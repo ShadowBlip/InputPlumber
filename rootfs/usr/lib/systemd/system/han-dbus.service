@@ -1,0 +1,9 @@
+[Unit]
+Description=PowerStation Service
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/powerstation
+
+[Install]
+WantedBy=multi-user.target

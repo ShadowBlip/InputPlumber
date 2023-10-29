@@ -1,0 +1,20 @@
+[package]
+name = "han-dbus"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+evdev = "0.12.1"
+log = "0.4.20"
+simple_logger = "4.2.0"
+tokio = { version = "*", features = ["full"] }
+zbus = { version = "3.14.1", default-features = false, features = ["tokio"] }
+zbus_macros = "3.14.1"
+
+[profile.release]
+debug = false
+strip = true
+lto = true
+codegen-units = 1
