@@ -10,6 +10,7 @@ use crate::gamepad::watcher;
 use crate::gamepad::watcher::WatchEvent;
 
 mod gamepad;
+mod input;
 
 const BUS_NAME: &str = "org.shadowblip.HanDBus";
 const PREFIX: &str = "/org/shadowblip/Gamepads";

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use evdev::Device;
 use tokio::sync::mpsc;
@@ -94,8 +95,8 @@ impl Backend {
     }
 
     /// Returns an array of input devices discovered under '/dev/input'
-    pub fn discover_devices(&self) -> Vec<Device> {
-        let mut devices: Vec<Device> = Vec::new();
+    pub fn discover_devices(&self) -> HashMap<String, Device> {
+        let mut devices: HashMap<String, Device> = HashMap::new();
         let paths = fs::read_dir(INPUT_PATH).unwrap();
         for path in paths {
             let path = path.unwrap();
@@ -114,7 +115,7 @@ impl Backend {
             let device = device.unwrap();
 
             log::info!("Discovered device: {}", device);
-            devices.push(device);
+            devices.insert(path.path().display().to_string(), device);
         }
 
         return devices;
