@@ -1,12 +1,17 @@
 use std::collections::HashMap;
 use std::fs;
 use evdev::Device;
+use evdev::EventType;
+use evdev::Key;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use zbus::fdo;
 use zbus::Connection;
 use zbus_macros::dbus_interface;
 
+use crate::input;
+
+use super::managed_gamepad::ManagedGamepad;
 use super::watcher::WatchEvent;
 
 const INPUT_PATH: &str = "/dev/input";
@@ -44,12 +49,13 @@ pub fn new(tx: mpsc::Sender<Command>, rx: mpsc::Receiver<Command>) -> (Frontend,
 /// https://github.com/godotengine/godot/pull/76045
 pub struct Backend {
     rx: mpsc::Receiver<Command>,
+    gamepads: Vec<ManagedGamepad>,
 }
 
 impl Backend {
     /// Returns a new instance of Gamepad Manager
     pub fn new(rx: mpsc::Receiver<Command>) -> Backend {
-        Backend { rx }
+        Backend { rx, gamepads: Vec::new() }
     }
 
     /// Start the backend and listen for command messages from the frontend
@@ -92,6 +98,50 @@ impl Backend {
             }
             WatchEvent::Other {} => (),
         }
+
+        // Get all currently detected input devices from procfs
+        let procfs_devices = input::device::get_all();
+        if procfs_devices.is_err() {
+            log::error!("Unable to read procfs input devices");
+            return;
+        }
+        let procfs_devices = procfs_devices.unwrap();
+
+        // Get a list of all currently detected event devices (e.g. ["event1", "event2"])
+        let mut detected_handlers: Vec<String> = Vec::new();
+        for device in procfs_devices {
+            log::debug!("Detected device: {:?}", device);
+            for handler in device.handlers {
+                if !handler.starts_with("event") {
+                    continue;
+                }
+                detected_handlers.push(handler);
+            }
+        }
+        log::debug!("Detected device handlers: {:?}", detected_handlers);
+
+        // Discover any new gamepads
+        let discovered_devices = self.discover_devices();
+
+        // Remove all gamepads that no longer exist
+        for gamepad in &self.gamepads {
+            // TODO
+        }
+
+        // Add newly discovered gamepads
+        for path in discovered_devices.keys() {
+            let device = discovered_devices.get(path).unwrap();
+            if !self.is_gamepad(&device) {
+                continue;
+            }
+            log::debug!("Considering gamepad: {}", path);
+        }
+    }
+
+    /// Returns true if the given evdev device is a gamepad
+    fn is_gamepad(&self, device: &Device) -> bool {
+        let supported = device.supported_keys().map_or(false, |keys| keys.contains(Key::BTN_MODE));
+        return supported;
     }
 
     /// Returns an array of input devices discovered under '/dev/input'
