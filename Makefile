@@ -1,4 +1,4 @@
-NAME := han-dbus
+NAME := $(shell grep 'name =' Cargo.toml | head -n 1 | cut -d'"' -f2)
 DBUS_NAME := org.shadowblip.HanDBus
 ALL_RS := $(shell find src -name '*.rs')
 PREFIX ?= /usr
@@ -62,6 +62,10 @@ clean: ## Remove build artifacts
 .PHONY: format
 format: ## Run rustfmt on all source files
 	rustfmt --edition 2021 $(ALL_RS)
+
+.PHONY: test
+test: ## Run all tests
+	cargo test -- --show-output
 
 .PHONY: setup
 setup: /usr/share/dbus-1/system.d/$(DBUS_NAME).conf ## Install dbus policies

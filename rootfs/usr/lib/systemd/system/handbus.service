@@ -1,9 +1,9 @@
 [Unit]
-Description=PowerStation Service
+Description=HanDBus Service
 After=graphical-session.target
 
 [Service]
-ExecStart=/usr/bin/powerstation
+ExecStart=/usr/bin/handbus
 
 [Install]
 WantedBy=multi-user.target
