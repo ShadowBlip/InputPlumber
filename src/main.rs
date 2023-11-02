@@ -5,20 +5,20 @@ use tokio::sync::mpsc;
 use tokio::sync::watch;
 use zbus::Connection;
 
+use crate::constants::BUS_NAME;
+use crate::constants::PREFIX;
 use crate::gamepad::manager;
 use crate::gamepad::watcher;
 use crate::gamepad::watcher::WatchEvent;
 
+mod constants;
 mod gamepad;
 mod input;
-
-const BUS_NAME: &str = "org.shadowblip.HanDBus";
-const PREFIX: &str = "/org/shadowblip/Gamepads";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
-    log::info!("Starting hanDBus");
+    log::info!("Starting HanDBus");
 
     // Configure the DBus connection
     let connection = Connection::system().await?;
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create an instance of Gamepad Manager
     let (manager_tx, manager_rx) = mpsc::channel(32);
     let manager_watch_tx = manager_tx.clone();
-    let (manager_frontend, mut manager_backend) = manager::new(manager_tx, manager_rx);
+    let (manager_dbus, mut manager) = manager::new(manager_tx, manager_rx);
 
     // Listen for watch events and dispatch them to Gamepad Manager
     tokio::spawn(async move {
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // processed before awaiting the `changed()` future.
         loop {
             let event = watcher_rx.borrow_and_update().clone();
-            let _ = manager_watch_tx
+            manager_watch_tx
                 .send(manager::Command::WatchEvent { event })
                 .await
                 .unwrap();
@@ -53,14 +53,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let gamepads_path = format!("{0}", PREFIX);
     connection
         .object_server()
-        .at(gamepads_path, manager_frontend)
+        .at(gamepads_path, manager_dbus)
         .await?;
     connection.request_name(BUS_NAME).await?;
 
-    // Start the backend
+    // Start the gamepad manager backend
     tokio::spawn(async move {
-        log::info!("Starting backend");
-        manager_backend.run(connection).await;
+        log::info!("Starting gamepad manager");
+        manager.run(connection).await;
     });
 
     // Watch for device change events and send them over the watcher channel
