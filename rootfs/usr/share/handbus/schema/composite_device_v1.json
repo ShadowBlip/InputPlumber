@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-06/schema#",
+  "$ref": "#/definitions/CompositeDevice",
+  "definitions": {
+    "CompositeDevice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "integer",
+          "description": "Schema version number"
+        },
+        "kind": {
+          "type": "string",
+          "description": "The type of configuration schema"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the composite device mapping"
+        },
+        "source_devices": {
+          "type": "array",
+          "description": "One or more source devices to combine into a single virtual device. The events from these devices will be watched and translated according to the key map.",
+          "items": {
+            "$ref": "#/definitions/SourceDevice"
+          }
+        },
+        "event_map": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EventMap"
+          }
+        },
+        "filtered_events": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": [
+        "event_map",
+        "filtered_events",
+        "kind",
+        "name",
+        "source_devices",
+        "version"
+      ],
+      "title": "CompositeDevice"
+    },
+    "EventMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "source_events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Emits"
+          }
+        },
+        "emits": {
+          "$ref": "#/definitions/Emits"
+        }
+      },
+      "required": [
+        "emits",
+        "from",
+        "name",
+        "source_events"
+      ],
+      "title": "EventMap"
+    },
+    "Emits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "type"
+      ],
+      "title": "Emits"
+    },
+    "SourceDevice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "phys_path": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "phys_path"
+      ],
+      "title": "SourceDevice"
+    }
+  }
+}

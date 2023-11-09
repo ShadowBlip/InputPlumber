@@ -1,0 +1,41 @@
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: DeviceProfile
+
+# Name of the device profile
+name: Default
+
+# Profile mappings
+mapping:
+  - name: Guide Button
+    output_behavior: sequence
+    source_event:
+      type: EV_KEY
+      code: BTN_MODE
+      kind: evdev
+    output_events:
+      - type: EV_KEY
+        code: BTN_MODE
+        kind: evdev
+
+  - name: Quick Menu Button
+    output_behavior: sequence
+    source_event:
+      type: EV_KEY
+      code: BTN_BASE
+      kind: evdev
+    output_events:
+      - code: open_quick_menu
+        kind: dbus
+
+  - name: Keyboard Button
+    output_behavior: sequence
+    source_event:
+      type: EV_KEY
+      code: KEY_KEYBOARD
+      kind: evdev
+    output_events:
+      - code: open_keyboard
+        kind: dbus

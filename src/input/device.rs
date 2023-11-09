@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, fs, io};
+use std::{fs, io};
 
 /// Container for a sysfs ID
 /// E.g. I: Bus=0003 Vendor=045e Product=028e Version=0120

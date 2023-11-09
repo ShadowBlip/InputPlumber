@@ -10,7 +10,10 @@ evdev = { git = "https://github.com/emberian/evdev.git", features = ["tokio"] }
 #evdev = { version = "0.12.1", features = ["tokio"] }
 inotify = "0.10.2"
 log = "0.4.20"
+serde = { version = "1.0.192", features = ["derive"] }
+serde_yaml = "0.9.27"
 simple_logger = "4.2.0"
+thiserror = "1.0.50"
 tokio = { version = "*", features = ["full"] }
 zbus = { version = "3.14.1", default-features = false, features = ["tokio"] }
 zbus_macros = "3.14.1"

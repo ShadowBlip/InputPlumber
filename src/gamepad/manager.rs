@@ -13,6 +13,7 @@ use crate::constants::PREFIX;
 use crate::gamepad::source_device::SourceDevice;
 use crate::input;
 
+use super::composite_device::CompositeDevice;
 use super::managed_gamepad;
 use super::watcher::WatchEvent;
 
@@ -141,6 +142,9 @@ impl Manager {
             }
             WatchEvent::Other {} => (),
         }
+
+        // Load all composite device profiles
+        let composite_profiles = Manager::load_composite_devices();
 
         // Get all currently detected input devices from procfs
         let procfs_devices = input::device::get_all();
@@ -333,6 +337,53 @@ impl Manager {
         }
 
         return devices;
+    }
+
+    /// Looks in all default locations for [CompositeDevice] definitions.
+    pub fn load_composite_devices() -> Vec<CompositeDevice> {
+        let mut devices: Vec<CompositeDevice> = Vec::new();
+        let paths = vec![
+            "/usr/share/handbus/devices",
+            "/etc/handbus/devices.d",
+            "./rootfs/usr/share/handbus/devices",
+        ];
+
+        // Look for composite device profiles in all known locations
+        for path in paths {
+            let files = fs::read_dir(path);
+            if files.is_err() {
+                log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
+                continue;
+            }
+            let files = files.unwrap();
+
+            // Look at each file in the directory and try to load them
+            for file in files {
+                let file = file.unwrap();
+                let filename = file.file_name();
+                let filename = filename.as_os_str().to_str().unwrap();
+
+                // Skip any non-yaml files
+                if !filename.ends_with(".yaml") {
+                    continue;
+                }
+
+                // Try to load the composite device profile
+                log::debug!("Found file: {}", file.path().display());
+                let device = CompositeDevice::from_yaml_file(file.path().display().to_string());
+                if device.is_err() {
+                    log::debug!(
+                        "Failed to parse composite device config: {}",
+                        device.unwrap_err()
+                    );
+                    continue;
+                }
+                let device = device.unwrap();
+                devices.push(device);
+            }
+        }
+
+        devices
     }
 }
 
