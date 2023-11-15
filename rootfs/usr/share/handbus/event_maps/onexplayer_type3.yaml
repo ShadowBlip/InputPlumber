@@ -1,25 +1,18 @@
-# yaml-language-server: $schema=../schema/composite_device_v1.json
+# yaml-language-server: $schema=../schema/event_map_v1.json
 # Schema version number
 version: 1
 
 # The type of configuration schema
-kind: CompositeDevice
+kind: EventMap
 
-# Name of the composite device mapping
-name: OneXPlayer Gen3
+# Name for the device event map
+name: OneXPlayer Type 3
 
-# One or more source devices to combine into a single virtual device. The events
-# from these devices will be watched and translated according to the key map.
-source_devices:
-  - name: AT Translated Set 2 keyboard
-    phys_path: isa0060/serio0/input0
-    id: keyboard
-  - name: Microsoft X-Box 360 pad
-    phys_path: usb-0000:03:00.3-4/input0
-    id: gamepad
+# Unique identifier of the event mapping
+id: oxp3
 
 # List of mapped events that are activated by a specific set of activation keys.
-event_map:
+mapping:
   - name: Volume Up
     from: keyboard
     source_events:

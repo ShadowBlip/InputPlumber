@@ -12,6 +12,21 @@ pub enum LoadError {
     DeserializeError(#[from] serde_yaml::Error),
 }
 
+/// Defines a platform match for loading a [CompositeDevice]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct Match {
+    pub bios_release: Option<String>,
+    pub bios_vendor: Option<String>,
+    pub bios_version: Option<String>,
+    pub board_name: Option<String>,
+    pub product_name: Option<String>,
+    pub product_version: Option<String>,
+    pub product_sku: Option<String>,
+    pub sys_vendor: Option<String>,
+    pub cpu_vendor: Option<String>,
+}
+
 /// Defines a combined device
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -19,9 +34,9 @@ pub struct CompositeDevice {
     pub version: u32,
     pub kind: String,
     pub name: String,
+    pub matches: Vec<Match>,
     pub source_devices: Vec<SourceDevice>,
-    pub event_map: Vec<EventMapping>,
-    pub filtered_events: Vec<Event>,
+    pub event_map_id: String,
 }
 
 impl CompositeDevice {
@@ -45,6 +60,7 @@ pub struct SourceDevice {
     pub name: String,
     pub phys_path: String,
     pub id: String,
+    pub primary: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

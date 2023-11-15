@@ -1,11 +1,17 @@
+# yaml-language-server: $schema=../schema/virtual_device_profile_v1.json
 # Schema version number
 version: 1
 
 # The type of configuration schema
-kind: DeviceProfile
+kind: VirtualDeviceProfile
 
 # Name of the device profile
 name: Default
+
+# Type of gamepad to emulate.
+# "auto" will copy the name/vendor from the source devices
+# Options: ["auto", "xb360", "ps3", "ps4", "ps5", "switchpro"]
+gamepad_type: "xb360"
 
 # Profile mappings
 mapping:

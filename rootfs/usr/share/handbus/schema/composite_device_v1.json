@@ -7,102 +7,109 @@
       "additionalProperties": false,
       "properties": {
         "version": {
-          "type": "integer",
-          "description": "Schema version number"
+          "description": "Schema version number",
+          "type": "integer"
         },
         "kind": {
-          "type": "string",
-          "description": "The type of configuration schema"
+          "description": "The type of configuration schema",
+          "type": "string"
         },
         "name": {
-          "type": "string",
-          "description": "Name of the composite device mapping"
+          "description": "Name of the composite device mapping",
+          "type": "string"
+        },
+        "matches": {
+          "description": "Only use this profile if *any* of the given DMI system matches match. If this list is empty, then the source devices will *always* be checked.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Match"
+          }
         },
         "source_devices": {
+          "description": "One or more source devices to combine into a single virtual device. The events from these devices will be watched and translated according to the event map.",
           "type": "array",
-          "description": "One or more source devices to combine into a single virtual device. The events from these devices will be watched and translated according to the key map.",
           "items": {
             "$ref": "#/definitions/SourceDevice"
           }
         },
-        "event_map": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/EventMap"
-          }
-        },
-        "filtered_events": {
-          "type": "array",
-          "items": {}
+        "event_map_id": {
+          "description": "The ID of a device event mapping in the 'event_maps' directory",
+          "type": "string"
         }
       },
       "required": [
-        "event_map",
-        "filtered_events",
+        "event_map_id",
         "kind",
+        "matches",
         "name",
         "source_devices",
         "version"
       ],
       "title": "CompositeDevice"
     },
-    "EventMap": {
+    "Match": {
       "type": "object",
+      "description": "DMI product information to match on",
       "additionalProperties": false,
       "properties": {
-        "name": {
+        "bios_release": {
+          "description": "BIOS release to match found at /sys/class/dmi/id/bios_release",
           "type": "string"
         },
-        "from": {
+        "bios_vendor": {
+          "description": "BIOS vendor to match found at /sys/class/dmi/id/bios_vendor",
           "type": "string"
         },
-        "source_events": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/Emits"
-          }
+        "bios_version": {
+          "description": "BIOS version to match found at /sys/class/dmi/id/bios_version",
+          "type": "string"
         },
-        "emits": {
-          "$ref": "#/definitions/Emits"
+        "board_name": {
+          "description": "Board name to match found at /sys/class/dmi/id/board_name",
+          "type": "string"
+        },
+        "product_name": {
+          "description": "Product name to match found at /sys/class/dmi/id/product_name",
+          "type": "string"
+        },
+        "product_version": {
+          "description": "Product version to match found at /sys/class/dmi/id/product_version",
+          "type": "string"
+        },
+        "product_sku": {
+          "description": "Product SKU to match found at /sys/class/dmi/id/product_sku",
+          "type": "string"
+        },
+        "sys_vendor": {
+          "description": "System vendor to match found at /sys/class/dmi/id/sys_vendor",
+          "type": "string"
+        },
+        "cpu_vendor": {
+          "description": "CPU vendor to match from 'lscpu'",
+          "type": "string"
         }
       },
-      "required": [
-        "emits",
-        "from",
-        "name",
-        "source_events"
-      ],
-      "title": "EventMap"
-    },
-    "Emits": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "code": {
-          "type": "string"
-        },
-        "type": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "code",
-        "type"
-      ],
-      "title": "Emits"
+      "title": "Match"
     },
     "SourceDevice": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "name": {
+          "description": "Name of the source device defined in /proc/bus/input/devices",
           "type": "string"
         },
         "phys_path": {
+          "description": "Phys path as defined in /proc/bus/input/devices",
           "type": "string"
         },
         "id": {
+          "description": "Custom unique identifier for the source device",
           "type": "string"
+        },
+        "primary": {
+          "description": "If true, the target device to emulate",
+          "type": "boolean"
         }
       },
       "required": [

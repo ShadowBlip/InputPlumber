@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: OneXPlayer Intel
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches:
+  - product_name: ONEXPLAYER
+    sys_vendor: ONE-NETBOOK
+    cpu_vendor: GenuineIntel
+  - product_name: ONE XPLAYER
+    sys_vendor: ONE-NETBOOK
+    cpu_vendor: GenuineIntel
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - name: OneXPlayer Gamepad
+    phys_path: usb-0000:00:14.0-9/input0
+    id: gamepad
+    primary: true
+  - name: AT Translated Set 2 keyboard
+    phys_path: isa0060/serio0/input0
+    id: keyboard
+
+# The ID of a device event mapping in the 'event_maps' folder
+event_map_id: oxp1
