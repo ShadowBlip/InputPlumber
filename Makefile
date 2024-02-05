@@ -70,6 +70,6 @@ test: ## Run all tests
 .PHONY: setup
 setup: /usr/share/dbus-1/system.d/$(DBUS_NAME).conf ## Install dbus policies
 /usr/share/dbus-1/system.d/$(DBUS_NAME).conf:
-	sudo ln $(PWD)/rootfs/usr/share/dbus-1/system.d/$(DBUS_NAME).conf \
+	sudo cp $(PWD)/rootfs/usr/share/dbus-1/system.d/$(DBUS_NAME).conf \
 		/usr/share/dbus-1/system.d/$(DBUS_NAME).conf
 	sudo systemctl reload dbus
