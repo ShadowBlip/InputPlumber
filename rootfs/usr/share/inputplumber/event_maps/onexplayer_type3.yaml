@@ -18,18 +18,16 @@ mapping:
     source_events:
       - code: KEY_VOLUMEUP
         type: EV_KEY
-    emits:
-      code: KEY_VOLUMEUP
-      type: EV_KEY
+    intermediary_event:
+      code: volume_up
 
   - name: Volume Down
     from: keyboard
     source_events:
       - code: KEY_VOLUMEDOWN
         type: EV_KEY
-    emits:
-      code: KEY_VOLUMEDOWN
-      type: EV_KEY
+    intermediary_event:
+      code: volume_down
 
   - name: Turbo
     from: keyboard
@@ -41,8 +39,7 @@ mapping:
       - code: KEY_LEFTMETA
         type: EV_KEY
     emits:
-      code: BTN_BASE
-      type: EV_KEY
+      code: base
 
 # List of events to filter from the source devices
 filtered_events: []

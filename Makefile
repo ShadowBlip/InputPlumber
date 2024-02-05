@@ -1,5 +1,5 @@
 NAME := $(shell grep 'name =' Cargo.toml | head -n 1 | cut -d'"' -f2)
-DBUS_NAME := org.shadowblip.HanDBus
+DBUS_NAME := org.shadowblip.InputPlumber
 ALL_RS := $(shell find src -name '*.rs')
 PREFIX ?= /usr
 
@@ -21,7 +21,7 @@ help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 .PHONY: install
-install: build ## Install hanDBus to the given prefix (default: PREFIX=/usr)
+install: build ## Install input-plumber to the given prefix (default: PREFIX=/usr)
 	install -D -m 755 target/release/$(NAME) \
 		$(PREFIX)/bin/$(NAME)
 	install -D -m 644 rootfs/usr/share/dbus-1/system.d/$(DBUS_NAME).conf \
@@ -31,7 +31,7 @@ install: build ## Install hanDBus to the given prefix (default: PREFIX=/usr)
 	systemctl reload dbus
 
 .PHONY: uninstall
-uninstall: ## Uninstall hanDBus
+uninstall: ## Uninstall input-plumber
 	rm $(PREFIX)/bin/$(NAME)
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service

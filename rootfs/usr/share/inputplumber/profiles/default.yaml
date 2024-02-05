@@ -11,20 +11,16 @@ name: Default
 # Type of gamepad to emulate.
 # "auto" will copy the name/vendor from the source devices
 # Options: ["auto", "xb360", "ps3", "ps4", "ps5", "switchpro"]
-gamepad_type: "xb360"
+gamepad_type: "ps5"
 
 # Profile mappings
 mapping:
   - name: Guide Button
     output_behavior: sequence
     source_event:
-      type: EV_KEY
-      code: BTN_MODE
-      kind: evdev
+      code: mode
     output_events:
-      - type: EV_KEY
-        code: BTN_MODE
-        kind: evdev
+      - code: mode
 
   - name: Quick Menu Button
     output_behavior: sequence
@@ -45,3 +41,10 @@ mapping:
     output_events:
       - code: open_keyboard
         kind: dbus
+
+  - name: West Button
+    output_behavior: sequence
+    source_event:
+      code: west_button
+    output_events:
+      - code: north_button

@@ -30,11 +30,17 @@ matches:
 source_devices:
   - name: Microsoft X-Box 360 pad
     phys_path: usb-0000:03:00.3-4/input0
-    id: gamepad
-    primary: true
+    group: gamepad
+  - name: Microsoft X-Box 360 pad
+    phys_path: usb-0000:03:00.3-4/input1
+    group: gamepad
   - name: AT Translated Set 2 keyboard
     phys_path: isa0060/serio0/input0
-    id: keyboard
+    group: keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
 event_map_id: oxp2
+
+# The default output device that the virtual device profile should use if
+# 'auto' is selected.
+default_output_device: xb360

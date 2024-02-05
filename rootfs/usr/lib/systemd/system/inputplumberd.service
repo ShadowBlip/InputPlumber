@@ -1,9 +1,9 @@
 [Unit]
-Description=HanDBus Service
+Description=InputPlumber Service
 After=graphical-session.target
 
 [Service]
-ExecStart=/usr/bin/handbus
+ExecStart=/usr/bin/inputplumber
 
 [Install]
 WantedBy=multi-user.target
