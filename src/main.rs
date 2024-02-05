@@ -8,6 +8,7 @@ use crate::constants::BUS_NAME;
 use crate::constants::BUS_PREFIX;
 use crate::input::manager::Manager;
 
+mod config;
 mod constants;
 mod input;
 mod procfs;

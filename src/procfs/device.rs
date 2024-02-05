@@ -59,7 +59,7 @@ pub fn get_all() -> io::Result<Vec<Device>> {
     let path = "/proc/bus/input/devices";
     let result = fs::read_to_string(path);
     let content = result?;
-    let lines = content.split("\n");
+    let lines = content.split('\n');
 
     // Parse the output
     let mut device: Option<Device> = None;
@@ -70,7 +70,7 @@ pub fn get_all() -> io::Result<Vec<Device>> {
 
             let parts = line.split_whitespace();
             for part in parts {
-                let mut pair = part.split("=");
+                let mut pair = part.split('=');
                 if pair.clone().count() != 2 {
                     continue;
                 }
@@ -90,18 +90,18 @@ pub fn get_all() -> io::Result<Vec<Device>> {
         } else if line.starts_with("N: ") {
             if let Some(device) = &mut device {
                 let line = line.replace("N: ", "");
-                let parts = line.splitn(2, "=");
+                let parts = line.splitn(2, '=');
                 if parts.clone().count() != 2 {
                     continue;
                 }
-                device.name = parts.last().unwrap().replace("\"", "");
+                device.name = parts.last().unwrap().replace('\"', "");
             }
         } else if line.starts_with("P: ") {
             match device {
                 None => continue,
                 Some(ref mut d) => {
                     let line = line.replace("P: ", "");
-                    let parts = line.splitn(2, "=");
+                    let parts = line.splitn(2, '=');
                     if parts.clone().count() != 2 {
                         continue;
                     }
@@ -113,7 +113,7 @@ pub fn get_all() -> io::Result<Vec<Device>> {
                 None => continue,
                 Some(ref mut d) => {
                     let line = line.replace("S: ", "");
-                    let parts = line.splitn(2, "=");
+                    let parts = line.splitn(2, '=');
                     if parts.clone().count() != 2 {
                         continue;
                     }
@@ -125,7 +125,7 @@ pub fn get_all() -> io::Result<Vec<Device>> {
                 None => continue,
                 Some(ref mut d) => {
                     let line = line.replace("U: ", "");
-                    let parts = line.splitn(2, "=");
+                    let parts = line.splitn(2, '=');
                     if parts.clone().count() != 2 {
                         continue;
                     }
@@ -137,7 +137,7 @@ pub fn get_all() -> io::Result<Vec<Device>> {
                 None => continue,
                 Some(ref mut d) => {
                     let line = line.replace("H: ", "");
-                    let parts = line.splitn(2, "=");
+                    let parts = line.splitn(2, '=');
                     if parts.clone().count() != 2 {
                         continue;
                     }
@@ -149,7 +149,7 @@ pub fn get_all() -> io::Result<Vec<Device>> {
             }
         } else if line.starts_with("B: ") {
             // TODO
-        } else if line == "" {
+        } else if line.is_empty() {
             match device {
                 None => continue,
                 Some(ref mut d) => {
@@ -161,5 +161,5 @@ pub fn get_all() -> io::Result<Vec<Device>> {
         }
     }
 
-    return Ok(devices);
+    Ok(devices)
 }
