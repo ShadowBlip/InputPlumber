@@ -137,13 +137,15 @@ impl CompositeDeviceConfig {
             .collect()
     }
 
-    fn get_matching_hidraw(&self) -> Result<(), Box<dyn Error>> {
+    pub fn get_matching_hidraw(&self) -> Result<(), Box<dyn Error>> {
         todo!()
     }
 
     /// Returns a list of evdev device information for all devices that match
     /// the configuration
-    fn get_matching_evdev(&self) -> Result<Option<Vec<procfs::device::Device>>, Box<dyn Error>> {
+    pub fn get_matching_evdev(
+        &self,
+    ) -> Result<Option<Vec<procfs::device::Device>>, Box<dyn Error>> {
         // Only consider evdev devices
         let evdev_configs = self.get_evdev_configs();
 

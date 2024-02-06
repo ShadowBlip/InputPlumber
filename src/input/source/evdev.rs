@@ -1,10 +1,11 @@
 use std::error::Error;
 
+use evdev::{AttributeSet, Device, EventSummary, EventType, InputEvent, KeyCode};
 use tokio::sync::broadcast;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
-use crate::{constants::BUS_PREFIX, procfs};
+use crate::{constants::BUS_PREFIX, input::composite_device, procfs};
 
 /// Evdev commands define all the different ways to interact with [EventDevice]
 /// over a channel. These commands are processed in an asyncronous thread and
@@ -72,46 +73,58 @@ impl DBusInterface {
 /// [EventDevice] represents an input device using the input subsystem.
 #[derive(Debug)]
 pub struct EventDevice {
-    dbus: Connection,
-    handler: String,
     info: procfs::device::Device,
-    rx: broadcast::Receiver<Command>,
-    tx: broadcast::Sender<Command>,
+    tx: broadcast::Sender<composite_device::Command>,
 }
 
 impl EventDevice {
-    pub fn new(conn: Connection, handler: String) -> Result<Self, Box<dyn Error>> {
-        // Create a communication channel
-        let (tx, rx) = broadcast::channel(32);
-
-        // Parse information about this device from procfs
-        let mut info: Option<procfs::device::Device> = None;
-        let devices = procfs::device::get_all()?;
-        for device in devices {
-            for name in device.handlers.clone() {
-                if name != handler {
-                    continue;
-                }
-                info = Some(device.clone());
-            }
-        }
-        let Some(info) = info else {
-            return Err("Failed to find device information".into());
-        };
-
-        Ok(Self {
-            dbus: conn,
-            rx,
-            tx,
-            info,
-            handler,
-        })
+    pub fn new(
+        info: procfs::device::Device,
+        tx: broadcast::Sender<composite_device::Command>,
+    ) -> Self {
+        Self { info, tx }
     }
 
     /// Run the source device handler
     pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+        let path = self.get_device_path();
+        log::debug!("Opening device at: {}", path);
+        let device = Device::open(path.clone())?;
+        log::debug!("Reading events from {}", path);
+        let mut events = device.into_event_stream()?;
+        while let Ok(event) = events.next_event().await {
+            log::debug!("Received event: {:?}", event);
+            self.tx.send(composite_device::Command::Other)?;
+        }
+        log::debug!("Stopped reading device events");
+
         Ok(())
     }
+
+    /// Returns the full path to the device handler (e.g. /dev/input/event3)
+    fn get_device_path(&self) -> String {
+        let handlers = &self.info.handlers;
+        for handler in handlers {
+            if !handler.starts_with("event") {
+                continue;
+            }
+            return format!("/dev/input/{}", handler.clone());
+        }
+        "".into()
+    }
+
+    /// Processes all physical inputs for this device. This
+    /// should be called in a tight loop to process input events.
+    fn process_input(&mut self, event: InputEvent) {
+        log::debug!("Process input for event: {:?}", event);
+        self.process_phys_event(event);
+    }
+
+    /// Processes a single physical gamepad event. Depending on the intercept mode,
+    /// this usually means forwarding events from the physical gamepad to the
+    /// virtual gamepad. In other cases we want to translate physical input into
+    /// DBus events that only an overlay will respond to.
+    fn process_phys_event(&mut self, event: InputEvent) {}
 }
 
 /// Returns the DBus object path for evdev devices

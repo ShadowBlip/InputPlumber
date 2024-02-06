@@ -183,7 +183,7 @@ impl Manager {
 
             // Create a composite device to manage these devices
             log::info!("Creating composite device");
-            let device = CompositeDevice::new(config);
+            let mut device = CompositeDevice::new(config)?;
 
             // Create a DBus interface for the device
             let path = self.next_composite_dbus_path();

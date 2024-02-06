@@ -1,12 +1,19 @@
 use std::error::Error;
 
-use tokio::sync::broadcast;
+use tokio::{
+    join,
+    sync::broadcast,
+    task::{JoinHandle, JoinSet},
+};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
-use crate::config::CompositeDeviceConfig;
+use crate::{config::CompositeDeviceConfig, input::source};
 
-use super::{source::SourceDevice, target::TargetDevice};
+use super::{
+    source::{evdev, SourceDevice},
+    target::TargetDevice,
+};
 
 /// Evdev commands define all the different ways to interact with [EventDevice]
 /// over a channel. These commands are processed in an asyncronous thread and
@@ -62,15 +69,28 @@ pub struct CompositeDevice {
 }
 
 impl CompositeDevice {
-    pub fn new(config: CompositeDeviceConfig) -> Self {
+    pub fn new(config: CompositeDeviceConfig) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = broadcast::channel(128);
-        Self {
+        let mut source_devices: Vec<SourceDevice> = Vec::new();
+
+        // Open source devices based on configuration
+        if let Some(evdev_devices) = config.get_matching_evdev()? {
+            log::debug!("Found event devices");
+            for info in evdev_devices {
+                log::debug!("Adding source device: {:?}", info);
+                let device = source::evdev::EventDevice::new(info, tx.clone());
+                let source_device = source::SourceDevice::EventDevice(device);
+                source_devices.push(source_device);
+            }
+        }
+
+        Ok(Self {
             config,
             tx,
             rx,
-            source_devices: Vec::new(),
+            source_devices,
             target_devices: Vec::new(),
-        }
+        })
     }
 
     /// Return a [Handle] to the [CompositeDevice] to communicate with
@@ -94,7 +114,31 @@ impl CompositeDevice {
     }
 
     /// Run the [CompositeDevice]
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        // Keep a list of all the tasks
+        let mut tasks = JoinSet::new();
+
+        // Run all source devices
+        let sources = self.source_devices.drain(..);
+        for source in sources {
+            match source {
+                SourceDevice::EventDevice(device) => {
+                    tasks.spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed running event device: {:?}", e);
+                        }
+                    });
+                }
+            }
+        }
+
+        // Wait on all tasks
+        while let Some(res) = tasks.join_next().await {
+            res?;
+        }
+
+        log::debug!("All source devices have closed");
+
         Ok(())
     }
 
