@@ -22,13 +22,17 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  - name: OneXPlayer Gamepad
-    phys_path: usb-0000:00:14.0-9/input0
-    id: gamepad
-    primary: true
-  - name: AT Translated Set 2 keyboard
-    phys_path: isa0060/serio0/input0
-    id: keyboard
+  - group: gamepad
+    evdev:
+      name: OneXPlayer Gamepad
+      phys_path: usb-0000:00:14.0-9/input0
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
 
 # The ID of a device event mapping in the 'event_maps' folder
 event_map_id: oxp1
+
+# Default output device
+default_output_device: xb360

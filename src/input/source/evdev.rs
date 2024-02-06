@@ -18,13 +18,26 @@ pub enum Command {
 /// a [Manager]. It works by sending command messages to a channel that the
 /// [Manager] is listening on.
 pub struct DBusInterface {
+    handler: String,
     info: procfs::device::Device,
-    tx: broadcast::Sender<Command>,
 }
 
 impl DBusInterface {
-    fn new(tx: broadcast::Sender<Command>, info: procfs::device::Device) -> DBusInterface {
-        DBusInterface { tx, info }
+    pub fn new(handler: String, info: procfs::device::Device) -> DBusInterface {
+        DBusInterface { info, handler }
+    }
+
+    /// Creates a new instance of the source evdev interface on DBus. Returns
+    /// a structure with information about the source device.
+    pub async fn listen_on_dbus(
+        conn: Connection,
+        handler: String,
+        info: procfs::device::Device,
+    ) -> Result<(), Box<dyn Error>> {
+        let path = get_dbus_path(handler.clone());
+        let iface = DBusInterface::new(handler.clone(), info);
+        conn.object_server().at(path, iface).await?;
+        Ok(())
     }
 }
 
@@ -57,6 +70,7 @@ impl DBusInterface {
 }
 
 /// [EventDevice] represents an input device using the input subsystem.
+#[derive(Debug)]
 pub struct EventDevice {
     dbus: Connection,
     handler: String,
@@ -96,15 +110,6 @@ impl EventDevice {
 
     /// Run the source device handler
     pub async fn run(&self) -> Result<(), Box<dyn Error>> {
-        self.listen_on_dbus().await?;
-        Ok(())
-    }
-
-    /// Creates a DBus object
-    async fn listen_on_dbus(&self) -> Result<(), Box<dyn Error>> {
-        let path = get_dbus_path(self.handler.clone());
-        let iface = DBusInterface::new(self.tx.clone(), self.info.clone());
-        self.dbus.object_server().at(path, iface).await?;
         Ok(())
     }
 }

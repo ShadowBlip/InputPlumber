@@ -3,6 +3,7 @@
   "$ref": "#/definitions/CompositeDevice",
   "definitions": {
     "CompositeDevice": {
+      "description": "Describes the source devices to aggregate",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -35,6 +36,10 @@
         "event_map_id": {
           "description": "The ID of a device event mapping in the 'event_maps' directory",
           "type": "string"
+        },
+        "default_output_device": {
+          "description": "Default output device to emulate",
+          "type": "string"
         }
       },
       "required": [
@@ -49,7 +54,6 @@
     },
     "Match": {
       "type": "object",
-      "description": "DMI product information to match on",
       "additionalProperties": false,
       "properties": {
         "bios_release": {
@@ -89,9 +93,30 @@
           "type": "string"
         }
       },
+      "required": [],
       "title": "Match"
     },
     "SourceDevice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "description": "Custom group identifier for the source device. This is used by the event mappings to determine what source inputs should be mapped.",
+          "type": "string"
+        },
+        "evdev": {
+          "$ref": "#/definitions/Evdev"
+        },
+        "hidraw": {
+          "$ref": "#/definitions/Hidraw"
+        }
+      },
+      "required": [
+        "group"
+      ],
+      "title": "SourceDevice"
+    },
+    "Evdev": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -99,25 +124,42 @@
           "description": "Name of the source device defined in /proc/bus/input/devices",
           "type": "string"
         },
+        "handler": {
+          "description": "Event handler for the source device in /dev/input",
+          "type": "string"
+        },
         "phys_path": {
           "description": "Phys path as defined in /proc/bus/input/devices",
           "type": "string"
-        },
-        "id": {
-          "description": "Custom unique identifier for the source device",
+        }
+      },
+      "required": [],
+      "title": "Evdev"
+    },
+    "Hidraw": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "handler": {
+          "description": "HIDRaw handler for the source device in /dev/hidraw*",
           "type": "string"
         },
-        "primary": {
-          "description": "If true, the target device to emulate",
-          "type": "boolean"
+        "vendor_id": {
+          "type": "integer"
+        },
+        "product_id": {
+          "type": "integer"
+        },
+        "interface_num": {
+          "type": "integer"
         }
       },
       "required": [
-        "id",
-        "name",
-        "phys_path"
+        "interface_num",
+        "product_id",
+        "vendor_id"
       ],
-      "title": "SourceDevice"
+      "title": "Hidraw"
     }
   }
 }

@@ -6,43 +6,27 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: OneXPlayer AMD
+name: Steam Deck
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
-  - product_name: ONE XPLAYER
-    sys_vendor: ONE-NETBOOK
+  - product_name: Galileo
+    sys_vendor: Valve
     cpu_vendor: AuthenticAMD
-  - product_name: ONE XPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: AuthenticAMD Advanced Micro Devices, Inc.
-  - product_name: ONEXPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: AuthenticAMD
-  - product_name: ONEXPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: AuthenticAMD Advanced Micro Devices, Inc.
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:03:00.3-4/input0
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:03:00.3-4/input1
-  - group: keyboard
-    evdev:
-      name: AT Translated Set 2 keyboard
-      phys_path: isa0060/serio0/input0
+    hidraw:
+      vendor_id: 0x28de
+      product_id: 0x1205
+      interface_num: 2
 
 # The ID of a device event mapping in the 'event_maps' folder
-event_map_id: oxp2
+event_map_id: deck
 
 # The default output device that the virtual device profile should use if
 # 'auto' is selected.
