@@ -14,7 +14,8 @@ use super::{event, source::SourceDevice, target::TargetDevice};
 const BUFFER_SIZE: usize = 2048;
 
 /// The [InterceptMode] defines whether or not inputs should be routed over
-/// DBus instead of to the target devices.
+/// DBus instead of to the target devices. This can be used by overlays to
+/// intercept input.
 #[derive(Debug, Clone)]
 pub enum InterceptMode {
     /// Pass all input to the target devices
@@ -25,14 +26,15 @@ pub enum InterceptMode {
     Always,
 }
 
-/// Evdev commands define all the different ways to interact with [EventDevice]
+/// CompositeDevice commands define all the different ways to interact with [CompositeDevice]
 /// over a channel. These commands are processed in an asyncronous thread and
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
 pub enum Command {
     ProcessEvent(event::Event),
     SetInterceptMode(InterceptMode),
-    Other,
+    GetInterceptMode(mpsc::Sender<InterceptMode>),
+    GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
 }
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
@@ -56,8 +58,33 @@ impl DBusInterface {
     }
 
     #[dbus_interface(property)]
+    async fn source_device_paths(&self) -> fdo::Result<Vec<String>> {
+        let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
+        self.tx
+            .send(Command::GetSourceDevicePaths(sender))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let Some(paths) = receiver.recv().await else {
+            return Ok(Vec::new());
+        };
+
+        Ok(paths)
+    }
+
+    #[dbus_interface(property)]
     async fn intercept_mode(&self) -> fdo::Result<u32> {
-        Ok(0)
+        let (sender, mut receiver) = mpsc::channel::<InterceptMode>(1);
+        self.tx
+            .send(Command::GetInterceptMode(sender))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let Some(mode) = receiver.recv().await else {
+            return Ok(0);
+        };
+
+        match mode {
+            InterceptMode::None => Ok(0),
+            InterceptMode::Pass => Ok(1),
+            InterceptMode::Always => Ok(2),
+        }
     }
 
     #[dbus_interface(property)]
@@ -94,10 +121,10 @@ impl Handle {
 pub struct CompositeDevice {
     intercept_mode: InterceptMode,
     config: CompositeDeviceConfig,
-    events: mpsc::Receiver<event::Event>,
     tx: broadcast::Sender<Command>,
     rx: broadcast::Receiver<Command>,
     source_devices: Vec<SourceDevice>,
+    source_device_paths: Vec<String>,
     target_devices: Vec<TargetDevice>,
 }
 
@@ -105,28 +132,29 @@ impl CompositeDevice {
     pub fn new(config: CompositeDeviceConfig) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = broadcast::channel(BUFFER_SIZE);
         let mut source_devices: Vec<SourceDevice> = Vec::new();
-
-        // Create a channel for events to be sent through
-        let (events_tx, events) = mpsc::channel(BUFFER_SIZE);
+        let mut source_device_paths: Vec<String> = Vec::new();
 
         // Open source devices based on configuration
         if let Some(evdev_devices) = config.get_matching_evdev()? {
             log::debug!("Found event devices");
             for info in evdev_devices {
                 log::debug!("Adding source device: {:?}", info);
-                let device = source::evdev::EventDevice::new(info, tx.clone(), events_tx.clone());
+                let device = source::evdev::EventDevice::new(info, tx.clone());
+                let device_path = device.get_device_path();
                 let source_device = source::SourceDevice::EventDevice(device);
                 source_devices.push(source_device);
+                source_device_paths.push(device_path);
             }
         }
+        log::debug!("Finished adding event devices");
 
         Ok(Self {
             intercept_mode: InterceptMode::None,
             config,
-            events,
             tx,
             rx,
             source_devices,
+            source_device_paths,
             target_devices: Vec::new(),
         })
     }
@@ -153,6 +181,7 @@ impl CompositeDevice {
 
     /// Run the [CompositeDevice]
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        log::debug!("Starting composite device");
         // Keep a list of all the tasks
         let mut tasks = JoinSet::new();
 
@@ -170,19 +199,23 @@ impl CompositeDevice {
             }
         }
 
-        // Wait for events from source devices
-        //while let Some(event) = self.events.recv().await {
-        //    self.process_event(event).await;
-        //}
-
-        // Process commands
         // Loop and listen for command events
+        log::debug!("CompositeDevice started");
         while let Ok(cmd) = self.rx.recv().await {
             log::debug!("Received command: {:?}", cmd);
             match cmd {
                 Command::ProcessEvent(event) => self.process_event(event).await,
                 Command::SetInterceptMode(mode) => self.set_intercept_mode(mode),
-                Command::Other => todo!(),
+                Command::GetInterceptMode(sender) => {
+                    if let Err(e) = sender.send(self.intercept_mode.clone()).await {
+                        log::error!("Failed to send intercept mode: {:?}", e);
+                    }
+                }
+                Command::GetSourceDevicePaths(sender) => {
+                    if let Err(e) = sender.send(self.get_source_device_paths()).await {
+                        log::error!("Failed to send source device paths: {:?}", e);
+                    }
+                }
             }
         }
 
@@ -202,6 +235,12 @@ impl CompositeDevice {
         self.intercept_mode = mode;
     }
 
+    /// Return a list of source device paths (e.g. /dev/hidraw0, /dev/input/event0)
+    /// that this composite device is managing
+    fn get_source_device_paths(&self) -> Vec<String> {
+        self.source_device_paths.clone()
+    }
+
     /// Process a single event
     async fn process_event(&self, event: event::Event) {
         log::debug!("Received event: {:?}", event);
@@ -219,8 +258,13 @@ impl CompositeDevice {
         conn: Connection,
         path: String,
     ) -> Result<(), Box<dyn Error>> {
-        let iface = DBusInterface::new(self.tx.clone());
-        conn.object_server().at(path, iface).await?;
+        let tx = self.tx.clone();
+        tokio::spawn(async move {
+            let iface = DBusInterface::new(tx);
+            if let Err(e) = conn.object_server().at(path, iface).await {
+                log::error!("Failed to setup DBus interface for device: {:?}", e);
+            }
+        });
         Ok(())
     }
 }
