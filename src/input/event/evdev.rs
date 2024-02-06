@@ -1,10 +1,12 @@
+use evdev::InputEvent;
+
 use super::MappableEvent;
 
 #[derive(Debug, Clone)]
 pub struct EvdevEvent {
     kind: u32,
     code: u32,
-    value: u32,
+    value: i32,
 }
 
 impl EvdevEvent {
@@ -13,6 +15,16 @@ impl EvdevEvent {
             code: 0,
             value: 0,
             kind: 0,
+        }
+    }
+}
+
+impl From<InputEvent> for EvdevEvent {
+    fn from(item: InputEvent) -> Self {
+        EvdevEvent {
+            kind: item.event_type().0 as u32,
+            code: item.code() as u32,
+            value: item.value(),
         }
     }
 }
@@ -29,7 +41,7 @@ impl MappableEvent for EvdevEvent {
     }
 
     fn set_value(&mut self, value: f64) {
-        self.value = value.round() as u32;
+        self.value = value.round() as i32;
     }
 
     fn get_value(&self) -> f64 {

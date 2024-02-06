@@ -1,11 +1,18 @@
 use std::error::Error;
 
 use evdev::{AttributeSet, Device, EventSummary, EventType, InputEvent, KeyCode};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
-use crate::{constants::BUS_PREFIX, input::composite_device, procfs};
+use crate::{
+    constants::BUS_PREFIX,
+    input::{
+        composite_device,
+        event::{self, Event},
+    },
+    procfs,
+};
 
 /// Evdev commands define all the different ways to interact with [EventDevice]
 /// over a channel. These commands are processed in an asyncronous thread and
@@ -75,14 +82,16 @@ impl DBusInterface {
 pub struct EventDevice {
     info: procfs::device::Device,
     tx: broadcast::Sender<composite_device::Command>,
+    event_tx: mpsc::Sender<event::Event>,
 }
 
 impl EventDevice {
     pub fn new(
         info: procfs::device::Device,
         tx: broadcast::Sender<composite_device::Command>,
+        event_tx: mpsc::Sender<event::Event>,
     ) -> Self {
-        Self { info, tx }
+        Self { info, tx, event_tx }
     }
 
     /// Run the source device handler
@@ -90,11 +99,19 @@ impl EventDevice {
         let path = self.get_device_path();
         log::debug!("Opening device at: {}", path);
         let device = Device::open(path.clone())?;
+
+        // Read events from the device and send them to the composite device
         log::debug!("Reading events from {}", path);
         let mut events = device.into_event_stream()?;
         while let Ok(event) = events.next_event().await {
             log::debug!("Received event: {:?}", event);
-            self.tx.send(composite_device::Command::Other)?;
+            self.tx
+                .send(composite_device::Command::ProcessEvent(Event::Evdev(
+                    event.into(),
+                )))?;
+            //self.event_tx
+            //    .send(event::Event::Evdev(event.into()))
+            //    .await?;
         }
         log::debug!("Stopped reading device events");
 
