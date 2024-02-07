@@ -228,6 +228,9 @@ impl Manager {
                 continue;
             }
 
+            // TODO: Check to see if there's already a composite device running
+            // but without all its source devices
+
             // Create a composite device to manage these devices
             log::info!("Found matching source!: {:?}", config.name);
             let mut device = CompositeDevice::new(config)?;
