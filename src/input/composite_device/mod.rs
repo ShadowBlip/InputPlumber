@@ -35,6 +35,8 @@ pub enum Command {
     SetInterceptMode(InterceptMode),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
+    SourceDeviceAdded,
+    SourceDeviceStopped(String),
 }
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
@@ -125,6 +127,8 @@ pub struct CompositeDevice {
     rx: broadcast::Receiver<Command>,
     source_devices: Vec<SourceDevice>,
     source_device_paths: Vec<String>,
+    source_device_ids: Vec<String>,
+    source_devices_used: Vec<String>,
     target_devices: Vec<TargetDevice>,
 }
 
@@ -133,17 +137,23 @@ impl CompositeDevice {
         let (tx, rx) = broadcast::channel(BUFFER_SIZE);
         let mut source_devices: Vec<SourceDevice> = Vec::new();
         let mut source_device_paths: Vec<String> = Vec::new();
+        let mut source_device_ids: Vec<String> = Vec::new();
 
         // Open source devices based on configuration
         if let Some(evdev_devices) = config.get_matching_evdev()? {
             log::debug!("Found event devices");
             for info in evdev_devices {
+                // Create an instance of the device
                 log::debug!("Adding source device: {:?}", info);
                 let device = source::evdev::EventDevice::new(info, tx.clone());
+
+                // Keep track of the source device
+                let id = device.get_id();
                 let device_path = device.get_device_path();
                 let source_device = source::SourceDevice::EventDevice(device);
                 source_devices.push(source_device);
                 source_device_paths.push(device_path);
+                source_device_ids.push(id);
             }
         }
         log::debug!("Finished adding event devices");
@@ -155,28 +165,10 @@ impl CompositeDevice {
             rx,
             source_devices,
             source_device_paths,
+            source_device_ids,
+            source_devices_used: Vec::new(),
             target_devices: Vec::new(),
         })
-    }
-
-    /// Return a [Handle] to the [CompositeDevice] to communicate with
-    pub fn handle(&self) -> Handle {
-        let rx = self.subscribe();
-        let tx = self.transmitter();
-
-        Handle::new(tx, rx)
-    }
-
-    /// Return a [Command] transmitter to communitcate with the device while it
-    /// is running
-    pub fn transmitter(&self) -> broadcast::Sender<Command> {
-        self.tx.clone()
-    }
-
-    /// Return a [Command] receiver to listen for signals while the device
-    /// is running
-    pub fn subscribe(&self) -> broadcast::Receiver<Command> {
-        self.tx.subscribe()
     }
 
     /// Run the [CompositeDevice]
@@ -190,9 +182,16 @@ impl CompositeDevice {
         for source in sources {
             match source {
                 SourceDevice::EventDevice(device) => {
+                    let device_id = device.get_id();
+                    self.source_devices_used.push(device_id.clone());
+                    let tx = self.tx.clone();
                     tasks.spawn(async move {
                         if let Err(e) = device.run().await {
                             log::error!("Failed running event device: {:?}", e);
+                        }
+                        log::debug!("Event device closed");
+                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
+                            log::error!("Failed to send device stop command: {:?}", e);
                         }
                     });
                 }
@@ -216,6 +215,20 @@ impl CompositeDevice {
                         log::error!("Failed to send source device paths: {:?}", e);
                     }
                 }
+                Command::SourceDeviceAdded => todo!(),
+                Command::SourceDeviceStopped(device_id) => {
+                    log::debug!("Detected source device removal: {}", device_id);
+                    let idx = self
+                        .source_devices_used
+                        .iter()
+                        .position(|v| v.clone() == device_id);
+                    if let Some(idx) = idx {
+                        self.source_devices_used.remove(idx);
+                    }
+                    if self.source_devices_used.is_empty() {
+                        break;
+                    }
+                }
             }
         }
 
@@ -229,10 +242,29 @@ impl CompositeDevice {
         Ok(())
     }
 
-    /// Sets the intercept mode to the given value
-    fn set_intercept_mode(&mut self, mode: InterceptMode) {
-        log::debug!("Setting intercept mode to: {:?}", mode);
-        self.intercept_mode = mode;
+    /// Return a [Handle] to the [CompositeDevice] to communicate with
+    pub fn handle(&self) -> Handle {
+        let rx = self.subscribe();
+        let tx = self.transmitter();
+
+        Handle::new(tx, rx)
+    }
+
+    /// Return a [Command] transmitter to communitcate with the device while it
+    /// is running
+    pub fn transmitter(&self) -> broadcast::Sender<Command> {
+        self.tx.clone()
+    }
+
+    /// Return a [Command] receiver to listen for signals while the device
+    /// is running
+    pub fn subscribe(&self) -> broadcast::Receiver<Command> {
+        self.tx.subscribe()
+    }
+
+    /// Returns an array of all source devices being used by this device.
+    pub fn get_source_device_ids(&self) -> Vec<String> {
+        self.source_device_ids.clone()
     }
 
     /// Return a list of source device paths (e.g. /dev/hidraw0, /dev/input/event0)
@@ -250,6 +282,8 @@ impl CompositeDevice {
         //    event::Event::Native(_) => todo!(),
         //    event::Event::DBus(_) => todo!(),
         //}
+
+        // Translate the event based on the device profile.
     }
 
     /// Creates a new instance of the composite device interface on DBus.
@@ -266,5 +300,11 @@ impl CompositeDevice {
             }
         });
         Ok(())
+    }
+
+    /// Sets the intercept mode to the given value
+    fn set_intercept_mode(&mut self, mode: InterceptMode) {
+        log::debug!("Setting intercept mode to: {:?}", mode);
+        self.intercept_mode = mode;
     }
 }

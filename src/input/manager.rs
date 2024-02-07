@@ -27,11 +27,13 @@ const BUFFER_SIZE: usize = 1024;
 #[derive(Debug, Clone)]
 pub enum Command {
     SourceDeviceAdded,
+    SourceDeviceRemoved,
     EventDeviceAdded { name: String },
     EventDeviceRemoved { name: String },
     HIDRawAdded { name: String },
     HIDRawRemoved { name: String },
     CreateCompositeDevice { config: CompositeDeviceConfig },
+    CompositeDeviceStopped(String),
 }
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
@@ -88,9 +90,14 @@ pub struct Manager {
     /// The receive side of the channel used to listen for [Command] messages
     /// from other objects.
     rx: broadcast::Receiver<Command>,
-    /// Mapping of all currently managed source devices.
-    /// E.g. {"/org/shadowblip/InputPlumber/devices/source/event0": <SourceDevice>}
-    source_devices: HashMap<String, source::SourceDevice>,
+    /// Mapping of source devices to their DBus path
+    /// E.g. {"evdev://event0": "/org/shadowblip/InputPlumber/devices/source/event0"}
+    source_devices: HashMap<String, String>,
+    /// Map of source devices being used by a [CompositeDevice].
+    /// E.g. {"evdev://event0": "/org/shadowblip/InputPlumber/CompositeDevice0"}
+    source_devices_used: HashMap<String, String>,
+    /// Mapping of DBus path to its corresponding [CompositeDevice] handle
+    /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <Handle>}
     composite_devices: HashMap<String, composite_device::Handle>,
 }
 
@@ -103,6 +110,7 @@ impl Manager {
             rx,
             tx,
             source_devices: HashMap::new(),
+            source_devices_used: HashMap::new(),
             composite_devices: HashMap::new(),
         }
     }
@@ -135,7 +143,11 @@ impl Manager {
                         log::error!("Error adding hidraw device: {:?}", e);
                     }
                 }
-                Command::HIDRawRemoved { name } => self.on_hidraw_removed(name).await,
+                Command::HIDRawRemoved { name } => {
+                    if let Err(e) = self.on_hidraw_removed(name).await {
+                        log::error!("Error removing hidraw device: {:?}", e);
+                    }
+                }
                 Command::CreateCompositeDevice { config } => {
                     if let Err(e) = self.create_composite_device(config).await {
                         log::error!("Error creating composite device: {:?}", e);
@@ -144,6 +156,16 @@ impl Manager {
                 Command::SourceDeviceAdded => {
                     if let Err(e) = self.on_source_device_added().await {
                         log::error!("Error handling added source device: {:?}", e);
+                    }
+                }
+                Command::SourceDeviceRemoved => {
+                    if let Err(e) = self.on_source_device_removed().await {
+                        log::error!("Error handling removed source device: {:?}", e);
+                    }
+                }
+                Command::CompositeDeviceStopped(path) => {
+                    if let Err(e) = self.on_composite_device_stopped(path).await {
+                        log::error!("Error handling stopped composite device: {:?}", e);
                     }
                 }
             }
@@ -157,6 +179,36 @@ impl Manager {
         &mut self,
         config: CompositeDeviceConfig,
     ) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
+
+    /// Called when a composite device stops running
+    async fn on_composite_device_stopped(&mut self, path: String) -> Result<(), Box<dyn Error>> {
+        log::debug!("Removing composite device: {}", path);
+
+        // Remove the DBus interface
+        let dbus_path = ObjectPath::from_string_unchecked(path.clone());
+        self.dbus
+            .object_server()
+            .remove::<composite_device::DBusInterface, ObjectPath>(dbus_path)
+            .await?;
+
+        // Find any source devices that were in use by the composite device
+        let mut to_remove = Vec::new();
+        for (id, composite_dbus_path) in self.source_devices_used.iter() {
+            if composite_dbus_path.clone() != path {
+                continue;
+            }
+            to_remove.push(id.clone());
+        }
+        for id in to_remove {
+            self.source_devices_used.remove::<String>(&id);
+        }
+
+        // Remove the composite device from our list
+        self.composite_devices.remove::<String>(&path);
+        log::debug!("Composite device removed: {}", path);
+
         Ok(())
     }
 
@@ -176,17 +228,38 @@ impl Manager {
                 continue;
             }
 
-            log::info!("Found matching source!: {:?}", config.name);
-
-            // TODO: Check to see if there's already a CompositeDevice for
-            // these source devices
-
             // Create a composite device to manage these devices
-            log::info!("Creating composite device");
+            log::info!("Found matching source!: {:?}", config.name);
             let mut device = CompositeDevice::new(config)?;
 
-            // Create a DBus interface for the device
+            // Check to see if there's already a CompositeDevice for
+            // these source devices.
+            // TODO: Should we allow multiple composite devices with the same source?
+            let mut devices_in_use = false;
+            let source_device_ids = device.get_source_device_ids();
+            for (id, path) in self.source_devices_used.iter() {
+                if !source_device_ids.contains(id) {
+                    continue;
+                }
+                log::debug!("Source device '{}' already in use by: {}", id, path);
+                devices_in_use = true;
+                break;
+            }
+            if devices_in_use {
+                continue;
+            }
+
+            // Generate the DBus tree path for this composite device
             let path = self.next_composite_dbus_path();
+
+            // Keep track of the source devices that this composite device is
+            // using.
+            for id in source_device_ids {
+                self.source_devices_used.insert(id, path.clone());
+            }
+
+            // Create a DBus interface for the device
+            log::info!("Creating composite device");
             device
                 .listen_on_dbus(self.dbus.clone(), path.clone())
                 .await?;
@@ -195,34 +268,30 @@ impl Manager {
             let handle = device.handle();
 
             // Run the device
+            let dbus_path = path.clone();
+            let tx = self.tx.clone();
             tokio::spawn(async move {
                 if let Err(e) = device.run().await {
                     log::error!("Error running device: {:?}", e);
+                }
+                log::debug!("Composite device stopped running: {:?}", dbus_path);
+                if let Err(e) = tx.send(Command::CompositeDeviceStopped(dbus_path)) {
+                    log::error!("Error sending composite device stopped: {:?}", e);
                 }
             });
 
             // Add the device to our map
             self.composite_devices.insert(path, handle);
+            log::debug!("Managed source devices: {:?}", self.source_devices_used);
         }
 
         Ok(())
     }
 
-    /// Returns the next available composite device dbus path
-    fn next_composite_dbus_path(&self) -> String {
-        let max = 2048;
-        let mut i = 0;
-        loop {
-            if i > max {
-                return "Devices exceeded".to_string();
-            }
-            let path = format!("{}/CompositeDevice{}", BUS_PREFIX, i);
-            if self.composite_devices.get(&path).is_some() {
-                i += 1;
-                continue;
-            }
-            return path;
-        }
+    /// Called when any source device is removed
+    async fn on_source_device_removed(&mut self) -> Result<(), Box<dyn Error>> {
+        log::debug!("Source device removed");
+        Ok(())
     }
 
     /// Called when an event device (e.g. /dev/input/event5) is added
@@ -255,23 +324,32 @@ impl Manager {
         // Signal that a source device was added
         self.tx.send(Command::SourceDeviceAdded)?;
 
+        // Add the device as a source device
+        let path = source::evdev::get_dbus_path(handler.clone());
+        let id = format!("evdev://{}", handler);
+        self.source_devices.insert(id, path);
+
         Ok(())
     }
 
     /// Called when an event device (e.g. /dev/input/event5) is removed
-    async fn on_event_device_removed(&mut self, name: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("Event device removed: {}", name);
+    async fn on_event_device_removed(&mut self, handler: String) -> Result<(), Box<dyn Error>> {
+        log::debug!("Event device removed: {}", handler);
 
         // Remove the device from our hashmap
-        let path = source::evdev::get_dbus_path(name);
-        self.source_devices.remove(&path);
+        let id = format!("evdev://{}", handler);
+        self.source_devices.remove(&id);
 
         // Remove the DBus interface
+        let path = source::evdev::get_dbus_path(handler);
         let path = ObjectPath::from_string_unchecked(path.clone());
         self.dbus
             .object_server()
             .remove::<source::evdev::DBusInterface, ObjectPath>(path.clone())
             .await?;
+
+        // Signal that a source device was removed
+        self.tx.send(Command::SourceDeviceRemoved)?;
 
         Ok(())
     }
@@ -287,8 +365,30 @@ impl Manager {
     }
 
     /// Called when a hidraw device (e.g. /dev/hidraw0) is removed
-    async fn on_hidraw_removed(&self, name: String) {
+    async fn on_hidraw_removed(&self, name: String) -> Result<(), Box<dyn Error>> {
         log::debug!("HIDRaw removed: {}", name);
+
+        // Signal that a source device was removed
+        self.tx.send(Command::SourceDeviceRemoved)?;
+
+        Ok(())
+    }
+
+    /// Returns the next available composite device dbus path
+    fn next_composite_dbus_path(&self) -> String {
+        let max = 2048;
+        let mut i = 0;
+        loop {
+            if i > max {
+                return "Devices exceeded".to_string();
+            }
+            let path = format!("{}/CompositeDevice{}", BUS_PREFIX, i);
+            if self.composite_devices.get(&path).is_some() {
+                i += 1;
+                continue;
+            }
+            return path;
+        }
     }
 
     /// Starts watching for input devices that are added and removed.

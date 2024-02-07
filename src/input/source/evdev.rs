@@ -64,18 +64,31 @@ impl DBusInterface {
     async fn unique_id(&self) -> fdo::Result<String> {
         Ok(self.info.unique_id.clone())
     }
+
+    /// Returns the full path to the device handler (e.g. /dev/input/event3)
+    #[dbus_interface(property)]
+    pub fn device_path(&self) -> fdo::Result<String> {
+        let handlers = &self.info.handlers;
+        for handler in handlers {
+            if !handler.starts_with("event") {
+                continue;
+            }
+            return Ok(format!("/dev/input/{}", handler.clone()));
+        }
+        Ok("".into())
+    }
 }
 
 /// [EventDevice] represents an input device using the input subsystem.
 #[derive(Debug)]
 pub struct EventDevice {
     info: procfs::device::Device,
-    tx: broadcast::Sender<Command>,
+    composite_tx: broadcast::Sender<Command>,
 }
 
 impl EventDevice {
-    pub fn new(info: procfs::device::Device, tx: broadcast::Sender<Command>) -> Self {
-        Self { info, tx }
+    pub fn new(info: procfs::device::Device, composite_tx: broadcast::Sender<Command>) -> Self {
+        Self { info, composite_tx }
     }
 
     /// Run the source device handler
@@ -90,23 +103,34 @@ impl EventDevice {
         while let Ok(event) = events.next_event().await {
             log::trace!("Received event: {:?}", event);
             let event = Event::Evdev(event.into());
-            self.tx.send(Command::ProcessEvent(event))?;
+            self.composite_tx.send(Command::ProcessEvent(event))?;
         }
         log::debug!("Stopped reading device events");
 
         Ok(())
     }
 
-    /// Returns the full path to the device handler (e.g. /dev/input/event3)
-    pub fn get_device_path(&self) -> String {
+    /// Returns a unique identifier for the source device.
+    pub fn get_id(&self) -> String {
+        format!("evdev://{}", self.get_event_handler())
+    }
+
+    /// Returns the name of the event handler (e.g. event3)
+    pub fn get_event_handler(&self) -> String {
         let handlers = &self.info.handlers;
         for handler in handlers {
             if !handler.starts_with("event") {
                 continue;
             }
-            return format!("/dev/input/{}", handler.clone());
+            return handler.clone();
         }
         "".into()
+    }
+
+    /// Returns the full path to the device handler (e.g. /dev/input/event3)
+    pub fn get_device_path(&self) -> String {
+        let handler = self.get_event_handler();
+        format!("/dev/input/{}", handler)
     }
 }
 
