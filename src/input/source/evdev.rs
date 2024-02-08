@@ -1,6 +1,9 @@
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 
-use evdev::{AttributeSet, Device, EventSummary, EventType, InputEvent, KeyCode, KeyEvent};
+use evdev::{
+    AbsoluteAxisCode, AbsoluteAxisEvent, AttributeSet, Device, EventSummary, EventType, InputEvent,
+    KeyCode, KeyEvent,
+};
 use tokio::sync::broadcast;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
@@ -10,7 +13,7 @@ use crate::{
     input::{
         capability::{Capability, Gamepad, GamepadButton},
         composite_device::Command,
-        event::Event,
+        event::{evdev::EvdevEvent, Event},
     },
     procfs,
 };
@@ -101,12 +104,36 @@ impl EventDevice {
         log::debug!("Opening device at: {}", path);
         let device = Device::open(path.clone())?;
 
+        // Query information about the device to get the absolute ranges
+        let mut axes_info = HashMap::new();
+        for (axis, info) in device.get_absinfo()? {
+            log::trace!("Found axis: {:?}", axis);
+            log::trace!("Found info: {:?}", info);
+            axes_info.insert(axis, info);
+        }
+
         // Read events from the device and send them to the composite device
         log::debug!("Reading events from {}", path);
         let mut events = device.into_event_stream()?;
         while let Ok(event) = events.next_event().await {
             log::trace!("Received event: {:?}", event);
-            let event = Event::Evdev(event.into());
+            // If this is an ABS event, get the min/max info for this type of
+            // event so we can normalize the value.
+            let abs_info = if event.event_type() == EventType::ABSOLUTE {
+                axes_info.get(&AbsoluteAxisCode(event.code()))
+            } else {
+                None
+            };
+
+            // Convert the event into an [EvdevEvent] and optionally include
+            // the axis information with min/max values
+            let mut evdev_event: EvdevEvent = event.into();
+            if let Some(info) = abs_info {
+                evdev_event.set_abs_info(*info);
+            }
+
+            // Send the event to the composite device
+            let event = Event::Evdev(evdev_event);
             self.composite_tx.send(Command::ProcessEvent(event))?;
         }
         log::debug!("Stopped reading device events");

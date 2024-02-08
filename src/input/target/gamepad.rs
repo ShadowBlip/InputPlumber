@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
@@ -51,6 +51,9 @@ impl GenericGamepad {
         log::debug!("Creating virtual gamepad");
         let mut device = self.create_virtual_device()?;
 
+        // Query information about the device to get the absolute ranges
+        let axes_map = self.get_abs_info();
+
         // TODO: Listen for events (Force Feedback Events)
         //let event_stream = device.into_event_stream()?;
 
@@ -58,11 +61,33 @@ impl GenericGamepad {
         log::debug!("Started listening for events to send");
         while let Some(event) = self.rx.recv().await {
             log::debug!("Got event to emit: {:?}", event);
-            let evdev_event: EvdevEvent = event.into();
+            let evdev_event = EvdevEvent::from_native_event(event, axes_map.clone());
             device.emit(&[evdev_event.as_input_event()])?;
         }
 
         Ok(())
+    }
+
+    /// Return a hashmap of ABS information for this virtual device. This information
+    /// is used to denormalize input event values.
+    fn get_abs_info(&self) -> HashMap<AbsoluteAxisCode, AbsInfo> {
+        let mut axes_info = HashMap::new();
+
+        let joystick_setup = AbsInfo::new(0, -32768, 32767, 16, 128, 1);
+        axes_info.insert(AbsoluteAxisCode::ABS_X, joystick_setup);
+        axes_info.insert(AbsoluteAxisCode::ABS_Y, joystick_setup);
+        axes_info.insert(AbsoluteAxisCode::ABS_RX, joystick_setup);
+        axes_info.insert(AbsoluteAxisCode::ABS_RY, joystick_setup);
+
+        let triggers_setup = AbsInfo::new(0, 0, 255, 0, 0, 1);
+        axes_info.insert(AbsoluteAxisCode::ABS_Z, triggers_setup);
+        axes_info.insert(AbsoluteAxisCode::ABS_RZ, triggers_setup);
+
+        let dpad_setup = AbsInfo::new(0, -1, 1, 0, 0, 1);
+        axes_info.insert(AbsoluteAxisCode::ABS_HAT0X, dpad_setup);
+        axes_info.insert(AbsoluteAxisCode::ABS_HAT0Y, dpad_setup);
+
+        axes_info
     }
 
     /// Create the virtual device to emulate
