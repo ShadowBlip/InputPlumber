@@ -1,8 +1,11 @@
-use super::MappableEvent;
+use crate::input::capability::{Capability, Gamepad, GamepadButton};
+
+use super::{evdev::EvdevEvent, MappableEvent};
 
 /// A native event represents an InputPlumber event
 #[derive(Debug, Clone)]
 pub struct NativeEvent {
+    capability: Capability,
     kind: u32,
     code: u32,
     value: u32,
@@ -11,9 +14,26 @@ pub struct NativeEvent {
 impl NativeEvent {
     pub fn new() -> NativeEvent {
         NativeEvent {
+            capability: Capability::None,
             code: 0,
             value: 0,
             kind: 0,
+        }
+    }
+
+    /// Returns the capability that this event implements
+    pub fn as_capability(&self) -> Capability {
+        self.capability.clone()
+    }
+}
+
+impl From<EvdevEvent> for NativeEvent {
+    fn from(item: EvdevEvent) -> Self {
+        NativeEvent {
+            capability: item.as_capability(),
+            kind: 0,
+            code: 0,
+            value: item.get_value() as u32,
         }
     }
 }

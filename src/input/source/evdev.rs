@@ -1,13 +1,17 @@
 use std::error::Error;
 
-use evdev::{AttributeSet, Device, EventSummary, EventType, InputEvent, KeyCode};
+use evdev::{AttributeSet, Device, EventSummary, EventType, InputEvent, KeyCode, KeyEvent};
 use tokio::sync::broadcast;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::{
     constants::BUS_PREFIX,
-    input::{composite_device::Command, event::Event},
+    input::{
+        capability::{Capability, Gamepad, GamepadButton},
+        composite_device::Command,
+        event::Event,
+    },
     procfs,
 };
 
@@ -131,6 +135,63 @@ impl EventDevice {
     pub fn get_device_path(&self) -> String {
         let handler = self.get_event_handler();
         format!("/dev/input/{}", handler)
+    }
+
+    /// Returns the capabilities that this source device can fulfill.
+    pub fn get_capabilities(&self) -> Result<Vec<Capability>, Box<dyn Error>> {
+        let mut capabilities = vec![];
+
+        // Open the device to get the evdev capabilities
+        let path = self.get_device_path();
+        log::debug!("Opening device at: {}", path);
+        let device = Device::open(path.clone())?;
+
+        // Loop through all support events
+        let events = device.supported_events();
+        for event in events.iter() {
+            match event {
+                EventType::SYNCHRONIZATION => (),
+                EventType::KEY => {
+                    let Some(keys) = device.supported_keys() else {
+                        continue;
+                    };
+                    for key in keys.iter() {
+                        let capability = match key {
+                            KeyCode::KEY_LEFT => Capability::None,
+                            KeyCode::KEY_UP => Capability::None,
+                            KeyCode::BTN_SOUTH => {
+                                Capability::Gamepad(Gamepad::Button(GamepadButton::South))
+                            }
+                            KeyCode::BTN_NORTH => {
+                                Capability::Gamepad(Gamepad::Button(GamepadButton::North))
+                            }
+                            KeyCode::BTN_WEST => {
+                                Capability::Gamepad(Gamepad::Button(GamepadButton::West))
+                            }
+                            KeyCode::BTN_EAST => {
+                                Capability::Gamepad(Gamepad::Button(GamepadButton::East))
+                            }
+                            _ => Capability::None,
+                        };
+                        capabilities.push(capability);
+                    }
+                }
+                EventType::RELATIVE => (),
+                EventType::ABSOLUTE => (),
+                EventType::MISC => (),
+                EventType::SWITCH => (),
+                EventType::LED => (),
+                EventType::SOUND => (),
+                EventType::REPEAT => (),
+                EventType::FORCEFEEDBACK => (),
+                EventType::POWER => (),
+                EventType::FORCEFEEDBACKSTATUS => (),
+                EventType::UINPUT => (),
+                _ => (),
+            }
+        }
+
+        Ok(capabilities)
     }
 }
 

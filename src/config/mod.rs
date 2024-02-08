@@ -82,6 +82,7 @@ pub struct CompositeDeviceConfig {
     pub matches: Vec<Match>,
     pub source_devices: Vec<SourceDevice>,
     pub event_map_id: String,
+    pub default_output_device: Option<String>,
 }
 
 impl CompositeDeviceConfig {

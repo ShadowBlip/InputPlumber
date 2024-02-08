@@ -1,0 +1,24 @@
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: OneXPlayer Type 3
+
+# Unique identifier of the capability mapping
+id: oxp3
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Turbo
+    from: keyboard
+    source_capabilities:
+      - Keyboard:Key:LeftCtrl
+      - Keyboard:Key:LeftAlt
+      - Keyboard:Key:LeftMeta
+    target_capability: Gamepad:Button:Base
+
+# List of events to filter from the source devices
+filtered_events: []

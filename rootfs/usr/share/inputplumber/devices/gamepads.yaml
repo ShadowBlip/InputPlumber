@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: XBox 360
+name: Gamepads
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
@@ -18,7 +18,7 @@ matches: []
 source_devices:
   - group: gamepad
     evdev:
-      name: Xbox 360 Wireless Receiver (XBOX)
+      handler: js*
 
 # The ID of a device event mapping in the 'event_maps' folder
 event_map_id: xb360

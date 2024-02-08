@@ -7,9 +7,16 @@ use tokio::{
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
-use crate::{config::CompositeDeviceConfig, input::source};
+use crate::{
+    config::CompositeDeviceConfig,
+    input::{
+        event::native::NativeEvent,
+        source,
+        target::{gamepad::GenericGamepad, xb360::XBox360Controller},
+    },
+};
 
-use super::{event, source::SourceDevice, target::TargetDevice};
+use super::{event::Event, source::SourceDevice, target::TargetDevice};
 
 const BUFFER_SIZE: usize = 2048;
 
@@ -31,7 +38,7 @@ pub enum InterceptMode {
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
 pub enum Command {
-    ProcessEvent(event::Event),
+    ProcessEvent(Event),
     SetInterceptMode(InterceptMode),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
@@ -129,7 +136,7 @@ pub struct CompositeDevice {
     source_device_paths: Vec<String>,
     source_device_ids: Vec<String>,
     source_devices_used: Vec<String>,
-    target_devices: Vec<TargetDevice>,
+    target_devices: Vec<mpsc::Sender<NativeEvent>>,
 }
 
 impl CompositeDevice {
@@ -146,6 +153,12 @@ impl CompositeDevice {
                 // Create an instance of the device
                 log::debug!("Adding source device: {:?}", info);
                 let device = source::evdev::EventDevice::new(info, tx.clone());
+
+                // Get the capabilities of the source device.
+                let capabilities = device.get_capabilities()?;
+
+                // TODO: Based on the capability map in the config, translate
+                // the capabilities.
 
                 // Keep track of the source device
                 let id = device.get_id();
@@ -198,12 +211,37 @@ impl CompositeDevice {
             }
         }
 
+        // Create and run all target devices
+        let targets = self.create_target_devices()?;
+        for target in targets {
+            match target {
+                TargetDevice::Null => (),
+                TargetDevice::Keyboard(_) => todo!(),
+                TargetDevice::Mouse(_) => todo!(),
+                TargetDevice::GenericGamepad(mut gamepad) => {
+                    let transmitter = gamepad.transmitter();
+                    self.target_devices.push(transmitter);
+                    tokio::spawn(async move {
+                        if let Err(e) = gamepad.run().await {
+                            log::error!("Failed to run target gamepad: {:?}", e);
+                        }
+                        log::debug!("Target gamepad device closed");
+                    });
+                }
+                TargetDevice::XBox360(_) => todo!(),
+            }
+        }
+
         // Loop and listen for command events
         log::debug!("CompositeDevice started");
         while let Ok(cmd) = self.rx.recv().await {
             log::debug!("Received command: {:?}", cmd);
             match cmd {
-                Command::ProcessEvent(event) => self.process_event(event).await,
+                Command::ProcessEvent(event) => {
+                    if let Err(e) = self.process_event(event).await {
+                        log::error!("Failed to process event: {:?}", e);
+                    }
+                }
                 Command::SetInterceptMode(mode) => self.set_intercept_mode(mode),
                 Command::GetInterceptMode(sender) => {
                     if let Err(e) = sender.send(self.intercept_mode.clone()).await {
@@ -273,17 +311,68 @@ impl CompositeDevice {
         self.source_device_paths.clone()
     }
 
-    /// Process a single event
-    async fn process_event(&self, event: event::Event) {
-        log::debug!("Received event: {:?}", event);
-        //match event {
-        //    event::Event::Evdev(_) => todo!(),
-        //    event::Event::HIDRaw => todo!(),
-        //    event::Event::Native(_) => todo!(),
-        //    event::Event::DBus(_) => todo!(),
-        //}
+    /// Create target (output) devices to emulate. Returns the created devices
+    /// as an array.
+    fn create_target_devices(&self) -> Result<Vec<TargetDevice>, Box<dyn Error>> {
+        log::debug!("Creating target devices");
+        let mut target_devices: Vec<TargetDevice> = Vec::new();
+
+        // Create a transmitter channel that target devices can use to communitcate
+        // with the composite device
+        let tx = self.transmitter();
+
+        // Create the target devices to emulate based on the config
+        let config = &self.config;
+        let default_output_device = &config.default_output_device;
+        let device_id = default_output_device.clone().unwrap_or("null".into());
+        let gamepad_device = match device_id.as_str() {
+            "xb360" => TargetDevice::XBox360(XBox360Controller::new(tx)),
+            "null" | "none" => TargetDevice::Null,
+            _ => TargetDevice::GenericGamepad(GenericGamepad::new(tx)),
+        };
+        target_devices.push(gamepad_device);
+        log::debug!("Created target gamepad");
+
+        // TODO: Create a keyboard device to emulate
+
+        // TODO: Create a mouse device to emulate
+
+        Ok(target_devices)
+    }
+
+    /// Process a single event from a source device. Events are piped through
+    /// a translation layer, then dispatched to the appropriate target device(s)
+    async fn process_event(&self, raw_event: Event) -> Result<(), Box<dyn Error>> {
+        log::debug!("Received event: {:?}", raw_event);
+
+        // Convert the event into a NativeEvent
+        let event: NativeEvent = match raw_event {
+            Event::Evdev(event) => event.into(),
+            Event::HIDRaw => todo!(),
+            Event::Native(_) => todo!(),
+            Event::DBus(_) => todo!(),
+        };
+
+        // TODO: Check if the event needs to be translated based on the
+        // capability map.
 
         // Translate the event based on the device profile.
+
+        // Send the event to the appropriate target device
+        for target in &self.target_devices {
+            target.send(event.clone()).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Processes a single translated event. These events are piped to the
+    /// appropriate target device(s)
+    async fn process_translated_event(&self, event: Event) {}
+
+    /// Translates the given event.
+    async fn translate_event(&self, event: Event) -> Vec<Event> {
+        Vec::new()
     }
 
     /// Creates a new instance of the composite device interface on DBus.
