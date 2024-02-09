@@ -106,10 +106,10 @@ impl From<InputEvent> for EvdevEvent {
 impl EvdevEvent {
     /// Convert a [NativeEvent] into an [EvdevEvent].
     pub fn from_native_event(
-        item: NativeEvent,
+        event: NativeEvent,
         axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
     ) -> Self {
-        let event_type = match item.as_capability() {
+        let event_type = match event.as_capability() {
             Capability::Sync => EventType::SYNCHRONIZATION,
             Capability::Gamepad(gamepad) => match gamepad {
                 Gamepad::Button(_) => EventType::KEY,
@@ -118,7 +118,7 @@ impl EvdevEvent {
             _ => EventType::KEY,
         };
 
-        let code = match item.as_capability() {
+        let code = match event.as_capability() {
             Capability::Gamepad(gamepad) => match gamepad {
                 Gamepad::Button(btn) => match btn {
                     GamepadButton::South => KeyCode::BTN_SOUTH.0,
@@ -150,18 +150,14 @@ impl EvdevEvent {
 
         // Get the axis information if this is an ABS event.
         let abs_info = if event_type == EventType::ABSOLUTE {
-            if let Some(info) = axis_map.get(&AbsoluteAxisCode(code)) {
-                Some(info.clone())
-            } else {
-                None
-            }
+            axis_map.get(&AbsoluteAxisCode(code)).copied()
         } else {
             None
         };
 
         // Denormalize the native value (e.g. 1.0) into the appropriate value
         // based on the ABS min/max range.
-        let normalized_value = item.get_value();
+        let normalized_value = event.get_value();
         let denormalized_value = if let Some(info) = abs_info {
             let mid = (info.maximum() + info.minimum()) / 2;
             let normalized_value_abs = normalized_value.abs();
@@ -179,23 +175,11 @@ impl EvdevEvent {
         };
 
         EvdevEvent {
-            event: InputEvent::new(event_type.0, code, item.get_value() as i32),
+            event: InputEvent::new(event_type.0, code, denormalized_value),
             abs_info,
         }
     }
 }
-
-/*
-* var normalized_value_abs: float = abs(normalized_value)
-            if normalized_value >= 0:
-                var maximum := abs_x_max - abs_x_mid
-                var value := normalized_value * float(maximum) + abs_x_mid
-                return value
-            if normalized_value < 0:
-                var minimum := abs_x_min - abs_x_mid
-                var value: float = (normalized_value_abs * float(minimum)) + abs_x_mid
-                return value
-*/
 
 impl MappableEvent for EvdevEvent {
     fn matches<T>(&self, event: T) -> bool

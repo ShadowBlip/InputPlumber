@@ -14,6 +14,7 @@ use crate::constants::BUS_PREFIX;
 use crate::input::composite_device;
 use crate::input::composite_device::CompositeDevice;
 use crate::input::source;
+use crate::input::source::hidraw;
 use crate::procfs;
 use crate::watcher;
 
@@ -313,7 +314,7 @@ impl Manager {
             }
         }
         let Some(info) = info else {
-            return Err("Failed to find device information".into());
+            return Err(format!("Failed to find device information for: {}", handler).into());
         };
 
         // Create a DBus interface for the event device
@@ -358,11 +359,33 @@ impl Manager {
     }
 
     /// Called when a hidraw device (e.g. /dev/hidraw0) is added
-    async fn on_hidraw_added(&self, name: String) -> Result<(), Box<dyn Error>> {
+    async fn on_hidraw_added(&mut self, name: String) -> Result<(), Box<dyn Error>> {
         log::debug!("HIDRaw added: {}", name);
+        let path = format!("/dev/{}", name);
 
         // Signal that a source device was added
         self.tx.send(Command::SourceDeviceAdded)?;
+
+        // Look up the connected device using hidapi
+        let devices = hidraw::list_devices()?;
+        let device = devices
+            .iter()
+            .find(|dev| dev.path().to_string_lossy() == path)
+            .cloned();
+        let Some(info) = device else {
+            return Err(format!("Failed to find device information for: {}", path).into());
+        };
+
+        // Create a DBus interface for the hidraw device
+        source::hidraw::DBusInterface::listen_on_dbus(self.dbus.clone(), info.clone()).await?;
+
+        // Signal that a source device was added
+        self.tx.send(Command::SourceDeviceAdded)?;
+
+        // Add the device as a source device
+        let path = source::hidraw::get_dbus_path(path);
+        let id = format!("hidraw://{}", name);
+        self.source_devices.insert(id, path);
 
         Ok(())
     }
