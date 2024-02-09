@@ -213,7 +213,10 @@ impl Manager {
         Ok(())
     }
 
-    /// Called when any source device is added
+    /// Called when any source device is added. This method will load all
+    /// device configurations to check and see if any configuration matches
+    /// the input devices on the system. If a match is found, a [CompositeDevice]
+    /// will be created and started.
     async fn on_source_device_added(&mut self) -> Result<(), Box<dyn Error>> {
         // Check all CompositeDevice configs to see if this device creates
         // a match that will automatically create a CompositeDevice.

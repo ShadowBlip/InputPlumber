@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::io;
 
+use hidapi::{DeviceInfo, HidApi};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -105,14 +106,17 @@ impl CompositeDeviceConfig {
         Ok(self.sources_exist_evdev()? && self.sources_exist_hidraw()?)
     }
 
-    /// TODO: Implement this
+    /// Returns true if all the hidraw source devices in the config exist on the system
     fn sources_exist_hidraw(&self) -> Result<bool, Box<dyn Error>> {
+        let Some(hidraw_devices) = self.get_matching_hidraw()? else {
+            return Ok(true);
+        };
         let hidraw_configs = self.get_hidraw_configs();
 
-        Ok(hidraw_configs.is_empty())
+        Ok(hidraw_configs.len() == hidraw_devices.len())
     }
 
-    /// Returns true if all the evdev source devices exist on the system
+    /// Returns true if all the evdev source devices in the config exist on the system
     fn sources_exist_evdev(&self) -> Result<bool, Box<dyn Error>> {
         let Some(evdev_devices) = self.get_matching_evdev()? else {
             return Ok(true);
@@ -138,8 +142,52 @@ impl CompositeDeviceConfig {
             .collect()
     }
 
-    pub fn get_matching_hidraw(&self) -> Result<(), Box<dyn Error>> {
-        todo!()
+    /// Returns a list of hidraw device information for all devices that
+    /// match the configuration.
+    pub fn get_matching_hidraw(&self) -> Result<Option<Vec<DeviceInfo>>, Box<dyn Error>> {
+        // Only consider hidraw devices
+        let hidraw_configs = self.get_hidraw_configs();
+
+        // If there are no hidraw definitions, consider it a match
+        if hidraw_configs.is_empty() {
+            return Ok(None);
+        }
+        let mut matches: Vec<DeviceInfo> = Vec::new();
+
+        // Get all hidraw devices to match on and check to see if they match
+        // a hidraw definition in the config.
+        let api = HidApi::new()?;
+        let devices: Vec<DeviceInfo> = api.device_list().cloned().collect();
+        for device in devices {
+            for hidraw_config in hidraw_configs.clone() {
+                let hidraw_config = hidraw_config.clone();
+                let mut has_matches = false;
+
+                if let Some(vendor_id) = hidraw_config.vendor_id {
+                    if device.vendor_id() as u32 != vendor_id {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(product_id) = hidraw_config.product_id {
+                    if device.product_id() as u32 != product_id {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if !has_matches {
+                    continue;
+                }
+
+                // If it's gotten this far, then the config has matched all
+                // non-empty fields!
+                matches.push(device.clone());
+            }
+        }
+
+        Ok(Some(matches))
     }
 
     /// Returns a list of evdev device information for all devices that match

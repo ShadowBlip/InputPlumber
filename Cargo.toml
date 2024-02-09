@@ -11,6 +11,7 @@ hidapi = "2.6.0"
 #evdev = { version = "0.12.1", features = ["tokio"] }
 inotify = "0.10.2"
 log = "0.4.20"
+packed_struct = "0.10.1"
 serde = { version = "1.0.192", features = ["derive"] }
 serde_yaml = "0.9.27"
 simple_logger = "4.2.0"

@@ -194,6 +194,8 @@ impl CompositeDevice {
         let sources = self.source_devices.drain(..);
         for source in sources {
             match source {
+                // If the source device is an event device (i.e. from /dev/input/),
+                // then start listening for inputs from that device.
                 SourceDevice::EventDevice(device) => {
                     let device_id = device.get_id();
                     self.source_devices_used.push(device_id.clone());
@@ -203,6 +205,23 @@ impl CompositeDevice {
                             log::error!("Failed running event device: {:?}", e);
                         }
                         log::debug!("Event device closed");
+                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
+                            log::error!("Failed to send device stop command: {:?}", e);
+                        }
+                    });
+                }
+
+                // If the source device is a hidraw device (i.e. /dev/hidraw0),
+                // then start listening for inputs from that device.
+                SourceDevice::HIDRawDevice(device) => {
+                    let device_id = device.get_id();
+                    self.source_devices_used.push(device_id.clone());
+                    let tx = self.tx.clone();
+                    tasks.spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed running hidraw device: {:?}", e);
+                        }
+                        log::debug!("HIDRaw device closed");
                         if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
                             log::error!("Failed to send device stop command: {:?}", e);
                         }

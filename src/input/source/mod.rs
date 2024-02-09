@@ -5,5 +5,5 @@ pub mod hidraw;
 #[derive(Debug)]
 pub enum SourceDevice {
     EventDevice(evdev::EventDevice),
-    //HIDRawDevice(hidraw::HIDRawDevice),
+    HIDRawDevice(hidraw::HIDRawDevice),
 }

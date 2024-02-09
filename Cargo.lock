@@ -604,6 +604,7 @@ dependencies = [
  "hidapi",
  "inotify",
  "log",
+ "packed_struct",
  "serde",
  "serde_yaml",
  "simple_logger",
@@ -803,6 +804,28 @@ checksum = "9aa2b01e1d916879f73a53d01d1d6cee68adbb31d6d9177a8cfce093cced1d50"
 dependencies = [
  "futures-core",
  "pin-project-lite",
+]
+
+[[package]]
+name = "packed_struct"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36b29691432cc9eff8b282278473b63df73bea49bc3ec5e67f31a3ae9c3ec190"
+dependencies = [
+ "bitvec",
+ "packed_struct_codegen",
+ "serde",
+]
+
+[[package]]
+name = "packed_struct_codegen"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cd6706dfe50d53e0f6aa09e12c034c44faacd23e966ae5a209e8bdb8f179f98"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]

@@ -10,6 +10,7 @@ use crate::input::manager::Manager;
 
 mod config;
 mod constants;
+mod drivers;
 mod input;
 mod procfs;
 mod watcher;

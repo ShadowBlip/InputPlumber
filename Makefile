@@ -1,7 +1,14 @@
 NAME := $(shell grep 'name =' Cargo.toml | head -n 1 | cut -d'"' -f2)
+VERSION := $(shell grep '^version =' Cargo.toml | cut -d'"' -f2)
+ARCH := $(shell uname -m)
 DBUS_NAME := org.shadowblip.InputPlumber
 ALL_RS := $(shell find src -name '*.rs')
 PREFIX ?= /usr
+CACHE_DIR := .cache
+
+# Docker image variables
+IMAGE_NAME ?= rust
+IMAGE_TAG ?= 1.75
 
 ##@ General
 
@@ -28,7 +35,9 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	install -D -m 644 rootfs/usr/lib/systemd/system/$(NAME).service \
 		$(PREFIX)/lib/systemd/system/$(NAME).service
-	systemctl reload dbus
+	@echo ""
+	@echo "Install completed. Enable service with:" 
+	@echo "  systemctl enable --now $(NAME)"
 
 .PHONY: uninstall
 uninstall: ## Uninstall inputplumber
@@ -73,3 +82,28 @@ setup: /usr/share/dbus-1/system.d/$(DBUS_NAME).conf ## Install dbus policies
 	sudo cp $(PWD)/rootfs/usr/share/dbus-1/system.d/$(DBUS_NAME).conf \
 		/usr/share/dbus-1/system.d/$(DBUS_NAME).conf
 	sudo systemctl reload dbus
+
+##@ Distribution
+
+.PHONY: dist
+dist: dist/$(NAME).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Create all redistributable versions of the project
+
+.PHONY: dist-archive
+dist-archive: dist/$(NAME).tar.gz ## Build a redistributable archive of the project
+dist/$(NAME).tar.gz: build
+	rm -rf $(CACHE_DIR)/$(NAME)
+	mkdir -p $(CACHE_DIR)/$(NAME)
+	$(MAKE) install PREFIX=$(CACHE_DIR)/$(NAME)/usr NO_RELOAD=true
+	mkdir -p dist
+	tar cvfz $@ -C $(CACHE_DIR) $(NAME)
+	cd dist && sha256sum $(NAME).tar.gz > $(NAME).tar.gz.sha256.txt
+
+.PHONY: dist-rpm
+dist-rpm: dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Build a redistributable RPM package
+dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/release/$(NAME)
+	mkdir -p dist
+	cargo install cargo-generate-rpm
+	cargo generate-rpm
+	cp ./target/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
+	cd dist && sha256sum $(NAME)-$(VERSION)-1.$(ARCH).rpm > $(NAME)-$(VERSION)-1.$(ARCH).rpm.sha256.txt
+
