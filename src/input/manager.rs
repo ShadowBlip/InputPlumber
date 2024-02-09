@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 
-use tokio::fs;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use zbus::fdo;
@@ -236,7 +236,7 @@ impl Manager {
             // but without all its source devices
 
             // Create a composite device to manage these devices
-            log::info!("Found matching source!: {:?}", config.name);
+            log::info!("Found matching source devices: {:?}", config.name);
             let mut device = CompositeDevice::new(config)?;
 
             // Check to see if there's already a CompositeDevice for
@@ -540,49 +540,58 @@ impl Manager {
     /// load/parse them. Returns an array of these configs which can be used
     /// to automatically create a [CompositeDevice].
     pub async fn load_device_configs(&self) -> Vec<CompositeDeviceConfig> {
-        let mut devices: Vec<CompositeDeviceConfig> = Vec::new();
-        let paths = vec![
-            "/usr/share/inputplumber/devices",
-            "/etc/inputplumber/devices.d",
-            "./rootfs/usr/share/inputplumber/devices",
-        ];
+        let task = tokio::task::spawn_blocking(move || {
+            let mut devices: Vec<CompositeDeviceConfig> = Vec::new();
+            let paths = vec![
+                "/usr/share/inputplumber/devices",
+                "/etc/inputplumber/devices.d",
+                "./rootfs/usr/share/inputplumber/devices",
+            ];
 
-        // Look for composite device profiles in all known locations
-        for path in paths {
-            let files = fs::read_dir(path).await;
-            if files.is_err() {
-                log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
-                continue;
-            }
-            let mut files = files.unwrap();
-
-            // Look at each file in the directory and try to load them
-            while let Ok(Some(file)) = files.next_entry().await {
-                let filename = file.file_name();
-                let filename = filename.as_os_str().to_str().unwrap();
-
-                // Skip any non-yaml files
-                if !filename.ends_with(".yaml") {
+            // Look for composite device profiles in all known locations
+            for path in paths {
+                let files = fs::read_dir(path);
+                if files.is_err() {
+                    log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
                     continue;
                 }
+                let files = files.unwrap();
 
-                // Try to load the composite device profile
-                log::debug!("Found file: {}", file.path().display());
-                let device =
-                    CompositeDeviceConfig::from_yaml_file(file.path().display().to_string());
-                if device.is_err() {
-                    log::debug!(
-                        "Failed to parse composite device config: {}",
-                        device.unwrap_err()
-                    );
-                    continue;
+                // Look at each file in the directory and try to load them
+                for file in files {
+                    if file.is_err() {
+                        log::debug!("Failed read directory entry: {}", file.unwrap_err());
+                        continue;
+                    }
+                    let file = file.unwrap();
+                    let filename = file.file_name();
+                    let filename = filename.as_os_str().to_str().unwrap();
+
+                    // Skip any non-yaml files
+                    if !filename.ends_with(".yaml") {
+                        continue;
+                    }
+
+                    // Try to load the composite device profile
+                    log::debug!("Found file: {}", file.path().display());
+                    let device =
+                        CompositeDeviceConfig::from_yaml_file(file.path().display().to_string());
+                    if device.is_err() {
+                        log::debug!(
+                            "Failed to parse composite device config: {}",
+                            device.unwrap_err()
+                        );
+                        continue;
+                    }
+                    let device = device.unwrap();
+                    devices.push(device);
                 }
-                let device = device.unwrap();
-                devices.push(device);
             }
-        }
 
-        devices
+            devices
+        });
+
+        task.await.unwrap_or_default()
     }
 
     /// Creates a DBus object

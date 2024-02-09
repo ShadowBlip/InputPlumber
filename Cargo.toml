@@ -2,8 +2,16 @@
 name = "inputplumber"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Open source input manager for Linux"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package.metadata.generate-rpm]
+assets = [
+  { source = "./target/release/inputplumber", dest = "/usr/bin/inputplumber", mode = "755" },
+  { source = "./rootfs/usr/share/dbus-1/session.d/org.shadowblip.InputPlumber.conf", dest = "/usr/share/dbus-1/session.d/org.shadowblip.InputPlumber.conf", mode = "644" },
+  { source = "./rootfs/usr/share/dbus-1/services/org.shadowblip.InputPlumber.service", dest = "/usr/share/dbus-1/services/org.shadowblip.InputPlumber.service", mode = "644" },
+  { source = "./rootfs/usr/lib/systemd/user/inputplumber.service", dest = "/usr/lib/systemd/user/inputplumber.service", mode = "644" },
+]
 
 [dependencies]
 evdev = { git = "https://github.com/emberian/evdev.git", features = ["tokio"] }

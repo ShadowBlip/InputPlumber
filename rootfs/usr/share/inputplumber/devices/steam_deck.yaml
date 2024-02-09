@@ -30,4 +30,4 @@ event_map_id: deck
 
 # The default output device that the virtual device profile should use if
 # 'auto' is selected.
-default_output_device: xb360
+default_output_device: gamepad

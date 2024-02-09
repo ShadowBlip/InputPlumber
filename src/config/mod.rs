@@ -50,9 +50,9 @@ pub struct Evdev {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct Hidraw {
-    pub vendor_id: Option<u32>,
-    pub product_id: Option<u32>,
-    pub interface_num: Option<u32>,
+    pub vendor_id: Option<u16>,
+    pub product_id: Option<u16>,
+    pub interface_num: Option<i32>,
     pub handler: Option<String>,
 }
 
@@ -103,7 +103,11 @@ impl CompositeDeviceConfig {
     /// Checks to see if the [CompositeDeviceConfig] matches what is available
     /// on the system.
     pub fn sources_exist(&self) -> Result<bool, Box<dyn Error>> {
-        Ok(self.sources_exist_evdev()? && self.sources_exist_hidraw()?)
+        let evdev_exists = self.sources_exist_evdev()?;
+        log::debug!("Evdev Devices Exist: {}", evdev_exists);
+        let hidraw_exists = self.sources_exist_hidraw()?;
+        log::debug!("HIDRaw Devices Exist: {}", hidraw_exists);
+        Ok(evdev_exists && hidraw_exists)
     }
 
     /// Returns true if all the hidraw source devices in the config exist on the system
@@ -113,7 +117,7 @@ impl CompositeDeviceConfig {
         };
         let hidraw_configs = self.get_hidraw_configs();
 
-        Ok(hidraw_configs.len() == hidraw_devices.len())
+        Ok(hidraw_devices.len() >= hidraw_configs.len())
     }
 
     /// Returns true if all the evdev source devices in the config exist on the system
@@ -154,6 +158,10 @@ impl CompositeDeviceConfig {
         }
         let mut matches: Vec<DeviceInfo> = Vec::new();
 
+        // Keep track of potentially duplicate hidraw devices with the same
+        // vendor + product
+        let mut seen_devices: Vec<String> = Vec::new();
+
         // Get all hidraw devices to match on and check to see if they match
         // a hidraw definition in the config.
         let api = HidApi::new()?;
@@ -164,14 +172,21 @@ impl CompositeDeviceConfig {
                 let mut has_matches = false;
 
                 if let Some(vendor_id) = hidraw_config.vendor_id {
-                    if device.vendor_id() as u32 != vendor_id {
+                    if device.vendor_id() != vendor_id {
                         continue;
                     }
                     has_matches = true;
                 }
 
                 if let Some(product_id) = hidraw_config.product_id {
-                    if device.product_id() as u32 != product_id {
+                    if device.product_id() != product_id {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(interface_num) = hidraw_config.interface_num {
+                    if device.interface_number() != interface_num {
                         continue;
                     }
                     has_matches = true;
@@ -181,9 +196,18 @@ impl CompositeDeviceConfig {
                     continue;
                 }
 
+                // Construct a device ID from the vendor and product to see
+                // if this device has already been matched.
+                let device_id = format!("{:04x}:{:04x}", device.vendor_id(), device.product_id());
+                if seen_devices.contains(&device_id) {
+                    log::debug!("Device already seen: {}", device_id);
+                    continue;
+                }
+
                 // If it's gotten this far, then the config has matched all
                 // non-empty fields!
                 matches.push(device.clone());
+                seen_devices.push(device_id);
             }
         }
 

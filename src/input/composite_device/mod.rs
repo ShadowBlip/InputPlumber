@@ -146,9 +146,11 @@ impl CompositeDevice {
         let mut source_device_paths: Vec<String> = Vec::new();
         let mut source_device_ids: Vec<String> = Vec::new();
 
-        // Open source devices based on configuration
+        // Open evdev source devices based on configuration
         if let Some(evdev_devices) = config.get_matching_evdev()? {
-            log::debug!("Found event devices");
+            if !evdev_devices.is_empty() {
+                log::debug!("Found event devices");
+            }
             for info in evdev_devices {
                 // Create an instance of the device
                 log::debug!("Adding source device: {:?}", info);
@@ -169,7 +171,27 @@ impl CompositeDevice {
                 source_device_ids.push(id);
             }
         }
-        log::debug!("Finished adding event devices");
+
+        // Open hidraw source devices based on configuration
+        if let Some(hidraw_devices) = config.get_matching_hidraw()? {
+            if !hidraw_devices.is_empty() {
+                log::debug!("Found hidraw devices");
+            }
+            for info in hidraw_devices {
+                log::debug!("Adding source device: {:?}", info);
+                let device = source::hidraw::HIDRawDevice::new(info, tx.clone());
+
+                // Get the capabilities of the source device.
+                //let capabilities = device.get_capabilities()?;
+
+                let id = device.get_id();
+                let source_device = source::SourceDevice::HIDRawDevice(device);
+                source_devices.push(source_device);
+                source_device_ids.push(id);
+            }
+        }
+
+        log::debug!("Finished adding source devices");
 
         Ok(Self {
             intercept_mode: InterceptMode::None,

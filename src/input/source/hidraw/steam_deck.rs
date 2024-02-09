@@ -44,8 +44,10 @@ impl DeckController {
 
                     // All report descriptors are 64 bytes, so this is just to be safe
                     if bytes_read != PACKET_SIZE {
-                        let msg = format!("Invalid input report size was received from gamepad device: {bytes_read}/{PACKET_SIZE}");
-                        return Err(msg.into());
+                        //let msg = format!("Invalid input report size was received from gamepad device: {bytes_read}/{PACKET_SIZE}");
+                        log::debug!("Invalid input report size was received from gamepad device: {bytes_read}/{PACKET_SIZE}");
+                        continue;
+                        //return Err(msg.into());
                     }
 
                     // Unpack the input report

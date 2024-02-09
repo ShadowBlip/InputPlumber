@@ -109,6 +109,11 @@ impl HIDRawDevice {
 
     /// Returns a unique identifier for the source device.
     pub fn get_id(&self) -> String {
+        //let name = format!(
+        //    "{:04x}:{:04x}",
+        //    self.info.vendor_id(),
+        //    self.info.product_id()
+        //);
         let device_path = self.info.path().to_string_lossy().to_string();
         let name = device_path.split('/').last().unwrap();
         format!("hidraw://{}", name)

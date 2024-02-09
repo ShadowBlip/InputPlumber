@@ -3,12 +3,20 @@ VERSION := $(shell grep '^version =' Cargo.toml | cut -d'"' -f2)
 ARCH := $(shell uname -m)
 DBUS_NAME := org.shadowblip.InputPlumber
 ALL_RS := $(shell find src -name '*.rs')
+ALL_ROOTFS := $(shell find rootfs -type f)
 PREFIX ?= /usr
 CACHE_DIR := .cache
 
 # Docker image variables
 IMAGE_NAME ?= rust
 IMAGE_TAG ?= 1.75
+
+# systemd-sysext variables 
+SYSEXT_ID ?= steamos
+SYSEXT_VERSION_ID ?= 3.5.14
+
+# Include any user defined settings
+-include settings.mk
 
 ##@ General
 
@@ -35,6 +43,8 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	install -D -m 644 rootfs/usr/lib/systemd/system/$(NAME).service \
 		$(PREFIX)/lib/systemd/system/$(NAME).service
+	install -D -m 644 rootfs/usr/share/$(NAME)/devices/steam_deck.yaml \
+		$(PREFIX)/share/$(NAME)/devices/steam_deck.yaml
 	@echo ""
 	@echo "Install completed. Enable service with:" 
 	@echo "  systemctl enable --now $(NAME)"
@@ -44,6 +54,7 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/bin/$(NAME)
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
+	rm $(PREFIX)/share/$(NAME)/devices/steam_deck.yaml
 
 ##@ Development
 
@@ -86,11 +97,11 @@ setup: /usr/share/dbus-1/system.d/$(DBUS_NAME).conf ## Install dbus policies
 ##@ Distribution
 
 .PHONY: dist
-dist: dist/$(NAME).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Create all redistributable versions of the project
+dist: dist/$(NAME).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist/$(NAME).raw ## Create all redistributable versions of the project
 
 .PHONY: dist-archive
 dist-archive: dist/$(NAME).tar.gz ## Build a redistributable archive of the project
-dist/$(NAME).tar.gz: build
+dist/$(NAME).tar.gz: build $(ALL_ROOTFS)
 	rm -rf $(CACHE_DIR)/$(NAME)
 	mkdir -p $(CACHE_DIR)/$(NAME)
 	$(MAKE) install PREFIX=$(CACHE_DIR)/$(NAME)/usr NO_RELOAD=true
@@ -107,3 +118,33 @@ dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/release/$(NAME)
 	cp ./target/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
 	cd dist && sha256sum $(NAME)-$(VERSION)-1.$(ARCH).rpm > $(NAME)-$(VERSION)-1.$(ARCH).rpm.sha256.txt
 
+.PHONY: dist-ext
+dist-ext: dist/$(NAME).raw ## Create a systemd-sysext extension archive
+dist/$(NAME).raw: dist/$(NAME).tar.gz
+	@echo "Building redistributable systemd extension"
+	mkdir -p dist
+	rm -rf dist/$(NAME).raw $(CACHE_DIR)/$(NAME).raw
+	cp dist/$(NAME).tar.gz $(CACHE_DIR)
+	cd $(CACHE_DIR) && tar xvfz $(NAME).tar.gz $(NAME)/usr
+	mkdir -p $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d
+	echo ID=$(SYSEXT_ID) > $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
+	echo VERSION_ID=$(SYSEXT_VERSION_ID) >> $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
+
+	@# Build the extension archive
+	cd $(CACHE_DIR) && mksquashfs $(NAME) $(NAME).raw
+	rm -rf $(CACHE_DIR)/$(NAME)
+	mv $(CACHE_DIR)/$(NAME).raw $@
+	cd dist && sha256sum $(NAME).raw > $(NAME).raw.sha256.txt
+
+##@ Deployment
+
+
+.PHONY: deploy
+deploy: deploy-ext ## Build and deploy to a remote device
+
+.PHONY: deploy-ext
+deploy-ext: dist-ext ## Build and deploy systemd extension to a remote device
+	ssh $(SSH_USER)@$(SSH_HOST) mkdir -p .var/lib/extensions
+	scp dist/$(NAME).raw $(SSH_USER)@$(SSH_HOST):~/.var/lib/extensions
+	ssh -t $(SSH_USER)@$(SSH_HOST) sudo systemd-sysext refresh
+	ssh $(SSH_USER)@$(SSH_HOST) systemd-sysext status
