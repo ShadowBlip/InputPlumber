@@ -52,7 +52,9 @@ impl DeckController {
 
                     // Unpack the input report
                     let input_report = PackedInputDataReport::unpack(&buf)?;
-                    log::debug!("A Button state: {}", input_report.a);
+                    log::debug!("----- REPORT Frame: {} ----", input_report.frame);
+                    log::debug!("{:?}", input_report);
+                    log::debug!("----- END REPORT ----");
                 }
             },
         );
