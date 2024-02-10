@@ -21,11 +21,8 @@ pub struct NativeEvent {
 }
 
 impl NativeEvent {
-    pub fn new() -> NativeEvent {
-        NativeEvent {
-            capability: Capability::None,
-            value: InputValue::None,
-        }
+    pub fn new(capability: Capability, value: InputValue) -> NativeEvent {
+        NativeEvent { capability, value }
     }
 
     /// Returns the capability that this event implements
