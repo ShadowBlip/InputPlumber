@@ -8,6 +8,7 @@ pub enum InputValue {
     None,
     Bool(bool),
     Int(i32),
+    UInt(u32),
     Float(f64),
     Vector2 { x: f64, y: f64 },
     Vector3 { x: f64, y: f64, z: f64 },
