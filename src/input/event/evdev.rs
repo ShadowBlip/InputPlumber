@@ -114,6 +114,9 @@ impl EvdevEvent {
             Capability::Gamepad(gamepad) => match gamepad {
                 Gamepad::Button(_) => EventType::KEY,
                 Gamepad::Axis(_) => EventType::ABSOLUTE,
+                Gamepad::Trigger(_) => todo!(),
+                Gamepad::Accelerometer => todo!(),
+                Gamepad::Gyro => todo!(),
             },
             _ => EventType::KEY,
         };
@@ -137,6 +140,18 @@ impl EvdevEvent {
                     GamepadButton::DPadDown => KeyCode::BTN_TRIGGER_HAPPY2.0,
                     GamepadButton::DPadLeft => KeyCode::BTN_TRIGGER_HAPPY3.0,
                     GamepadButton::DPadRight => KeyCode::BTN_TRIGGER_HAPPY4.0,
+                    GamepadButton::LeftTrigger => todo!(),
+                    GamepadButton::LeftPaddle1 => todo!(),
+                    GamepadButton::LeftPaddle2 => todo!(),
+                    GamepadButton::LeftStickTouch => todo!(),
+                    GamepadButton::LeftTouchpadTouch => todo!(),
+                    GamepadButton::LeftTouchpadPress => todo!(),
+                    GamepadButton::RightTrigger => todo!(),
+                    GamepadButton::RightPaddle1 => todo!(),
+                    GamepadButton::RightPaddle2 => todo!(),
+                    GamepadButton::RightStickTouch => todo!(),
+                    GamepadButton::RightTouchpadTouch => todo!(),
+                    GamepadButton::RightTouchpadPress => todo!(),
                 },
                 Gamepad::Axis(axis) => match axis {
                     GamepadAxis::LeftStick => todo!(),
@@ -144,6 +159,9 @@ impl EvdevEvent {
                     GamepadAxis::Hat1 => todo!(),
                     GamepadAxis::Hat2 => todo!(),
                 },
+                Gamepad::Trigger(_) => todo!(),
+                Gamepad::Accelerometer => todo!(),
+                Gamepad::Gyro => todo!(),
             },
             _ => 0,
         };

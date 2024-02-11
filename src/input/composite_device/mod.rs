@@ -185,8 +185,10 @@ impl CompositeDevice {
                 //let capabilities = device.get_capabilities()?;
 
                 let id = device.get_id();
+                let device_path = device.get_device_path();
                 let source_device = source::SourceDevice::HIDRawDevice(device);
                 source_devices.push(source_device);
+                source_device_paths.push(device_path);
                 source_device_ids.push(id);
             }
         }
@@ -390,7 +392,7 @@ impl CompositeDevice {
         let event: NativeEvent = match raw_event {
             Event::Evdev(event) => event.into(),
             Event::HIDRaw => todo!(),
-            Event::Native(_) => todo!(),
+            Event::Native(event) => event,
             Event::DBus(_) => todo!(),
         };
 

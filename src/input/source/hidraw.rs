@@ -118,6 +118,11 @@ impl HIDRawDevice {
         let name = device_path.split('/').last().unwrap();
         format!("hidraw://{}", name)
     }
+
+    /// Returns the full path to the device handler (e.g. /dev/hidraw0)
+    pub fn get_device_path(&self) -> String {
+        self.info.path().to_string_lossy().to_string()
+    }
 }
 
 /// Returns an array of all HIDRaw devices

@@ -1,6 +1,6 @@
 //! The Deck implementation has been largly based off of the OpenSD project:
 //! https://gitlab.com/open-sd/opensd/
-use std::error::Error;
+use std::{error::Error, thread, time};
 
 use hidapi::DeviceInfo;
 use tokio::sync::broadcast;
@@ -8,7 +8,7 @@ use tokio::sync::broadcast;
 use crate::{
     drivers::steam_deck::{self, driver::Driver},
     input::{
-        capability::{Capability, Gamepad, GamepadButton},
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         composite_device::Command,
         event::{
             native::{InputValue, NativeEvent},
@@ -47,6 +47,10 @@ impl DeckController {
                     for event in native_events {
                         tx.send(Command::ProcessEvent(Event::Native(event)))?;
                     }
+
+                    // Polling interval is about 4ms so we can sleep a little
+                    let duration = time::Duration::from_micros(250);
+                    thread::sleep(duration);
                 }
             });
 
@@ -71,7 +75,7 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
     match event {
         steam_deck::event::Event::Button(button) => match button {
             steam_deck::event::ButtonEvent::A(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::X(value) => NativeEvent::new(
@@ -79,11 +83,11 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::B(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::Y(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::Menu(value) => NativeEvent::new(
@@ -123,69 +127,69 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::L2(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::L3(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::L4(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::L5(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::R1(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::R2(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::R3(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::R4(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::R5(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::RPadTouch(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightTouchpadTouch)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::LPadTouch(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTouchpadTouch)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::RPadPress(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightTouchpadPress)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::LPadPress(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTouchpadPress)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::RStickTouch(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::LStickTouch(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch)),
                 InputValue::Bool(value.pressed),
             ),
         },
         steam_deck::event::Event::Accelerometer(accel) => match accel {
             steam_deck::event::AccelerometerEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::NotImplemented,
                 InputValue::Vector3 {
                     x: value.x as f64,
                     y: value.y as f64,
@@ -193,7 +197,7 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
                 },
             ),
             steam_deck::event::AccelerometerEvent::Attitude(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::NotImplemented,
                 InputValue::Vector3 {
                     x: value.x as f64,
                     y: value.y as f64,
@@ -203,28 +207,28 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
         },
         steam_deck::event::Event::Axis(axis) => match axis {
             steam_deck::event::AxisEvent::LPad(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::NotImplemented,
                 InputValue::Vector2 {
                     x: value.x as f64,
                     y: value.y as f64,
                 },
             ),
             steam_deck::event::AxisEvent::RPad(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::NotImplemented,
                 InputValue::Vector2 {
                     x: value.x as f64,
                     y: value.y as f64,
                 },
             ),
             steam_deck::event::AxisEvent::LStick(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
                 InputValue::Vector2 {
                     x: value.x as f64,
                     y: value.y as f64,
                 },
             ),
             steam_deck::event::AxisEvent::RStick(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
                 InputValue::Vector2 {
                     x: value.x as f64,
                     y: value.y as f64,
@@ -233,27 +237,27 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
         },
         steam_deck::event::Event::Trigger(trigg) => match trigg {
             steam_deck::event::TriggerEvent::LTrigger(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
                 InputValue::UInt(value.value as u32),
             ),
             steam_deck::event::TriggerEvent::RTrigger(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
                 InputValue::UInt(value.value as u32),
             ),
             steam_deck::event::TriggerEvent::LPadForce(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::NotImplemented,
                 InputValue::UInt(value.value as u32),
             ),
             steam_deck::event::TriggerEvent::RPadForce(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::NotImplemented,
                 InputValue::UInt(value.value as u32),
             ),
             steam_deck::event::TriggerEvent::LStickForce(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::NotImplemented,
                 InputValue::UInt(value.value as u32),
             ),
             steam_deck::event::TriggerEvent::RStickForce(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+                Capability::NotImplemented,
                 InputValue::UInt(value.value as u32),
             ),
         },
