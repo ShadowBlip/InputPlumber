@@ -123,6 +123,7 @@ pub enum GamepadAxis {
     RightStick,
     Hat1,
     Hat2,
+    Hat3,
 }
 
 #[derive(Clone, Debug)]

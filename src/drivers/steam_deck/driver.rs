@@ -4,9 +4,12 @@ use crate::drivers::steam_deck::hid_report::PackedInputDataReport;
 use hidapi::HidDevice;
 use packed_struct::{types::SizedInteger, PackedStruct};
 
-use super::event::{
-    AccelerometerEvent, AccelerometerInput, AxisEvent, AxisInput, BinaryInput, ButtonEvent, Event,
-    TriggerEvent, TriggerInput,
+use super::{
+    event::{
+        AccelerometerEvent, AccelerometerInput, AxisEvent, AxisInput, BinaryInput, ButtonEvent,
+        Event, TriggerEvent, TriggerInput,
+    },
+    hid_report::{PackedMappingsReport, ReportType},
 };
 
 pub const VID: u16 = 0x28de;
@@ -24,6 +27,11 @@ impl Driver {
         let path = CString::new(path)?;
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
+        let info = device.get_device_info()?;
+        if info.vendor_id() != VID || info.product_id() != PID {
+            return Err("Device '{path}' is not a Steam Deck Controller".into());
+        }
+
         Ok(Self {
             device,
             state: None,
@@ -46,6 +54,36 @@ impl Driver {
         let events = self.handle_input_report(buf)?;
 
         Ok(events)
+    }
+
+    /// Set lizard mode, which will automatically try to emulate mouse/keyboard
+    /// if enabled.
+    pub fn set_lizard_mode(&self, enabled: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Initialize the report to send
+        let report = match enabled {
+            true => PackedMappingsReport {
+                report_id: ReportType::DefaultMappings as u8,
+            },
+            false => PackedMappingsReport {
+                report_id: ReportType::ClearMappings as u8,
+            },
+        };
+
+        // Write the report to the device
+        let buf = report.pack()?;
+        let _bytes_written = self.device.write(&buf)?;
+
+        Ok(())
+    }
+
+    /// Strangely, the only known method to disable keyboard emulation only does
+    /// so for a few seconds, whereas disabling the mouse is permanent until
+    /// re-enabled.  This means we have to run a separate thread which wakes up
+    /// every couple seconds and disabled the keyboard again using the
+    /// CLEAR_MAPPINGS report.  If there's a better way to do this, I'd love to
+    /// know about it.  Looking at you, Valve.
+    pub fn handle_lizard_mode(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.set_lizard_mode(false)
     }
 
     /// Unpacks the buffer into a [PackedInputDataReport] structure and updates

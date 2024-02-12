@@ -214,11 +214,11 @@ impl CompositeDevice {
         // Keep a list of all the tasks
         let mut tasks = JoinSet::new();
 
-        // Run all source devices
+        // Start listening for events from all source devices
         let sources = self.source_devices.drain(..);
         for source in sources {
             match source {
-                // If the source device is an event device (i.e. from /dev/input/),
+                // If the source device is an event device (i.e. from /dev/input/eventXX),
                 // then start listening for inputs from that device.
                 SourceDevice::EventDevice(device) => {
                     let device_id = device.get_id();
@@ -254,7 +254,7 @@ impl CompositeDevice {
             }
         }
 
-        // Create and run all target devices
+        // Create and start all target devices
         let targets = self.create_target_devices()?;
         for target in targets {
             match target {
@@ -262,8 +262,8 @@ impl CompositeDevice {
                 TargetDevice::Keyboard(_) => todo!(),
                 TargetDevice::Mouse(_) => todo!(),
                 TargetDevice::GenericGamepad(mut gamepad) => {
-                    let transmitter = gamepad.transmitter();
-                    self.target_devices.push(transmitter);
+                    let event_tx = gamepad.transmitter();
+                    self.target_devices.push(event_tx);
                     tokio::spawn(async move {
                         if let Err(e) = gamepad.run().await {
                             log::error!("Failed to run target gamepad: {:?}", e);
@@ -278,7 +278,7 @@ impl CompositeDevice {
         // Loop and listen for command events
         log::debug!("CompositeDevice started");
         while let Ok(cmd) = self.rx.recv().await {
-            log::debug!("Received command: {:?}", cmd);
+            //log::debug!("Received command: {:?}", cmd);
             match cmd {
                 Command::ProcessEvent(event) => {
                     if let Err(e) = self.process_event(event).await {
@@ -343,7 +343,7 @@ impl CompositeDevice {
         self.tx.subscribe()
     }
 
-    /// Returns an array of all source devices being used by this device.
+    /// Returns an array of all source devices ids being used by this device.
     pub fn get_source_device_ids(&self) -> Vec<String> {
         self.source_device_ids.clone()
     }
@@ -386,7 +386,7 @@ impl CompositeDevice {
     /// Process a single event from a source device. Events are piped through
     /// a translation layer, then dispatched to the appropriate target device(s)
     async fn process_event(&self, raw_event: Event) -> Result<(), Box<dyn Error>> {
-        log::debug!("Received event: {:?}", raw_event);
+        //log::debug!("Received event: {:?}", raw_event);
 
         // Convert the event into a NativeEvent
         let event: NativeEvent = match raw_event {

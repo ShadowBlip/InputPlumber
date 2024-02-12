@@ -6,7 +6,7 @@ use hidapi::DeviceInfo;
 use tokio::sync::broadcast;
 
 use crate::{
-    drivers::steam_deck::{self, driver::Driver},
+    drivers::steam_deck::{self, driver::Driver, hid_report::LIZARD_SLEEP_SEC},
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         composite_device::Command,
@@ -38,9 +38,10 @@ impl DeckController {
         let tx = self.composite_tx.clone();
 
         // Spawn a blocking task to read the events
+        let device_path = path.clone();
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut driver = Driver::new(path.clone())?;
+                let mut driver = Driver::new(device_path.clone())?;
                 loop {
                     let events = driver.poll()?;
                     let native_events = translate_events(events);
@@ -54,14 +55,136 @@ impl DeckController {
                 }
             });
 
+        // Spawn a blocking task to handle lizard mode
+        let lizard_task =
+            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+                let driver = Driver::new(path.clone())?;
+                loop {
+                    // Keep the lizard asleep
+                    driver.handle_lizard_mode()?;
+
+                    // Polling interval is about 4ms so we can sleep a little
+                    let duration = time::Duration::from_secs(LIZARD_SLEEP_SEC as u64);
+                    thread::sleep(duration);
+                }
+            });
+
         // Wait for the task to finish
         if let Err(e) = task.await? {
+            return Err(e.to_string().into());
+        }
+        if let Err(e) = lizard_task.await? {
             return Err(e.to_string().into());
         }
 
         log::debug!("Steam Deck Controller driver stopped");
 
         Ok(())
+    }
+}
+
+/// Returns a value between -1.0 and 1.0 based on the given value with its
+/// minimum and maximum values.
+fn normalize_signed_value(raw_value: f64, min: f64, max: f64) -> f64 {
+    let mid = (max + min) / 2.0;
+    let event_value = raw_value - mid;
+
+    // Normalize the value
+    if event_value >= 0.0 {
+        let maximum = max - mid;
+        event_value / maximum
+    } else {
+        let minimum = min - mid;
+        let value = event_value / minimum;
+        -value
+    }
+}
+
+// Returns a value between 0.0 and 1.0 based on the given value with its
+// maximum.
+fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
+    raw_value / max
+}
+
+/// Normalize the value to something between -1.0 and 1.0 based on the Deck's
+/// minimum and maximum axis ranges.
+fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
+    match event {
+        steam_deck::event::AxisEvent::LPad(value) => {
+            let min = steam_deck::hid_report::PAD_X_MIN;
+            let max = steam_deck::hid_report::PAD_X_MAX;
+            let x = normalize_signed_value(value.x as f64, min, max);
+
+            let min = steam_deck::hid_report::PAD_Y_MAX; // uses inverted Y-axis
+            let max = steam_deck::hid_report::PAD_Y_MIN;
+            let y = normalize_signed_value(value.y as f64, min, max);
+
+            InputValue::Vector2 { x, y }
+        }
+        steam_deck::event::AxisEvent::RPad(value) => {
+            let min = steam_deck::hid_report::PAD_X_MIN;
+            let max = steam_deck::hid_report::PAD_X_MAX;
+            let x = normalize_signed_value(value.x as f64, min, max);
+
+            let min = steam_deck::hid_report::PAD_Y_MAX; // uses inverted Y-axis
+            let max = steam_deck::hid_report::PAD_Y_MIN;
+            let y = normalize_signed_value(value.y as f64, min, max);
+
+            InputValue::Vector2 { x, y }
+        }
+        steam_deck::event::AxisEvent::LStick(value) => {
+            let min = steam_deck::hid_report::STICK_X_MIN;
+            let max = steam_deck::hid_report::STICK_X_MAX;
+            let x = normalize_signed_value(value.x as f64, min, max);
+
+            let min = steam_deck::hid_report::STICK_Y_MAX; // uses inverted Y-axis
+            let max = steam_deck::hid_report::STICK_Y_MIN;
+            let y = normalize_signed_value(value.y as f64, min, max);
+
+            InputValue::Vector2 { x, y }
+        }
+        steam_deck::event::AxisEvent::RStick(value) => {
+            let min = steam_deck::hid_report::STICK_X_MIN;
+            let max = steam_deck::hid_report::STICK_X_MAX;
+            let x = normalize_signed_value(value.x as f64, min, max);
+
+            let min = steam_deck::hid_report::STICK_Y_MAX; // uses inverted Y-axis
+            let max = steam_deck::hid_report::STICK_Y_MIN;
+            let y = normalize_signed_value(value.y as f64, min, max);
+
+            InputValue::Vector2 { x, y }
+        }
+    }
+}
+
+/// Normalize the trigger value to something between 0.0 and 1.0 based on the Deck's
+/// maximum axis ranges.
+fn normalize_trigger_value(event: steam_deck::event::TriggerEvent) -> InputValue {
+    match event {
+        steam_deck::event::TriggerEvent::LTrigger(value) => {
+            let max = steam_deck::hid_report::TRIGG_MAX;
+            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
+        }
+        steam_deck::event::TriggerEvent::RTrigger(value) => {
+            let max = steam_deck::hid_report::TRIGG_MAX;
+            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
+        }
+        steam_deck::event::TriggerEvent::LPadForce(value) => {
+            let max = steam_deck::hid_report::PAD_FORCE_MAX;
+            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
+        }
+        steam_deck::event::TriggerEvent::RPadForce(value) => {
+            let max = steam_deck::hid_report::PAD_FORCE_MAX;
+            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
+        }
+        steam_deck::event::TriggerEvent::LStickForce(value) => {
+            let max = steam_deck::hid_report::STICK_FORCE_MAX;
+            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
+        }
+        steam_deck::event::TriggerEvent::RStickForce(value) => {
+            let max = steam_deck::hid_report::STICK_FORCE_MAX;
+            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
+        }
     }
 }
 
@@ -205,61 +328,43 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
                 },
             ),
         },
-        steam_deck::event::Event::Axis(axis) => match axis {
-            steam_deck::event::AxisEvent::LPad(value) => NativeEvent::new(
-                Capability::NotImplemented,
-                InputValue::Vector2 {
-                    x: value.x as f64,
-                    y: value.y as f64,
-                },
-            ),
-            steam_deck::event::AxisEvent::RPad(value) => NativeEvent::new(
-                Capability::NotImplemented,
-                InputValue::Vector2 {
-                    x: value.x as f64,
-                    y: value.y as f64,
-                },
-            ),
-            steam_deck::event::AxisEvent::LStick(value) => NativeEvent::new(
+        steam_deck::event::Event::Axis(axis) => match axis.clone() {
+            steam_deck::event::AxisEvent::LPad(_) => {
+                NativeEvent::new(Capability::NotImplemented, normalize_axis_value(axis))
+            }
+            steam_deck::event::AxisEvent::RPad(_) => {
+                NativeEvent::new(Capability::NotImplemented, normalize_axis_value(axis))
+            }
+            steam_deck::event::AxisEvent::LStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
-                InputValue::Vector2 {
-                    x: value.x as f64,
-                    y: value.y as f64,
-                },
+                normalize_axis_value(axis),
             ),
-            steam_deck::event::AxisEvent::RStick(value) => NativeEvent::new(
+            steam_deck::event::AxisEvent::RStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
-                InputValue::Vector2 {
-                    x: value.x as f64,
-                    y: value.y as f64,
-                },
+                normalize_axis_value(axis),
             ),
         },
-        steam_deck::event::Event::Trigger(trigg) => match trigg {
-            steam_deck::event::TriggerEvent::LTrigger(value) => NativeEvent::new(
+        steam_deck::event::Event::Trigger(trigg) => match trigg.clone() {
+            steam_deck::event::TriggerEvent::LTrigger(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
-                InputValue::UInt(value.value as u32),
+                normalize_trigger_value(trigg),
             ),
-            steam_deck::event::TriggerEvent::RTrigger(value) => NativeEvent::new(
+            steam_deck::event::TriggerEvent::RTrigger(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-                InputValue::UInt(value.value as u32),
+                normalize_trigger_value(trigg),
             ),
-            steam_deck::event::TriggerEvent::LPadForce(value) => NativeEvent::new(
-                Capability::NotImplemented,
-                InputValue::UInt(value.value as u32),
-            ),
-            steam_deck::event::TriggerEvent::RPadForce(value) => NativeEvent::new(
-                Capability::NotImplemented,
-                InputValue::UInt(value.value as u32),
-            ),
-            steam_deck::event::TriggerEvent::LStickForce(value) => NativeEvent::new(
-                Capability::NotImplemented,
-                InputValue::UInt(value.value as u32),
-            ),
-            steam_deck::event::TriggerEvent::RStickForce(value) => NativeEvent::new(
-                Capability::NotImplemented,
-                InputValue::UInt(value.value as u32),
-            ),
+            steam_deck::event::TriggerEvent::LPadForce(_) => {
+                NativeEvent::new(Capability::NotImplemented, normalize_trigger_value(trigg))
+            }
+            steam_deck::event::TriggerEvent::RPadForce(_) => {
+                NativeEvent::new(Capability::NotImplemented, normalize_trigger_value(trigg))
+            }
+            steam_deck::event::TriggerEvent::LStickForce(_) => {
+                NativeEvent::new(Capability::NotImplemented, normalize_trigger_value(trigg))
+            }
+            steam_deck::event::TriggerEvent::RStickForce(_) => {
+                NativeEvent::new(Capability::NotImplemented, normalize_trigger_value(trigg))
+            }
         },
     }
 }

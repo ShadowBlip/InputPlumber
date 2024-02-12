@@ -1,6 +1,66 @@
 //! Reference: https://gitlab.com/open-sd/opensd/-/blob/main/src/opensdd/drivers/gamepad/hid_reports.hpp
 use packed_struct::prelude::*;
 
+// Input report axis ranges
+pub const STICK_X_MIN: f64 = -32767.0;
+pub const STICK_X_MAX: f64 = 32767.0;
+pub const STICK_Y_MIN: f64 = 32767.0; // Hardware uses an inverted y axis
+pub const STICK_Y_MAX: f64 = -32767.0;
+pub const STICK_FORCE_MAX: f64 = 112.0; // Weird number
+pub const PAD_X_MIN: f64 = -32767.0;
+pub const PAD_X_MAX: f64 = 32767.0;
+pub const PAD_Y_MIN: f64 = 32767.0;
+pub const PAD_Y_MAX: f64 = -32767.0;
+pub const PAD_FORCE_MAX: f64 = 32767.0;
+pub const TRIGG_MIN: f64 = 0.0;
+pub const TRIGG_MAX: f64 = 32767.0;
+
+// Precalculated axis multipliers
+pub const STICK_X_AXIS_MULT: f64 = 1.0 / STICK_X_MAX;
+pub const STICK_Y_AXIS_MULT: f64 = 1.0 / STICK_Y_MAX;
+pub const STICK_FORCE_MULT: f64 = 1.0 / STICK_FORCE_MAX;
+pub const PAD_X_AXIS_MULT: f64 = 1.0 / PAD_X_MAX;
+pub const PAD_Y_AXIS_MULT: f64 = 1.0 / PAD_Y_MAX;
+pub const PAD_X_SENS_MULT: f64 = 1.0 / 128.0;
+pub const PAD_Y_SENS_MULT: f64 = 1.0 / 128.0;
+pub const PAD_FORCE_MULT: f64 = 1.0 / PAD_FORCE_MAX;
+pub const TRIGG_AXIS_MULT: f64 = 1.0 / TRIGG_MAX;
+
+// Lengh of time for the thread to sleep before keyboard emulation
+// has to be disabled again with a CLEAR_MAPPINGS report.
+pub const LIZARD_SLEEP_SEC: f64 = 2.0;
+
+/// Different reports types
+pub enum ReportType {
+    InputData = 0x09,
+    SetMappings = 0x80,
+    ClearMappings = 0x81,
+    GetMappings = 0x82,
+    GetAttrib = 0x83,
+    GetAttribLabel = 0x84,
+    DefaultMappings = 0x85,
+    FactoryReset = 0x86,
+    WriteRegister = 0x87,
+    ClearRegister = 0x88,
+    ReadRegister = 0x89,
+    GetRegisterLabel = 0x8a,
+    GetRegisterMax = 0x8b,
+    GetRegisterDefault = 0x8c,
+    SetMode = 0x8d,
+    DefaultMouse = 0x8e,
+    ForceFeedback = 0x8f,
+    RequestCommStatus = 0xb4,
+    GetSerial = 0xae,
+    HapticPulse = 0xea,
+}
+
+pub enum Register {
+    LPadMode = 0x07,
+    RPadMode = 0x08,
+    RPadMargin = 0x18,
+    GyroMode = 0x30,
+}
+
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "64")]
 pub struct PackedInputDataReport {
@@ -158,6 +218,7 @@ pub struct PackedInputDataReport {
     #[packed_field(bytes = "22..=23", endian = "lsb")]
     pub r_pad_y: Integer<i16, packed_bits::Bits<16>>,
 
+    // Accelerometer?
     // byte 24-29
     #[packed_field(bytes = "24..=25", endian = "lsb")]
     pub accel_x: Integer<i16, packed_bits::Bits<16>>, // Accelerometers I think.  Needs more testing.
@@ -166,6 +227,7 @@ pub struct PackedInputDataReport {
     #[packed_field(bytes = "28..=29", endian = "lsb")]
     pub accel_z: Integer<i16, packed_bits::Bits<16>>,
 
+    // Gyro?
     // byte 30-35
     #[packed_field(bytes = "30..=31", endian = "lsb")]
     pub pitch: Integer<i16, packed_bits::Bits<16>>, // Attitude (?)  Needs more testing
@@ -174,6 +236,7 @@ pub struct PackedInputDataReport {
     #[packed_field(bytes = "34..=35", endian = "lsb")]
     pub roll: Integer<i16, packed_bits::Bits<16>>,
 
+    // Magnetometer?
     // byte 36-43
     #[packed_field(bytes = "36..=37", endian = "lsb")]
     pub _gyro0: Integer<i16, packed_bits::Bits<16>>, // Not sure what these are...
@@ -229,4 +292,11 @@ pub struct PackedFeedbackReport {
     pub period: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "7..=8", endian = "lsb")]
     pub count: Integer<u16, packed_bits::Bits<16>>,
+}
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "64")]
+pub struct PackedMappingsReport {
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
 }

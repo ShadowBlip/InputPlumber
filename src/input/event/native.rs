@@ -1,6 +1,6 @@
-use crate::input::capability::{Capability, Gamepad, GamepadButton};
+use crate::input::capability::Capability;
 
-use super::{evdev::EvdevEvent, MappableEvent};
+use super::evdev::EvdevEvent;
 
 /// InputValue represents different ways to represent a value from an input event.
 #[derive(Debug, Clone)]
@@ -30,49 +30,21 @@ impl NativeEvent {
     pub fn as_capability(&self) -> Capability {
         self.capability.clone()
     }
+
+    /// Returns the value of this event
+    pub fn get_value(&self) -> InputValue {
+        self.value.clone()
+    }
 }
 
 impl From<EvdevEvent> for NativeEvent {
     /// Convert the [EvdevEvent] into a [NativeEvent]
     fn from(item: EvdevEvent) -> Self {
-        let value = item.get_value();
         let normal_value = item.get_normalized_value();
-        log::trace!("Normalized value from {} to {}", value, normal_value);
         let input_value = InputValue::Float(normal_value);
         NativeEvent {
             capability: item.as_capability(),
             value: input_value,
         }
-    }
-}
-
-impl MappableEvent for NativeEvent {
-    fn matches<T>(&self, event: T) -> bool
-    where
-        T: MappableEvent,
-    {
-        match event.kind() {
-            _ => false,
-        }
-    }
-
-    fn set_value(&mut self, value: f64) {
-        self.value = InputValue::Float(value);
-    }
-
-    fn get_value(&self) -> f64 {
-        match self.value {
-            InputValue::Int(v) => v as f64,
-            InputValue::Float(v) => v,
-            _ => 0.0,
-        }
-    }
-
-    fn get_signature(&self) -> String {
-        todo!()
-    }
-
-    fn kind(&self) -> super::Event {
-        super::Event::Native(self.clone())
     }
 }

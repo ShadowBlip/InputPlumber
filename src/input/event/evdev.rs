@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, KeyEvent};
 
-use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton};
+use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger};
 
-use super::{native::NativeEvent, MappableEvent};
+use super::native::{InputValue, NativeEvent};
 
 #[derive(Debug, Clone)]
 pub struct EvdevEvent {
@@ -13,6 +13,7 @@ pub struct EvdevEvent {
 }
 
 impl EvdevEvent {
+    /// Create a new [EvdevEvent] instance
     pub fn new() -> EvdevEvent {
         EvdevEvent {
             event: InputEvent::new(0, 0, 0),
@@ -67,20 +68,20 @@ impl EvdevEvent {
                 KeyCode::BTN_NORTH => Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
                 KeyCode::BTN_WEST => Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
                 KeyCode::BTN_EAST => Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-                _ => Capability::None,
+                _ => Capability::NotImplemented,
             },
-            EventType::RELATIVE => Capability::None,
-            EventType::ABSOLUTE => Capability::None,
-            EventType::MISC => Capability::None,
-            EventType::SWITCH => Capability::None,
-            EventType::LED => Capability::None,
-            EventType::SOUND => Capability::None,
-            EventType::REPEAT => Capability::None,
-            EventType::FORCEFEEDBACK => Capability::None,
-            EventType::POWER => Capability::None,
-            EventType::FORCEFEEDBACKSTATUS => Capability::None,
-            EventType::UINPUT => Capability::None,
-            _ => Capability::None,
+            EventType::RELATIVE => Capability::NotImplemented,
+            EventType::ABSOLUTE => Capability::NotImplemented,
+            EventType::MISC => Capability::NotImplemented,
+            EventType::SWITCH => Capability::NotImplemented,
+            EventType::LED => Capability::NotImplemented,
+            EventType::SOUND => Capability::NotImplemented,
+            EventType::REPEAT => Capability::NotImplemented,
+            EventType::FORCEFEEDBACK => Capability::NotImplemented,
+            EventType::POWER => Capability::NotImplemented,
+            EventType::FORCEFEEDBACKSTATUS => Capability::NotImplemented,
+            EventType::UINPUT => Capability::NotImplemented,
+            _ => Capability::NotImplemented,
         }
     }
 }
@@ -104,132 +105,187 @@ impl From<InputEvent> for EvdevEvent {
 }
 
 impl EvdevEvent {
-    /// Convert a [NativeEvent] into an [EvdevEvent].
+    /// Translate a [NativeEvent] into one or more [EvdevEvent].
     pub fn from_native_event(
         event: NativeEvent,
         axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
-    ) -> Self {
-        let event_type = match event.as_capability() {
-            Capability::Sync => EventType::SYNCHRONIZATION,
-            Capability::Gamepad(gamepad) => match gamepad {
-                Gamepad::Button(_) => EventType::KEY,
-                Gamepad::Axis(_) => EventType::ABSOLUTE,
-                Gamepad::Trigger(_) => todo!(),
-                Gamepad::Accelerometer => todo!(),
-                Gamepad::Gyro => todo!(),
-            },
-            _ => EventType::KEY,
+    ) -> Vec<Self> {
+        // Native events can be translated into one or more evdev events
+        let mut events = Vec::new();
+
+        // Determine the event type to use based on the capability
+        let event_type = event_type_from_capability(event.as_capability());
+
+        // If an event type cannot be determined, return an empty event
+        let Some(event_type) = event_type else {
+            //log::debug!("Unable to determine evdev event type");
+            return events;
         };
 
-        let code = match event.as_capability() {
-            Capability::Gamepad(gamepad) => match gamepad {
-                Gamepad::Button(btn) => match btn {
-                    GamepadButton::South => KeyCode::BTN_SOUTH.0,
-                    GamepadButton::East => KeyCode::BTN_EAST.0,
-                    GamepadButton::North => KeyCode::BTN_NORTH.0,
-                    GamepadButton::West => KeyCode::BTN_WEST.0,
-                    GamepadButton::LeftBumper => KeyCode::BTN_TL.0,
-                    GamepadButton::RightBumper => KeyCode::BTN_TR.0,
-                    GamepadButton::Start => KeyCode::BTN_START.0,
-                    GamepadButton::Select => KeyCode::BTN_SELECT.0,
-                    GamepadButton::Guide => KeyCode::BTN_MODE.0,
-                    GamepadButton::Base => KeyCode::BTN_BASE.0,
-                    GamepadButton::LeftStick => KeyCode::BTN_THUMBL.0,
-                    GamepadButton::RightStick => KeyCode::BTN_THUMBR.0,
-                    GamepadButton::DPadUp => KeyCode::BTN_TRIGGER_HAPPY1.0,
-                    GamepadButton::DPadDown => KeyCode::BTN_TRIGGER_HAPPY2.0,
-                    GamepadButton::DPadLeft => KeyCode::BTN_TRIGGER_HAPPY3.0,
-                    GamepadButton::DPadRight => KeyCode::BTN_TRIGGER_HAPPY4.0,
-                    GamepadButton::LeftTrigger => todo!(),
-                    GamepadButton::LeftPaddle1 => todo!(),
-                    GamepadButton::LeftPaddle2 => todo!(),
-                    GamepadButton::LeftStickTouch => todo!(),
-                    GamepadButton::LeftTouchpadTouch => todo!(),
-                    GamepadButton::LeftTouchpadPress => todo!(),
-                    GamepadButton::RightTrigger => todo!(),
-                    GamepadButton::RightPaddle1 => todo!(),
-                    GamepadButton::RightPaddle2 => todo!(),
-                    GamepadButton::RightStickTouch => todo!(),
-                    GamepadButton::RightTouchpadTouch => todo!(),
-                    GamepadButton::RightTouchpadPress => todo!(),
-                },
-                Gamepad::Axis(axis) => match axis {
-                    GamepadAxis::LeftStick => todo!(),
-                    GamepadAxis::RightStick => todo!(),
-                    GamepadAxis::Hat1 => todo!(),
-                    GamepadAxis::Hat2 => todo!(),
-                },
-                Gamepad::Trigger(_) => todo!(),
-                Gamepad::Accelerometer => todo!(),
-                Gamepad::Gyro => todo!(),
-            },
-            _ => 0,
-        };
+        // Determine the event code(s) based on capability. Axis events can
+        // translate to multiple events.
+        let codes = event_codes_from_capability(event.as_capability());
 
-        // Get the axis information if this is an ABS event.
-        let abs_info = if event_type == EventType::ABSOLUTE {
-            axis_map.get(&AbsoluteAxisCode(code)).copied()
-        } else {
-            None
-        };
-
-        // Denormalize the native value (e.g. 1.0) into the appropriate value
-        // based on the ABS min/max range.
-        let normalized_value = event.get_value();
-        let denormalized_value = if let Some(info) = abs_info {
-            let mid = (info.maximum() + info.minimum()) / 2;
-            let normalized_value_abs = normalized_value.abs();
-            if normalized_value >= 0.0 {
-                let maximum = (info.maximum() - mid) as f64;
-                let value = normalized_value * maximum + (mid as f64);
-                value as i32
+        // Process each event code
+        for code in codes {
+            // Get the axis information if this is an ABS event.
+            let axis_info = if event_type == EventType::ABSOLUTE {
+                axis_map.get(&AbsoluteAxisCode(code)).copied()
             } else {
-                let minimum = (info.minimum() - mid) as f64;
-                let value = normalized_value_abs * minimum + (mid as f64);
-                value as i32
-            }
-        } else {
-            normalized_value as i32
-        };
+                None
+            };
 
-        EvdevEvent {
-            event: InputEvent::new(event_type.0, code, denormalized_value),
-            abs_info,
+            // Get the input value from the event and convert it into an evdev
+            // input event.
+            let value = event.get_value();
+            let event = input_event_from_value(event_type, code, axis_info, value);
+
+            events.push(EvdevEvent::from(event));
         }
+
+        events
     }
 }
 
-impl MappableEvent for EvdevEvent {
-    fn matches<T>(&self, event: T) -> bool
-    where
-        T: MappableEvent,
-    {
-        match event.kind() {
-            super::Event::Evdev(event) => {
-                self.event.code() == event.event.code()
-                    && self.event.event_type() == event.event.event_type()
+/// Returns the event type responsible for handling the given input capability.
+fn event_type_from_capability(capability: Capability) -> Option<EventType> {
+    match capability {
+        Capability::Sync => Some(EventType::SYNCHRONIZATION),
+        Capability::Gamepad(gamepad) => match gamepad {
+            Gamepad::Button(_) => Some(EventType::KEY),
+            Gamepad::Axis(_) => Some(EventType::ABSOLUTE),
+            Gamepad::Trigger(_) => Some(EventType::RELATIVE),
+            Gamepad::Accelerometer => None,
+            Gamepad::Gyro => None,
+        },
+        _ => None,
+    }
+}
+
+/// Returns a list of event codes responsible for handling the given input capability.
+fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
+    match capability {
+        Capability::None => vec![],
+        Capability::NotImplemented => vec![],
+        Capability::Sync => vec![0],
+        Capability::Gamepad(gamepad) => match gamepad {
+            Gamepad::Button(btn) => match btn {
+                GamepadButton::South => vec![KeyCode::BTN_SOUTH.0],
+                GamepadButton::East => vec![KeyCode::BTN_EAST.0],
+                GamepadButton::North => vec![KeyCode::BTN_NORTH.0],
+                GamepadButton::West => vec![KeyCode::BTN_WEST.0],
+                GamepadButton::LeftBumper => vec![KeyCode::BTN_TL.0],
+                GamepadButton::RightBumper => vec![KeyCode::BTN_TR.0],
+                GamepadButton::Start => vec![KeyCode::BTN_START.0],
+                GamepadButton::Select => vec![KeyCode::BTN_SELECT.0],
+                GamepadButton::Guide => vec![KeyCode::BTN_MODE.0],
+                GamepadButton::Base => vec![KeyCode::BTN_BASE.0],
+                GamepadButton::LeftStick => vec![KeyCode::BTN_THUMBL.0],
+                GamepadButton::RightStick => vec![KeyCode::BTN_THUMBR.0],
+                GamepadButton::DPadUp => vec![KeyCode::BTN_TRIGGER_HAPPY1.0],
+                GamepadButton::DPadDown => vec![KeyCode::BTN_TRIGGER_HAPPY2.0],
+                GamepadButton::DPadLeft => vec![KeyCode::BTN_TRIGGER_HAPPY3.0],
+                GamepadButton::DPadRight => vec![KeyCode::BTN_TRIGGER_HAPPY4.0],
+                GamepadButton::LeftTrigger => vec![KeyCode::BTN_TL2.0],
+                GamepadButton::LeftPaddle1 => vec![],
+                GamepadButton::LeftPaddle2 => vec![],
+                GamepadButton::LeftStickTouch => vec![],
+                GamepadButton::LeftTouchpadTouch => vec![],
+                GamepadButton::LeftTouchpadPress => vec![],
+                GamepadButton::RightTrigger => vec![],
+                GamepadButton::RightPaddle1 => vec![],
+                GamepadButton::RightPaddle2 => vec![],
+                GamepadButton::RightStickTouch => vec![],
+                GamepadButton::RightTouchpadTouch => vec![],
+                GamepadButton::RightTouchpadPress => vec![],
+            },
+            Gamepad::Axis(axis) => match axis {
+                GamepadAxis::LeftStick => {
+                    vec![AbsoluteAxisCode::ABS_X.0, AbsoluteAxisCode::ABS_Y.0]
+                }
+                GamepadAxis::RightStick => {
+                    vec![AbsoluteAxisCode::ABS_RX.0, AbsoluteAxisCode::ABS_RY.0]
+                }
+                GamepadAxis::Hat1 => {
+                    vec![AbsoluteAxisCode::ABS_HAT0X.0, AbsoluteAxisCode::ABS_HAT0Y.0]
+                }
+                GamepadAxis::Hat2 => {
+                    vec![AbsoluteAxisCode::ABS_HAT1X.0, AbsoluteAxisCode::ABS_HAT1Y.0]
+                }
+                GamepadAxis::Hat3 => {
+                    vec![AbsoluteAxisCode::ABS_HAT2X.0, AbsoluteAxisCode::ABS_HAT2Y.0]
+                }
+            },
+            Gamepad::Trigger(trigg) => match trigg {
+                GamepadTrigger::LeftTrigger => {
+                    vec![AbsoluteAxisCode::ABS_Z.0]
+                }
+                GamepadTrigger::LeftTouchpadForce => vec![],
+                GamepadTrigger::LeftStickForce => vec![],
+                GamepadTrigger::RightTrigger => {
+                    vec![AbsoluteAxisCode::ABS_RZ.0]
+                }
+                GamepadTrigger::RightTouchpadForce => vec![],
+                GamepadTrigger::RightStickForce => vec![],
+            },
+            Gamepad::Accelerometer => vec![],
+            Gamepad::Gyro => vec![],
+        },
+        Capability::Mouse(_) => vec![],
+        Capability::Keyboard(_) => vec![],
+    }
+}
+
+/// Returns a translated evdev input event from the given [InputValue].
+fn input_event_from_value(
+    event_type: EventType,
+    code: u16,
+    axis_info: Option<AbsInfo>,
+    input: InputValue,
+) -> InputEvent {
+    let value = match input {
+        InputValue::None => todo!(),
+        InputValue::Bool(value) => {
+            if value {
+                1
+            } else {
+                0
             }
-            _ => false,
         }
-    }
+        InputValue::Int(value) => value,
+        InputValue::UInt(value) => value as i32,
+        InputValue::Float(value) => denormalize_unsigned_value(value, axis_info.unwrap()),
+        InputValue::Vector2 { x, y } => match AbsoluteAxisCode(code) {
+            AbsoluteAxisCode::ABS_X => denormalize_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_RX => denormalize_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_Y => denormalize_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_RY => denormalize_signed_value(y, axis_info.unwrap()),
+            _ => todo!(),
+        },
+        InputValue::Vector3 { x, y, z } => todo!(),
+    };
 
-    fn set_value(&mut self, value: f64) {
-        self.event = InputEvent::new(
-            self.event.event_type().0,
-            self.event.code(),
-            value.round() as i32,
-        );
-    }
+    InputEvent::new(event_type.0, code, value)
+}
 
-    fn get_value(&self) -> f64 {
-        self.event.value() as f64
+/// De-normalizes the given value from -1.0 - 1.0 into a real value based on the
+/// minimum and maximum axis range from the given [AbsInfo].
+fn denormalize_signed_value(normal_value: f64, axis_info: AbsInfo) -> i32 {
+    let mid = (axis_info.maximum() + axis_info.minimum()) / 2;
+    let normal_value_abs = normal_value.abs();
+    if normal_value >= 0.0 {
+        let maximum = (axis_info.maximum() - mid) as f64;
+        let value = normal_value * maximum + (mid as f64);
+        value as i32
+    } else {
+        let minimum = (axis_info.minimum() - mid) as f64;
+        let value = normal_value_abs * minimum + (mid as f64);
+        value as i32
     }
+}
 
-    fn get_signature(&self) -> String {
-        todo!()
-    }
-
-    fn kind(&self) -> super::Event {
-        super::Event::Evdev(self.clone())
-    }
+/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
+/// the maximum axis range.
+fn denormalize_unsigned_value(normal_value: f64, axis_info: AbsInfo) -> i32 {
+    (normal_value * axis_info.maximum() as f64).round() as i32
 }

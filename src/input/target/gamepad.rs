@@ -2,8 +2,8 @@ use std::{collections::HashMap, error::Error};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
-    AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffect, FFEffectCode, KeyCode, KeyEvent,
-    UinputAbsSetup,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffect, FFEffectCode, InputEvent, KeyCode, KeyEvent,
+    SynchronizationCode, SynchronizationEvent, UinputAbsSetup,
 };
 use tokio::sync::{broadcast, mpsc};
 
@@ -60,12 +60,25 @@ impl GenericGamepad {
         // Listen for send events
         log::debug!("Started listening for events to send");
         while let Some(event) = self.rx.recv().await {
-            log::debug!("Got event to emit: {:?}", event);
-            let evdev_event = EvdevEvent::from_native_event(event, axes_map.clone());
-            device.emit(&[evdev_event.as_input_event()])?;
+            //log::debug!("Got event to emit: {:?}", event);
+            let evdev_events = self.translate_event(event, axes_map.clone());
+            device.emit(evdev_events.as_slice())?;
+            device.emit(&[SynchronizationEvent::new(SynchronizationCode::SYN_REPORT, 0).into()])?;
         }
 
         Ok(())
+    }
+
+    /// Translate the given native event into an evdev event
+    fn translate_event(
+        &self,
+        event: NativeEvent,
+        axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
+    ) -> Vec<InputEvent> {
+        EvdevEvent::from_native_event(event, axis_map)
+            .into_iter()
+            .map(|event| event.as_input_event())
+            .collect()
     }
 
     /// Return a hashmap of ABS information for this virtual device. This information
