@@ -4,7 +4,7 @@ use tokio::{
     sync::{broadcast, mpsc},
     task::JoinSet,
 };
-use zbus::{fdo, Connection};
+use zbus::{fdo, Connection, SignalContext};
 use zbus_macros::dbus_interface;
 
 use crate::{
@@ -16,7 +16,15 @@ use crate::{
     },
 };
 
-use super::{event::Event, source::SourceDevice, target::TargetDevice};
+use super::{
+    capability,
+    event::{
+        dbus::{Action, DBusEvent},
+        Event,
+    },
+    source::SourceDevice,
+    target::TargetDevice,
+};
 
 const BUFFER_SIZE: usize = 2048;
 
@@ -61,11 +69,13 @@ impl DBusInterface {
 
 #[dbus_interface(name = "org.shadowblip.Input.CompositeDevice")]
 impl DBusInterface {
+    /// Name of the composite device
     #[dbus_interface(property)]
     async fn name(&self) -> fdo::Result<String> {
         Ok("CompositeDevice".into())
     }
 
+    /// List of source devices that this composite device is processing inputs for
     #[dbus_interface(property)]
     async fn source_device_paths(&self) -> fdo::Result<Vec<String>> {
         let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
@@ -79,6 +89,7 @@ impl DBusInterface {
         Ok(paths)
     }
 
+    /// The intercept mode of the composite device.
     #[dbus_interface(property)]
     async fn intercept_mode(&self) -> fdo::Result<u32> {
         let (sender, mut receiver) = mpsc::channel::<InterceptMode>(1);
@@ -109,6 +120,10 @@ impl DBusInterface {
             .map_err(|err| zbus::Error::Failure(err.to_string()))?;
         Ok(())
     }
+
+    /// Emitted when an input event occurs when the device is in intercept mode
+    #[dbus_interface(signal)]
+    async fn input_event(ctxt: &SignalContext<'_>, event: String, value: f64) -> zbus::Result<()>;
 }
 
 /// Defines a handle to a [CompositeDevice] for communication
@@ -128,6 +143,8 @@ impl Handle {
 /// can translate input to any target devices
 #[derive(Debug)]
 pub struct CompositeDevice {
+    conn: Connection,
+    dbus_path: Option<String>,
     intercept_mode: InterceptMode,
     config: CompositeDeviceConfig,
     tx: broadcast::Sender<Command>,
@@ -140,7 +157,7 @@ pub struct CompositeDevice {
 }
 
 impl CompositeDevice {
-    pub fn new(config: CompositeDeviceConfig) -> Result<Self, Box<dyn Error>> {
+    pub fn new(conn: Connection, config: CompositeDeviceConfig) -> Result<Self, Box<dyn Error>> {
         let (tx, rx) = broadcast::channel(BUFFER_SIZE);
         let mut source_devices: Vec<SourceDevice> = Vec::new();
         let mut source_device_paths: Vec<String> = Vec::new();
@@ -157,7 +174,7 @@ impl CompositeDevice {
                 let device = source::evdev::EventDevice::new(info, tx.clone());
 
                 // Get the capabilities of the source device.
-                let capabilities = device.get_capabilities()?;
+                //let capabilities = device.get_capabilities()?;
 
                 // TODO: Based on the capability map in the config, translate
                 // the capabilities.
@@ -196,6 +213,8 @@ impl CompositeDevice {
         log::debug!("Finished adding source devices");
 
         Ok(Self {
+            conn,
+            dbus_path: None,
             intercept_mode: InterceptMode::None,
             config,
             tx,
@@ -208,7 +227,22 @@ impl CompositeDevice {
         })
     }
 
-    /// Run the [CompositeDevice]
+    /// Creates a new instance of the composite device interface on DBus.
+    pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
+        let conn = self.conn.clone();
+        let tx = self.tx.clone();
+        self.dbus_path = Some(path.clone());
+        tokio::spawn(async move {
+            let iface = DBusInterface::new(tx);
+            if let Err(e) = conn.object_server().at(path, iface).await {
+                log::error!("Failed to setup DBus interface for device: {:?}", e);
+            }
+        });
+        Ok(())
+    }
+
+    /// Starts the [CompositeDevice] and listens for events from all source
+    /// devices to translate the events and send them to the appropriate target.
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting composite device");
         // Keep a list of all the tasks
@@ -312,6 +346,7 @@ impl CompositeDevice {
                 }
             }
         }
+        log::debug!("CompositeDevice stopped");
 
         // Wait on all tasks
         while let Some(res) = tasks.join_next().await {
@@ -385,7 +420,7 @@ impl CompositeDevice {
 
     /// Process a single event from a source device. Events are piped through
     /// a translation layer, then dispatched to the appropriate target device(s)
-    async fn process_event(&self, raw_event: Event) -> Result<(), Box<dyn Error>> {
+    async fn process_event(&mut self, raw_event: Event) -> Result<(), Box<dyn Error>> {
         //log::debug!("Received event: {:?}", raw_event);
 
         // Convert the event into a NativeEvent
@@ -399,38 +434,87 @@ impl CompositeDevice {
         // TODO: Check if the event needs to be translated based on the
         // capability map.
 
-        // Translate the event based on the device profile.
+        // TODO: Translate the event based on the device profile.
 
-        // Send the event to the appropriate target device
-        for target in &self.target_devices {
-            target.send(event.clone()).await?;
+        // Process the event depending on the intercept mode
+        let mode = self.intercept_mode.clone();
+        match mode {
+            // Intercept mode NONE will pass all input to the target device(s)
+            InterceptMode::None => {
+                self.write_event(event).await?;
+            }
+            // Intrecept mode PASS will pass all input to the target device(s)
+            // EXCEPT for GUIDE button presses
+            InterceptMode::Pass => {
+                let capability = event.as_capability();
+                match capability {
+                    capability::Capability::Gamepad(gamepad) => match gamepad {
+                        capability::Gamepad::Button(btn) => match btn {
+                            capability::GamepadButton::Guide => {
+                                // Set the intercept mode while the button is pressed
+                                if event.pressed() {
+                                    log::debug!("Intercepted guide button press");
+                                    self.set_intercept_mode(InterceptMode::Always);
+                                }
+
+                                // Send DBus event
+                                log::debug!("Writing DBus event");
+                                self.write_dbus_event(event.into()).await?;
+                            }
+                            _ => self.write_event(event).await?,
+                        },
+                        _ => self.write_event(event).await?,
+                    },
+                    _ => self.write_event(event).await?,
+                }
+            }
+            // Intercept mode ALWAYS will not send any input to the target
+            // devices and instead send them as DBus events.
+            InterceptMode::Always => {
+                self.write_dbus_event(event.into()).await?;
+            }
         }
 
         Ok(())
     }
 
-    /// Processes a single translated event. These events are piped to the
-    /// appropriate target device(s)
-    async fn process_translated_event(&self, event: Event) {}
-
-    /// Translates the given event.
-    async fn translate_event(&self, event: Event) -> Vec<Event> {
-        Vec::new()
+    /// Writes the given event to the appropriate target device.
+    async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+        for target in &self.target_devices {
+            target.send(event.clone()).await?;
+        }
+        Ok(())
     }
 
-    /// Creates a new instance of the composite device interface on DBus.
-    pub async fn listen_on_dbus(
-        &self,
-        conn: Connection,
-        path: String,
-    ) -> Result<(), Box<dyn Error>> {
-        let tx = self.tx.clone();
-        tokio::spawn(async move {
-            let iface = DBusInterface::new(tx);
-            if let Err(e) = conn.object_server().at(path, iface).await {
-                log::error!("Failed to setup DBus interface for device: {:?}", e);
-            }
-        });
+    /// Writes the given event to DBus
+    async fn write_dbus_event(&self, event: DBusEvent) -> Result<(), Box<dyn Error>> {
+        // Only send valid events
+        let valid = !matches!(event.action, Action::None);
+        if !valid {
+            return Ok(());
+        }
+
+        // DBus events can only be written if there is a DBus path reference.
+        let Some(path) = self.dbus_path.clone() else {
+            return Err("No dbus path exists to send events to".into());
+        };
+
+        // Get the object instance at the given path so we can send DBus signal
+        // updates
+        let iface_ref = self
+            .conn
+            .object_server()
+            .interface::<_, DBusInterface>(path)
+            .await?;
+
+        // Send the input event signal
+        DBusInterface::input_event(
+            iface_ref.signal_context(),
+            event.action.as_string(),
+            event.value,
+        )
+        .await?;
+
         Ok(())
     }
 

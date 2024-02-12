@@ -237,7 +237,7 @@ impl Manager {
 
             // Create a composite device to manage these devices
             log::info!("Found matching source devices: {:?}", config.name);
-            let mut device = CompositeDevice::new(config)?;
+            let mut device = CompositeDevice::new(self.dbus.clone(), config)?;
 
             // Check to see if there's already a CompositeDevice for
             // these source devices.
@@ -267,9 +267,7 @@ impl Manager {
 
             // Create a DBus interface for the device
             log::info!("Creating composite device");
-            device
-                .listen_on_dbus(self.dbus.clone(), path.clone())
-                .await?;
+            device.listen_on_dbus(path.clone()).await?;
 
             // Get a handle to the device
             let handle = device.handle();

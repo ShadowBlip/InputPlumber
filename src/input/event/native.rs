@@ -35,6 +35,19 @@ impl NativeEvent {
     pub fn get_value(&self) -> InputValue {
         self.value.clone()
     }
+
+    /// Returns whether or not the event is "pressed"
+    pub fn pressed(&self) -> bool {
+        match self.value {
+            InputValue::None => false,
+            InputValue::Bool(value) => value,
+            InputValue::Int(value) => value != 0,
+            InputValue::UInt(value) => value != 0,
+            InputValue::Float(value) => value != 0.0,
+            InputValue::Vector2 { x, y } => todo!(),
+            InputValue::Vector3 { x, y, z } => todo!(),
+        }
+    }
 }
 
 impl From<EvdevEvent> for NativeEvent {
