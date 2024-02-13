@@ -254,7 +254,7 @@ fn input_event_from_value(
         }
         InputValue::Int(value) => value,
         InputValue::UInt(value) => value as i32,
-        InputValue::Float(value) => denormalize_unsigned_value(value, axis_info.unwrap()),
+        InputValue::Float(value) => denormalize_unsigned_value(value, axis_info),
         InputValue::Vector2 { x, y } => match AbsoluteAxisCode(code) {
             AbsoluteAxisCode::ABS_X => denormalize_signed_value(x, axis_info.unwrap()),
             AbsoluteAxisCode::ABS_RX => denormalize_signed_value(x, axis_info.unwrap()),
@@ -286,6 +286,10 @@ fn denormalize_signed_value(normal_value: f64, axis_info: AbsInfo) -> i32 {
 
 /// De-normalizes the given value from 0.0 - 1.0 into a real value based on
 /// the maximum axis range.
-fn denormalize_unsigned_value(normal_value: f64, axis_info: AbsInfo) -> i32 {
+fn denormalize_unsigned_value(normal_value: f64, axis_info: Option<AbsInfo>) -> i32 {
+    // TODO: this better
+    let Some(axis_info) = axis_info else {
+        return normal_value as i32;
+    };
     (normal_value * axis_info.maximum() as f64).round() as i32
 }

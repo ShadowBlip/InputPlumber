@@ -1,24 +1,37 @@
 use simple_logger::SimpleLogger;
 use std::error::Error;
 use std::future::pending;
+use std::process;
 use zbus::fdo::ObjectManager;
 use zbus::Connection;
 
 use crate::constants::BUS_NAME;
 use crate::constants::BUS_PREFIX;
 use crate::input::manager::Manager;
+use crate::udev::unhide_all;
 
 mod config;
 mod constants;
 mod drivers;
 mod input;
 mod procfs;
+mod udev;
 mod watcher;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
     log::info!("Starting InputPlumber");
+
+    // Setup CTRL+C handler
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        log::info!("Un-hiding all devices");
+        if let Err(e) = unhide_all().await {
+            log::error!("Unable to un-hide devices: {:?}", e);
+        }
+        process::exit(0);
+    });
 
     // Configure the DBus connection
     let connection = Connection::system().await?;

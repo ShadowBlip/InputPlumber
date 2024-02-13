@@ -1,0 +1,207 @@
+//! Based on the pattern developed by the hhd project:
+//! https://github.com/hhd-dev/hhd/blob/master/src/hhd/controller/lib/hide.py
+
+#[cfg(test)]
+pub mod device_test;
+
+pub mod device;
+
+use std::{error::Error, fs};
+
+use tokio::process::Command;
+
+use self::device::Device;
+
+const RULES_PREFIX: &str = "/run/udev/rules.d";
+
+/// Hide the given input device from regular users.
+pub async fn hide_device(path: String) -> Result<(), Box<dyn Error>> {
+    // Get the device to hide
+    let device = get_device(path.clone()).await?;
+    let name = device.name.clone();
+    let Some(parent) = device.get_parent() else {
+        return Err("Unable to determine parent for device".into())
+    };
+    let subsystem = device.subsystem.clone();
+    let Some(match_rule) = device.get_match_rule() else {
+        return Err("Unable to create match rule for device".into())
+    };
+
+    // Create a udev rule to hide the device
+    let rule = format!(
+        r#"# Hides devices stemming from {name}
+# Managed by InputPlumber, this file will be autoremoved during configuration changes.
+{match_rule}, GOTO="inputplumber_valid"
+GOTO="inputplumber_end"
+LABEL="inputplumber_valid"
+KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="/bin/chmod 000 {path}"
+LABEL="inputplumber_end"
+"#
+    );
+
+    // Write the udev rule
+    fs::create_dir_all(RULES_PREFIX)?;
+    let rule_path = format!("{RULES_PREFIX}/96-inputplumber-hide-{name}.rules");
+    fs::write(rule_path, rule)?;
+
+    // Reload udev
+    reload_children(parent).await?;
+
+    Ok(())
+}
+
+/// Unhide the given device
+pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
+    // Get the device to unhide
+    let device = get_device(path.clone()).await?;
+    let name = device.name.clone();
+    let Some(parent) = device.get_parent() else {
+        return Err("Unable to determine parent for device".into())
+    };
+    let rule_path = format!("{RULES_PREFIX}/96-inputplumber-hide-{name}.rules");
+    fs::remove_file(rule_path)?;
+
+    // Reload udev
+    reload_children(parent).await?;
+
+    Ok(())
+}
+
+/// Unhide all devices hidden by InputPlumber
+pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
+    let entries = fs::read_dir(RULES_PREFIX)?;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let filename = entry.file_name().to_string_lossy().to_string();
+        if !filename.starts_with("96-inputplumber-hide") {
+            continue;
+        }
+        let path = entry.path().to_string_lossy().to_string();
+        fs::remove_file(path)?;
+    }
+
+    // Reload udev rules
+    reload_all().await?;
+
+    Ok(())
+}
+
+/// Trigger udev to evaluate rules on the children of the given parent device path
+async fn reload_children(parent: String) -> Result<(), Box<dyn Error>> {
+    let _ = Command::new("udevadm")
+        .args(["control", "--reload-rules"])
+        .output()
+        .await?;
+
+    for action in ["remove", "add"] {
+        let _ = Command::new("udevadm")
+            .args(["trigger", "--action", action, "-b", parent.as_str()])
+            .output()
+            .await?;
+    }
+
+    Ok(())
+}
+
+/// Trigger udev to evaluate rules on the children of the given parent device path
+async fn reload_all() -> Result<(), Box<dyn Error>> {
+    let _ = Command::new("udevadm")
+        .args(["control", "--reload-rules"])
+        .output()
+        .await?;
+
+    let _ = Command::new("udevadm").arg("trigger").output().await?;
+
+    Ok(())
+}
+
+/// Returns device information for the given device path using udevadm.
+pub async fn get_device(path: String) -> Result<Device, Box<dyn Error>> {
+    let mut device = Device::default();
+    let output = Command::new("udevadm")
+        .args(["info", path.as_str()])
+        .output()
+        .await?;
+    let output = String::from_utf8(output.stdout)?;
+
+    for line in output.split('\n') {
+        if line.starts_with("P: ") {
+            let line = line.replace("P: ", "");
+            device.path = line;
+            continue;
+        }
+        if line.starts_with("M: ") {
+            let line = line.replace("M: ", "");
+            device.name = line;
+            continue;
+        }
+        if line.starts_with("R: ") {
+            let line = line.replace("R: ", "");
+            let number = line.parse().unwrap_or_default();
+            device.number = number;
+            continue;
+        }
+        if line.starts_with("U: ") {
+            let line = line.replace("U: ", "");
+            device.subsystem = line;
+            continue;
+        }
+        if line.starts_with("T: ") {
+            let line = line.replace("T: ", "");
+            device.device_type = line;
+            continue;
+        }
+        if line.starts_with("D: ") {
+            let line = line.replace("D: ", "");
+            device.node = line;
+            continue;
+        }
+        if line.starts_with("I: ") {
+            let line = line.replace("I: ", "");
+            device.network_index = line;
+            continue;
+        }
+        if line.starts_with("N: ") {
+            let line = line.replace("N: ", "");
+            device.node_name = line;
+            continue;
+        }
+        if line.starts_with("L: ") {
+            let line = line.replace("L: ", "");
+            let priority = line.parse().unwrap_or_default();
+            device.symlink_priority = priority;
+            continue;
+        }
+        if line.starts_with("S: ") {
+            let line = line.replace("S: ", "");
+            device.symlink.push(line);
+            continue;
+        }
+        if line.starts_with("Q: ") {
+            let line = line.replace("Q: ", "");
+            let seq = line.parse().unwrap_or_default();
+            device.sequence_num = seq;
+            continue;
+        }
+        if line.starts_with("V: ") {
+            let line = line.replace("V: ", "");
+            device.driver = line;
+            continue;
+        }
+        if line.starts_with("E: ") {
+            let line = line.replace("E: ", "");
+            let mut parts = line.splitn(2, "=");
+            if parts.clone().count() != 2 {
+                continue;
+            }
+            let key = parts.next().unwrap();
+            let value = parts.last().unwrap();
+            device.properties.insert(key.to_string(), value.to_string());
+            continue;
+        }
+    }
+
+    Ok(device)
+}

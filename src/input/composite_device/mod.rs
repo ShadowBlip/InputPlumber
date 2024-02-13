@@ -14,6 +14,7 @@ use crate::{
         source,
         target::{gamepad::GenericGamepad, xb360::XBox360Controller},
     },
+    udev::{hide_device, unhide_device},
 };
 
 use super::{
@@ -52,6 +53,7 @@ pub enum Command {
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
     SourceDeviceAdded,
     SourceDeviceStopped(String),
+    Stop,
 }
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
@@ -248,6 +250,13 @@ impl CompositeDevice {
         // Keep a list of all the tasks
         let mut tasks = JoinSet::new();
 
+        // Hide all source devices
+        // TODO: Make this configurable
+        for source_path in self.source_device_paths.clone() {
+            log::debug!("Hiding device: {}", source_path);
+            hide_device(source_path).await?;
+        }
+
         // Start listening for events from all source devices
         let sources = self.source_devices.drain(..);
         for source in sources {
@@ -344,9 +353,19 @@ impl CompositeDevice {
                         break;
                     }
                 }
+                Command::Stop => {
+                    log::debug!("Stopping CompositeDevice");
+                    break;
+                }
             }
         }
         log::debug!("CompositeDevice stopped");
+
+        // Unhide all source devices
+        for source_path in self.source_device_paths.clone() {
+            log::debug!("Un-hiding device: {}", source_path);
+            unhide_device(source_path).await?;
+        }
 
         // Wait on all tasks
         while let Some(res) = tasks.join_next().await {
