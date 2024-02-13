@@ -37,9 +37,13 @@
           "description": "The ID of a device event mapping in the 'event_maps' directory",
           "type": "string"
         },
-        "default_output_device": {
-          "description": "Default output device to emulate",
-          "type": "string"
+        "output_device": {
+          "description": "Output device to emulate",
+          "type": "string",
+          "enum": [
+            "gamepad",
+            "xb360"
+          ]
         }
       },
       "required": [
@@ -53,6 +57,18 @@
       "title": "CompositeDevice"
     },
     "Match": {
+      "description": "Only use this configuration if *any* of the given items match the system. If this list is empty, then matching source devices will always create a CompositeDevice.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dmi_data": {
+          "$ref": "#/definitions/DMIMatch"
+        }
+      },
+      "title": "Match"
+    },
+    "DMIMatch": {
+      "description": "Match DMI system data",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -102,7 +118,12 @@
       "properties": {
         "group": {
           "description": "Custom group identifier for the source device. This is used by the event mappings to determine what source inputs should be mapped.",
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "keyboard",
+            "mouse",
+            "gamepad"
+          ]
         },
         "evdev": {
           "$ref": "#/definitions/Evdev"
@@ -117,6 +138,7 @@
       "title": "SourceDevice"
     },
     "Evdev": {
+      "description": "Source device to manage. Properties support globbing patterns.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

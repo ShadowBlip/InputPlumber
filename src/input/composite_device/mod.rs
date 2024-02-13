@@ -420,8 +420,8 @@ impl CompositeDevice {
 
         // Create the target devices to emulate based on the config
         let config = &self.config;
-        let default_output_device = &config.default_output_device;
-        let device_id = default_output_device.clone().unwrap_or("null".into());
+        let output_device = &config.output_device;
+        let device_id = output_device.clone().unwrap_or("null".into());
         let gamepad_device = match device_id.as_str() {
             "xb360" => TargetDevice::XBox360(XBox360Controller::new(tx)),
             "null" | "none" => TargetDevice::Null,

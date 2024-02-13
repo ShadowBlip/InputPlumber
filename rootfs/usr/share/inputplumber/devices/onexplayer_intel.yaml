@@ -12,12 +12,14 @@ name: OneXPlayer Intel
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
-  - product_name: ONEXPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: GenuineIntel
-  - product_name: ONE XPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: GenuineIntel
+  - dmi_data:
+      product_name: ONEXPLAYER
+      sys_vendor: ONE-NETBOOK
+      cpu_vendor: GenuineIntel
+  - dmi_data:
+      product_name: ONE XPLAYER
+      sys_vendor: ONE-NETBOOK
+      cpu_vendor: GenuineIntel
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -35,4 +37,4 @@ source_devices:
 event_map_id: oxp1
 
 # Default output device
-default_output_device: xb360
+output_device: gamepad

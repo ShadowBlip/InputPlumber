@@ -25,4 +25,4 @@ event_map_id: xb360
 
 # The default output device that the virtual device profile should use if
 # 'auto' is selected.
-default_output_device: gamepad
+output_device: gamepad

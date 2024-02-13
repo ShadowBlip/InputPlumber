@@ -1,11 +1,12 @@
 use std::error::Error;
 use std::io;
 
+use glob_match::glob_match;
 use hidapi::{DeviceInfo, HidApi};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::procfs;
+use crate::{dmi::data::DMIData, procfs};
 
 /// Represents all possible errors loading a [CompositeDevice]
 #[derive(Debug, Error)]
@@ -20,6 +21,13 @@ pub enum LoadError {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct Match {
+    pub dmi_data: Option<DMIMatch>,
+}
+
+/// Match DMI data for loading a [CompositeDevice]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct DMIMatch {
     pub bios_release: Option<String>,
     pub bios_vendor: Option<String>,
     pub bios_version: Option<String>,
@@ -83,7 +91,7 @@ pub struct CompositeDeviceConfig {
     pub matches: Vec<Match>,
     pub source_devices: Vec<SourceDevice>,
     pub event_map_id: String,
-    pub default_output_device: Option<String>,
+    pub output_device: Option<String>,
 }
 
 impl CompositeDeviceConfig {
@@ -237,24 +245,26 @@ impl CompositeDeviceConfig {
                 let mut has_matches = false;
 
                 if let Some(name) = evdev_config.name {
-                    if device.name != name {
+                    if !glob_match(name.as_str(), device.name.as_str()) {
                         continue;
                     }
                     has_matches = true;
                 }
 
                 if let Some(phys_path) = evdev_config.phys_path {
-                    if device.phys_path != phys_path {
+                    if !glob_match(phys_path.as_str(), device.phys_path.as_str()) {
                         continue;
                     }
                     has_matches = true;
                 }
 
                 if let Some(handler) = evdev_config.handler {
-                    if !device.handlers.contains(&handler) {
-                        continue;
+                    for handle in device.handlers.clone() {
+                        if !glob_match(handler.as_str(), handle.as_str()) {
+                            continue;
+                        }
+                        has_matches = true;
                     }
-                    has_matches = true;
                 }
 
                 if !has_matches {
@@ -268,5 +278,97 @@ impl CompositeDeviceConfig {
         }
 
         Ok(Some(matches))
+    }
+
+    /// Returns true if the configuration has a valid set of matches. This will
+    /// return true if ANY match config matches. If this list is empty, it will return true.
+    pub fn has_valid_matches(&self, data: DMIData) -> bool {
+        self.get_valid_matches(data).is_some()
+    }
+
+    /// Returns matches that matched system data.
+    pub fn get_valid_matches(&self, data: DMIData) -> Option<Vec<Match>> {
+        let mut matches: Vec<Match> = Vec::new();
+
+        // If there are no match definitions, consider it a match
+        if self.matches.is_empty() {
+            return Some(matches);
+        }
+
+        // Check all match configs for ANY matches.
+        for match_config in self.matches.clone() {
+            let conf = match_config.clone();
+            let mut has_matches = false;
+
+            if let Some(dmi_config) = match_config.dmi_data {
+                if let Some(bios_release) = dmi_config.bios_release {
+                    if !glob_match(bios_release.as_str(), data.bios_release.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(bios_vendor) = dmi_config.bios_vendor {
+                    if !glob_match(bios_vendor.as_str(), data.bios_vendor.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(bios_version) = dmi_config.bios_version {
+                    if !glob_match(bios_version.as_str(), data.bios_version.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(board_name) = dmi_config.board_name {
+                    if !glob_match(board_name.as_str(), data.board_name.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(product_name) = dmi_config.product_name {
+                    if !glob_match(product_name.as_str(), data.product_name.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(product_version) = dmi_config.product_version {
+                    if !glob_match(product_version.as_str(), data.product_version.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(product_sku) = dmi_config.product_sku {
+                    if !glob_match(product_sku.as_str(), data.product_sku.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(sys_vendor) = dmi_config.sys_vendor {
+                    if !glob_match(sys_vendor.as_str(), data.sys_vendor.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+            }
+
+            if !has_matches {
+                continue;
+            }
+
+            matches.push(conf);
+        }
+
+        if matches.is_empty() {
+            return None;
+        }
+
+        Some(matches)
     }
 }

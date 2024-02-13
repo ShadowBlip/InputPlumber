@@ -12,18 +12,22 @@ name: OneXPlayer AMD
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
-  - product_name: ONE XPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: AuthenticAMD
-  - product_name: ONE XPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: AuthenticAMD Advanced Micro Devices, Inc.
-  - product_name: ONEXPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: AuthenticAMD
-  - product_name: ONEXPLAYER
-    sys_vendor: ONE-NETBOOK
-    cpu_vendor: AuthenticAMD Advanced Micro Devices, Inc.
+  - dmi_data:
+      product_name: ONE XPLAYER
+      sys_vendor: ONE-NETBOOK
+      cpu_vendor: AuthenticAMD
+  - dmi_data:
+      product_name: ONE XPLAYER
+      sys_vendor: ONE-NETBOOK
+      cpu_vendor: AuthenticAMD Advanced Micro Devices, Inc.
+  - dmi_data:
+      product_name: ONEXPLAYER
+      sys_vendor: ONE-NETBOOK
+      cpu_vendor: AuthenticAMD
+  - dmi_data:
+      product_name: ONEXPLAYER
+      sys_vendor: ONE-NETBOOK
+      cpu_vendor: AuthenticAMD Advanced Micro Devices, Inc.
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -46,4 +50,4 @@ event_map_id: oxp2
 
 # The default output device that the virtual device profile should use if
 # 'auto' is selected.
-default_output_device: xb360
+output_device: gamepad

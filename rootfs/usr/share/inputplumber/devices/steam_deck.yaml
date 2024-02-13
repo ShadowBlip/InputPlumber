@@ -8,13 +8,14 @@ kind: CompositeDevice
 # Name of the composite device mapping
 name: Steam Deck
 
-# Only use this profile if *any* of the given matches matches. If this list is
+# Only use this profile if *any* of the given matches match. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
-  - product_name: Galileo
-    sys_vendor: Valve
-    cpu_vendor: AuthenticAMD
+  - dmi_data:
+      product_name: Galileo
+      sys_vendor: Valve
+      cpu_vendor: AuthenticAMD
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -30,4 +31,4 @@ event_map_id: deck
 
 # The default output device that the virtual device profile should use if
 # 'auto' is selected.
-default_output_device: gamepad
+output_device: gamepad

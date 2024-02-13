@@ -11,6 +11,8 @@ use zbus_macros::dbus_interface;
 
 use crate::config::CompositeDeviceConfig;
 use crate::constants::BUS_PREFIX;
+use crate::dmi::data::DMIData;
+use crate::dmi::get_dmi_data;
 use crate::input::composite_device;
 use crate::input::composite_device::CompositeDevice;
 use crate::input::source;
@@ -84,6 +86,8 @@ impl DBusInterface {
 pub struct Manager {
     /// The DBus connection
     dbus: Connection,
+    /// System DMI data
+    dmi_data: DMIData,
     /// The transmit side of the [rx] channel used to send [Command] messages.
     /// This can be cloned to allow child objects to communicate up to the
     /// manager.
@@ -106,8 +110,14 @@ impl Manager {
     /// Returns a new instance of Gamepad Manager
     pub fn new(conn: Connection) -> Manager {
         let (tx, rx) = broadcast::channel(BUFFER_SIZE);
+
+        log::debug!("Loading DMI data");
+        let dmi_data = get_dmi_data();
+        log::debug!("Got DMI data: {:?}", dmi_data);
+
         Manager {
             dbus: conn,
+            dmi_data,
             rx,
             tx,
             source_devices: HashMap::new(),
@@ -225,7 +235,11 @@ impl Manager {
         for config in configs {
             log::debug!("Got config: {:?}", config.name);
 
-            // TODO: Check if DMI matches
+            // Check to see if this configuration matches the system
+            if !config.has_valid_matches(self.dmi_data.clone()) {
+                log::debug!("Configuration does not match system");
+                continue;
+            }
 
             // Skip configs where the required source devices don't exist.
             if !config.sources_exist()? {

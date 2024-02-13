@@ -192,7 +192,7 @@ pub async fn get_device(path: String) -> Result<Device, Box<dyn Error>> {
         }
         if line.starts_with("E: ") {
             let line = line.replace("E: ", "");
-            let mut parts = line.splitn(2, "=");
+            let mut parts = line.splitn(2, '=');
             if parts.clone().count() != 2 {
                 continue;
             }

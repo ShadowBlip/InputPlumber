@@ -12,6 +12,7 @@ use crate::udev::unhide_all;
 
 mod config;
 mod constants;
+mod dmi;
 mod drivers;
 mod input;
 mod procfs;
@@ -30,6 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         if let Err(e) = unhide_all().await {
             log::error!("Unable to un-hide devices: {:?}", e);
         }
+        log::info!("Shutting down");
         process::exit(0);
     });
 
