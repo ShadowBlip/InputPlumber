@@ -118,6 +118,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let min = steam_deck::hid_report::PAD_Y_MAX; // uses inverted Y-axis
             let max = steam_deck::hid_report::PAD_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
+            let y = -y; // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
@@ -129,6 +130,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let min = steam_deck::hid_report::PAD_Y_MAX; // uses inverted Y-axis
             let max = steam_deck::hid_report::PAD_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
+            let y = -y; // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
@@ -140,6 +142,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let min = steam_deck::hid_report::STICK_Y_MAX; // uses inverted Y-axis
             let max = steam_deck::hid_report::STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
+            let y = -y; // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
@@ -151,6 +154,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let min = steam_deck::hid_report::STICK_Y_MAX; // uses inverted Y-axis
             let max = steam_deck::hid_report::STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
+            let y = -y; // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
