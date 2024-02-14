@@ -6,11 +6,43 @@ use evdev::{
     SynchronizationEvent,
 };
 use tokio::sync::{broadcast, mpsc};
+use zbus::fdo;
+use zbus_macros::dbus_interface;
 
 use crate::input::{
     composite_device,
     event::{evdev::EvdevEvent, native::NativeEvent},
 };
+
+/// MouseDevice commands define all the different ways to interact with [MouseDevice]
+/// over a channel. These commands are processed in an asyncronous thread and
+/// dispatched as they come in.
+#[derive(Debug, Clone)]
+pub enum Command {
+    Stop,
+}
+
+/// The [DBusInterface] provides a DBus interface that can be exposed for managing
+/// a [MouseDevice]. It works by sending command messages to a channel that the
+/// [MouseDevice] is listening on.
+pub struct DBusInterface {
+    tx: broadcast::Sender<Command>,
+}
+
+impl DBusInterface {
+    fn new(tx: broadcast::Sender<Command>) -> DBusInterface {
+        DBusInterface { tx }
+    }
+}
+
+#[dbus_interface(name = "org.shadowblip.Input.Mouse")]
+impl DBusInterface {
+    /// Name of the composite device
+    #[dbus_interface(property)]
+    async fn name(&self) -> fdo::Result<String> {
+        Ok("Mouse".into())
+    }
+}
 
 #[derive(Debug)]
 pub struct MouseDevice {
@@ -27,6 +59,11 @@ impl MouseDevice {
             tx,
             rx,
         }
+    }
+
+    /// Returns a transmitter channel that can be used to send events to this device
+    pub fn transmitter(&self) -> mpsc::Sender<NativeEvent> {
+        self.tx.clone()
     }
 
     /// Creates and runs the target device

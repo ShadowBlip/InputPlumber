@@ -299,24 +299,7 @@ impl CompositeDevice {
 
         // Create and start all target devices
         let targets = self.create_target_devices()?;
-        for target in targets {
-            match target {
-                TargetDevice::Null => (),
-                TargetDevice::Keyboard(_) => todo!(),
-                TargetDevice::Mouse(_) => todo!(),
-                TargetDevice::GenericGamepad(mut gamepad) => {
-                    let event_tx = gamepad.transmitter();
-                    self.target_devices.push(event_tx);
-                    tokio::spawn(async move {
-                        if let Err(e) = gamepad.run().await {
-                            log::error!("Failed to run target gamepad: {:?}", e);
-                        }
-                        log::debug!("Target gamepad device closed");
-                    });
-                }
-                TargetDevice::XBox360(_) => todo!(),
-            }
-        }
+        self.run_target_devices(targets);
 
         // Loop and listen for command events
         log::debug!("CompositeDevice started");
@@ -435,6 +418,37 @@ impl CompositeDevice {
         // TODO: Create a mouse device to emulate
 
         Ok(target_devices)
+    }
+
+    /// Start and run the given target devices
+    fn run_target_devices(&mut self, targets: Vec<TargetDevice>) {
+        for target in targets {
+            match target {
+                TargetDevice::Null => (),
+                TargetDevice::Keyboard(_) => todo!(),
+                TargetDevice::Mouse(mut mouse) => {
+                    let event_tx = mouse.transmitter();
+                    self.target_devices.push(event_tx);
+                    tokio::spawn(async move {
+                        if let Err(e) = mouse.run().await {
+                            log::error!("Failed to run target mouse: {:?}", e);
+                        }
+                        log::debug!("Target mouse device closed");
+                    });
+                }
+                TargetDevice::GenericGamepad(mut gamepad) => {
+                    let event_tx = gamepad.transmitter();
+                    self.target_devices.push(event_tx);
+                    tokio::spawn(async move {
+                        if let Err(e) = gamepad.run().await {
+                            log::error!("Failed to run target gamepad: {:?}", e);
+                        }
+                        log::debug!("Target gamepad device closed");
+                    });
+                }
+                TargetDevice::XBox360(_) => todo!(),
+            }
+        }
     }
 
     /// Process a single event from a source device. Events are piped through

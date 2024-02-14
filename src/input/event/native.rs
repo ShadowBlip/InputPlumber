@@ -53,11 +53,8 @@ impl NativeEvent {
 impl From<EvdevEvent> for NativeEvent {
     /// Convert the [EvdevEvent] into a [NativeEvent]
     fn from(item: EvdevEvent) -> Self {
-        let normal_value = item.get_normalized_value();
-        let input_value = InputValue::Float(normal_value);
-        NativeEvent {
-            capability: item.as_capability(),
-            value: input_value,
-        }
+        let capability = item.as_capability();
+        let value = item.get_value();
+        NativeEvent { capability, value }
     }
 }

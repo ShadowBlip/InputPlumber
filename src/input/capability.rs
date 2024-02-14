@@ -124,6 +124,8 @@ pub enum GamepadAxis {
     Hat1,
     Hat2,
     Hat3,
+    /// Axis input from two binary button inputs
+    Buttons(GamepadButton, GamepadButton),
 }
 
 #[derive(Clone, Debug)]

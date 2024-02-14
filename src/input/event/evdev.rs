@@ -13,6 +13,78 @@ pub struct EvdevEvent {
 }
 
 impl EvdevEvent {
+    /// Returns the normalized value of the event expressed as an [InputValue].
+    pub fn get_value(&self) -> InputValue {
+        let normal_value = self.get_normalized_value();
+        let event_type = self.event.event_type();
+        let code = self.event.code();
+
+        // Select the appropiate value type based on the type of input. E.g. Axis
+        // values should be in the form of a [InputValue::Vector2].
+        match event_type {
+            EventType::KEY => {
+                KeyCode::new(code);
+                if normal_value > 0.5 {
+                    InputValue::Bool(true)
+                } else {
+                    InputValue::Bool(false)
+                }
+            }
+            EventType::ABSOLUTE => match AbsoluteAxisCode(code) {
+                AbsoluteAxisCode::ABS_X => InputValue::Vector2 {
+                    x: normal_value,
+                    y: 0.0,
+                },
+                AbsoluteAxisCode::ABS_Y => InputValue::Vector2 {
+                    x: 0.0,
+                    y: normal_value,
+                },
+                AbsoluteAxisCode::ABS_RX => InputValue::Vector2 {
+                    x: normal_value,
+                    y: 0.0,
+                },
+                AbsoluteAxisCode::ABS_RY => InputValue::Vector2 {
+                    x: 0.0,
+                    y: normal_value,
+                },
+                AbsoluteAxisCode::ABS_HAT0X => InputValue::Vector2 {
+                    x: normal_value,
+                    y: 0.0,
+                },
+                AbsoluteAxisCode::ABS_HAT0Y => InputValue::Vector2 {
+                    x: 0.0,
+                    y: normal_value,
+                },
+                AbsoluteAxisCode::ABS_HAT1X => InputValue::Vector2 {
+                    x: normal_value,
+                    y: 0.0,
+                },
+                AbsoluteAxisCode::ABS_HAT1Y => InputValue::Vector2 {
+                    x: 0.0,
+                    y: normal_value,
+                },
+                AbsoluteAxisCode::ABS_HAT2X => InputValue::Vector2 {
+                    x: normal_value,
+                    y: 0.0,
+                },
+                AbsoluteAxisCode::ABS_HAT2Y => InputValue::Vector2 {
+                    x: 0.0,
+                    y: normal_value,
+                },
+                AbsoluteAxisCode::ABS_HAT3X => InputValue::Vector2 {
+                    x: normal_value,
+                    y: 0.0,
+                },
+                AbsoluteAxisCode::ABS_HAT3Y => InputValue::Vector2 {
+                    x: 0.0,
+                    y: normal_value,
+                },
+                _ => InputValue::Float(normal_value),
+            },
+            _ => InputValue::Float(normal_value),
+        }
+    }
+
     /// Returns the normalized value of the event. This will be a value that
     /// ranges from -1.0 to 1.0 based on the minimum and maximum values.
     pub fn get_normalized_value(&self) -> f64 {
@@ -20,17 +92,11 @@ impl EvdevEvent {
 
         // If this event has ABS info, normalize the value
         if let Some(info) = self.abs_info {
-            let mid = (info.maximum() + info.minimum()) / 2;
-            let event_value = (raw_value - mid) as f64;
-
-            // Normalize the value
-            if event_value >= 0.0 {
-                let maximum = (info.maximum() - mid) as f64;
-                event_value / maximum
-            } else {
-                let minimum = (info.minimum() - mid) as f64;
-                let value = event_value / minimum;
-                -value
+            let code = self.event.code();
+            match AbsoluteAxisCode(code) {
+                AbsoluteAxisCode::ABS_Z => normalize_unsigned_value(raw_value, info.maximum()),
+                AbsoluteAxisCode::ABS_RZ => normalize_unsigned_value(raw_value, info.maximum()),
+                _ => normalize_signed_value(raw_value, info.minimum(), info.maximum()),
             }
         } else {
             raw_value as f64
@@ -49,7 +115,8 @@ impl EvdevEvent {
         self.event
     }
 
-    /// Returns the capability that this event fulfills.
+    /// Returns the capability that this event fulfills. This is used to translate
+    /// evdev events into [NativeEvent]s.
     pub fn as_capability(&self) -> Capability {
         let event_type = self.event.event_type();
         let code = self.event.code();
@@ -60,10 +127,47 @@ impl EvdevEvent {
                 KeyCode::BTN_NORTH => Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
                 KeyCode::BTN_WEST => Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
                 KeyCode::BTN_EAST => Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
+                KeyCode::BTN_TL => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
+                KeyCode::BTN_TR => Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+                KeyCode::BTN_START => Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
+                KeyCode::BTN_SELECT => Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
+                KeyCode::BTN_MODE => Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+                KeyCode::BTN_THUMBL => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick))
+                }
+                KeyCode::BTN_THUMBR => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick))
+                }
+                _ => Capability::NotImplemented,
+            },
+            EventType::ABSOLUTE => match AbsoluteAxisCode(code) {
+                AbsoluteAxisCode::ABS_X => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick))
+                }
+                AbsoluteAxisCode::ABS_Y => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick))
+                }
+                AbsoluteAxisCode::ABS_RX => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick))
+                }
+                AbsoluteAxisCode::ABS_RY => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick))
+                }
+                AbsoluteAxisCode::ABS_Z => {
+                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger))
+                }
+                AbsoluteAxisCode::ABS_RZ => {
+                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger))
+                }
+                AbsoluteAxisCode::ABS_HAT0X => Capability::Gamepad(Gamepad::Axis(
+                    GamepadAxis::Buttons(GamepadButton::DPadLeft, GamepadButton::DPadRight),
+                )),
+                AbsoluteAxisCode::ABS_HAT0Y => Capability::Gamepad(Gamepad::Axis(
+                    GamepadAxis::Buttons(GamepadButton::DPadUp, GamepadButton::DPadDown),
+                )),
                 _ => Capability::NotImplemented,
             },
             EventType::RELATIVE => Capability::NotImplemented,
-            EventType::ABSOLUTE => Capability::NotImplemented,
             EventType::MISC => Capability::NotImplemented,
             EventType::SWITCH => Capability::NotImplemented,
             EventType::LED => Capability::NotImplemented,
@@ -190,6 +294,7 @@ fn axis_direction_from_capability(capability: Capability) -> AxisDirection {
 }
 
 /// Returns a list of event codes responsible for handling the given input capability.
+/// This is typically used to translate a [NativeEvent] into an [EvdevEvent].
 fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
     match capability {
         Capability::None => vec![],
@@ -242,6 +347,9 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 GamepadAxis::Hat3 => {
                     vec![AbsoluteAxisCode::ABS_HAT2X.0, AbsoluteAxisCode::ABS_HAT2Y.0]
                 }
+                GamepadAxis::Buttons(_, _) => {
+                    vec![AbsoluteAxisCode::ABS_HAT0X.0, AbsoluteAxisCode::ABS_HAT0Y.0]
+                }
             },
             Gamepad::Trigger(trigg) => match trigg {
                 GamepadTrigger::LeftTrigger => {
@@ -274,7 +382,7 @@ fn input_event_from_value(
     let value = match input {
         InputValue::None => 0,
         InputValue::Bool(value) => {
-            // Connvert the binary input value into an integar
+            // Convert the binary input value into an integar
             let value = if value { 1 } else { 0 };
 
             // If this value is for an axis, we need to convert this value into
@@ -298,15 +406,52 @@ fn input_event_from_value(
         InputValue::Float(value) => denormalize_unsigned_value(value, axis_info),
         InputValue::Vector2 { x, y } => match AbsoluteAxisCode(code) {
             AbsoluteAxisCode::ABS_X => denormalize_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_RX => denormalize_signed_value(x, axis_info.unwrap()),
             AbsoluteAxisCode::ABS_Y => denormalize_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_RX => denormalize_signed_value(x, axis_info.unwrap()),
             AbsoluteAxisCode::ABS_RY => denormalize_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT0X => denormalize_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT0Y => denormalize_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT1X => denormalize_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT1Y => denormalize_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT2X => denormalize_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT2Y => denormalize_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT3X => denormalize_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT3Y => denormalize_signed_value(y, axis_info.unwrap()),
             _ => todo!(),
         },
         InputValue::Vector3 { x: _, y: _, z: _ } => todo!(),
     };
 
     InputEvent::new(event_type.0, code, value)
+}
+
+/// Normalizes the given value from a real value with axis information into a range
+/// between -1.0 - 1.0, indicating how far the axis has been pressed towards its
+/// minimum and maximum values.
+fn normalize_signed_value(raw_value: i32, min: i32, max: i32) -> f64 {
+    let mid = (max + min) / 2;
+    let event_value = raw_value - mid;
+
+    let min = min as f64;
+    let max = max as f64;
+    let mid = mid as f64;
+    let event_value = event_value as f64;
+
+    // Normalize the value
+    if event_value >= 0.0 {
+        let maximum = max - mid;
+        event_value / maximum
+    } else {
+        let minimum = min - mid;
+        let value = event_value / minimum;
+        -value
+    }
+}
+
+// Returns a value between 0.0 and 1.0 based on the given value with its
+// maximum.
+fn normalize_unsigned_value(raw_value: i32, max: i32) -> f64 {
+    raw_value as f64 / max as f64
 }
 
 /// De-normalizes the given value from -1.0 - 1.0 into a real value based on the
