@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, KeyEvent};
+use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode};
 
 use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger};
 
@@ -13,14 +13,6 @@ pub struct EvdevEvent {
 }
 
 impl EvdevEvent {
-    /// Create a new [EvdevEvent] instance
-    pub fn new() -> EvdevEvent {
-        EvdevEvent {
-            event: InputEvent::new(0, 0, 0),
-            abs_info: None,
-        }
-    }
-
     /// Returns the normalized value of the event. This will be a value that
     /// ranges from -1.0 to 1.0 based on the minimum and maximum values.
     pub fn get_normalized_value(&self) -> f64 {
@@ -135,10 +127,18 @@ impl EvdevEvent {
                 None
             };
 
+            // Get the axis direction if this this an ABS event and we need to
+            // translate binary input into axis input. (e.g. DPad buttons)
+            let axis_direction = if event_type == EventType::ABSOLUTE {
+                Some(axis_direction_from_capability(event.as_capability()))
+            } else {
+                None
+            };
+
             // Get the input value from the event and convert it into an evdev
             // input event.
             let value = event.get_value();
-            let event = input_event_from_value(event_type, code, axis_info, value);
+            let event = input_event_from_value(event_type, code, axis_info, axis_direction, value);
 
             events.push(EvdevEvent::from(event));
         }
@@ -152,13 +152,40 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
     match capability {
         Capability::Sync => Some(EventType::SYNCHRONIZATION),
         Capability::Gamepad(gamepad) => match gamepad {
-            Gamepad::Button(_) => Some(EventType::KEY),
+            Gamepad::Button(button) => match button {
+                GamepadButton::DPadUp => Some(EventType::ABSOLUTE),
+                GamepadButton::DPadDown => Some(EventType::ABSOLUTE),
+                GamepadButton::DPadLeft => Some(EventType::ABSOLUTE),
+                GamepadButton::DPadRight => Some(EventType::ABSOLUTE),
+                _ => Some(EventType::KEY),
+            },
             Gamepad::Axis(_) => Some(EventType::ABSOLUTE),
             Gamepad::Trigger(_) => Some(EventType::RELATIVE),
             Gamepad::Accelerometer => None,
             Gamepad::Gyro => None,
         },
         _ => None,
+    }
+}
+
+/// Returns the axis direction for the given input capability. This is primarily
+/// used to translate direction binary button events into axis events.
+fn axis_direction_from_capability(capability: Capability) -> AxisDirection {
+    match capability {
+        Capability::Gamepad(gamepad) => {
+            if let Gamepad::Button(button) = gamepad {
+                match button {
+                    GamepadButton::DPadUp => AxisDirection::Negative,
+                    GamepadButton::DPadDown => AxisDirection::Positive,
+                    GamepadButton::DPadLeft => AxisDirection::Negative,
+                    GamepadButton::DPadRight => AxisDirection::Positive,
+                    _ => AxisDirection::None,
+                }
+            } else {
+                AxisDirection::None
+            }
+        }
+        _ => AxisDirection::None,
     }
 }
 
@@ -182,17 +209,17 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 GamepadButton::Base => vec![KeyCode::BTN_BASE.0],
                 GamepadButton::LeftStick => vec![KeyCode::BTN_THUMBL.0],
                 GamepadButton::RightStick => vec![KeyCode::BTN_THUMBR.0],
-                GamepadButton::DPadUp => vec![KeyCode::BTN_TRIGGER_HAPPY1.0],
-                GamepadButton::DPadDown => vec![KeyCode::BTN_TRIGGER_HAPPY2.0],
-                GamepadButton::DPadLeft => vec![KeyCode::BTN_TRIGGER_HAPPY3.0],
-                GamepadButton::DPadRight => vec![KeyCode::BTN_TRIGGER_HAPPY4.0],
+                GamepadButton::DPadUp => vec![AbsoluteAxisCode::ABS_HAT0Y.0],
+                GamepadButton::DPadDown => vec![AbsoluteAxisCode::ABS_HAT0Y.0],
+                GamepadButton::DPadLeft => vec![AbsoluteAxisCode::ABS_HAT0X.0],
+                GamepadButton::DPadRight => vec![AbsoluteAxisCode::ABS_HAT0X.0],
                 GamepadButton::LeftTrigger => vec![KeyCode::BTN_TL2.0],
                 GamepadButton::LeftPaddle1 => vec![],
                 GamepadButton::LeftPaddle2 => vec![],
                 GamepadButton::LeftStickTouch => vec![],
                 GamepadButton::LeftTouchpadTouch => vec![],
                 GamepadButton::LeftTouchpadPress => vec![],
-                GamepadButton::RightTrigger => vec![],
+                GamepadButton::RightTrigger => vec![KeyCode::BTN_TR2.0],
                 GamepadButton::RightPaddle1 => vec![],
                 GamepadButton::RightPaddle2 => vec![],
                 GamepadButton::RightStickTouch => vec![],
@@ -241,15 +268,29 @@ fn input_event_from_value(
     event_type: EventType,
     code: u16,
     axis_info: Option<AbsInfo>,
+    axis_direction: Option<AxisDirection>,
     input: InputValue,
 ) -> InputEvent {
     let value = match input {
-        InputValue::None => todo!(),
+        InputValue::None => 0,
         InputValue::Bool(value) => {
-            if value {
-                1
+            // Connvert the binary input value into an integar
+            let value = if value { 1 } else { 0 };
+
+            // If this value is for an axis, we need to convert this value into
+            // the minimum and maximum values for that axis depending on the
+            // axis direction. This is typically done for DPad button input that
+            // needs to be translated to an ABS_HAT axis input.
+            if axis_info.is_some() && axis_direction.is_some() {
+                let info = axis_info.unwrap();
+                let direction = axis_direction.unwrap();
+                match direction {
+                    AxisDirection::None => value,
+                    AxisDirection::Positive => info.maximum() * value,
+                    AxisDirection::Negative => info.minimum() * value,
+                }
             } else {
-                0
+                value
             }
         }
         InputValue::Int(value) => value,
@@ -262,7 +303,7 @@ fn input_event_from_value(
             AbsoluteAxisCode::ABS_RY => denormalize_signed_value(y, axis_info.unwrap()),
             _ => todo!(),
         },
-        InputValue::Vector3 { x, y, z } => todo!(),
+        InputValue::Vector3 { x: _, y: _, z: _ } => todo!(),
     };
 
     InputEvent::new(event_type.0, code, value)
@@ -292,4 +333,15 @@ fn denormalize_unsigned_value(normal_value: f64, axis_info: Option<AbsInfo>) -> 
         return normal_value as i32;
     };
     (normal_value * axis_info.maximum() as f64).round() as i32
+}
+
+/// The AxisDirection is used to determine if a button value should be mapped
+/// towards the maximum axis value or the minimum axis value. For example,
+/// when mapping a BTN_UP to an ABS_HAT0Y, the converted value should be
+/// positive, towards that axis's maximum value, whereas BTN_DOWN should
+/// be Negative, towards that axis's minimum value.
+enum AxisDirection {
+    None,
+    Positive,
+    Negative,
 }
