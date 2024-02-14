@@ -160,7 +160,7 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
                 _ => Some(EventType::KEY),
             },
             Gamepad::Axis(_) => Some(EventType::ABSOLUTE),
-            Gamepad::Trigger(_) => Some(EventType::RELATIVE),
+            Gamepad::Trigger(_) => Some(EventType::ABSOLUTE),
             Gamepad::Accelerometer => None,
             Gamepad::Gyro => None,
         },

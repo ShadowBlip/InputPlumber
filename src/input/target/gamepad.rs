@@ -2,36 +2,36 @@ use std::{collections::HashMap, error::Error};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
-    AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffect, FFEffectCode, InputEvent, KeyCode, KeyEvent,
-    SynchronizationCode, SynchronizationEvent, UinputAbsSetup,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, InputEvent, KeyCode, SynchronizationCode,
+    SynchronizationEvent, UinputAbsSetup,
 };
 use tokio::sync::{broadcast, mpsc};
 
 use crate::input::{
     capability::Capability,
     composite_device,
-    event::{evdev::EvdevEvent, native::NativeEvent, Event},
+    event::{evdev::EvdevEvent, native::NativeEvent},
 };
 
 #[derive(Debug)]
 pub struct GenericGamepad {
     tx: mpsc::Sender<NativeEvent>,
     rx: mpsc::Receiver<NativeEvent>,
-    composite_tx: broadcast::Sender<composite_device::Command>,
+    _composite_tx: broadcast::Sender<composite_device::Command>,
 }
 
 impl GenericGamepad {
     pub fn new(composite_tx: broadcast::Sender<composite_device::Command>) -> Self {
         let (tx, rx) = mpsc::channel(1024);
         Self {
-            composite_tx,
+            _composite_tx: composite_tx,
             tx,
             rx,
         }
     }
 
     /// Returns all the native capabilities that the device can emit
-    pub fn get_capabilities() -> Vec<Capability> {
+    pub fn _get_capabilities() -> Vec<Capability> {
         use crate::input::capability::{Gamepad, GamepadButton};
         vec![
             Capability::Gamepad(Gamepad::Button(GamepadButton::South)),

@@ -46,6 +46,10 @@ impl DeckController {
                     let events = driver.poll()?;
                     let native_events = translate_events(events);
                     for event in native_events {
+                        // Don't send un-implemented events
+                        if matches!(event.as_capability(), Capability::NotImplemented) {
+                            continue;
+                        }
                         tx.send(Command::ProcessEvent(Event::Native(event)))?;
                     }
 
