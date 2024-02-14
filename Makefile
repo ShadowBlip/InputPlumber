@@ -8,8 +8,8 @@ PREFIX ?= /usr
 CACHE_DIR := .cache
 
 # Docker image variables
-IMAGE_NAME ?= rust
-IMAGE_TAG ?= 1.75
+IMAGE_NAME ?= inputplumber-builder
+IMAGE_TAG ?= latest
 
 # systemd-sysext variables 
 SYSEXT_ID ?= steamos
@@ -136,8 +136,25 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz
 	mv $(CACHE_DIR)/$(NAME).raw $@
 	cd dist && sha256sum $(NAME).raw > $(NAME).raw.sha256.txt
 
-##@ Deployment
+# Refer to .releaserc.yaml for release configuration
+.PHONY: sem-release 
+sem-release: ## Publish a release with semantic release 
+	npx semantic-release
 
+# E.g. make in-docker TARGET=build
+.PHONY: in-docker
+in-docker:
+	@# Run the given make target inside Docker
+	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	docker run --rm \
+		-v $(PWD):/src \
+		--workdir /src \
+		-e HOME=/home/build \
+		--user $(shell id -u):$(shell id -g) \
+		$(IMAGE_NAME):$(IMAGE_TAG) \
+		make $(TARGET)
+
+##@ Deployment
 
 .PHONY: deploy
 deploy: deploy-ext ## Build and deploy to a remote device
@@ -148,3 +165,4 @@ deploy-ext: dist-ext ## Build and deploy systemd extension to a remote device
 	scp dist/$(NAME).raw $(SSH_USER)@$(SSH_HOST):~/.var/lib/extensions
 	ssh -t $(SSH_USER)@$(SSH_HOST) sudo systemd-sysext refresh
 	ssh $(SSH_USER)@$(SSH_HOST) systemd-sysext status
+

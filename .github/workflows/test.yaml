@@ -1,0 +1,13 @@
+name: 🪲 Test
+
+on: [push, pull_request]
+
+jobs:
+  run-tests:
+    name: Run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - run: |
+          make in-docker TARGET='test'
