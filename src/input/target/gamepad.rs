@@ -1,3 +1,5 @@
+//! The GenericGamepad target provides a simple generic virtual gamepad based
+//! on the XBox 360 gamepad.
 use std::{collections::HashMap, error::Error};
 
 use evdev::{

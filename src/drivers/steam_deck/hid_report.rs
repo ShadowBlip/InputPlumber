@@ -1,4 +1,5 @@
 //! Reference: https://gitlab.com/open-sd/opensd/-/blob/main/src/opensdd/drivers/gamepad/hid_reports.hpp
+#![allow(warnings)]
 use packed_struct::prelude::*;
 
 // Input report axis ranges

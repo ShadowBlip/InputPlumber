@@ -188,7 +188,7 @@ impl Manager {
     /// Create a new [CompositeDevice] from the given [CompositeDeviceConfig]
     async fn create_composite_device(
         &mut self,
-        config: CompositeDeviceConfig,
+        _config: CompositeDeviceConfig,
     ) -> Result<(), Box<dyn Error>> {
         Ok(())
     }

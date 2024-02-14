@@ -1,8 +1,8 @@
 use std::error::Error;
 
 use evdev::{
-    uinput::VirtualDeviceBuilder, AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffect, FFEffectCode,
-    KeyCode, UinputAbsSetup,
+    uinput::VirtualDeviceBuilder, AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffectCode, KeyCode,
+    UinputAbsSetup,
 };
 use tokio::sync::broadcast;
 
@@ -10,12 +10,14 @@ use crate::input::composite_device;
 
 #[derive(Debug)]
 pub struct XBox360Controller {
-    composite_tx: broadcast::Sender<composite_device::Command>,
+    _composite_tx: broadcast::Sender<composite_device::Command>,
 }
 
 impl XBox360Controller {
     pub fn new(composite_tx: broadcast::Sender<composite_device::Command>) -> Self {
-        Self { composite_tx }
+        Self {
+            _composite_tx: composite_tx,
+        }
     }
 
     pub fn run() -> Result<(), Box<dyn Error>> {
@@ -60,7 +62,7 @@ impl XBox360Controller {
         ff.insert(FFEffectCode::FF_GAIN);
 
         // Build the device
-        let device = VirtualDeviceBuilder::new()?
+        let _device = VirtualDeviceBuilder::new()?
             .name("Xbox 360 Wireless Receiver (XBOX)")
             .with_keys(&keys)?
             .with_absolute_axis(&abs_x)?

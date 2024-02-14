@@ -13,9 +13,17 @@
 
 ## About
 
-InputPlumber is an open source input control system for Linux. It can be used
-to combine any number of input devices and translate their input to
-multiple virtual device formats.
+InputPlumber is an open source input routing and control daemon for Linux. It can 
+be used to combine any number of input devices (like gamepads, mice, and keyboards) 
+and translate their input to a variety of virtual device formats.
+
+Features
+
+[x] Combine multiple input devices
+[x] Emulate mouse, keyboard, and gamepad inputs
+[x] Intercept and route input over DBus for overlay interface control
+[ ] Input mapping profiles to translate source input into the desired target input
+[ ] Route input over the network
 
 ## Install
 
