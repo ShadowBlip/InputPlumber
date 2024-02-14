@@ -64,7 +64,6 @@ impl From<NativeEvent> for DBusEvent {
     fn from(item: NativeEvent) -> Self {
         let input_value = item.get_value();
         let value = match input_value {
-            super::native::InputValue::None => 0.0,
             super::native::InputValue::Bool(value) => {
                 if value {
                     1.0
@@ -72,8 +71,6 @@ impl From<NativeEvent> for DBusEvent {
                     0.0
                 }
             }
-            super::native::InputValue::Int(value) => value as f64,
-            super::native::InputValue::UInt(value) => value as f64,
             super::native::InputValue::Float(value) => value,
             super::native::InputValue::Vector2 { x, y } => 0.0,
             super::native::InputValue::Vector3 { x, y, z } => 0.0,

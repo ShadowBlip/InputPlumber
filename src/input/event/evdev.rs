@@ -32,52 +32,52 @@ impl EvdevEvent {
             }
             EventType::ABSOLUTE => match AbsoluteAxisCode(code) {
                 AbsoluteAxisCode::ABS_X => InputValue::Vector2 {
-                    x: normal_value,
-                    y: 0.0,
+                    x: Some(normal_value),
+                    y: None,
                 },
                 AbsoluteAxisCode::ABS_Y => InputValue::Vector2 {
-                    x: 0.0,
-                    y: normal_value,
+                    x: None,
+                    y: Some(normal_value),
                 },
                 AbsoluteAxisCode::ABS_RX => InputValue::Vector2 {
-                    x: normal_value,
-                    y: 0.0,
+                    x: Some(normal_value),
+                    y: None,
                 },
                 AbsoluteAxisCode::ABS_RY => InputValue::Vector2 {
-                    x: 0.0,
-                    y: normal_value,
+                    x: None,
+                    y: Some(normal_value),
                 },
                 AbsoluteAxisCode::ABS_HAT0X => InputValue::Vector2 {
-                    x: normal_value,
-                    y: 0.0,
+                    x: Some(normal_value),
+                    y: None,
                 },
                 AbsoluteAxisCode::ABS_HAT0Y => InputValue::Vector2 {
-                    x: 0.0,
-                    y: normal_value,
+                    x: None,
+                    y: Some(normal_value),
                 },
                 AbsoluteAxisCode::ABS_HAT1X => InputValue::Vector2 {
-                    x: normal_value,
-                    y: 0.0,
+                    x: Some(normal_value),
+                    y: None,
                 },
                 AbsoluteAxisCode::ABS_HAT1Y => InputValue::Vector2 {
-                    x: 0.0,
-                    y: normal_value,
+                    x: None,
+                    y: Some(normal_value),
                 },
                 AbsoluteAxisCode::ABS_HAT2X => InputValue::Vector2 {
-                    x: normal_value,
-                    y: 0.0,
+                    x: Some(normal_value),
+                    y: None,
                 },
                 AbsoluteAxisCode::ABS_HAT2Y => InputValue::Vector2 {
-                    x: 0.0,
-                    y: normal_value,
+                    x: None,
+                    y: Some(normal_value),
                 },
                 AbsoluteAxisCode::ABS_HAT3X => InputValue::Vector2 {
-                    x: normal_value,
-                    y: 0.0,
+                    x: Some(normal_value),
+                    y: None,
                 },
                 AbsoluteAxisCode::ABS_HAT3Y => InputValue::Vector2 {
-                    x: 0.0,
-                    y: normal_value,
+                    x: None,
+                    y: Some(normal_value),
                 },
                 _ => InputValue::Float(normal_value),
             },
@@ -243,8 +243,11 @@ impl EvdevEvent {
             // input event.
             let value = event.get_value();
             let event = input_event_from_value(event_type, code, axis_info, axis_direction, value);
+            if event.is_none() {
+                continue;
+            }
 
-            events.push(EvdevEvent::from(event));
+            events.push(EvdevEvent::from(event.unwrap()));
         }
 
         events
@@ -378,9 +381,8 @@ fn input_event_from_value(
     axis_info: Option<AbsInfo>,
     axis_direction: Option<AxisDirection>,
     input: InputValue,
-) -> InputEvent {
+) -> Option<InputEvent> {
     let value = match input {
-        InputValue::None => 0,
         InputValue::Bool(value) => {
             // Convert the binary input value into an integar
             let value = if value { 1 } else { 0 };
@@ -393,36 +395,37 @@ fn input_event_from_value(
                 let info = axis_info.unwrap();
                 let direction = axis_direction.unwrap();
                 match direction {
-                    AxisDirection::None => value,
-                    AxisDirection::Positive => info.maximum() * value,
-                    AxisDirection::Negative => info.minimum() * value,
+                    AxisDirection::None => Some(value),
+                    AxisDirection::Positive => Some(info.maximum() * value),
+                    AxisDirection::Negative => Some(info.minimum() * value),
                 }
             } else {
-                value
+                Some(value)
             }
         }
-        InputValue::Int(value) => value,
-        InputValue::UInt(value) => value as i32,
-        InputValue::Float(value) => denormalize_unsigned_value(value, axis_info),
+        InputValue::Float(value) => Some(denormalize_unsigned_value(value, axis_info)),
         InputValue::Vector2 { x, y } => match AbsoluteAxisCode(code) {
-            AbsoluteAxisCode::ABS_X => denormalize_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_Y => denormalize_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_RX => denormalize_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_RY => denormalize_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT0X => denormalize_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT0Y => denormalize_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT1X => denormalize_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT1Y => denormalize_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT2X => denormalize_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT2Y => denormalize_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT3X => denormalize_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT3Y => denormalize_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_X => denormalize_optional_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_RX => denormalize_optional_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_RY => denormalize_optional_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT0X => denormalize_optional_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT0Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT1X => denormalize_optional_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT1Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT2X => denormalize_optional_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT2Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT3X => denormalize_optional_signed_value(x, axis_info.unwrap()),
+            AbsoluteAxisCode::ABS_HAT3Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
             _ => todo!(),
         },
         InputValue::Vector3 { x: _, y: _, z: _ } => todo!(),
     };
+    if value.is_none() {
+        return None;
+    }
 
-    InputEvent::new(event_type.0, code, value)
+    Some(InputEvent::new(event_type.0, code, value.unwrap()))
 }
 
 /// Normalizes the given value from a real value with axis information into a range
@@ -452,6 +455,16 @@ fn normalize_signed_value(raw_value: i32, min: i32, max: i32) -> f64 {
 // maximum.
 fn normalize_unsigned_value(raw_value: i32, max: i32) -> f64 {
     raw_value as f64 / max as f64
+}
+
+/// De-normalizes the given value from -1.0 - 1.0 into a real value based on the
+/// minimum and maximum axis range from the given [AbsInfo].
+fn denormalize_optional_signed_value(normal_value: Option<f64>, axis_info: AbsInfo) -> Option<i32> {
+    if normal_value.is_none() {
+        return None;
+    }
+    let normal_value = normal_value.unwrap();
+    Some(denormalize_signed_value(normal_value, axis_info))
 }
 
 /// De-normalizes the given value from -1.0 - 1.0 into a real value based on the
