@@ -45,6 +45,8 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/lib/systemd/system/$(NAME).service
 	install -D -m 644 rootfs/usr/share/$(NAME)/devices/steam_deck.yaml \
 		$(PREFIX)/share/$(NAME)/devices/steam_deck.yaml
+	install -D -m 644 rootfs/usr/share/$(NAME)/devices/gamepads.yaml \
+		$(PREFIX)/share/$(NAME)/devices/gamepads.yaml
 	@echo ""
 	@echo "Install completed. Enable service with:" 
 	@echo "  systemctl enable --now $(NAME)"
@@ -55,6 +57,7 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
 	rm $(PREFIX)/share/$(NAME)/devices/steam_deck.yaml
+	rm $(PREFIX)/share/$(NAME)/devices/gamepads.yaml
 
 ##@ Development
 
