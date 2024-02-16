@@ -17,6 +17,8 @@ use crate::input::{
     event::{evdev::EvdevEvent, native::NativeEvent},
 };
 
+use super::TargetCommand;
+
 const BUFFER_SIZE: usize = 2048;
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
@@ -42,8 +44,8 @@ impl DBusInterface {
 pub struct GenericGamepad {
     conn: Connection,
     dbus_path: Option<String>,
-    tx: mpsc::Sender<NativeEvent>,
-    rx: mpsc::Receiver<NativeEvent>,
+    tx: mpsc::Sender<TargetCommand>,
+    rx: mpsc::Receiver<TargetCommand>,
     _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
 }
 
@@ -76,7 +78,7 @@ impl GenericGamepad {
     }
 
     /// Returns a transmitter channel that can be used to send events to this device
-    pub fn transmitter(&self) -> mpsc::Sender<NativeEvent> {
+    pub fn transmitter(&self) -> mpsc::Sender<TargetCommand> {
         self.tx.clone()
     }
 
@@ -106,11 +108,31 @@ impl GenericGamepad {
 
         // Listen for send events
         log::debug!("Started listening for events to send");
-        while let Some(event) = self.rx.recv().await {
-            //log::debug!("Got event to emit: {:?}", event);
-            let evdev_events = self.translate_event(event, axes_map.clone());
-            device.emit(evdev_events.as_slice())?;
-            device.emit(&[SynchronizationEvent::new(SynchronizationCode::SYN_REPORT, 0).into()])?;
+        while let Some(command) = self.rx.recv().await {
+            match command {
+                TargetCommand::WriteEvent(event) => {
+                    //log::debug!("Got event to emit: {:?}", event);
+                    let evdev_events = self.translate_event(event, axes_map.clone());
+                    device.emit(evdev_events.as_slice())?;
+                    device.emit(&[SynchronizationEvent::new(
+                        SynchronizationCode::SYN_REPORT,
+                        0,
+                    )
+                    .into()])?;
+                }
+                TargetCommand::Stop => break,
+            };
+        }
+
+        log::debug!("Stopping device");
+
+        // Remove the DBus interface
+        if let Some(path) = self.dbus_path.clone() {
+            log::debug!("Removing DBus interface");
+            self.conn
+                .object_server()
+                .remove::<DBusInterface, String>(path)
+                .await?;
         }
 
         Ok(())

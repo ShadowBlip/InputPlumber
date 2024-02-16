@@ -13,7 +13,12 @@ use crate::{
     udev::{hide_device, unhide_device},
 };
 
-use super::{capability, event::Event, source::SourceDevice, target::TargetDevice};
+use super::{
+    capability,
+    event::Event,
+    source::SourceDevice,
+    target::{TargetCommand, TargetDevice},
+};
 
 const BUFFER_SIZE: usize = 2048;
 
@@ -153,10 +158,10 @@ pub struct CompositeDevice {
     source_devices_used: Vec<String>,
     /// Map of DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/gamepad0": <Sender>}
-    target_devices: HashMap<String, mpsc::Sender<NativeEvent>>,
+    target_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
     /// Map of DBusDevice DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
-    target_dbus_devices: HashMap<String, mpsc::Sender<NativeEvent>>,
+    target_dbus_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
 }
 
 impl CompositeDevice {
@@ -248,7 +253,7 @@ impl CompositeDevice {
     /// devices to translate the events and send them to the appropriate target.
     pub async fn run(
         &mut self,
-        targets: HashMap<String, mpsc::Sender<NativeEvent>>,
+        targets: HashMap<String, mpsc::Sender<TargetCommand>>,
     ) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting composite device");
 
@@ -301,13 +306,25 @@ impl CompositeDevice {
         }
         log::debug!("CompositeDevice stopped");
 
+        // Stop all target devices
+        log::debug!("Stopping target devices");
+        for (_, target) in &self.target_devices {
+            target.send(TargetCommand::Stop).await?;
+        }
+        for (_, target) in &self.target_dbus_devices {
+            target.send(TargetCommand::Stop).await?;
+        }
+
         // Unhide all source devices
         for source_path in self.source_device_paths.clone() {
             log::debug!("Un-hiding device: {}", source_path);
-            unhide_device(source_path).await?;
+            if let Err(e) = unhide_device(source_path.clone()).await {
+                log::debug!("Unable to unhide device {source_path}: {:?}", e);
+            }
         }
 
         // Wait on all tasks
+        log::debug!("Waiting for source device tasks to finish");
         while let Some(res) = tasks.join_next().await {
             res?;
         }
@@ -343,7 +360,7 @@ impl CompositeDevice {
     }
 
     /// Sets the DBus target devices on the [CompositeDevice].
-    pub fn set_dbus_devices(&mut self, devices: HashMap<String, mpsc::Sender<NativeEvent>>) {
+    pub fn set_dbus_devices(&mut self, devices: HashMap<String, mpsc::Sender<TargetCommand>>) {
         self.target_dbus_devices = devices;
     }
 
@@ -452,6 +469,8 @@ impl CompositeDevice {
 
     /// Writes the given event to the appropriate target device.
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+        let event = TargetCommand::WriteEvent(event);
+
         // If the device is in intercept mode, only send events to DBus
         // target devices.
         if matches!(self.intercept_mode, InterceptMode::Always) {

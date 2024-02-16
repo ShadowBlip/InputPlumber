@@ -28,6 +28,7 @@ use crate::procfs;
 use crate::watcher;
 
 use super::event::native::NativeEvent;
+use super::target::TargetCommand;
 
 const DEV_PATH: &str = "/dev";
 const INPUT_PATH: &str = "/dev/input";
@@ -116,9 +117,6 @@ pub struct Manager {
     /// Mapping of target devices to their respective handles
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Handle>}
     target_devices: HashMap<String, mpsc::Sender<NativeEvent>>,
-    /// Mapping of target devices without a [CompositeDevice]
-    /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <TargetDevice>}
-    orphan_target_devices: HashMap<String, TargetDevice>,
 }
 
 impl Manager {
@@ -139,7 +137,6 @@ impl Manager {
             source_devices_used: HashMap::new(),
             composite_devices: HashMap::new(),
             target_devices: HashMap::new(),
-            orphan_target_devices: HashMap::new(),
         }
     }
 
@@ -263,7 +260,7 @@ impl Manager {
     async fn start_target_devices(
         &self,
         targets: Vec<TargetDevice>,
-    ) -> Result<HashMap<String, mpsc::Sender<NativeEvent>>, Box<dyn Error>> {
+    ) -> Result<HashMap<String, mpsc::Sender<TargetCommand>>, Box<dyn Error>> {
         let mut target_devices = HashMap::new();
         for target in targets {
             match target {

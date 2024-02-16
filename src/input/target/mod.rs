@@ -1,3 +1,5 @@
+use super::event::native::NativeEvent;
+
 pub mod dbus;
 pub mod gamepad;
 pub mod keyboard;
@@ -13,4 +15,12 @@ pub enum TargetDevice {
     Mouse(mouse::MouseDevice),
     GenericGamepad(gamepad::GenericGamepad),
     XBox360(xb360::XBox360Controller),
+}
+
+/// A [TargetCommand] is a message that can be sent to a [TargetDevice] over
+/// a channel.
+#[derive(Debug, Clone)]
+pub enum TargetCommand {
+    WriteEvent(NativeEvent),
+    Stop,
 }

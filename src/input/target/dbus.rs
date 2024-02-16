@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use tokio::sync::{broadcast, mpsc};
-use zbus::{fdo, Connection, SignalContext};
+use zbus::{fdo, zvariant::ObjectPath, Connection, SignalContext};
 use zbus_macros::dbus_interface;
 
 use crate::input::{
@@ -11,6 +11,8 @@ use crate::input::{
         native::NativeEvent,
     },
 };
+
+use super::TargetCommand;
 
 const BUFFER_SIZE: usize = 2048;
 
@@ -44,8 +46,8 @@ impl DBusInterface {
 pub struct DBusDevice {
     conn: Connection,
     dbus_path: Option<String>,
-    tx: mpsc::Sender<NativeEvent>,
-    rx: mpsc::Receiver<NativeEvent>,
+    tx: mpsc::Sender<TargetCommand>,
+    rx: mpsc::Receiver<TargetCommand>,
     _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
 }
 
@@ -68,7 +70,7 @@ impl DBusDevice {
     }
 
     /// Returns a transmitter channel that can be used to send events to this device
-    pub fn transmitter(&self) -> mpsc::Sender<NativeEvent> {
+    pub fn transmitter(&self) -> mpsc::Sender<TargetCommand> {
         self.tx.clone()
     }
 
@@ -91,10 +93,25 @@ impl DBusDevice {
 
         // Listen for send events
         log::debug!("Started listening for events to send");
-        while let Some(event) = self.rx.recv().await {
-            //log::debug!("Got event to emit: {:?}", event);
-            let dbus_event = self.translate_event(event);
-            self.write_dbus_event(dbus_event).await?;
+        while let Some(command) = self.rx.recv().await {
+            match command {
+                TargetCommand::WriteEvent(event) => {
+                    //log::debug!("Got event to emit: {:?}", event);
+                    let dbus_event = self.translate_event(event);
+                    self.write_dbus_event(dbus_event).await?;
+                }
+                TargetCommand::Stop => break,
+            };
+        }
+        log::debug!("Stopping device");
+
+        // Remove the DBus interface
+        if let Some(path) = self.dbus_path.clone() {
+            log::debug!("Removing DBus interface");
+            self.conn
+                .object_server()
+                .remove::<DBusInterface, String>(path)
+                .await?;
         }
 
         Ok(())
