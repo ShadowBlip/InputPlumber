@@ -154,9 +154,9 @@ pub struct CompositeDevice {
     /// Map of DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/gamepad0": <Sender>}
     target_devices: HashMap<String, mpsc::Sender<NativeEvent>>,
-    /// List of paths to [DBusDevice] targets
-    /// E.g. ["/org/shadowblip/InputPlumber/devices/target/dbus0"]
-    target_dbus_devices: Vec<String>,
+    /// Map of DBusDevice DBus paths to their respective transmitter channel.
+    /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
+    target_dbus_devices: HashMap<String, mpsc::Sender<NativeEvent>>,
 }
 
 impl CompositeDevice {
@@ -226,7 +226,7 @@ impl CompositeDevice {
             source_device_ids,
             source_devices_used: Vec::new(),
             target_devices: HashMap::new(),
-            target_dbus_devices: Vec::new(),
+            target_dbus_devices: HashMap::new(),
         })
     }
 
@@ -246,14 +246,17 @@ impl CompositeDevice {
 
     /// Starts the [CompositeDevice] and listens for events from all source
     /// devices to translate the events and send them to the appropriate target.
-    pub async fn run(&mut self, targets: Vec<TargetDevice>) -> Result<(), Box<dyn Error>> {
+    pub async fn run(
+        &mut self,
+        targets: HashMap<String, mpsc::Sender<NativeEvent>>,
+    ) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting composite device");
 
         // Start all source devices
         let mut tasks = self.run_source_devices().await?;
 
-        // Start all target devices
-        self.run_target_devices(targets)?;
+        // Keep track of all target devices
+        self.target_devices = targets;
 
         // Loop and listen for command events
         log::debug!("CompositeDevice started");
@@ -339,6 +342,11 @@ impl CompositeDevice {
         self.source_device_ids.clone()
     }
 
+    /// Sets the DBus target devices on the [CompositeDevice].
+    pub fn set_dbus_devices(&mut self, devices: HashMap<String, mpsc::Sender<NativeEvent>>) {
+        self.target_dbus_devices = devices;
+    }
+
     /// Return a list of source device paths (e.g. /dev/hidraw0, /dev/input/event0)
     /// that this composite device is managing
     fn get_source_device_paths(&self) -> Vec<String> {
@@ -401,59 +409,6 @@ impl CompositeDevice {
         Ok(tasks)
     }
 
-    /// Start and run the given target devices
-    fn run_target_devices(&mut self, targets: Vec<TargetDevice>) -> Result<(), Box<dyn Error>> {
-        for target in targets {
-            match target {
-                TargetDevice::Null => (),
-                TargetDevice::Keyboard(_) => todo!(),
-                TargetDevice::Mouse(mut mouse) => {
-                    let event_tx = mouse.transmitter();
-                    let Some(path) = mouse.get_dbus_path() else {
-                        return Err("No DBus path found for target device".into());
-                    };
-                    self.target_devices.insert(path, event_tx);
-                    tokio::spawn(async move {
-                        if let Err(e) = mouse.run().await {
-                            log::error!("Failed to run target mouse: {:?}", e);
-                        }
-                        log::debug!("Target mouse device closed");
-                    });
-                }
-                TargetDevice::GenericGamepad(mut gamepad) => {
-                    let event_tx = gamepad.transmitter();
-                    let Some(path) = gamepad.get_dbus_path() else {
-                        return Err("No DBus path found for target device".into());
-                    };
-                    self.target_devices.insert(path, event_tx);
-                    tokio::spawn(async move {
-                        if let Err(e) = gamepad.run().await {
-                            log::error!("Failed to run target gamepad: {:?}", e);
-                        }
-                        log::debug!("Target gamepad device closed");
-                    });
-                }
-                TargetDevice::XBox360(_) => todo!(),
-                TargetDevice::DBus(mut device) => {
-                    let event_tx = device.transmitter();
-                    let Some(path) = device.get_dbus_path() else {
-                        return Err("No DBus path found for target device".into());
-                    };
-                    self.target_devices.insert(path.clone(), event_tx);
-                    self.target_dbus_devices.push(path);
-                    tokio::spawn(async move {
-                        if let Err(e) = device.run().await {
-                            log::error!("Failed to run target dbus device: {:?}", e);
-                        }
-                        log::debug!("Target dbus device closed");
-                    });
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     /// Process a single event from a source device. Events are piped through
     /// a translation layer, then dispatched to the appropriate target device(s)
     async fn process_event(&mut self, raw_event: Event) -> Result<(), Box<dyn Error>> {
@@ -497,27 +452,19 @@ impl CompositeDevice {
 
     /// Writes the given event to the appropriate target device.
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
-        for (path, target) in &self.target_devices {
-            // If the device is in intercept mode, only send events to DBus
-            // target devices.
-            let is_dbus_device = self.is_dbus_device(path);
-            if matches!(self.intercept_mode, InterceptMode::Always) {
-                if is_dbus_device {
-                    target.send(event.clone()).await?;
-                }
-                continue;
+        // If the device is in intercept mode, only send events to DBus
+        // target devices.
+        if matches!(self.intercept_mode, InterceptMode::Always) {
+            for (_, target) in &self.target_dbus_devices {
+                target.send(event.clone()).await?;
             }
-            if is_dbus_device {
-                continue;
-            }
+            return Ok(());
+        }
+
+        for (_, target) in &self.target_devices {
             target.send(event.clone()).await?;
         }
         Ok(())
-    }
-
-    /// Returns true if the given DBus path belongs to a [DBusDevice].
-    fn is_dbus_device(&self, path: &String) -> bool {
-        self.target_dbus_devices.contains(path)
     }
 
     /// Sets the intercept mode to the given value

@@ -6,26 +6,52 @@ use evdev::{
     SynchronizationEvent,
 };
 use tokio::sync::{broadcast, mpsc};
+use zbus::{fdo, Connection};
+use zbus_macros::dbus_interface;
 
 use crate::input::{
     composite_device,
     event::{evdev::EvdevEvent, native::NativeEvent},
 };
 
+const BUFFER_SIZE: usize = 2048;
+
+/// The [DBusInterface] provides a DBus interface that can be exposed for managing
+/// a [KeyboardDevice]. It works by sending command messages to a channel that the
+/// [KeyboardDevice] is listening on.
+pub struct DBusInterface {}
+
+impl DBusInterface {
+    fn new() -> DBusInterface {
+        DBusInterface {}
+    }
+}
+
+#[dbus_interface(name = "org.shadowblip.Input.Keyboard")]
+impl DBusInterface {
+    /// Name of the composite device
+    #[dbus_interface(property)]
+    async fn name(&self) -> fdo::Result<String> {
+        Ok("Keyboard".into())
+    }
+}
+
 #[derive(Debug)]
 pub struct KeyboardDevice {
+    conn: Connection,
     dbus_path: Option<String>,
     tx: mpsc::Sender<NativeEvent>,
     rx: mpsc::Receiver<NativeEvent>,
-    _composite_tx: broadcast::Sender<composite_device::Command>,
+    _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
 }
 
 impl KeyboardDevice {
-    pub fn new(composite_tx: broadcast::Sender<composite_device::Command>) -> Self {
-        let (tx, rx) = mpsc::channel(1024);
+    pub fn new(conn: Connection) -> Self {
+        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
+            conn,
             dbus_path: None,
-            _composite_tx: composite_tx,
+            _composite_tx: None,
             tx,
             rx,
         }
@@ -34,6 +60,24 @@ impl KeyboardDevice {
     /// Returns the DBus path of this device
     pub fn get_dbus_path(&self) -> Option<String> {
         self.dbus_path.clone()
+    }
+
+    /// Returns a transmitter channel that can be used to send events to this device
+    pub fn transmitter(&self) -> mpsc::Sender<NativeEvent> {
+        self.tx.clone()
+    }
+
+    /// Creates a new instance of the device interface on DBus.
+    pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
+        let conn = self.conn.clone();
+        self.dbus_path = Some(path.clone());
+        tokio::spawn(async move {
+            let iface = DBusInterface::new();
+            if let Err(e) = conn.object_server().at(path, iface).await {
+                log::error!("Failed to setup DBus interface for device: {:?}", e);
+            }
+        });
+        Ok(())
     }
 
     /// Creates and runs the target device

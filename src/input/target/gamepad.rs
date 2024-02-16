@@ -17,6 +17,8 @@ use crate::input::{
     event::{evdev::EvdevEvent, native::NativeEvent},
 };
 
+const BUFFER_SIZE: usize = 2048;
+
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
 /// a [GenericGamepad].
 pub struct DBusInterface {}
@@ -47,7 +49,7 @@ pub struct GenericGamepad {
 
 impl GenericGamepad {
     pub fn new(conn: Connection) -> Self {
-        let (tx, rx) = mpsc::channel(1024);
+        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
             conn,
             dbus_path: None,

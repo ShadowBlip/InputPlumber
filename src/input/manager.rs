@@ -20,6 +20,8 @@ use crate::input::source;
 use crate::input::source::hidraw;
 use crate::input::target::dbus::DBusDevice;
 use crate::input::target::gamepad::GenericGamepad;
+use crate::input::target::keyboard::KeyboardDevice;
+use crate::input::target::mouse::MouseDevice;
 use crate::input::target::xb360::XBox360Controller;
 use crate::input::target::TargetDevice;
 use crate::procfs;
@@ -240,42 +242,144 @@ impl Manager {
         Ok(device)
     }
 
-    /// Create target input device to emulate and adds it to the DBus object tree.
-    /// Returns the created device.
+    /// Create target input device to emulate based on the given device type.
     async fn create_target_device(&mut self, kind: &str) -> Result<TargetDevice, Box<dyn Error>> {
-        log::debug!("Creating target device");
+        log::debug!("Creating target device: {kind}");
         // Create the target device to emulate based on the kind
         let device = match kind {
             "gamepad" => TargetDevice::GenericGamepad(GenericGamepad::new(self.dbus.clone())),
             "xb360" => TargetDevice::XBox360(XBox360Controller::new()),
             "dbus" => TargetDevice::DBus(DBusDevice::new(self.dbus.clone())),
+            "mouse" => TargetDevice::Mouse(MouseDevice::new(self.dbus.clone())),
+            "keyboard" => TargetDevice::Keyboard(KeyboardDevice::new(self.dbus.clone())),
             _ => TargetDevice::Null,
         };
-        log::debug!("Created target input device {kind}");
-
-        // Add the device to the DBus object tree
-        let device = match device {
-            TargetDevice::Null => TargetDevice::Null,
-            TargetDevice::DBus(mut device) => {
-                let path = self.next_target_path("dbus")?;
-                let tx = device.transmitter();
-                self.target_devices.insert(path.clone(), tx);
-                device.listen_on_dbus(path).await?;
-                TargetDevice::DBus(device)
-            }
-            TargetDevice::Keyboard(_) => todo!(),
-            TargetDevice::Mouse(_) => todo!(),
-            TargetDevice::GenericGamepad(mut device) => {
-                let path = self.next_target_path("gamepad")?;
-                let tx = device.transmitter();
-                self.target_devices.insert(path.clone(), tx);
-                device.listen_on_dbus(path).await?;
-                TargetDevice::GenericGamepad(device)
-            }
-            TargetDevice::XBox360(_) => todo!(),
-        };
-
+        log::debug!("Created target input device: {kind}");
         Ok(device)
+    }
+
+    /// Start and run the given target devices. Returns a HashMap of transmitters
+    /// to send events to the given targets.
+    async fn start_target_devices(
+        &self,
+        targets: Vec<TargetDevice>,
+    ) -> Result<HashMap<String, mpsc::Sender<NativeEvent>>, Box<dyn Error>> {
+        let mut target_devices = HashMap::new();
+        for target in targets {
+            match target {
+                TargetDevice::Null => (),
+                TargetDevice::Keyboard(mut device) => {
+                    let path = self.next_target_path("keyboard")?;
+                    let event_tx = device.transmitter();
+                    target_devices.insert(path.clone(), event_tx.clone());
+                    device.listen_on_dbus(path).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed to run target keyboard: {:?}", e);
+                        }
+                        log::debug!("Target keyboard device closed");
+                    });
+                }
+                TargetDevice::Mouse(mut mouse) => {
+                    let path = self.next_target_path("mouse")?;
+                    let event_tx = mouse.transmitter();
+                    target_devices.insert(path.clone(), event_tx.clone());
+                    mouse.listen_on_dbus(path).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = mouse.run().await {
+                            log::error!("Failed to run target mouse: {:?}", e);
+                        }
+                        log::debug!("Target mouse device closed");
+                    });
+                }
+                TargetDevice::GenericGamepad(mut gamepad) => {
+                    let path = self.next_target_path("gamepad")?;
+                    let event_tx = gamepad.transmitter();
+                    target_devices.insert(path.clone(), event_tx.clone());
+                    gamepad.listen_on_dbus(path).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = gamepad.run().await {
+                            log::error!("Failed to run target gamepad: {:?}", e);
+                        }
+                        log::debug!("Target gamepad device closed");
+                    });
+                }
+                TargetDevice::DBus(mut device) => {
+                    let path = self.next_target_path("dbus")?;
+                    let event_tx = device.transmitter();
+                    target_devices.insert(path.clone(), event_tx.clone());
+                    device.listen_on_dbus(path).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed to run target dbus device: {:?}", e);
+                        }
+                        log::debug!("Target dbus device closed");
+                    });
+                }
+                TargetDevice::XBox360(_) => todo!(),
+            }
+        }
+
+        Ok(target_devices)
+    }
+
+    /// Starts the given [CompositeDevice]
+    async fn start_composite_device(
+        &mut self,
+        mut device: CompositeDevice,
+        target_types: Option<Vec<String>>,
+    ) -> Result<(), Box<dyn Error>> {
+        // Generate the DBus tree path for this composite device
+        let path = self.next_composite_dbus_path();
+
+        // Keep track of the source devices that this composite device is
+        // using.
+        let source_device_ids = device.get_source_device_ids();
+        for id in source_device_ids {
+            self.source_devices_used.insert(id, path.clone());
+        }
+
+        // Create a DBus interface for the device
+        device.listen_on_dbus(path.clone()).await?;
+
+        // Get a handle to the device
+        let handle = device.handle();
+
+        // Create a DBus target device
+        let dbus_device = self.create_target_device("dbus").await?;
+        let dbus_devices = self.start_target_devices(vec![dbus_device]).await?;
+        device.set_dbus_devices(dbus_devices);
+
+        // Create target devices based on the configuration
+        let mut target_devices = Vec::new();
+        if let Some(target_devices_config) = target_types {
+            for kind in target_devices_config {
+                let device = self.create_target_device(kind.as_str()).await?;
+                target_devices.push(device);
+            }
+        }
+
+        // Start the target input devices
+        let targets = self.start_target_devices(target_devices).await?;
+
+        // Run the device
+        let dbus_path = path.clone();
+        let tx = self.tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = device.run(targets).await {
+                log::error!("Error running device: {:?}", e);
+            }
+            log::debug!("Composite device stopped running: {:?}", dbus_path);
+            if let Err(e) = tx.send(Command::CompositeDeviceStopped(dbus_path)) {
+                log::error!("Error sending composite device stopped: {:?}", e);
+            }
+        });
+
+        // Add the device to our map
+        self.composite_devices.insert(path, handle);
+        log::debug!("Managed source devices: {:?}", self.source_devices_used);
+
+        Ok(())
     }
 
     /// Called when a composite device stops running
@@ -336,53 +440,9 @@ impl Manager {
 
             // Create the composite deivce
             log::info!("Creating composite device");
-            let mut device = self.create_composite_device_from_config(config).await?;
-
-            // Generate the DBus tree path for this composite device
-            let path = self.next_composite_dbus_path();
-
-            // Keep track of the source devices that this composite device is
-            // using.
-            let source_device_ids = device.get_source_device_ids();
-            for id in source_device_ids {
-                self.source_devices_used.insert(id, path.clone());
-            }
-
-            // Create a DBus interface for the device
-            device.listen_on_dbus(path.clone()).await?;
-
-            // Get a handle to the device
-            let handle = device.handle();
-
-            // Create a DBus target device
-            let mut targets = Vec::new();
-            let dbus_device = self.create_target_device("dbus").await?;
-            targets.push(dbus_device);
-
-            // Create target devices based on the configuration
-            if let Some(target_devices_config) = target_devices_config {
-                for kind in target_devices_config {
-                    let device = self.create_target_device(kind.as_str()).await?;
-                    targets.push(device);
-                }
-            }
-
-            // Run the device
-            let dbus_path = path.clone();
-            let tx = self.tx.clone();
-            tokio::spawn(async move {
-                if let Err(e) = device.run(targets).await {
-                    log::error!("Error running device: {:?}", e);
-                }
-                log::debug!("Composite device stopped running: {:?}", dbus_path);
-                if let Err(e) = tx.send(Command::CompositeDeviceStopped(dbus_path)) {
-                    log::error!("Error sending composite device stopped: {:?}", e);
-                }
-            });
-
-            // Add the device to our map
-            self.composite_devices.insert(path, handle);
-            log::debug!("Managed source devices: {:?}", self.source_devices_used);
+            let device = self.create_composite_device_from_config(config).await?;
+            self.start_composite_device(device, target_devices_config)
+                .await?;
         }
 
         Ok(())

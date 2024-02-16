@@ -404,26 +404,31 @@ fn input_event_from_value(
             }
         }
         InputValue::Float(value) => Some(denormalize_unsigned_value(value, axis_info)),
-        InputValue::Vector2 { x, y } => match AbsoluteAxisCode(code) {
-            AbsoluteAxisCode::ABS_X => denormalize_optional_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_RX => denormalize_optional_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_RY => denormalize_optional_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT0X => denormalize_optional_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT0Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT1X => denormalize_optional_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT1Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT2X => denormalize_optional_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT2Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT3X => denormalize_optional_signed_value(x, axis_info.unwrap()),
-            AbsoluteAxisCode::ABS_HAT3Y => denormalize_optional_signed_value(y, axis_info.unwrap()),
-            _ => todo!(),
-        },
+        InputValue::Vector2 { x, y } => {
+            if let Some(axis_info) = axis_info {
+                match AbsoluteAxisCode(code) {
+                    AbsoluteAxisCode::ABS_X => denormalize_optional_signed_value(x, axis_info),
+                    AbsoluteAxisCode::ABS_Y => denormalize_optional_signed_value(y, axis_info),
+                    AbsoluteAxisCode::ABS_RX => denormalize_optional_signed_value(x, axis_info),
+                    AbsoluteAxisCode::ABS_RY => denormalize_optional_signed_value(y, axis_info),
+                    AbsoluteAxisCode::ABS_HAT0X => denormalize_optional_signed_value(x, axis_info),
+                    AbsoluteAxisCode::ABS_HAT0Y => denormalize_optional_signed_value(y, axis_info),
+                    AbsoluteAxisCode::ABS_HAT1X => denormalize_optional_signed_value(x, axis_info),
+                    AbsoluteAxisCode::ABS_HAT1Y => denormalize_optional_signed_value(y, axis_info),
+                    AbsoluteAxisCode::ABS_HAT2X => denormalize_optional_signed_value(x, axis_info),
+                    AbsoluteAxisCode::ABS_HAT2Y => denormalize_optional_signed_value(y, axis_info),
+                    AbsoluteAxisCode::ABS_HAT3X => denormalize_optional_signed_value(x, axis_info),
+                    AbsoluteAxisCode::ABS_HAT3Y => denormalize_optional_signed_value(y, axis_info),
+                    _ => todo!(),
+                }
+            } else {
+                // Cannot convert axis input without axis info
+                None
+            }
+        }
         InputValue::Vector3 { x: _, y: _, z: _ } => todo!(),
     };
-    if value.is_none() {
-        return None;
-    }
+    value?;
 
     Some(InputEvent::new(event_type.0, code, value.unwrap()))
 }
