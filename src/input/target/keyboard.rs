@@ -14,6 +14,7 @@ use crate::input::{
 
 #[derive(Debug)]
 pub struct KeyboardDevice {
+    dbus_path: Option<String>,
     tx: mpsc::Sender<NativeEvent>,
     rx: mpsc::Receiver<NativeEvent>,
     _composite_tx: broadcast::Sender<composite_device::Command>,
@@ -23,10 +24,16 @@ impl KeyboardDevice {
     pub fn new(composite_tx: broadcast::Sender<composite_device::Command>) -> Self {
         let (tx, rx) = mpsc::channel(1024);
         Self {
+            dbus_path: None,
             _composite_tx: composite_tx,
             tx,
             rx,
         }
+    }
+
+    /// Returns the DBus path of this device
+    pub fn get_dbus_path(&self) -> Option<String> {
+        self.dbus_path.clone()
     }
 
     /// Creates and runs the target device

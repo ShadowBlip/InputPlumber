@@ -10,13 +10,13 @@ use crate::input::composite_device;
 
 #[derive(Debug)]
 pub struct XBox360Controller {
-    _composite_tx: broadcast::Sender<composite_device::Command>,
+    _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
 }
 
 impl XBox360Controller {
-    pub fn new(composite_tx: broadcast::Sender<composite_device::Command>) -> Self {
+    pub fn new() -> Self {
         Self {
-            _composite_tx: composite_tx,
+            _composite_tx: None,
         }
     }
 

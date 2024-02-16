@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 
 use tokio::{
     sync::{broadcast, mpsc},
@@ -9,23 +9,11 @@ use zbus_macros::dbus_interface;
 
 use crate::{
     config::CompositeDeviceConfig,
-    input::{
-        event::native::NativeEvent,
-        source,
-        target::{gamepad::GenericGamepad, xb360::XBox360Controller},
-    },
+    input::{event::native::NativeEvent, source},
     udev::{hide_device, unhide_device},
 };
 
-use super::{
-    capability,
-    event::{
-        dbus::{Action, DBusEvent},
-        Event,
-    },
-    source::SourceDevice,
-    target::TargetDevice,
-};
+use super::{capability, event::Event, source::SourceDevice, target::TargetDevice};
 
 const BUFFER_SIZE: usize = 2048;
 
@@ -145,17 +133,30 @@ impl Handle {
 /// can translate input to any target devices
 #[derive(Debug)]
 pub struct CompositeDevice {
+    /// Connection to DBus
     conn: Connection,
+    /// The DBus path this [CompositeDevice] is listening on
     dbus_path: Option<String>,
+    /// Mode defining how inputs should be routed
     intercept_mode: InterceptMode,
-    config: CompositeDeviceConfig,
+    /// Transmit channel for sending commands to this composite device
     tx: broadcast::Sender<Command>,
+    /// Receiver channel for listening for commands
     rx: broadcast::Receiver<Command>,
+    /// Source devices that this composite device will consume.
     source_devices: Vec<SourceDevice>,
+    /// Physical device path for source devices. E.g. ["/dev/input/event0"]
     source_device_paths: Vec<String>,
+    /// Unique identifiers for source devices. E.g. ["evdev://event0"]
     source_device_ids: Vec<String>,
+    /// Unique identifiers for running source devices. E.g. ["evdev://event0"]
     source_devices_used: Vec<String>,
-    target_devices: Vec<mpsc::Sender<NativeEvent>>,
+    /// Map of DBus paths to their respective transmitter channel.
+    /// E.g. {"/org/shadowblip/InputPlumber/devices/target/gamepad0": <Sender>}
+    target_devices: HashMap<String, mpsc::Sender<NativeEvent>>,
+    /// List of paths to [DBusDevice] targets
+    /// E.g. ["/org/shadowblip/InputPlumber/devices/target/dbus0"]
+    target_dbus_devices: Vec<String>,
 }
 
 impl CompositeDevice {
@@ -218,14 +219,14 @@ impl CompositeDevice {
             conn,
             dbus_path: None,
             intercept_mode: InterceptMode::None,
-            config,
             tx,
             rx,
             source_devices,
             source_device_paths,
             source_device_ids,
             source_devices_used: Vec::new(),
-            target_devices: Vec::new(),
+            target_devices: HashMap::new(),
+            target_dbus_devices: Vec::new(),
         })
     }
 
@@ -245,61 +246,14 @@ impl CompositeDevice {
 
     /// Starts the [CompositeDevice] and listens for events from all source
     /// devices to translate the events and send them to the appropriate target.
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self, targets: Vec<TargetDevice>) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting composite device");
-        // Keep a list of all the tasks
-        let mut tasks = JoinSet::new();
 
-        // Hide all source devices
-        // TODO: Make this configurable
-        for source_path in self.source_device_paths.clone() {
-            log::debug!("Hiding device: {}", source_path);
-            hide_device(source_path).await?;
-        }
+        // Start all source devices
+        let mut tasks = self.run_source_devices().await?;
 
-        // Start listening for events from all source devices
-        let sources = self.source_devices.drain(..);
-        for source in sources {
-            match source {
-                // If the source device is an event device (i.e. from /dev/input/eventXX),
-                // then start listening for inputs from that device.
-                SourceDevice::EventDevice(device) => {
-                    let device_id = device.get_id();
-                    self.source_devices_used.push(device_id.clone());
-                    let tx = self.tx.clone();
-                    tasks.spawn(async move {
-                        if let Err(e) = device.run().await {
-                            log::error!("Failed running event device: {:?}", e);
-                        }
-                        log::debug!("Event device closed");
-                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
-                            log::error!("Failed to send device stop command: {:?}", e);
-                        }
-                    });
-                }
-
-                // If the source device is a hidraw device (i.e. /dev/hidraw0),
-                // then start listening for inputs from that device.
-                SourceDevice::HIDRawDevice(device) => {
-                    let device_id = device.get_id();
-                    self.source_devices_used.push(device_id.clone());
-                    let tx = self.tx.clone();
-                    tasks.spawn(async move {
-                        if let Err(e) = device.run().await {
-                            log::error!("Failed running hidraw device: {:?}", e);
-                        }
-                        log::debug!("HIDRaw device closed");
-                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
-                            log::error!("Failed to send device stop command: {:?}", e);
-                        }
-                    });
-                }
-            }
-        }
-
-        // Create and start all target devices
-        let targets = self.create_target_devices()?;
-        self.run_target_devices(targets);
+        // Start all target devices
+        self.run_target_devices(targets)?;
 
         // Loop and listen for command events
         log::debug!("CompositeDevice started");
@@ -391,44 +345,74 @@ impl CompositeDevice {
         self.source_device_paths.clone()
     }
 
-    /// Create target (output) devices to emulate. Returns the created devices
-    /// as an array.
-    fn create_target_devices(&self) -> Result<Vec<TargetDevice>, Box<dyn Error>> {
-        log::debug!("Creating target devices");
-        let mut target_devices: Vec<TargetDevice> = Vec::new();
+    /// Start and run the source devices that this composite device will
+    /// consume.
+    async fn run_source_devices(&mut self) -> Result<JoinSet<()>, Box<dyn Error>> {
+        // Keep a list of all the tasks
+        let mut tasks = JoinSet::new();
 
-        // Create a transmitter channel that target devices can use to communitcate
-        // with the composite device
-        let tx = self.transmitter();
+        // Hide all source devices
+        // TODO: Make this configurable
+        for source_path in self.source_device_paths.clone() {
+            log::debug!("Hiding device: {}", source_path);
+            hide_device(source_path).await?;
+        }
 
-        // Create the target devices to emulate based on the config
-        let config = &self.config;
-        let output_device = &config.output_device;
-        let device_id = output_device.clone().unwrap_or("null".into());
-        let gamepad_device = match device_id.as_str() {
-            "xb360" => TargetDevice::XBox360(XBox360Controller::new(tx)),
-            "null" | "none" => TargetDevice::Null,
-            _ => TargetDevice::GenericGamepad(GenericGamepad::new(tx)),
-        };
-        target_devices.push(gamepad_device);
-        log::debug!("Created target gamepad");
+        // Start listening for events from all source devices
+        let sources = self.source_devices.drain(..);
+        for source in sources {
+            match source {
+                // If the source device is an event device (i.e. from /dev/input/eventXX),
+                // then start listening for inputs from that device.
+                SourceDevice::EventDevice(device) => {
+                    let device_id = device.get_id();
+                    self.source_devices_used.push(device_id.clone());
+                    let tx = self.tx.clone();
+                    tasks.spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed running event device: {:?}", e);
+                        }
+                        log::debug!("Event device closed");
+                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
+                            log::error!("Failed to send device stop command: {:?}", e);
+                        }
+                    });
+                }
 
-        // TODO: Create a keyboard device to emulate
+                // If the source device is a hidraw device (i.e. /dev/hidraw0),
+                // then start listening for inputs from that device.
+                SourceDevice::HIDRawDevice(device) => {
+                    let device_id = device.get_id();
+                    self.source_devices_used.push(device_id.clone());
+                    let tx = self.tx.clone();
+                    tasks.spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed running hidraw device: {:?}", e);
+                        }
+                        log::debug!("HIDRaw device closed");
+                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
+                            log::error!("Failed to send device stop command: {:?}", e);
+                        }
+                    });
+                }
+            }
+        }
 
-        // TODO: Create a mouse device to emulate
-
-        Ok(target_devices)
+        Ok(tasks)
     }
 
     /// Start and run the given target devices
-    fn run_target_devices(&mut self, targets: Vec<TargetDevice>) {
+    fn run_target_devices(&mut self, targets: Vec<TargetDevice>) -> Result<(), Box<dyn Error>> {
         for target in targets {
             match target {
                 TargetDevice::Null => (),
                 TargetDevice::Keyboard(_) => todo!(),
                 TargetDevice::Mouse(mut mouse) => {
                     let event_tx = mouse.transmitter();
-                    self.target_devices.push(event_tx);
+                    let Some(path) = mouse.get_dbus_path() else {
+                        return Err("No DBus path found for target device".into());
+                    };
+                    self.target_devices.insert(path, event_tx);
                     tokio::spawn(async move {
                         if let Err(e) = mouse.run().await {
                             log::error!("Failed to run target mouse: {:?}", e);
@@ -438,7 +422,10 @@ impl CompositeDevice {
                 }
                 TargetDevice::GenericGamepad(mut gamepad) => {
                     let event_tx = gamepad.transmitter();
-                    self.target_devices.push(event_tx);
+                    let Some(path) = gamepad.get_dbus_path() else {
+                        return Err("No DBus path found for target device".into());
+                    };
+                    self.target_devices.insert(path, event_tx);
                     tokio::spawn(async move {
                         if let Err(e) = gamepad.run().await {
                             log::error!("Failed to run target gamepad: {:?}", e);
@@ -447,8 +434,24 @@ impl CompositeDevice {
                     });
                 }
                 TargetDevice::XBox360(_) => todo!(),
+                TargetDevice::DBus(mut device) => {
+                    let event_tx = device.transmitter();
+                    let Some(path) = device.get_dbus_path() else {
+                        return Err("No DBus path found for target device".into());
+                    };
+                    self.target_devices.insert(path.clone(), event_tx);
+                    self.target_dbus_devices.push(path);
+                    tokio::spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed to run target dbus device: {:?}", e);
+                        }
+                        log::debug!("Target dbus device closed");
+                    });
+                }
             }
         }
+
+        Ok(())
     }
 
     /// Process a single event from a source device. Events are piped through
@@ -471,84 +474,50 @@ impl CompositeDevice {
 
         // Process the event depending on the intercept mode
         let mode = self.intercept_mode.clone();
-        match mode {
-            // Intercept mode NONE will pass all input to the target device(s)
-            InterceptMode::None => {
-                self.write_event(event).await?;
-            }
-            // Intrecept mode PASS will pass all input to the target device(s)
-            // EXCEPT for GUIDE button presses
-            InterceptMode::Pass => {
-                let capability = event.as_capability();
-                match capability {
-                    capability::Capability::Gamepad(gamepad) => match gamepad {
-                        capability::Gamepad::Button(btn) => match btn {
-                            capability::GamepadButton::Guide => {
-                                // Set the intercept mode while the button is pressed
-                                if event.pressed() {
-                                    log::debug!("Intercepted guide button press");
-                                    self.set_intercept_mode(InterceptMode::Always);
-                                }
-
-                                // Send DBus event
-                                log::debug!("Writing DBus event");
-                                self.write_dbus_event(event.into()).await?;
-                            }
-                            _ => self.write_event(event).await?,
-                        },
-                        _ => self.write_event(event).await?,
-                    },
-                    _ => self.write_event(event).await?,
+        if matches!(mode, InterceptMode::Pass) {
+            let capability = event.as_capability();
+            if let capability::Capability::Gamepad(gamepad) = capability {
+                if let capability::Gamepad::Button(btn) = gamepad {
+                    if let capability::GamepadButton::Guide = btn {
+                        // Set the intercept mode while the button is pressed
+                        if event.pressed() {
+                            log::debug!("Intercepted guide button press");
+                            self.set_intercept_mode(InterceptMode::Always);
+                        }
+                    }
                 }
             }
-            // Intercept mode ALWAYS will not send any input to the target
-            // devices and instead send them as DBus events.
-            InterceptMode::Always => {
-                self.write_dbus_event(event.into()).await?;
-            }
         }
+
+        // Write the event
+        self.write_event(event).await?;
 
         Ok(())
     }
 
     /// Writes the given event to the appropriate target device.
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
-        for target in &self.target_devices {
+        for (path, target) in &self.target_devices {
+            // If the device is in intercept mode, only send events to DBus
+            // target devices.
+            let is_dbus_device = self.is_dbus_device(path);
+            if matches!(self.intercept_mode, InterceptMode::Always) {
+                if is_dbus_device {
+                    target.send(event.clone()).await?;
+                }
+                continue;
+            }
+            if is_dbus_device {
+                continue;
+            }
             target.send(event.clone()).await?;
         }
         Ok(())
     }
 
-    /// Writes the given event to DBus
-    async fn write_dbus_event(&self, event: DBusEvent) -> Result<(), Box<dyn Error>> {
-        // Only send valid events
-        let valid = !matches!(event.action, Action::None);
-        if !valid {
-            return Ok(());
-        }
-
-        // DBus events can only be written if there is a DBus path reference.
-        let Some(path) = self.dbus_path.clone() else {
-            return Err("No dbus path exists to send events to".into());
-        };
-
-        // Get the object instance at the given path so we can send DBus signal
-        // updates
-        let iface_ref = self
-            .conn
-            .object_server()
-            .interface::<_, DBusInterface>(path)
-            .await?;
-
-        // Send the input event signal
-        DBusInterface::input_event(
-            iface_ref.signal_context(),
-            event.action.as_string(),
-            event.value,
-        )
-        .await?;
-
-        Ok(())
+    /// Returns true if the given DBus path belongs to a [DBusDevice].
+    fn is_dbus_device(&self, path: &String) -> bool {
+        self.target_dbus_devices.contains(path)
     }
 
     /// Sets the intercept mode to the given value

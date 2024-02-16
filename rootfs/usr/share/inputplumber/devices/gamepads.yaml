@@ -20,9 +20,11 @@ source_devices:
     evdev:
       handler: js*
 
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - gamepad
+  - mouse
+  - keyboard
+
 # The ID of a device event mapping in the 'event_maps' folder
 event_map_id: xb360
-
-# The default output device that the virtual device profile should use if
-# 'auto' is selected.
-output_device: gamepad

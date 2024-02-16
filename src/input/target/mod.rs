@@ -1,3 +1,4 @@
+pub mod dbus;
 pub mod gamepad;
 pub mod keyboard;
 pub mod mouse;
@@ -7,6 +8,7 @@ pub mod xb360;
 #[derive(Debug)]
 pub enum TargetDevice {
     Null,
+    DBus(dbus::DBusDevice),
     Keyboard(keyboard::KeyboardDevice),
     Mouse(mouse::MouseDevice),
     GenericGamepad(gamepad::GenericGamepad),

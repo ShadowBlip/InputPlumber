@@ -8,6 +8,8 @@ use evdev::{
     SynchronizationEvent, UinputAbsSetup,
 };
 use tokio::sync::{broadcast, mpsc};
+use zbus::{fdo, Connection};
+use zbus_macros::dbus_interface;
 
 use crate::input::{
     capability::Capability,
@@ -15,20 +17,43 @@ use crate::input::{
     event::{evdev::EvdevEvent, native::NativeEvent},
 };
 
+/// The [DBusInterface] provides a DBus interface that can be exposed for managing
+/// a [GenericGamepad].
+pub struct DBusInterface {}
+
+impl DBusInterface {
+    fn new() -> DBusInterface {
+        DBusInterface {}
+    }
+}
+
+#[dbus_interface(name = "org.shadowblip.Input.Gamepad")]
+impl DBusInterface {
+    /// Name of the DBus device
+    #[dbus_interface(property)]
+    async fn name(&self) -> fdo::Result<String> {
+        Ok("Gamepad".into())
+    }
+}
+
 #[derive(Debug)]
 pub struct GenericGamepad {
+    conn: Connection,
+    dbus_path: Option<String>,
     tx: mpsc::Sender<NativeEvent>,
     rx: mpsc::Receiver<NativeEvent>,
-    _composite_tx: broadcast::Sender<composite_device::Command>,
+    _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
 }
 
 impl GenericGamepad {
-    pub fn new(composite_tx: broadcast::Sender<composite_device::Command>) -> Self {
+    pub fn new(conn: Connection) -> Self {
         let (tx, rx) = mpsc::channel(1024);
         Self {
-            _composite_tx: composite_tx,
+            conn,
+            dbus_path: None,
             tx,
             rx,
+            _composite_tx: None,
         }
     }
 
@@ -43,9 +68,27 @@ impl GenericGamepad {
         ]
     }
 
+    /// Returns the DBus path of this device
+    pub fn get_dbus_path(&self) -> Option<String> {
+        self.dbus_path.clone()
+    }
+
     /// Returns a transmitter channel that can be used to send events to this device
     pub fn transmitter(&self) -> mpsc::Sender<NativeEvent> {
         self.tx.clone()
+    }
+
+    /// Creates a new instance of the dbus device interface on DBus.
+    pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
+        let conn = self.conn.clone();
+        self.dbus_path = Some(path.clone());
+        tokio::spawn(async move {
+            let iface = DBusInterface::new();
+            if let Err(e) = conn.object_server().at(path, iface).await {
+                log::error!("Failed to setup DBus interface for Gamepad device: {:?}", e);
+            }
+        });
+        Ok(())
     }
 
     /// Creates and runs the target device

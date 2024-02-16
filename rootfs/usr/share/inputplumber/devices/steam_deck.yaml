@@ -26,9 +26,11 @@ source_devices:
       product_id: 0x1205
       interface_num: 2
 
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - gamepad
+  - mouse
+  - keyboard
+
 # The ID of a device event mapping in the 'event_maps' folder
 event_map_id: deck
-
-# The default output device that the virtual device profile should use if
-# 'auto' is selected.
-output_device: gamepad

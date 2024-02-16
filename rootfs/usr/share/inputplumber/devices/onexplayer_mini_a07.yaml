@@ -29,5 +29,11 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
 
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - gamepad
+  - mouse
+  - keyboard
+
 # The ID of a device event mapping in the 'event_maps' folder
 event_map_id: oxp3

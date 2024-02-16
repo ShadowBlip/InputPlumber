@@ -37,13 +37,18 @@
           "description": "The ID of a device event mapping in the 'event_maps' directory",
           "type": "string"
         },
-        "output_device": {
-          "description": "Output device to emulate",
-          "type": "string",
-          "enum": [
-            "gamepad",
-            "xb360"
-          ]
+        "target_devices": {
+          "description": "Target input device(s) to emulate. Can be one of ['mouse', 'keyboard', 'gamepad', 'xb360'].",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "mouse",
+              "keyboard",
+              "gamepad",
+              "xb360"
+            ]
+          }
         }
       },
       "required": [

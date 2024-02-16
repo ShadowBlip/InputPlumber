@@ -46,6 +46,7 @@ impl DBusInterface {
 
 #[derive(Debug)]
 pub struct MouseDevice {
+    dbus_path: Option<String>,
     tx: mpsc::Sender<NativeEvent>,
     rx: mpsc::Receiver<NativeEvent>,
     _composite_tx: broadcast::Sender<composite_device::Command>,
@@ -55,10 +56,16 @@ impl MouseDevice {
     pub fn new(composite_tx: broadcast::Sender<composite_device::Command>) -> Self {
         let (tx, rx) = mpsc::channel(1024);
         Self {
+            dbus_path: None,
             _composite_tx: composite_tx,
             tx,
             rx,
         }
+    }
+
+    /// Returns the DBus path of this device
+    pub fn get_dbus_path(&self) -> Option<String> {
+        self.dbus_path.clone()
     }
 
     /// Returns a transmitter channel that can be used to send events to this device

@@ -11,14 +11,21 @@ use zbus_macros::dbus_interface;
 
 use crate::config::CompositeDeviceConfig;
 use crate::constants::BUS_PREFIX;
+use crate::constants::BUS_TARGETS_PREFIX;
 use crate::dmi::data::DMIData;
 use crate::dmi::get_dmi_data;
 use crate::input::composite_device;
 use crate::input::composite_device::CompositeDevice;
 use crate::input::source;
 use crate::input::source::hidraw;
+use crate::input::target::dbus::DBusDevice;
+use crate::input::target::gamepad::GenericGamepad;
+use crate::input::target::xb360::XBox360Controller;
+use crate::input::target::TargetDevice;
 use crate::procfs;
 use crate::watcher;
+
+use super::event::native::NativeEvent;
 
 const DEV_PATH: &str = "/dev";
 const INPUT_PATH: &str = "/dev/input";
@@ -104,6 +111,12 @@ pub struct Manager {
     /// Mapping of DBus path to its corresponding [CompositeDevice] handle
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <Handle>}
     composite_devices: HashMap<String, composite_device::Handle>,
+    /// Mapping of target devices to their respective handles
+    /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Handle>}
+    target_devices: HashMap<String, mpsc::Sender<NativeEvent>>,
+    /// Mapping of target devices without a [CompositeDevice]
+    /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <TargetDevice>}
+    orphan_target_devices: HashMap<String, TargetDevice>,
 }
 
 impl Manager {
@@ -123,6 +136,8 @@ impl Manager {
             source_devices: HashMap::new(),
             source_devices_used: HashMap::new(),
             composite_devices: HashMap::new(),
+            target_devices: HashMap::new(),
+            orphan_target_devices: HashMap::new(),
         }
     }
 
@@ -193,6 +208,76 @@ impl Manager {
         Ok(())
     }
 
+    /// Create a [CompositeDevice] from the given configuration
+    async fn create_composite_device_from_config(
+        &mut self,
+        config: CompositeDeviceConfig,
+    ) -> Result<CompositeDevice, Box<dyn Error>> {
+        // TODO: Check to see if there's already a composite device running
+        // but without all its source devices
+
+        // Create a composite device to manage these devices
+        log::info!("Found matching source devices: {:?}", config.name);
+        let device = CompositeDevice::new(self.dbus.clone(), config)?;
+
+        // Check to see if there's already a CompositeDevice for
+        // these source devices.
+        // TODO: Should we allow multiple composite devices with the same source?
+        let mut devices_in_use = false;
+        let source_device_ids = device.get_source_device_ids();
+        for (id, path) in self.source_devices_used.iter() {
+            if !source_device_ids.contains(id) {
+                continue;
+            }
+            log::debug!("Source device '{}' already in use by: {}", id, path);
+            devices_in_use = true;
+            break;
+        }
+        if devices_in_use {
+            return Err("Source device(s) are already in use".into());
+        }
+
+        Ok(device)
+    }
+
+    /// Create target input device to emulate and adds it to the DBus object tree.
+    /// Returns the created device.
+    async fn create_target_device(&mut self, kind: &str) -> Result<TargetDevice, Box<dyn Error>> {
+        log::debug!("Creating target device");
+        // Create the target device to emulate based on the kind
+        let device = match kind {
+            "gamepad" => TargetDevice::GenericGamepad(GenericGamepad::new(self.dbus.clone())),
+            "xb360" => TargetDevice::XBox360(XBox360Controller::new()),
+            "dbus" => TargetDevice::DBus(DBusDevice::new(self.dbus.clone())),
+            _ => TargetDevice::Null,
+        };
+        log::debug!("Created target input device {kind}");
+
+        // Add the device to the DBus object tree
+        let device = match device {
+            TargetDevice::Null => TargetDevice::Null,
+            TargetDevice::DBus(mut device) => {
+                let path = self.next_target_path("dbus")?;
+                let tx = device.transmitter();
+                self.target_devices.insert(path.clone(), tx);
+                device.listen_on_dbus(path).await?;
+                TargetDevice::DBus(device)
+            }
+            TargetDevice::Keyboard(_) => todo!(),
+            TargetDevice::Mouse(_) => todo!(),
+            TargetDevice::GenericGamepad(mut device) => {
+                let path = self.next_target_path("gamepad")?;
+                let tx = device.transmitter();
+                self.target_devices.insert(path.clone(), tx);
+                device.listen_on_dbus(path).await?;
+                TargetDevice::GenericGamepad(device)
+            }
+            TargetDevice::XBox360(_) => todo!(),
+        };
+
+        Ok(device)
+    }
+
     /// Called when a composite device stops running
     async fn on_composite_device_stopped(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         log::debug!("Removing composite device: {}", path);
@@ -246,51 +331,47 @@ impl Manager {
                 continue;
             }
 
-            // TODO: Check to see if there's already a composite device running
-            // but without all its source devices
+            // Get the target input devices from the config
+            let target_devices_config = config.target_devices.clone();
 
-            // Create a composite device to manage these devices
-            log::info!("Found matching source devices: {:?}", config.name);
-            let mut device = CompositeDevice::new(self.dbus.clone(), config)?;
-
-            // Check to see if there's already a CompositeDevice for
-            // these source devices.
-            // TODO: Should we allow multiple composite devices with the same source?
-            let mut devices_in_use = false;
-            let source_device_ids = device.get_source_device_ids();
-            for (id, path) in self.source_devices_used.iter() {
-                if !source_device_ids.contains(id) {
-                    continue;
-                }
-                log::debug!("Source device '{}' already in use by: {}", id, path);
-                devices_in_use = true;
-                break;
-            }
-            if devices_in_use {
-                continue;
-            }
+            // Create the composite deivce
+            log::info!("Creating composite device");
+            let mut device = self.create_composite_device_from_config(config).await?;
 
             // Generate the DBus tree path for this composite device
             let path = self.next_composite_dbus_path();
 
             // Keep track of the source devices that this composite device is
             // using.
+            let source_device_ids = device.get_source_device_ids();
             for id in source_device_ids {
                 self.source_devices_used.insert(id, path.clone());
             }
 
             // Create a DBus interface for the device
-            log::info!("Creating composite device");
             device.listen_on_dbus(path.clone()).await?;
 
             // Get a handle to the device
             let handle = device.handle();
 
+            // Create a DBus target device
+            let mut targets = Vec::new();
+            let dbus_device = self.create_target_device("dbus").await?;
+            targets.push(dbus_device);
+
+            // Create target devices based on the configuration
+            if let Some(target_devices_config) = target_devices_config {
+                for kind in target_devices_config {
+                    let device = self.create_target_device(kind.as_str()).await?;
+                    targets.push(device);
+                }
+            }
+
             // Run the device
             let dbus_path = path.clone();
             let tx = self.tx.clone();
             tokio::spawn(async move {
-                if let Err(e) = device.run().await {
+                if let Err(e) = device.run(targets).await {
                     log::error!("Error running device: {:?}", e);
                 }
                 log::debug!("Composite device stopped running: {:?}", dbus_path);
@@ -413,6 +494,23 @@ impl Manager {
         self.tx.send(Command::SourceDeviceRemoved)?;
 
         Ok(())
+    }
+
+    /// Returns the next available target device dbus path
+    fn next_target_path(&self, kind: &str) -> Result<String, Box<dyn Error>> {
+        let max = 2048;
+        let mut i = 0;
+        loop {
+            if i > max {
+                return Err("Devices exceeded maximum of 2048".into());
+            }
+            let path = format!("{BUS_TARGETS_PREFIX}/{kind}{i}");
+            if self.target_devices.get(&path).is_some() {
+                i += 1;
+                continue;
+            }
+            return Ok(path);
+        }
     }
 
     /// Returns the next available composite device dbus path
