@@ -44,6 +44,8 @@ pub enum Command {
     SetInterceptMode(InterceptMode),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
+    GetTargetDevicePaths(mpsc::Sender<Vec<String>>),
+    GetDBusDevicePaths(mpsc::Sender<Vec<String>>),
     SourceDeviceAdded,
     SourceDeviceStopped(String),
     Stop,
@@ -116,9 +118,33 @@ impl DBusInterface {
         Ok(())
     }
 
-    /// Emitted when an input event occurs when the device is in intercept mode
-    #[dbus_interface(signal)]
-    async fn input_event(ctxt: &SignalContext<'_>, event: String, value: f64) -> zbus::Result<()>;
+    /// Target devices that this [CompositeDevice] is managing
+    #[dbus_interface(property)]
+    async fn target_devices(&self) -> fdo::Result<Vec<String>> {
+        let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
+        self.tx
+            .send(Command::GetTargetDevicePaths(sender))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let Some(paths) = receiver.recv().await else {
+            return Ok(Vec::new());
+        };
+
+        Ok(paths)
+    }
+
+    /// Target dbus devices that this [CompositeDevice] is managing
+    #[dbus_interface(property)]
+    async fn dbus_devices(&self) -> fdo::Result<Vec<String>> {
+        let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
+        self.tx
+            .send(Command::GetDBusDevicePaths(sender))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let Some(paths) = receiver.recv().await else {
+            return Ok(Vec::new());
+        };
+
+        Ok(paths)
+    }
 }
 
 /// Defines a handle to a [CompositeDevice] for communication
@@ -282,6 +308,18 @@ impl CompositeDevice {
                 Command::GetSourceDevicePaths(sender) => {
                     if let Err(e) = sender.send(self.get_source_device_paths()).await {
                         log::error!("Failed to send source device paths: {:?}", e);
+                    }
+                }
+                Command::GetTargetDevicePaths(sender) => {
+                    let paths = self.target_devices.keys().cloned().collect();
+                    if let Err(e) = sender.send(paths).await {
+                        log::error!("Failed to send target device paths: {:?}", e);
+                    }
+                }
+                Command::GetDBusDevicePaths(sender) => {
+                    let paths = self.target_dbus_devices.keys().cloned().collect();
+                    if let Err(e) = sender.send(paths).await {
+                        log::error!("Failed to send dbus device paths: {:?}", e);
                     }
                 }
                 Command::SourceDeviceAdded => todo!(),
