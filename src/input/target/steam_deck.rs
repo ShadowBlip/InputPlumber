@@ -8,7 +8,7 @@ use tokio::sync::{
     broadcast,
     mpsc::{self, error::TryRecvError},
 };
-use uhid_virt::{Bus, CreateParams, UHIDDevice};
+use uhid_virt::{Bus, CreateParams, OutputEvent, StreamError, UHIDDevice};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
@@ -101,6 +101,59 @@ impl SteamDeckDevice {
             let mut frame: u32 = 0;
             let mut state = PackedInputDataReport::new();
             loop {
+                // Handle reading from the device
+                // https://www.kernel.org/doc/html/latest/hid/uhid.html#read
+                let result = device.read();
+                match result {
+                    Ok(event) => {
+                        match event {
+                            OutputEvent::Start { dev_flags: _ } => {
+                                log::debug!("Start event received");
+                            }
+                            OutputEvent::Stop => {
+                                log::debug!("Stop event received");
+                            }
+                            OutputEvent::Open => {
+                                log::debug!("Open event received");
+                            }
+                            OutputEvent::Close => {
+                                log::debug!("Close event received");
+                            }
+                            OutputEvent::Output { data } => {
+                                log::debug!("Got output data: {:?}", data);
+                            }
+                            OutputEvent::GetReport {
+                                id,
+                                report_number,
+                                report_type,
+                            } => {
+                                log::debug!("Received GetReport event: id: {id}, num: {report_number}, type: {:?}", report_type);
+                                let _ = device.write_get_report_reply(
+                                    id,
+                                    0,
+                                    CONTROLLER_DESCRIPTOR.to_vec(),
+                                );
+                            }
+                            OutputEvent::SetReport {
+                                id,
+                                report_number,
+                                report_type,
+                                data,
+                            } => {
+                                log::debug!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
+                                let _ = device.write_set_report_reply(id, 0);
+                            }
+                        };
+                    }
+                    Err(err) => match err {
+                        StreamError::Io(_e) => (),
+                        StreamError::UnknownEventType(e) => {
+                            log::debug!("Unknown event type: {:?}", e);
+                        }
+                    },
+                };
+
+                // Try to receive input events from the channel
                 match device_rx.try_recv() {
                     Ok(new_state) => {
                         state = new_state;
@@ -128,9 +181,6 @@ impl SteamDeckDevice {
                     log::error!("Failed to write input data report: {:?}", e);
                     break;
                 }
-
-                // Handle reading from the device
-                let _ = device.read();
 
                 let duration = time::Duration::from_millis(POLL_INTERVAL_MS);
                 thread::sleep(duration);
