@@ -278,6 +278,106 @@ pub struct PackedInputDataReport {
     // 64 Bytes total
 }
 
+impl PackedInputDataReport {
+    /// Return a new empty input data report
+    pub fn new() -> Self {
+        PackedInputDataReport {
+            major_ver: 0x01,
+            minor_ver: 0x00,
+            report_type: 0x09,
+            report_size: 64,
+            frame: Integer::from_primitive(0),
+            a: false,
+            x: false,
+            b: false,
+            y: false,
+            l1: false,
+            r1: false,
+            l2: false,
+            r2: false,
+            l5: false,
+            menu: false,
+            steam: false,
+            options: false,
+            down: false,
+            left: false,
+            right: false,
+            up: false,
+            _unk4: false,
+            l3: false,
+            _unk3: false,
+            r_pad_touch: false,
+            l_pad_touch: false,
+            r_pad_press: false,
+            l_pad_press: false,
+            r5: false,
+            _unk11: false,
+            _unk10: false,
+            _unk9: false,
+            _unk8: false,
+            _unk7: false,
+            r3: false,
+            _unk6: false,
+            _unk5: false,
+            _unk19: false,
+            _unk18: false,
+            _unk17: false,
+            _unk16: false,
+            _unk15: false,
+            _unk14: false,
+            _unk13: false,
+            _unk12: false,
+            r_stick_touch: false,
+            l_stick_touch: false,
+            _unk23: false,
+            _unk22: false,
+            _unk21: false,
+            r4: false,
+            l4: false,
+            _unk20: false,
+            _unk30: false,
+            _unk29: false,
+            _unk28: false,
+            _unk27: false,
+            _unk26: false,
+            quick_access: false,
+            _unk25: false,
+            _unk24: false,
+            _unk31: 0,
+            l_pad_x: Integer::from_primitive(0),
+            l_pad_y: Integer::from_primitive(0),
+            r_pad_x: Integer::from_primitive(0),
+            r_pad_y: Integer::from_primitive(0),
+            accel_x: Integer::from_primitive(0),
+            accel_y: Integer::from_primitive(0),
+            accel_z: Integer::from_primitive(0),
+            pitch: Integer::from_primitive(0),
+            yaw: Integer::from_primitive(0),
+            roll: Integer::from_primitive(0),
+            _gyro0: Integer::from_primitive(0),
+            _gyro1: Integer::from_primitive(0),
+            _gyro2: Integer::from_primitive(0),
+            _gyro3: Integer::from_primitive(0),
+            l_trigg: Integer::from_primitive(0),
+            r_trigg: Integer::from_primitive(0),
+            l_stick_x: Integer::from_primitive(0),
+            l_stick_y: Integer::from_primitive(0),
+            r_stick_x: Integer::from_primitive(0),
+            r_stick_y: Integer::from_primitive(0),
+            l_pad_force: Integer::from_primitive(0),
+            r_pad_force: Integer::from_primitive(0),
+            l_stick_force: Integer::from_primitive(0),
+            r_stick_force: Integer::from_primitive(0),
+        }
+    }
+}
+
+impl Default for PackedInputDataReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0")]
 pub struct PackedFeedbackReport {

@@ -17,7 +17,7 @@ use super::{
     capability,
     event::Event,
     source::SourceDevice,
-    target::{TargetCommand, TargetDevice},
+    target::{TargetCommand, TargetDeviceType},
 };
 
 const BUFFER_SIZE: usize = 2048;

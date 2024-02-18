@@ -22,8 +22,9 @@ use crate::input::target::dbus::DBusDevice;
 use crate::input::target::gamepad::GenericGamepad;
 use crate::input::target::keyboard::KeyboardDevice;
 use crate::input::target::mouse::MouseDevice;
+use crate::input::target::steam_deck::SteamDeckDevice;
 use crate::input::target::xb360::XBox360Controller;
-use crate::input::target::TargetDevice;
+use crate::input::target::TargetDeviceType;
 use crate::procfs;
 use crate::watcher;
 
@@ -240,16 +241,20 @@ impl Manager {
     }
 
     /// Create target input device to emulate based on the given device type.
-    async fn create_target_device(&mut self, kind: &str) -> Result<TargetDevice, Box<dyn Error>> {
+    async fn create_target_device(
+        &mut self,
+        kind: &str,
+    ) -> Result<TargetDeviceType, Box<dyn Error>> {
         log::debug!("Creating target device: {kind}");
         // Create the target device to emulate based on the kind
         let device = match kind {
-            "gamepad" => TargetDevice::GenericGamepad(GenericGamepad::new(self.dbus.clone())),
-            "xb360" => TargetDevice::XBox360(XBox360Controller::new()),
-            "dbus" => TargetDevice::DBus(DBusDevice::new(self.dbus.clone())),
-            "mouse" => TargetDevice::Mouse(MouseDevice::new(self.dbus.clone())),
-            "keyboard" => TargetDevice::Keyboard(KeyboardDevice::new(self.dbus.clone())),
-            _ => TargetDevice::Null,
+            "gamepad" => TargetDeviceType::GenericGamepad(GenericGamepad::new(self.dbus.clone())),
+            "deck" => TargetDeviceType::SteamDeck(SteamDeckDevice::new(self.dbus.clone())),
+            "xb360" => TargetDeviceType::XBox360(XBox360Controller::new()),
+            "dbus" => TargetDeviceType::DBus(DBusDevice::new(self.dbus.clone())),
+            "mouse" => TargetDeviceType::Mouse(MouseDevice::new(self.dbus.clone())),
+            "keyboard" => TargetDeviceType::Keyboard(KeyboardDevice::new(self.dbus.clone())),
+            _ => TargetDeviceType::Null,
         };
         log::debug!("Created target input device: {kind}");
         Ok(device)
@@ -259,13 +264,13 @@ impl Manager {
     /// to send events to the given targets.
     async fn start_target_devices(
         &self,
-        targets: Vec<TargetDevice>,
+        targets: Vec<TargetDeviceType>,
     ) -> Result<HashMap<String, mpsc::Sender<TargetCommand>>, Box<dyn Error>> {
         let mut target_devices = HashMap::new();
         for target in targets {
             match target {
-                TargetDevice::Null => (),
-                TargetDevice::Keyboard(mut device) => {
+                TargetDeviceType::Null => (),
+                TargetDeviceType::Keyboard(mut device) => {
                     let path = self.next_target_path("keyboard")?;
                     let event_tx = device.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
@@ -277,7 +282,7 @@ impl Manager {
                         log::debug!("Target keyboard device closed");
                     });
                 }
-                TargetDevice::Mouse(mut mouse) => {
+                TargetDeviceType::Mouse(mut mouse) => {
                     let path = self.next_target_path("mouse")?;
                     let event_tx = mouse.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
@@ -289,7 +294,7 @@ impl Manager {
                         log::debug!("Target mouse device closed");
                     });
                 }
-                TargetDevice::GenericGamepad(mut gamepad) => {
+                TargetDeviceType::GenericGamepad(mut gamepad) => {
                     let path = self.next_target_path("gamepad")?;
                     let event_tx = gamepad.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
@@ -301,7 +306,7 @@ impl Manager {
                         log::debug!("Target gamepad device closed");
                     });
                 }
-                TargetDevice::DBus(mut device) => {
+                TargetDeviceType::DBus(mut device) => {
                     let path = self.next_target_path("dbus")?;
                     let event_tx = device.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
@@ -313,7 +318,19 @@ impl Manager {
                         log::debug!("Target dbus device closed");
                     });
                 }
-                TargetDevice::XBox360(_) => todo!(),
+                TargetDeviceType::SteamDeck(mut device) => {
+                    let path = self.next_target_path("gamepad")?;
+                    let event_tx = device.transmitter();
+                    target_devices.insert(path.clone(), event_tx.clone());
+                    device.listen_on_dbus(path).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed to run target steam deck device: {:?}", e);
+                        }
+                        log::debug!("Target steam deck device closed");
+                    });
+                }
+                TargetDeviceType::XBox360(_) => todo!(),
             }
         }
 

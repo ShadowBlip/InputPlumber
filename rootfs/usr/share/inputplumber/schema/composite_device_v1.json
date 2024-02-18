@@ -46,7 +46,8 @@
               "mouse",
               "keyboard",
               "gamepad",
-              "xb360"
+              "xb360",
+              "deck"
             ]
           }
         }
