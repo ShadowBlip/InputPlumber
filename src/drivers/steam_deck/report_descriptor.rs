@@ -1,5 +1,66 @@
+/// Report descriptor for the Deck mouse device (/dev/hidraw0 on Deck)
+pub const MOUSE_DESCRIPTOR: [u8; 65] = [
+    0x05, 0x01, // Usage Page (Generic Desktop)
+    0x09, 0x02, // Usage (Mouse)
+    0xa1, 0x01, // Collection (Application)
+    0x09, 0x01, //  Usage (Pointer)
+    0xa1, 0x00, //  Collection (Physical)
+    0x05, 0x09, //   Usage Page (Button)
+    0x19, 0x01, //   Usage Minimum (1)
+    0x29, 0x02, //   Usage Maximum (2)
+    0x15, 0x00, //   Logical Minimum (0)
+    0x25, 0x01, //   Logical Maximum (1)
+    0x75, 0x01, //   Report Size (1)
+    0x95, 0x02, //   Report Count (2)
+    0x81, 0x02, //   Input (Data,Var,Abs)
+    0x75, 0x06, //   Report Size (6)
+    0x95, 0x01, //   Report Count (1)
+    0x81, 0x01, //   Input (Cnst,Arr,Abs)
+    0x05, 0x01, //   Usage Page (Generic Desktop)
+    0x09, 0x30, //   Usage (X)
+    0x09, 0x31, //   Usage (Y)
+    0x15, 0x81, //   Logical Minimum (-127)
+    0x25, 0x7f, //   Logical Maximum (127)
+    0x75, 0x08, //   Report Size (8)
+    0x95, 0x02, //   Report Count (2)
+    0x81, 0x06, //   Input (Data,Var,Rel)
+    0x95, 0x01, //   Report Count (1)
+    0x09, 0x38, //   Usage (Wheel)
+    0x81, 0x06, //   Input (Data,Var,Rel)
+    0x05, 0x0c, //   Usage Page (Consumer Devices)
+    0x0a, 0x38, 0x02, //   Usage (AC Pan)
+    0x95, 0x01, //   Report Count (1)
+    0x81, 0x06, //   Input (Data,Var,Rel)
+    0xc0, //  End Collection
+    0xc0, // End Collection
+];
+
+/// Report descriptor for the Deck keyboard device (/dev/hidraw1 on Deck)
+pub const KEYBOARD_DESCRIPTOR: [u8; 39] = [
+    0x05, 0x01, // Usage Page (Generic Desktop)
+    0x09, 0x06, // Usage (Keyboard)
+    0xa1, 0x01, // Collection (Application)
+    0x05, 0x07, //  Usage Page (Keyboard)
+    0x19, 0xe0, //  Usage Minimum (224)
+    0x29, 0xe7, //  Usage Maximum (231)
+    0x15, 0x00, //  Logical Minimum (0)
+    0x25, 0x01, //  Logical Maximum (1)
+    0x75, 0x01, //  Report Size (1)
+    0x95, 0x08, //  Report Count (8)
+    0x81, 0x02, //  Input (Data,Var,Abs)
+    0x81, 0x01, //  Input (Cnst,Arr,Abs)
+    0x19, 0x00, //  Usage Minimum (0)
+    0x29, 0x65, //  Usage Maximum (101)
+    0x15, 0x00, //  Logical Minimum (0)
+    0x25, 0x65, //  Logical Maximum (101)
+    0x75, 0x08, //  Report Size (8)
+    0x95, 0x06, //  Report Count (6)
+    0x81, 0x00, //  Input (Data,Arr,Abs)
+    0xc0, // End Collection
+];
+
 /// Valve Software Steam Controller
-/// Report descriptor for the Deck Controller device
+/// Report descriptor for the Deck Controller device (/dev/hidraw3 on Deck)
 pub const CONTROLLER_DESCRIPTOR: [u8; 38] = [
     0x06, 0xff, 0xff, // Usage Page (Vendor Usage Page 0xffff)
     0x09, 0x01, // Usage (Vendor Usage 0x01)
@@ -22,7 +83,7 @@ pub const CONTROLLER_DESCRIPTOR: [u8; 38] = [
 ];
 
 /// FTS3528:00 2808:1015
-/// Report descriptor for the Deck touchscreen
+/// Report descriptor for the Deck touchscreen (/dev/hidraw2 on Deck)
 pub const TOUCHSCREEN_DESCRIPTOR: [u8; 543] = [
     0x05, 0x0d, // Usage Page (Digitizers)
     0x09, 0x04, // Usage (Touch Screen)
