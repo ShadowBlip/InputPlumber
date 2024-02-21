@@ -11,7 +11,6 @@ assets = [
   { source = "./rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", mode = "644" },
   { source = "./rootfs/usr/lib/systemd/system/inputplumber.service", dest = "/usr/lib/systemd/system/inputplumber.service", mode = "644" },
   { source = "./rootfs/usr/share/inputplumber/devices/steam_deck.yaml", dest = "/usr/share/inputplumber/devices/steam_deck.yaml", mode = "644" },
-  { source = "./rootfs/usr/share/inputplumber/devices/gamepads.yaml", dest = "/usr/share/inputplumber/devices/gamepads.yaml", mode = "644" },
 ]
 
 [dependencies]
