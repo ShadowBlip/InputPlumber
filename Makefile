@@ -13,7 +13,7 @@ IMAGE_TAG ?= latest
 
 # systemd-sysext variables 
 SYSEXT_ID ?= steamos
-SYSEXT_VERSION_ID ?= 3.5.14
+SYSEXT_VERSION_ID ?= 3.5.15
 
 # Include any user defined settings
 -include settings.mk
@@ -45,8 +45,6 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/lib/systemd/system/$(NAME).service
 	install -D -m 644 rootfs/usr/share/$(NAME)/devices/steam_deck.yaml \
 		$(PREFIX)/share/$(NAME)/devices/steam_deck.yaml
-	install -D -m 644 rootfs/usr/share/$(NAME)/devices/gamepads.yaml \
-		$(PREFIX)/share/$(NAME)/devices/gamepads.yaml
 	@echo ""
 	@echo "Install completed. Enable service with:" 
 	@echo "  systemctl enable --now $(NAME)"
@@ -57,7 +55,6 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
 	rm $(PREFIX)/share/$(NAME)/devices/steam_deck.yaml
-	rm $(PREFIX)/share/$(NAME)/devices/gamepads.yaml
 
 ##@ Development
 
@@ -138,6 +135,21 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz
 	rm -rf $(CACHE_DIR)/$(NAME)
 	mv $(CACHE_DIR)/$(NAME).raw $@
 	cd dist && sha256sum $(NAME).raw > $(NAME).raw.sha256.txt
+
+XSL_TEMPLATE := ./docs/dbus2markdown.xsl
+.PHONY: docs
+docs: ## Generate markdown docs for DBus interfaces
+	mkdir -p docs
+	xsltproc --novalid -o docs/manager.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Manager.xml
+	sed -i 's/DBus Interface API/Manager DBus Interface API/g' ./docs/manager.md
+	xsltproc --novalid -o docs/composite_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.CompositeDevice.xml
+	sed -i 's/DBus Interface API/CompositeDevice DBus Interface API/g' ./docs/composite_device.md
+	xsltproc --novalid -o docs/source_event_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Source.EventDevice.xml
+	sed -i 's/DBus Interface API/Source EventDevice DBus Interface API/g' ./docs/source_event_device.md
+	xsltproc --novalid -o docs/source_hidraw_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Source.HIDRawDevice.xml
+	sed -i 's/DBus Interface API/Source HIDRaw DBus Interface API/g' ./docs/source_hidraw_device.md
+	xsltproc --novalid -o docs/keyboard.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Keyboard
+	sed -i 's/DBus Interface API/Keyboard DBus Interface API/g' ./docs/keyboard.md
 
 # Refer to .releaserc.yaml for release configuration
 .PHONY: sem-release 
