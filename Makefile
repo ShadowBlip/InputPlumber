@@ -150,6 +150,8 @@ docs: ## Generate markdown docs for DBus interfaces
 	sed -i 's/DBus Interface API/Source HIDRaw DBus Interface API/g' ./docs/source_hidraw_device.md
 	xsltproc --novalid -o docs/keyboard.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Keyboard
 	sed -i 's/DBus Interface API/Keyboard DBus Interface API/g' ./docs/keyboard.md
+	xsltproc --novalid -o docs/target_dbus_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.DBusDevice.xml
+	sed -i 's/DBus Interface API/Target DBus Device Interface API/g' ./docs/target_dbus_device.md
 
 # Refer to .releaserc.yaml for release configuration
 .PHONY: sem-release 
