@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use tokio::sync::{broadcast, mpsc};
-use zbus::{fdo, zvariant::ObjectPath, Connection, SignalContext};
+use zbus::{fdo, Connection, SignalContext};
 use zbus_macros::dbus_interface;
 
 use crate::input::{
@@ -14,7 +14,19 @@ use crate::input::{
 
 use super::TargetCommand;
 
+/// Size of the channel buffer for events
 const BUFFER_SIZE: usize = 2048;
+/// The threshold for axis inputs to be considered "pressed"
+const AXIS_THRESHOLD: f64 = 0.35;
+
+/// The internal emulated device state for tracking analog input
+#[derive(Debug, Clone, Default)]
+struct State {
+    pressed_left: bool,
+    pressed_right: bool,
+    pressed_up: bool,
+    pressed_down: bool,
+}
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
 /// a [DBusDevice].
@@ -44,6 +56,7 @@ impl DBusInterface {
 /// divert inputs to an overlay over DBus.
 #[derive(Debug)]
 pub struct DBusDevice {
+    state: State,
     conn: Connection,
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
@@ -56,6 +69,7 @@ impl DBusDevice {
     pub fn new(conn: Connection) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
+            state: State::default(),
             conn,
             dbus_path: None,
             _composite_tx: None,
@@ -97,8 +111,10 @@ impl DBusDevice {
             match command {
                 TargetCommand::WriteEvent(event) => {
                     //log::debug!("Got event to emit: {:?}", event);
-                    let dbus_event = self.translate_event(event);
-                    self.write_dbus_event(dbus_event).await?;
+                    let dbus_events = self.translate_event(event);
+                    for dbus_event in dbus_events {
+                        self.write_dbus_event(dbus_event).await?;
+                    }
                 }
                 TargetCommand::Stop => break,
             };
@@ -117,9 +133,76 @@ impl DBusDevice {
         Ok(())
     }
 
-    /// Translate the given native event into a dbus event
-    fn translate_event(&self, event: NativeEvent) -> DBusEvent {
-        event.into()
+    /// Translate the given native event into one or more dbus events
+    fn translate_event(&mut self, event: NativeEvent) -> Vec<DBusEvent> {
+        let mut translated = vec![];
+        let events = DBusEvent::from_native_event(event);
+        for mut event in events {
+            // Axis input is a special case, where we need to keep track of the
+            // current state of the axis, and only emit events whenever the axis
+            // passes or falls below the defined threshold.
+            let include_event = match event.action {
+                Action::Left => {
+                    if self.state.pressed_left && event.value < AXIS_THRESHOLD {
+                        event.value = 0.0;
+                        self.state.pressed_left = false;
+                        true
+                    } else if !self.state.pressed_left && event.value > AXIS_THRESHOLD {
+                        event.value = 1.0;
+                        self.state.pressed_left = true;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                Action::Right => {
+                    if self.state.pressed_right && event.value < AXIS_THRESHOLD {
+                        event.value = 0.0;
+                        self.state.pressed_right = false;
+                        true
+                    } else if !self.state.pressed_right && event.value > AXIS_THRESHOLD {
+                        event.value = 1.0;
+                        self.state.pressed_right = true;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                Action::Up => {
+                    if self.state.pressed_up && event.value < AXIS_THRESHOLD {
+                        event.value = 0.0;
+                        self.state.pressed_up = false;
+                        true
+                    } else if !self.state.pressed_up && event.value > AXIS_THRESHOLD {
+                        event.value = 1.0;
+                        self.state.pressed_up = true;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                Action::Down => {
+                    if self.state.pressed_down && event.value < AXIS_THRESHOLD {
+                        event.value = 0.0;
+                        self.state.pressed_down = false;
+                        true
+                    } else if !self.state.pressed_down && event.value > AXIS_THRESHOLD {
+                        event.value = 1.0;
+                        self.state.pressed_down = true;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => true,
+            };
+
+            if include_event {
+                translated.push(event);
+            }
+        }
+
+        translated
     }
 
     /// Writes the given event to DBus
