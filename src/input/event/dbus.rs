@@ -1,6 +1,6 @@
-use crate::input::capability::{Capability, Gamepad, GamepadButton};
+use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton};
 
-use super::native::NativeEvent;
+use super::native::{InputValue, NativeEvent};
 
 /// Actions represent all possible DBus event actions
 #[derive(Debug, Clone)]
@@ -10,12 +10,20 @@ pub enum Action {
     Quick,
     Context,
     Option,
+    Select,
     Accept,
     Back,
+    ActOn,
     Left,
     Right,
     Up,
     Down,
+    L1,
+    L2,
+    L3,
+    R1,
+    R2,
+    R3,
 }
 
 impl Action {
@@ -26,12 +34,20 @@ impl Action {
             Action::Quick => "ui_quick",
             Action::Context => "ui_context",
             Action::Option => "ui_option",
+            Action::Select => "ui_select",
             Action::Accept => "ui_accept",
             Action::Back => "ui_back",
+            Action::ActOn => "ui_action",
             Action::Left => "ui_left",
             Action::Right => "ui_right",
             Action::Up => "ui_up",
             Action::Down => "ui_down",
+            Action::L1 => "ui_l1",
+            Action::L2 => "ui_l2",
+            Action::L3 => "ui_l3",
+            Action::R1 => "ui_r1",
+            Action::R2 => "ui_r2",
+            Action::R3 => "ui_r3",
         }
     }
 
@@ -59,66 +75,135 @@ impl Default for DBusEvent {
     }
 }
 
-impl From<NativeEvent> for DBusEvent {
-    /// Convert the [NativeEvent] into a [DBusEvent]
-    fn from(item: NativeEvent) -> Self {
+impl DBusEvent {
+    /// Convert the [NativeEvent] into one or more [DBusEvent]
+    pub fn from_native_event(item: NativeEvent) -> Vec<Self> {
+        let mut events: Vec<Self> = Vec::new();
         let input_value = item.get_value();
-        let value = match input_value {
-            super::native::InputValue::Bool(value) => {
-                if value {
-                    1.0
-                } else {
-                    0.0
-                }
+
+        // Translate the event to dbus action(s)
+        let actions = actions_from_capability(item.as_capability());
+
+        // Create DBus events based on the type of input value
+        for action in actions {
+            let event = dbus_event_from_value(action, input_value.clone());
+            if event.is_none() {
+                continue;
             }
-            super::native::InputValue::Float(value) => value,
-            super::native::InputValue::Vector2 { x, y } => 0.0,
-            super::native::InputValue::Vector3 { x, y, z } => 0.0,
-        };
+            events.push(event.unwrap());
+        }
 
-        // Translate the event to an action
-        let action = match item.as_capability() {
-            Capability::None => Action::None,
-            Capability::NotImplemented => Action::None,
-            Capability::Sync => Action::None,
-            Capability::Gamepad(gamepad) => match gamepad {
-                Gamepad::Button(btn) => match btn {
-                    GamepadButton::South => Action::Accept,
-                    GamepadButton::East => Action::Back,
-                    GamepadButton::North => Action::Context,
-                    GamepadButton::West => Action::None,
-                    GamepadButton::Start => Action::Option,
-                    GamepadButton::Select => Action::None,
-                    GamepadButton::Guide => Action::Guide,
-                    GamepadButton::Base => Action::Quick,
-                    GamepadButton::DPadUp => Action::Up,
-                    GamepadButton::DPadDown => Action::Down,
-                    GamepadButton::DPadLeft => Action::Left,
-                    GamepadButton::DPadRight => Action::Right,
-                    GamepadButton::LeftBumper => Action::None,
-                    GamepadButton::LeftTrigger => Action::None,
-                    GamepadButton::LeftPaddle1 => Action::None,
-                    GamepadButton::LeftPaddle2 => Action::None,
-                    GamepadButton::LeftStick => Action::None,
-                    GamepadButton::LeftStickTouch => Action::None,
-                    GamepadButton::LeftTouchpadTouch => Action::None,
-                    GamepadButton::LeftTouchpadPress => Action::None,
-                    GamepadButton::RightBumper => Action::None,
-                    GamepadButton::RightTrigger => Action::None,
-                    GamepadButton::RightPaddle1 => Action::None,
-                    GamepadButton::RightPaddle2 => Action::None,
-                    GamepadButton::RightStick => Action::None,
-                    GamepadButton::RightStickTouch => Action::None,
-                    GamepadButton::RightTouchpadTouch => Action::None,
-                    GamepadButton::RightTouchpadPress => Action::None,
-                },
-                Gamepad::Axis(_) => Action::None,
-                _ => Action::None,
-            },
-            Capability::Mouse(_) => Action::None,
-            Capability::Keyboard(_) => Action::None,
-        };
-
-        Self { action, value }
+        events
     }
+}
+
+/// Returns an array of DBus event actions from the given event capability.
+fn actions_from_capability(capability: Capability) -> Vec<Action> {
+    match capability {
+        Capability::None => vec![Action::None],
+        Capability::NotImplemented => vec![Action::None],
+        Capability::Sync => vec![Action::None],
+        Capability::Gamepad(gamepad) => match gamepad {
+            Gamepad::Button(btn) => match btn {
+                GamepadButton::South => vec![Action::Accept],
+                GamepadButton::East => vec![Action::Back],
+                GamepadButton::North => vec![Action::Context],
+                GamepadButton::West => vec![Action::ActOn],
+                GamepadButton::Start => vec![Action::Option],
+                GamepadButton::Select => vec![Action::Select],
+                GamepadButton::Guide => vec![Action::Guide],
+                GamepadButton::Base => vec![Action::Quick],
+                GamepadButton::DPadUp => vec![Action::Up],
+                GamepadButton::DPadDown => vec![Action::Down],
+                GamepadButton::DPadLeft => vec![Action::Left],
+                GamepadButton::DPadRight => vec![Action::Right],
+                GamepadButton::LeftBumper => vec![Action::L1],
+                GamepadButton::LeftTrigger => vec![Action::L2],
+                GamepadButton::LeftPaddle1 => vec![Action::None],
+                GamepadButton::LeftPaddle2 => vec![Action::None],
+                GamepadButton::LeftStick => vec![Action::L3],
+                GamepadButton::LeftStickTouch => vec![Action::None],
+                GamepadButton::LeftTouchpadTouch => vec![Action::None],
+                GamepadButton::LeftTouchpadPress => vec![Action::None],
+                GamepadButton::RightBumper => vec![Action::R1],
+                GamepadButton::RightTrigger => vec![Action::R2],
+                GamepadButton::RightPaddle1 => vec![Action::None],
+                GamepadButton::RightPaddle2 => vec![Action::None],
+                GamepadButton::RightStick => vec![Action::R3],
+                GamepadButton::RightStickTouch => vec![Action::None],
+                GamepadButton::RightTouchpadTouch => vec![Action::None],
+                GamepadButton::RightTouchpadPress => vec![Action::None],
+            },
+            Gamepad::Axis(axis) => match axis {
+                GamepadAxis::LeftStick => {
+                    vec![Action::Left, Action::Right, Action::Up, Action::Down]
+                }
+                GamepadAxis::Hat1 => {
+                    vec![Action::Left, Action::Right, Action::Up, Action::Down]
+                }
+                GamepadAxis::Buttons(negative, positive) => {
+                    let mut dpad_actions = vec![];
+                    // Match negative axis buttons (up and left)
+                    match negative {
+                        GamepadButton::DPadUp => {
+                            dpad_actions.push(Action::Up);
+                        }
+                        GamepadButton::DPadLeft => {
+                            dpad_actions.push(Action::Left);
+                        }
+                        _ => (),
+                    };
+                    // Match positive axis buttons (down and right)
+                    match positive {
+                        GamepadButton::DPadDown => {
+                            dpad_actions.push(Action::Down);
+                        }
+                        GamepadButton::DPadRight => {
+                            dpad_actions.push(Action::Right);
+                        }
+                        _ => (),
+                    }
+
+                    dpad_actions
+                }
+                _ => vec![Action::None],
+            },
+            _ => vec![Action::None],
+        },
+        Capability::Mouse(_) => vec![Action::None],
+        // TODO: Handle keyboard translation
+        Capability::Keyboard(_) => vec![Action::None],
+    }
+}
+
+/// Returns a DBus event from the given DBus event action and input value.
+fn dbus_event_from_value(action: Action, input_value: InputValue) -> Option<DBusEvent> {
+    let value = match input_value {
+        InputValue::Bool(value) => {
+            if value {
+                Some(1.0)
+            } else {
+                Some(0.0)
+            }
+        }
+        InputValue::Float(value) => Some(value),
+        InputValue::Vector2 { x, y } => match action {
+            // Left should be a negative value
+            Action::Left => x.filter(|&x| x <= 0.0).map(|x| -x),
+            // Right should be a positive value
+            Action::Right => x.filter(|&x| x >= 0.0),
+            // Up should be a negative value
+            Action::Up => y.filter(|&y| y <= 0.0).map(|y| -y),
+            // Down should be a positive value
+            Action::Down => y.filter(|&y| y >= 0.0),
+            _ => None,
+        },
+        InputValue::Vector3 { x, y, z } => None,
+    };
+    value?;
+
+    Some(DBusEvent {
+        action,
+        value: value.unwrap(),
+    })
 }
