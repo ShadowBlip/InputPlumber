@@ -262,7 +262,7 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::L2(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::L3(value) => NativeEvent::new(
