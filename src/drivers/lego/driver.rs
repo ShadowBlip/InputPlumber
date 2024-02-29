@@ -6,7 +6,7 @@ use packed_struct::{types::SizedInteger, PackedStruct};
 use super::{
     event::{
         AccelerometerEvent, AccelerometerInput, AxisEvent, BinaryInput, ButtonEvent, Event,
-        JoyAxisInput, TouchAxisInput, TriggerEvent, TriggerInput, WheelEvent,
+        JoyAxisInput, StatusEvent, StatusInput, TouchAxisInput, TriggerEvent, TriggerInput,
     },
     hid_report::{
         DInputDataLeftReport, DInputDataRightReport, KeyboardDataReport, MouseDataReport,
@@ -605,8 +605,49 @@ impl Driver {
                 }),
             ));
 
-            // State events
-            // TODO: Add state events.
+            // Status events
+            if state.l_controller_battery != old_state.l_controller_battery {
+                events.push(Event::Status(StatusEvent::LeftControllerBattery(
+                    StatusInput {
+                        value: state.l_controller_battery,
+                    },
+                )));
+            }
+            if state.l_controller_mode0 != old_state.l_controller_mode0 {
+                events.push(Event::Status(StatusEvent::LeftControllerMode0(
+                    StatusInput {
+                        value: state.l_controller_mode0,
+                    },
+                )));
+            }
+            if state.l_controller_mode1 != old_state.l_controller_mode1 {
+                events.push(Event::Status(StatusEvent::LeftControllerMode1(
+                    StatusInput {
+                        value: state.l_controller_mode1,
+                    },
+                )));
+            }
+            if state.r_controller_battery != old_state.r_controller_battery {
+                events.push(Event::Status(StatusEvent::RightControllerBattery(
+                    StatusInput {
+                        value: state.r_controller_battery,
+                    },
+                )));
+            }
+            if state.r_controller_mode0 != old_state.r_controller_mode0 {
+                events.push(Event::Status(StatusEvent::RightControllerMode0(
+                    StatusInput {
+                        value: state.r_controller_mode0,
+                    },
+                )));
+            }
+            if state.r_controller_mode1 != old_state.r_controller_mode1 {
+                events.push(Event::Status(StatusEvent::RightControllerMode1(
+                    StatusInput {
+                        value: state.r_controller_mode1,
+                    },
+                )));
+            }
         };
 
         events
