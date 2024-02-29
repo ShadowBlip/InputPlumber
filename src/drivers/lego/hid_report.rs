@@ -388,9 +388,9 @@ pub struct XInputDataReport {
     pub mouse_z: u8,
 
     #[packed_field(bytes = "26..=27", endian = "msb")]
-    pub touch_x: u16,
+    pub touch_x_0: u16,
     #[packed_field(bytes = "28..=29", endian = "msb")]
-    pub touch_y: u16,
+    pub touch_y_0: u16,
 
     #[packed_field(bytes = "30")]
     pub left_accel_0: u8,
@@ -828,38 +828,100 @@ pub struct MouseDataReport {
 // #             | Confidence: 0 | Tip Switch: 0 | Contact Id:  0 | # | X:      0 | Y:      0 | Scan Time:  34964 | Contact Count:    2 | Button: 0 | #
 // E: 000143.247707 20 01 01 55 01 00 02 05 aa 02 00 02 00 00 00 00 00 94 88 02 00
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "21")]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "20")]
 pub struct TouchpadDataReport {
     #[packed_field(bytes = "0")]
     pub report_id: u8,
-    #[packed_field(bytes = "1")]
-    pub report_size: u8,
 
-    #[packed_field(bytes = "2")]
-    pub unk_0: u8, //confidence, tip switch, & contact id?
-    #[packed_field(bytes = "3..=4", endian = "lsb")]
-    pub r_pad_x_0: Integer<u16, packed_bits::Bits<16>>,
-    #[packed_field(bytes = "5..=6", endian = "lsb")]
-    pub r_pad_y_0: Integer<u16, packed_bits::Bits<16>>,
+    // BYTE 1
+    #[packed_field(bits = "8")]
+    pub unk_1_8: bool,
+    #[packed_field(bits = "9")]
+    pub unk_1_9: bool,
+    #[packed_field(bits = "10")]
+    pub unk_1_10: bool,
+    #[packed_field(bits = "11")]
+    pub unk_1_11: bool,
+    #[packed_field(bits = "12")]
+    pub unk_1_12: bool,
+    #[packed_field(bits = "13")]
+    pub contact_id_0: bool,
+    #[packed_field(bits = "14")]
+    pub tip_switch_0: bool,
+    #[packed_field(bits = "15")]
+    pub confidence_0: bool,
 
-    #[packed_field(bytes = "7")]
-    pub unk_1: u8, //confidence, tip switch, & contact id?
-    #[packed_field(bytes = "8..=9", endian = "lsb")]
-    pub r_pad_x_1: Integer<u16, packed_bits::Bits<16>>,
-    #[packed_field(bytes = "10..=11", endian = "lsb")]
-    pub r_pad_y_1: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "2..=3", endian = "lsb")]
+    pub touch_x_0: u16,
+    #[packed_field(bytes = "4..=5", endian = "lsb")]
+    pub touch_y_0: u16,
 
-    #[packed_field(bytes = "12")]
-    pub unk_2: u8, //confidence, tip switch, & contact id?
-    #[packed_field(bytes = "13..=14", endian = "lsb")]
-    pub r_pad_x_2: Integer<u16, packed_bits::Bits<16>>,
-    #[packed_field(bytes = "15..=16", endian = "lsb")]
-    pub r_pad_y_2: Integer<u16, packed_bits::Bits<16>>,
+    // BYTE 6
+    #[packed_field(bits = "48")]
+    pub unk_6_0: bool,
+    #[packed_field(bits = "49")]
+    pub unk_6_1: bool,
+    #[packed_field(bits = "50")]
+    pub unk_6_2: bool,
+    #[packed_field(bits = "51")]
+    pub unk_6_3: bool,
+    #[packed_field(bits = "52")]
+    pub unk_6_4: bool,
+    #[packed_field(bits = "53")]
+    pub contact_id_1: bool,
+    #[packed_field(bits = "54")]
+    pub tip_switch_1: bool,
+    #[packed_field(bits = "55")]
+    pub confidence_1: bool,
 
-    #[packed_field(bytes = "17..=18", endian = "lsb")]
-    pub scan_time: Integer<u16, packed_bits::Bits<16>>,
-    #[packed_field(bytes = "19")]
+    #[packed_field(bytes = "7..=8", endian = "lsb")]
+    pub touch_x_1: u16,
+    #[packed_field(bytes = "9..=10", endian = "lsb")]
+    pub touch_y_1: u16,
+
+    // BYTE 11
+    #[packed_field(bits = "88")]
+    pub unk_11_0: bool,
+    #[packed_field(bits = "89")]
+    pub unk_11_1: bool,
+    #[packed_field(bits = "90")]
+    pub unk_11_2: bool,
+    #[packed_field(bits = "91")]
+    pub unk_11_3: bool,
+    #[packed_field(bits = "92")]
+    pub unk_11_4: bool,
+    #[packed_field(bits = "93")]
+    pub contact_id_2: bool,
+    #[packed_field(bits = "94")]
+    pub tip_switch_2: bool,
+    #[packed_field(bits = "95")]
+    pub confidence_2: bool,
+
+    #[packed_field(bytes = "12..=13", endian = "lsb")]
+    pub touch_x_2: u16,
+    #[packed_field(bytes = "14..=15", endian = "lsb")]
+    pub touch_y_2: u16,
+
+    #[packed_field(bytes = "16..=17", endian = "lsb")]
+    pub scan_time: u16,
+    #[packed_field(bytes = "18")]
     pub contact_count: u8,
-    #[packed_field(bytes = "20")]
-    pub button_count: u8,
+
+    // BYTE 19
+    #[packed_field(bits = "152")]
+    pub unk_19_0: bool,
+    #[packed_field(bits = "153")]
+    pub unk_19_1: bool,
+    #[packed_field(bits = "154")]
+    pub unk_19_2: bool,
+    #[packed_field(bits = "155")]
+    pub unk_19_3: bool,
+    #[packed_field(bits = "156")]
+    pub unk_19_4: bool,
+    #[packed_field(bits = "157")]
+    pub unk_19_5: bool,
+    #[packed_field(bits = "158")]
+    pub unk_19_6: bool,
+    #[packed_field(bits = "159")]
+    pub unk_19_7: bool,
 }

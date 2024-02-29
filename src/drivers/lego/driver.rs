@@ -21,7 +21,7 @@ const DINPUT_PACKET_SIZE: usize = 13;
 const XINPUT_PACKET_SIZE: usize = 60;
 const KEYBOARD_PACKET_SIZE: usize = 15;
 const MOUSE_PACKET_SIZE: usize = 8;
-const TOUCHPAD_PACKET_SIZE: usize = 21;
+const TOUCHPAD_PACKET_SIZE: usize = 20;
 const HID_TIMEOUT: i32 = 5000;
 
 pub const DINPUTLEFT_DATA: u8 = 0x07;
@@ -105,14 +105,13 @@ impl Driver {
         let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
 
         let report_id = buf[0];
-        let report_size = buf[1] as usize;
-        let slice = &buf[..report_size];
+        let slice = &buf[..bytes_read];
         log::debug!("Got Report ID: {report_id}");
-        log::debug!("Got Report Size: {report_size}");
+        log::debug!("Got Report Size: {bytes_read}");
 
         match report_id {
             DINPUTLEFT_DATA => {
-                if report_size != DINPUT_PACKET_SIZE || bytes_read != DINPUT_PACKET_SIZE {
+                if bytes_read != DINPUT_PACKET_SIZE {
                     return Err("Invalid packet size for Direct Input Data.".into());
                 }
                 // Handle the incoming input report
@@ -122,7 +121,7 @@ impl Driver {
             }
 
             DINPUTRIGHT_DATA => {
-                if report_size != DINPUT_PACKET_SIZE || bytes_read != DINPUT_PACKET_SIZE {
+                if bytes_read != DINPUT_PACKET_SIZE {
                     return Err("Invalid packet size for Direct Input Data.".into());
                 }
                 // Handle the incoming input report
@@ -132,8 +131,9 @@ impl Driver {
             }
 
             KEYBOARD_TOUCH_DATA => {
-                if report_size != KEYBOARD_PACKET_SIZE || bytes_read != KEYBOARD_PACKET_SIZE {
-                    if report_size != TOUCHPAD_PACKET_SIZE || bytes_read != TOUCHPAD_PACKET_SIZE {
+                log::debug!("Got keyboard/touch data.");
+                if bytes_read != KEYBOARD_PACKET_SIZE {
+                    if bytes_read != TOUCHPAD_PACKET_SIZE {
                         return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
                     }
                     // Handle the incoming input report
@@ -149,7 +149,7 @@ impl Driver {
             }
 
             MOUSE_DATA | MOUSEFPS_DATA => {
-                if report_size != MOUSE_PACKET_SIZE || bytes_read != MOUSE_PACKET_SIZE {
+                if bytes_read != MOUSE_PACKET_SIZE {
                     return Err("Invalid packet size for Mouse Data.".into());
                 }
                 // Handle the incoming input report
@@ -159,7 +159,7 @@ impl Driver {
             }
 
             XINPUT_DATA => {
-                if report_size != XINPUT_PACKET_SIZE || bytes_read != XINPUT_PACKET_SIZE {
+                if bytes_read != XINPUT_PACKET_SIZE {
                     return Err("Invalid packet size for X-Input Data.".into());
                 }
                 // Handle the incoming input report
@@ -359,9 +359,9 @@ impl Driver {
         let input_report = TouchpadDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        // log::debug!("--- Input report ---");
-        // log::debug!("{input_report}");
-        // log::debug!("---- End Report ----");
+        log::debug!("--- Input report ---");
+        log::debug!("{input_report}");
+        log::debug!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_touchpad_state(input_report);
@@ -403,9 +403,9 @@ impl Driver {
         let input_report = XInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        log::debug!("--- Input report ---");
-        log::debug!("{input_report}");
-        log::debug!("---- End Report ----");
+        //log::debug!("--- Input report ---");
+        //log::debug!("{input_report}");
+        //log::debug!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_xinput_state(input_report);
@@ -555,10 +555,10 @@ impl Driver {
             }
 
             // Axis events
-            if state.touch_x != old_state.touch_x || state.touch_y != old_state.touch_y {
+            if state.touch_x_0 != old_state.touch_x_0 || state.touch_y_0 != old_state.touch_y_0 {
                 events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
-                    x: state.touch_x,
-                    y: state.touch_y,
+                    x: state.touch_x_0,
+                    y: state.touch_y_0,
                 })));
             }
             if state.l_stick_x != old_state.l_stick_x || state.l_stick_y != old_state.l_stick_y {
