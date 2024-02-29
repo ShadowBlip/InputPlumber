@@ -5,12 +5,40 @@ pub enum Event {
     Accelerometer(AccelerometerEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
+    Status(StatusEvent),
 }
 
 /// Binary input contain either pressed or unpressed
 #[derive(Clone, Debug)]
 pub struct BinaryInput {
     pub pressed: bool,
+}
+
+/// Axis input contain (x, y) coordinates
+#[derive(Clone, Debug)]
+pub struct TouchAxisInput {
+    pub x: u16,
+    pub y: u16,
+}
+
+/// Axis input contain (x, y) coordinates
+#[derive(Clone, Debug)]
+pub struct JoyAxisInput {
+    pub x: u8,
+    pub y: u8,
+}
+
+/// AccelerometerInput represents the state of the accelerometer (x, y, z) values
+#[derive(Clone, Debug)]
+pub struct AccelerometerInput {
+    pub x: u8,
+    pub y: u8,
+}
+
+// Status inputs contain some value that corresponds to the current status of a device.
+#[derive(Clone, Debug)]
+pub struct StatusInput {
+    pub value: u8,
 }
 
 /// Button events represend binary inputs
@@ -65,20 +93,6 @@ pub enum ButtonEvent {
     /// Mouse wheel click on the back of the right controller
     MouseClick(BinaryInput),
 }
-
-/// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
-pub struct TouchAxisInput {
-    pub x: u16,
-    pub y: u16,
-}
-
-/// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
-pub struct JoyAxisInput {
-    pub x: u8,
-    pub y: u8,
-}
 /// Axis events are events that have (x, y) values
 #[derive(Clone, Debug)]
 pub enum AxisEvent {
@@ -100,16 +114,6 @@ pub enum TriggerEvent {
     MouseWheel(TriggerInput),
 }
 
-/// Wheel events contain positive values indicating up and negative numbers indicating down
-#[derive(Clone, Debug)]
-pub enum WheelEvent {}
-/// AccelerometerInput represents the state of the accelerometer (x, y, z) values
-#[derive(Clone, Debug)]
-pub struct AccelerometerInput {
-    pub x: u8,
-    pub y: u8,
-}
-
 /// AccelerometerEvent has data from the accelerometer
 #[derive(Clone, Debug)]
 pub enum AccelerometerEvent {
@@ -117,4 +121,14 @@ pub enum AccelerometerEvent {
     RightAccelerometer(AccelerometerInput),
     //CenterAccelerometer(AccelerometerInput),
     // TODO: Gyro from sysfs
+}
+
+#[derive(Clone, Debug)]
+pub enum StatusEvent {
+    LeftControllerBattery(StatusInput),
+    LeftControllerMode0(StatusInput),
+    LeftControllerMode1(StatusInput),
+    RightControllerBattery(StatusInput),
+    RightControllerMode0(StatusInput),
+    RightControllerMode1(StatusInput),
 }

@@ -144,11 +144,14 @@ impl ReportType {
 // Somehow this has pitch, roll, and yaw in two 8 bit numbers. Perhaps it is incomplete (only two), or each
 // number is 5 bits? Reslution of 31 is really low. bytes 29 and 30 are left controller, 31 and 32
 // are right controller.
-// Also note bytes 5, 6, 7, 8, 11, and 12. These change when the controller is synced either docked
-// or wireless and indicate the mode for each side. 5 and 7 are 100 (or 99) when the device is fully
-// synced, or 0 when diconnected (left/right respectively). 6 and 11 correspond to if the left
+// Also note bytes 6, 8, 11, and 12. These change when the controller is synced either docked
+// or wireless and indicate the mode for each side. 6 and 11 correspond to if the left
 // controller is docked 6:4, 11:2 or wireless 6:1, 11:3. 7 and 12 are for the right controller,
 // same numbers.
+//
+// Battery Indicators
+// 5 and 7 are left/right controller battery level, 0-100
+//
 // Left Accel
 // Not sure what the different numbers mean yet
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,   99 ,    1 ,   99 ,    1 ,    1 ,    1 ,    1 ,    3 ,    3 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 ,  -16 ,  -67 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
@@ -272,11 +275,11 @@ pub struct XInputDataReport {
     pub unk_4: u8,
 
     #[packed_field(bytes = "5")]
-    pub l_controller_synced: u8,
+    pub l_controller_battery: u8,
     #[packed_field(bytes = "6")]
     pub l_controller_mode0: u8,
     #[packed_field(bytes = "7")]
-    pub r_controller_synced: u8,
+    pub r_controller_battery: u8,
     #[packed_field(bytes = "8")]
     pub r_controller_mode0: u8,
 
