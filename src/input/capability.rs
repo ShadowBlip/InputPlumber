@@ -164,6 +164,8 @@ pub enum GamepadButton {
     LeftPaddle1,
     /// Left back paddle button, Xbox P4, Steam Deck L5
     LeftPaddle2,
+    /// Left back paddle button, No examples
+    LeftPaddle3,
     /// Z-axis button on the left stick, Sony L3, Xbox LS
     LeftStick,
     /// Touch sensor for left stick
@@ -182,6 +184,8 @@ pub enum GamepadButton {
     RightPaddle1,
     /// Right back paddle button, Xbox P2, Steam Deck R5
     RightPaddle2,
+    /// Right "side" paddle button, Legion Go M2
+    RightPaddle3,
     /// Z-axis button on the right stick, Sony R3, Xbox RS
     RightStick,
     /// Touch binary sensor for right stick

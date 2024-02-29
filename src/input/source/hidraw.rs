@@ -1,3 +1,4 @@
+pub mod lego;
 pub mod steam_deck;
 
 use std::error::Error;
@@ -7,7 +8,7 @@ use tokio::sync::broadcast;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
-use crate::{constants::BUS_PREFIX, input::composite_device::Command};
+use crate::{constants::BUS_PREFIX, drivers, input::composite_device::Command};
 
 /// DBusInterface exposing information about a HIDRaw device
 pub struct DBusInterface {
@@ -101,6 +102,14 @@ impl HIDRawDevice {
             log::info!("Detected Steam Deck");
             let tx = self.composite_tx.clone();
             let driver = steam_deck::DeckController::new(self.info.clone(), tx);
+            driver.run().await?;
+        }
+        if self.info.vendor_id() == drivers::lego::driver::VID
+            && self.info.product_id() == drivers::lego::driver::PID
+        {
+            log::info!("Detected Legion Go");
+            let tx = self.composite_tx.clone();
+            let driver = lego::LegionController::new(self.info.clone(), tx);
             driver.run().await?;
         }
 

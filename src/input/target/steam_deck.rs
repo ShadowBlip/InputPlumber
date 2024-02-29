@@ -266,6 +266,8 @@ impl SteamDeckDevice {
                     GamepadButton::RightStickTouch => self.state.r_stick_touch = event.pressed(),
                     GamepadButton::RightTouchpadTouch => self.state.r_pad_touch = event.pressed(),
                     GamepadButton::RightTouchpadPress => self.state.r_pad_press = event.pressed(),
+		    GamepadButton::LeftPaddle3 => (),
+                    GamepadButton::RightPaddle3 => (),
                     _ => (),
                 },
                 Gamepad::Axis(axis) => match axis {
