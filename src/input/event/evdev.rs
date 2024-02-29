@@ -586,6 +586,8 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 GamepadButton::RightStickTouch => vec![],
                 GamepadButton::RightTouchpadTouch => vec![],
                 GamepadButton::RightTouchpadPress => vec![],
+                GamepadButton::LeftPaddle3 => vec![],
+                GamepadButton::RightPaddle3 => vec![],
             },
             Gamepad::Axis(axis) => match axis {
                 GamepadAxis::LeftStick => {

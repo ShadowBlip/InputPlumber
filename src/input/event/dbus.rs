@@ -138,6 +138,8 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 GamepadButton::RightStickTouch => vec![Action::None],
                 GamepadButton::RightTouchpadTouch => vec![Action::None],
                 GamepadButton::RightTouchpadPress => vec![Action::None],
+                GamepadButton::LeftPaddle3 => vec![Action::None],
+                GamepadButton::RightPaddle3 => vec![Action::None],
             },
             Gamepad::Axis(axis) => match axis {
                 GamepadAxis::LeftStick => {

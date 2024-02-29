@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Lenovo Legion Go
+
+# Only use this profile if *any* of the given matches match. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches:
+  - dmi_data:
+      product_name: '83E1'
+      sys_vendor: LENOVO
+      cpu_vendor: AuthenticAMD
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: keyboard # Block data
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6182
+      interface_num: 0
+  - group: mouse # Only for optical X/Y
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6182
+      interface_num: 1
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6182
+      interface_num: 2
+  - group: mouse  # Only for optical X/Y
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6182
+      interface_num: 3
+
+# The ID of a device event mapping in the 'event_maps' folder
+event_map_id: lego
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - gamepad
+  - mouse
+  - keyboard
