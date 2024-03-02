@@ -123,9 +123,8 @@ impl CompositeDeviceConfig {
         let Some(hidraw_devices) = self.get_matching_hidraw()? else {
             return Ok(true);
         };
-        let hidraw_configs = self.get_hidraw_configs();
 
-        Ok(hidraw_devices.len() >= hidraw_configs.len())
+        Ok(hidraw_devices.len() >= 1)
     }
 
     /// Returns true if all the evdev source devices in the config exist on the system
@@ -206,7 +205,12 @@ impl CompositeDeviceConfig {
 
                 // Construct a device ID from the vendor and product to see
                 // if this device has already been matched.
-                let device_id = format!("{:04x}:{:04x}", device.vendor_id(), device.product_id());
+                let device_id = format!(
+                    "{:04x}:{:04x}:{}",
+                    device.vendor_id(),
+                    device.product_id(),
+                    device.interface_number()
+                );
                 if seen_devices.contains(&device_id) {
                     log::debug!("Device already seen: {}", device_id);
                     continue;
