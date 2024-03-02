@@ -4,7 +4,7 @@ use hidapi::DeviceInfo;
 use tokio::sync::broadcast;
 
 use crate::{
-    drivers::lego::{self, driver::Driver},
+    drivers::lego::{self, driver::Driver, event::MouseAxisInput},
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse, MouseButton,
@@ -130,6 +130,19 @@ fn normalize_axis_value(event: lego::event::AxisEvent) -> InputValue {
             let max = lego::driver::STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
+
+            InputValue::Vector2 { x, y }
+        }
+        lego::event::AxisEvent::Mouse(value) => {
+            let min = lego::driver::MOUSE_X_MIN;
+            let max = lego::driver::MOUSE_X_MAX;
+            let x = normalize_signed_value(value.x as f64, min, max);
+            let x = Some(x);
+
+            let min = lego::driver::MOUSE_Y_MIN;
+            let max = lego::driver::MOUSE_Y_MAX;
+            let y = normalize_signed_value(value.y as f64, min, max);
+            let y = Some(y);
 
             InputValue::Vector2 { x, y }
         }
@@ -293,6 +306,9 @@ fn translate_event(event: lego::event::Event) -> NativeEvent {
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
                 normalize_axis_value(axis),
             ),
+            lego::event::AxisEvent::Mouse(_) => {
+                NativeEvent::new(Capability::Mouse(Mouse::Motion), normalize_axis_value(axis))
+            }
         },
         lego::event::Event::Trigger(trigg) => match trigg.clone() {
             lego::event::TriggerEvent::ATriggerL(_) => NativeEvent::new(

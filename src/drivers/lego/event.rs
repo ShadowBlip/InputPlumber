@@ -23,6 +23,12 @@ pub struct TouchAxisInput {
 
 /// Axis input contain (x, y) coordinates
 #[derive(Clone, Debug)]
+pub struct MouseAxisInput {
+    pub x: i16,
+    pub y: i16,
+}
+/// Axis input contain (x, y) coordinates
+#[derive(Clone, Debug)]
 pub struct JoyAxisInput {
     pub x: u8,
     pub y: u8,
@@ -38,6 +44,18 @@ pub struct AccelerometerInput {
 // Status inputs contain some value that corresponds to the current status of a device.
 #[derive(Clone, Debug)]
 pub struct StatusInput {
+    pub value: u8,
+}
+
+/// Mouse Wheel contains negative integars
+#[derive(Clone, Debug)]
+pub struct MouseWheelInput {
+    pub value: i8,
+}
+
+/// Trigger input contains non-negative integars
+#[derive(Clone, Debug)]
+pub struct TriggerInput {
     pub value: u8,
 }
 
@@ -99,19 +117,15 @@ pub enum AxisEvent {
     Touchpad(TouchAxisInput),
     LStick(JoyAxisInput),
     RStick(JoyAxisInput),
+    Mouse(MouseAxisInput),
 }
 
-/// Trigger input contains non-negative integars
-#[derive(Clone, Debug)]
-pub struct TriggerInput {
-    pub value: u8,
-}
-/// Trigger events contain positive values indicating how far a trigger is pulled
+/// Trigger events contain values indicating how far a trigger is pulled
 #[derive(Clone, Debug)]
 pub enum TriggerEvent {
     ATriggerL(TriggerInput),
     ATriggerR(TriggerInput),
-    MouseWheel(TriggerInput),
+    MouseWheel(MouseWheelInput),
 }
 
 /// AccelerometerEvent has data from the accelerometer

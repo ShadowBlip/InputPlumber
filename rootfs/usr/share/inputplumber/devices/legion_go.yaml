@@ -20,16 +20,11 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  - group: keyboard # Block data
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6182
-      interface_num: 0
-  - group: mouse # Only for optical X/Y
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6182
-      interface_num: 1
+  #- group: keyboard # Block data
+  #  hidraw:
+  #    vendor_id: 0x17ef
+  #    product_id: 0x6182
+  #    interface_num: 0
   - group: gamepad
     hidraw:
       vendor_id: 0x17ef
@@ -40,6 +35,16 @@ source_devices:
       vendor_id: 0x17ef
       product_id: 0x6182
       interface_num: 3
+  - group: mouse # Only for optical X/Y
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6185
+      interface_num: 1
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6185
+      interface_num: 2
 
 # The ID of a device event mapping in the 'event_maps' folder
 event_map_id: lego
