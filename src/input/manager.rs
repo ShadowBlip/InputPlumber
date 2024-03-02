@@ -648,6 +648,7 @@ impl Manager {
             if let Err(e) = result {
                 log::error!("Unable to send command: {:?}", e);
             }
+            break;
         }
 
         // Perform an initial event device discovery
@@ -675,6 +676,7 @@ impl Manager {
             if let Err(e) = result {
                 log::error!("Unable to send command: {:?}", e);
             }
+            break;
         }
 
         // Start a task to dispatch filesystem watch events to the `run()` loop
