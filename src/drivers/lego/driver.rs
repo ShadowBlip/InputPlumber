@@ -6,7 +6,8 @@ use packed_struct::{types::SizedInteger, PackedStruct};
 use super::{
     event::{
         AccelerometerEvent, AccelerometerInput, AxisEvent, BinaryInput, ButtonEvent, Event,
-        JoyAxisInput, StatusEvent, StatusInput, TouchAxisInput, TriggerEvent, TriggerInput,
+        JoyAxisInput, MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput, TriggerEvent,
+        TriggerInput,
     },
     hid_report::{
         DInputDataLeftReport, DInputDataRightReport, KeyboardDataReport, MouseDataReport,
@@ -16,11 +17,12 @@ use super::{
 
 pub const VID: u16 = 0x17ef;
 pub const PID: u16 = 0x6182;
+pub const PID2: u16 = 0x6185;
 
 const DINPUT_PACKET_SIZE: usize = 13;
 const XINPUT_PACKET_SIZE: usize = 60;
 const KEYBOARD_PACKET_SIZE: usize = 15;
-const MOUSE_PACKET_SIZE: usize = 8;
+const MOUSE_PACKET_SIZE: usize = 7;
 const TOUCHPAD_PACKET_SIZE: usize = 20;
 const HID_TIMEOUT: i32 = 5000;
 
@@ -38,12 +40,12 @@ pub const ACCEL_X_MAX: f64 = 255.0;
 pub const ACCEL_X_MIN: f64 = 0.0;
 pub const ACCEL_Y_MAX: f64 = 255.0;
 pub const ACCEL_Y_MIN: f64 = 0.0;
-pub const MOUSE_WHEEL_MAX: f64 = 255.0; //TODO: How does this work?
-pub const MOUSE_WHEEL_MIN: f64 = 128.0;
-pub const MOUSE_X_MAX: f64 = 4095.0;
-pub const MOUSE_X_MIN: f64 = 0.0;
-pub const MOUSE_Y_MAX: f64 = 4095.0;
-pub const MOUSE_Y_MIN: f64 = 0.0;
+pub const MOUSE_WHEEL_MAX: f64 = 120.0;
+pub const MOUSE_WHEEL_MIN: f64 = -120.0;
+pub const MOUSE_X_MAX: f64 = 2048.0;
+pub const MOUSE_X_MIN: f64 = -2048.0;
+pub const MOUSE_Y_MAX: f64 = 2048.0;
+pub const MOUSE_Y_MIN: f64 = -2048.0;
 pub const PAD_X_MAX: f64 = 1024.0;
 pub const PAD_X_MIN: f64 = 0.0;
 pub const PAD_Y_MAX: f64 = 1024.0;
@@ -79,12 +81,13 @@ pub struct Driver {
 
 impl Driver {
     pub fn new(path: String) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let fmtpath = path.clone();
         let path = CString::new(path)?;
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
         let info = device.get_device_info()?;
-        if info.vendor_id() != VID || info.product_id() != PID {
-            return Err("Device '{path}' is not a Legion Go Controller".into());
+        if info.vendor_id() != VID || (info.product_id() != PID && info.product_id() != PID2) {
+            return Err(format!("Device '{fmtpath}' is not a Legion Go Controller").into());
         }
 
         Ok(Self {
@@ -315,9 +318,9 @@ impl Driver {
         let input_report = MouseDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        // log::debug!("--- Input report ---");
-        // log::debug!("{input_report}");
-        // log::debug!("---- End Report ----");
+        log::debug!("--- Input report ---");
+        log::debug!("{input_report}");
+        log::debug!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_mouseinput_state(input_report);
@@ -586,7 +589,7 @@ impl Driver {
                 })));
             }
             if state.mouse_z != old_state.mouse_z {
-                events.push(Event::Trigger(TriggerEvent::MouseWheel(TriggerInput {
+                events.push(Event::Trigger(TriggerEvent::MouseWheel(MouseWheelInput {
                     value: state.mouse_z,
                 })));
             }

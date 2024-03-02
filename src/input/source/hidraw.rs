@@ -105,7 +105,8 @@ impl HIDRawDevice {
             driver.run().await?;
         }
         if self.info.vendor_id() == drivers::lego::driver::VID
-            && self.info.product_id() == drivers::lego::driver::PID
+            && (self.info.product_id() == drivers::lego::driver::PID
+                || self.info.product_id() == drivers::lego::driver::PID2)
         {
             log::info!("Detected Legion Go");
             let tx = self.composite_tx.clone();

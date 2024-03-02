@@ -2,48 +2,6 @@
 #![allow(warnings)]
 use packed_struct::prelude::*;
 
-// Input report axis ranges
-// TODO: actual mouse range
-// TODO: ACCEL Left/Right X/Y, Z?
-pub const ACCEL_X_MAX_LEFT: f64 = 1.0;
-pub const ACCEL_X_MAX_RIGHT: f64 = 1.0;
-pub const ACCEL_X_MIN_LEFT: f64 = 0.0;
-pub const ACCEL_X_MIN_RIGHT: f64 = 0.0;
-pub const ACCEL_Y_MAX_LEFT: f64 = 1.0;
-pub const ACCEL_Y_MAX_RIGHT: f64 = 1.0;
-pub const ACCEL_Y_MIN_LEFT: f64 = 0.0;
-pub const ACCEL_Y_MIN_RIGHT: f64 = 0.0;
-pub const MOUSE_WHEEL_MAX: f64 = 1.0;
-pub const MOUSE_WHEEL_MIN: f64 = -1.0;
-pub const MOUSE_X_MAX: f64 = 4095.0;
-pub const MOUSE_X_MIN: f64 = 0.0;
-pub const MOUSE_Y_MAX: f64 = 4095.0;
-pub const MOUSE_Y_MIN: f64 = 0.0;
-pub const PAD_X_MAX: f64 = 1024.0;
-pub const PAD_X_MIN: f64 = 0.0;
-pub const PAD_Y_MAX: f64 = 1024.0;
-pub const PAD_Y_MIN: f64 = 0.0;
-pub const STICK_X_MAX: f64 = 255.0;
-pub const STICK_X_MIN: f64 = 0.0;
-pub const STICK_Y_MAX: f64 = 255.0;
-pub const STICK_Y_MIN: f64 = 0.0;
-pub const TRIGG_MAX: f64 = 255.0;
-pub const TRIGG_MIN: f64 = 0.0;
-
-// NORMALIZED AXIS
-pub const ACCEL_X_LEFT_NORM: f64 = 1.0 / ACCEL_X_MAX_LEFT;
-pub const ACCEL_X_RIGHT_NORM: f64 = 1.0 / ACCEL_X_MAX_RIGHT;
-pub const ACCEL_Y_LEFT_NORM: f64 = 1.0 / ACCEL_Y_MAX_LEFT;
-pub const ACCEL_Y_RIGHT_NORM: f64 = 1.0 / ACCEL_Y_MAX_RIGHT;
-pub const MOUSE_WHEEL_NORM: f64 = 1.0 / MOUSE_WHEEL_MAX;
-pub const MOUSE_X_NORM: f64 = 1.0 / MOUSE_X_MAX;
-pub const MOUSE_Y_NORM: f64 = 1.0 / MOUSE_Y_MAX;
-pub const PAD_X_AXIS_NORM: f64 = 1.0 / PAD_X_MAX;
-pub const PAD_Y_AXIS_NORM: f64 = 1.0 / PAD_Y_MAX;
-pub const STICK_X_AXIS_NORM: f64 = 1.0 / STICK_X_MAX;
-pub const STICK_Y_AXIS_NORM: f64 = 1.0 / STICK_Y_MAX;
-pub const TRIGG_AXIS_NORM: f64 = 1.0 / TRIGG_MAX;
-
 /// Different reports types
 // When in some modes there's another report decriptor with the same ID
 // as the touchpad whic is a keyboard with macros tied to different buttons.
@@ -385,7 +343,7 @@ pub struct XInputDataReport {
     pub unk_23: u8,
 
     #[packed_field(bytes = "25")]
-    pub mouse_z: u8,
+    pub mouse_z: i8,
 
     #[packed_field(bytes = "26..=27", endian = "msb")]
     pub touch_x_0: u16,
@@ -771,40 +729,38 @@ pub struct DInputDataRightReport {
 // # ReportID: 9 / Button: 0  0  1  0  0 | # | X:     0 | Y:     0 | Wheel:    0 | #
 // E: 000070.303202 7 09 04 00 00 00 00 00
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "8")]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "7")]
 pub struct MouseDataReport {
     // State
     #[packed_field(bytes = "0")]
     pub report_id: u8,
-    #[packed_field(bytes = "1")]
-    pub report_size: u8,
 
     // Buttons
-    #[packed_field(bits = "16")]
-    pub m1: bool,
-    #[packed_field(bits = "17")]
-    pub m2: bool,
-    #[packed_field(bits = "18")]
-    pub mouse_click: bool,
-    #[packed_field(bits = "19")]
-    pub m3: bool,
-    #[packed_field(bits = "20")]
+    #[packed_field(bits = "8")]
+    pub unk_1_0: bool,
+    #[packed_field(bits = "9")]
+    pub unk_1_1: bool,
+    #[packed_field(bits = "10")]
+    pub unk_1_2: bool,
+    #[packed_field(bits = "11")]
     pub y3: bool,
-    #[packed_field(bits = "21")]
-    pub unk_2_21: bool,
-    #[packed_field(bits = "22")]
-    pub unk_2_22: bool,
-    #[packed_field(bits = "23")]
-    pub unk_2_23: bool,
+    #[packed_field(bits = "12")]
+    pub m3: bool,
+    #[packed_field(bits = "13")]
+    pub mouse_click: bool,
+    #[packed_field(bits = "14")]
+    pub m2: bool,
+    #[packed_field(bits = "15")]
+    pub m1: bool,
 
     // Axes
-    #[packed_field(bits = "24..=35", endian = "lsb")]
-    pub mouse_x: Integer<u16, packed_bits::Bits<12>>,
-    #[packed_field(bits = "36..=47", endian = "lsb")]
-    pub mouse_y: Integer<u16, packed_bits::Bits<12>>,
+    #[packed_field(bits = "16..=27", endian = "msb")]
+    pub mouse_x: Integer<i16, packed_bits::Bits<12>>,
+    #[packed_field(bits = "28..=39", endian = "msb")]
+    pub mouse_y: Integer<i16, packed_bits::Bits<12>>,
+    #[packed_field(bytes = "5")]
+    pub mouse_z: i8,
     #[packed_field(bytes = "6")]
-    pub mouse_z: u8,
-    #[packed_field(bytes = "7")]
     pub report_count: u8,
 }
 
