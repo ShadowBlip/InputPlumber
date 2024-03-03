@@ -444,7 +444,7 @@ impl Manager {
                 continue;
             }
 
-            // Skip configs where the required source devices don't exist.
+            // Skip configs where the required source devices aren't physically present.
             if !config.sources_exist()? {
                 continue;
             }

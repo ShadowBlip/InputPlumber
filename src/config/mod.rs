@@ -134,7 +134,7 @@ impl CompositeDeviceConfig {
         };
         let evdev_configs = self.get_evdev_configs();
 
-        Ok(evdev_configs.len() == evdev_devices.len())
+        Ok(evdev_configs.len() >= 1)
     }
 
     /// Returns an array of all defined hidraw source devices
@@ -244,6 +244,15 @@ impl CompositeDeviceConfig {
         // an evdev definition in the config.
         let devices = procfs::device::get_all()?;
         for device in devices {
+            // Ignore virtual devices.
+            // TODO: Maybe in the future we will support virtual devices if we figure something
+            // out.
+
+            if is_virtual(&device) {
+                log::debug!("{} is virtual, skipping.", device.name);
+                continue;
+            }
+
             for evdev_config in evdev_configs.clone() {
                 let evdev_config = evdev_config.clone();
                 let mut has_matches = false;
@@ -375,4 +384,16 @@ impl CompositeDeviceConfig {
 
         Some(matches)
     }
+}
+
+/// Determines if a procfs device is virtual or real.
+fn is_virtual(device: &procfs::device::Device) -> bool {
+    if device.phys_path != "" {
+        return false;
+    }
+
+    if device.sysfs_path.contains("/devices/virtual") {
+        return true;
+    }
+    return false;
 }
