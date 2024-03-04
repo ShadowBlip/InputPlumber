@@ -3,7 +3,7 @@ pub mod bmi_imu;
 use std::error::Error;
 
 use glob_match::glob_match;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
@@ -12,6 +12,11 @@ use crate::{
     iio::device::Device,
     input::{capability::Capability, composite_device::Command},
 };
+
+use super::SourceCommand;
+
+/// Size of the [SourceCommand] buffer for receiving output events
+const BUFFER_SIZE: usize = 2048;
 
 /// DBusInterface exposing information about a IIO device
 pub struct DBusInterface {
@@ -58,11 +63,24 @@ pub fn get_dbus_path(id: String) -> String {
 pub struct IIODevice {
     info: Device,
     composite_tx: broadcast::Sender<Command>,
+    tx: mpsc::Sender<SourceCommand>,
+    rx: mpsc::Receiver<SourceCommand>,
 }
 
 impl IIODevice {
     pub fn new(info: Device, composite_tx: broadcast::Sender<Command>) -> Self {
-        Self { info, composite_tx }
+        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
+        Self {
+            info,
+            composite_tx,
+            tx,
+            rx,
+        }
+    }
+
+    /// Returns a transmitter channel that can be used to send events to this device
+    pub fn transmitter(&self) -> mpsc::Sender<SourceCommand> {
+        self.tx.clone()
     }
 
     pub fn get_capabilities(&self) -> Result<Vec<Capability>, Box<dyn Error>> {

@@ -1,7 +1,21 @@
-use std::{collections::HashMap, error::Error};
+use std::{
+    any::Any,
+    collections::HashMap,
+    error::Error,
+    os::fd::AsRawFd,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-use evdev::{AbsoluteAxisCode, Device, EventType, InputEvent};
-use tokio::sync::broadcast;
+use evdev::{AbsoluteAxisCode, Device, EventType, FFEffect, InputEvent};
+use nix::fcntl::{FcntlArg, OFlag};
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{self, error::TryRecvError},
+    },
+    time::sleep,
+};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
@@ -11,9 +25,17 @@ use crate::{
         capability::Capability,
         composite_device::Command,
         event::{evdev::EvdevEvent, Event},
+        output_event::OutputEvent,
     },
     procfs,
 };
+
+use super::SourceCommand;
+
+/// Size of the [SourceCommand] buffer for receiving output events
+const BUFFER_SIZE: usize = 2048;
+/// How long to sleep before polling for events.
+const POLL_RATE: Duration = Duration::from_micros(1666);
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
 /// a [Manager]. It works by sending command messages to a channel that the
@@ -88,19 +110,40 @@ impl DBusInterface {
 pub struct EventDevice {
     info: procfs::device::Device,
     composite_tx: broadcast::Sender<Command>,
+    tx: mpsc::Sender<SourceCommand>,
+    rx: mpsc::Receiver<SourceCommand>,
+    ff_effects: HashMap<i16, FFEffect>,
 }
 
 impl EventDevice {
     pub fn new(info: procfs::device::Device, composite_tx: broadcast::Sender<Command>) -> Self {
-        Self { info, composite_tx }
+        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
+        Self {
+            info,
+            composite_tx,
+            tx,
+            rx,
+            ff_effects: HashMap::new(),
+        }
+    }
+
+    /// Returns a transmitter channel that can be used to send events to this device
+    pub fn transmitter(&self) -> mpsc::Sender<SourceCommand> {
+        self.tx.clone()
     }
 
     /// Run the source device handler
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let path = self.get_device_path();
         log::debug!("Opening device at: {}", path);
         let mut device = Device::open(path.clone())?;
         device.grab()?;
+
+        // Set the device to do non-blocking reads
+        // TODO: use epoll to wake up when data is available
+        // https://github.com/emberian/evdev/blob/main/examples/evtest_nonblocking.rs
+        let raw_fd = device.as_raw_fd();
+        nix::fcntl::fcntl(raw_fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
 
         // Query information about the device to get the absolute ranges
         let mut axes_info = HashMap::new();
@@ -110,34 +153,128 @@ impl EventDevice {
             axes_info.insert(axis, info);
         }
 
-        // Read events from the device and send them to the composite device
+        // Loop to read events from the device and commands over the channel
         log::debug!("Reading events from {}", path);
-        let mut events = device.into_event_stream()?;
-        while let Ok(event) = events.next_event().await {
-            log::trace!("Received event: {:?}", event);
-            // If this is an ABS event, get the min/max info for this type of
-            // event so we can normalize the value.
-            let abs_info = if event.event_type() == EventType::ABSOLUTE {
-                axes_info.get(&AbsoluteAxisCode(event.code()))
-            } else {
-                None
+        'main: loop {
+            // Read events from the device
+            let events = {
+                let result = device.fetch_events();
+                match result {
+                    Ok(events) => events.collect(),
+                    Err(err) => match err.kind() {
+                        // Do nothing if this would block
+                        std::io::ErrorKind::WouldBlock => vec![],
+                        _ => {
+                            log::trace!("Failed to fetch events: {:?}", err);
+                            let msg = format!("Failed to fetch events: {:?}", err);
+                            drop(err);
+                            return Err(msg.into());
+                        }
+                    },
+                }
             };
 
-            // Convert the event into an [EvdevEvent] and optionally include
-            // the axis information with min/max values
-            let mut evdev_event: EvdevEvent = event.into();
-            if let Some(info) = abs_info {
-                evdev_event.set_abs_info(*info);
+            for event in events {
+                log::trace!("Received event: {:?}", event);
+                // If this is an ABS event, get the min/max info for this type of
+                // event so we can normalize the value.
+                let abs_info = if event.event_type() == EventType::ABSOLUTE {
+                    axes_info.get(&AbsoluteAxisCode(event.code()))
+                } else {
+                    None
+                };
+
+                // Convert the event into an [EvdevEvent] and optionally include
+                // the axis information with min/max values
+                let mut evdev_event: EvdevEvent = event.into();
+                if let Some(info) = abs_info {
+                    evdev_event.set_abs_info(*info);
+                }
+
+                // Send the event to the composite device
+                let event = Event::Evdev(evdev_event);
+                self.composite_tx
+                    .send(Command::ProcessEvent(self.get_id(), event))?;
             }
 
-            // Send the event to the composite device
-            let event = Event::Evdev(evdev_event);
-            self.composite_tx
-                .send(Command::ProcessEvent(self.get_id(), event))?;
+            // Read commands sent to this device from the channel until it is
+            // empty.
+            loop {
+                match self.rx.try_recv() {
+                    Ok(cmd) => match cmd {
+                        SourceCommand::UploadEffect(data, composite_dev) => {
+                            self.upload_ff_effect(&mut device, data, composite_dev);
+                        }
+                        SourceCommand::EraseEffect(id, composite_dev) => {
+                            self.erase_ff_effect(id, composite_dev);
+                        }
+                        SourceCommand::WriteEvent(event) => {
+                            log::debug!("Received output event: {:?}", event);
+                            if let OutputEvent::Evdev(input_event) = event {
+                                if let Err(e) = device.send_events(&[input_event]) {
+                                    log::error!("Failed to write output event: {:?}", e);
+                                    break 'main;
+                                }
+                            }
+                        }
+                        SourceCommand::Stop => break 'main,
+                    },
+                    Err(e) => match e {
+                        TryRecvError::Empty => break,
+                        TryRecvError::Disconnected => {
+                            log::debug!("Receive channel disconnected");
+                            break 'main;
+                        }
+                    },
+                };
+            }
+
+            // Sleep for the polling time
+            sleep(POLL_RATE).await;
         }
+
         log::debug!("Stopped reading device events");
 
         Ok(())
+    }
+
+    /// Upload the given effect data to the device and send the result to
+    /// the composite device.
+    fn upload_ff_effect(
+        &mut self,
+        device: &mut Device,
+        data: evdev::FFEffectData,
+        composite_dev: std::sync::mpsc::Sender<Result<i16, Box<dyn Error + Send + Sync>>>,
+    ) {
+        log::debug!("Uploading FF effect data");
+        let res = match device.upload_ff_effect(data) {
+            Ok(effect) => {
+                let id = effect.id() as i16;
+                self.ff_effects.insert(id, effect);
+                composite_dev.send(Ok(id))
+            }
+            Err(e) => {
+                let err = format!("Failed to upload effect: {:?}", e);
+                composite_dev.send(Err(err.into()))
+            }
+        };
+        if let Err(err) = res {
+            log::error!("Failed to send upload result: {:?}", err);
+        }
+    }
+
+    /// Erase the effect from the device with the given effect id and send the
+    /// result to the composite device.
+    fn erase_ff_effect(
+        &mut self,
+        id: i16,
+        composite_dev: std::sync::mpsc::Sender<Result<(), Box<dyn Error + Send + Sync>>>,
+    ) {
+        log::debug!("Erasing FF effect data");
+        self.ff_effects.remove(&id);
+        if let Err(err) = composite_dev.send(Ok(())) {
+            log::error!("Failed to send erase result: {:?}", err);
+        }
     }
 
     /// Returns a unique identifier for the source device.
@@ -224,6 +361,14 @@ impl EventDevice {
                 _ => (),
             }
         }
+
+        Ok(capabilities)
+    }
+
+    /// Returns the output capabilities (such as Force Feedback) that this source
+    /// device can fulfill.
+    pub fn get_output_capabilities(&self) -> Result<Vec<Capability>, Box<dyn Error>> {
+        let capabilities = vec![];
 
         Ok(capabilities)
     }

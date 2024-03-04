@@ -1,12 +1,14 @@
 use std::{
-    collections::{HashMap, HashSet},
+    borrow::Borrow,
+    collections::{BTreeSet, HashMap, HashSet},
     error::Error,
 };
 
+use evdev::InputEvent;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinSet,
-    time::{sleep, Duration},
+    time::Duration,
 };
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
@@ -23,11 +25,14 @@ use crate::{
             Event,
         },
         manager::SourceDeviceInfo,
+        output_event::UinputOutputEvent,
         source::{self, SourceDevice},
         target::TargetCommand,
     },
     udev::{hide_device, unhide_device},
 };
+
+use super::{output_event::OutputEvent, source::SourceCommand};
 
 /// Size of the command channel buffer for processing input events and commands.
 const BUFFER_SIZE: usize = 2048;
@@ -51,6 +56,7 @@ pub enum InterceptMode {
 #[derive(Debug, Clone)]
 pub enum Command {
     ProcessEvent(String, Event),
+    ProcessOutputEvent(OutputEvent),
     GetCapabilities(mpsc::Sender<HashSet<Capability>>),
     SetInterceptMode(InterceptMode),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
@@ -280,8 +286,11 @@ pub struct CompositeDevice {
     tx: broadcast::Sender<Command>,
     /// Receiver channel for listening for commands
     rx: broadcast::Receiver<Command>,
+    /// Map of source device id to their respective transmitter channel.
+    /// E.g. {"evdev://event0": <Sender>}
+    source_devices: HashMap<String, mpsc::Sender<SourceCommand>>,
     /// Source devices that this composite device will consume.
-    source_devices: Vec<SourceDevice>,
+    source_devices_discovered: Vec<SourceDevice>,
     /// HashSet of source devices that are blocked from passing their input events to target
     /// events.
     source_devices_blocked: HashSet<String>,
@@ -297,6 +306,12 @@ pub struct CompositeDevice {
     /// Map of DBusDevice DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
     target_dbus_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
+    /// Set of available Force Feedback effect IDs that are not in use
+    ff_effect_ids: BTreeSet<i16>,
+    /// Source devices use their own IDs for uploaded force feedback effects.
+    /// This mapping maps the composite device effect ids to source device effect ids.
+    /// E.g. {3: {"evdev://event0": 6}}
+    ff_effect_id_source_map: HashMap<i16, HashMap<String, i16>>,
 }
 
 impl CompositeDevice {
@@ -322,13 +337,16 @@ impl CompositeDevice {
             intercept_mode: InterceptMode::None,
             tx,
             rx,
-            source_devices: Vec::new(),
+            source_devices: HashMap::new(),
+            source_devices_discovered: Vec::new(),
             source_devices_blocked: HashSet::new(),
             source_device_paths: Vec::new(),
             source_device_tasks: JoinSet::new(),
             source_devices_used: Vec::new(),
             target_devices: HashMap::new(),
             target_dbus_devices: HashMap::new(),
+            ff_effect_ids: (0..64).collect(),
+            ff_effect_id_source_map: HashMap::new(),
         };
 
         // Load the capability map if one was defined
@@ -390,6 +408,16 @@ impl CompositeDevice {
         self.run_source_devices().await?;
 
         // Keep track of all target devices
+        for target in targets.values() {
+            if let Err(e) = target
+                .send(TargetCommand::SetCompositeDevice(self.tx.clone()))
+                .await
+            {
+                return Err(
+                    format!("Failed to set composite device for target device: {:?}", e).into(),
+                );
+            }
+        }
         self.target_devices = targets;
 
         // Loop and listen for command events
@@ -400,6 +428,11 @@ impl CompositeDevice {
                 Command::ProcessEvent(device_id, event) => {
                     if let Err(e) = self.process_event(device_id, event).await {
                         log::error!("Failed to process event: {:?}", e);
+                    }
+                }
+                Command::ProcessOutputEvent(event) => {
+                    if let Err(e) = self.process_output_event(event).await {
+                        log::error!("Failed to process output event: {:?}", e);
                     }
                 }
                 Command::GetCapabilities(sender) => {
@@ -577,13 +610,15 @@ impl CompositeDevice {
 
         log::debug!("Starting new source devices");
         // Start listening for events from all source devices
-        let sources = self.source_devices.drain(..);
+        let sources = self.source_devices_discovered.drain(..);
         for source in sources {
             match source {
                 // If the source device is an event device (i.e. from /dev/input/eventXX),
                 // then start listening for inputs from that device.
-                SourceDevice::EventDevice(device) => {
+                SourceDevice::EventDevice(mut device) => {
                     let device_id = device.get_id();
+                    let source_tx = device.transmitter();
+                    self.source_devices.insert(device_id.clone(), source_tx);
                     let tx = self.tx.clone();
                     self.source_device_tasks.spawn(async move {
                         if let Err(e) = device.run().await {
@@ -600,6 +635,8 @@ impl CompositeDevice {
                 // then start listening for inputs from that device.
                 SourceDevice::HIDRawDevice(device) => {
                     let device_id = device.get_id();
+                    let source_tx = device.transmitter();
+                    self.source_devices.insert(device_id.clone(), source_tx);
                     let tx = self.tx.clone();
                     self.source_device_tasks.spawn(async move {
                         if let Err(e) = device.run().await {
@@ -616,6 +653,8 @@ impl CompositeDevice {
                 // then start listening for inputs from that device.
                 SourceDevice::IIODevice(device) => {
                     let device_id = device.get_id();
+                    let source_tx = device.transmitter();
+                    self.source_devices.insert(device_id.clone(), source_tx);
                     let tx = self.tx.clone();
                     self.source_device_tasks.spawn(async move {
                         if let Err(e) = device.run().await {
@@ -675,6 +714,150 @@ impl CompositeDevice {
             return Ok(());
         }
         self.handle_event(event).await?;
+
+        Ok(())
+    }
+
+    /// Process a single output event from a target device.
+    async fn process_output_event(&mut self, event: OutputEvent) -> Result<(), Box<dyn Error>> {
+        log::trace!("Received output event: {:?}", event);
+
+        // Handle any output events that need to upload FF effect data
+        if let OutputEvent::Uinput(uinput) = event.borrow() {
+            match uinput {
+                UinputOutputEvent::FFUpload(data, target_dev) => {
+                    // Upload the effect data to the source devices
+                    let mut source_effect_ids = HashMap::new();
+                    for (source_id, source) in self.source_devices.iter() {
+                        log::debug!("Uploading effect to {source_id}");
+                        let (tx, rx) = std::sync::mpsc::channel();
+                        source.send(SourceCommand::UploadEffect(*data, tx)).await?;
+
+                        // Wait for the result of the upload
+                        match rx.recv_timeout(Duration::from_secs(1)) {
+                            Ok(upload_result) => {
+                                if let Err(e) = upload_result {
+                                    log::debug!(
+                                        "Failed to upload FF effect to {source_id}: {:?}",
+                                        e
+                                    );
+                                    continue;
+                                }
+                                let source_effect_id = upload_result.unwrap();
+                                log::debug!("Successfully uploaded effect with source effect id {source_effect_id}");
+                                source_effect_ids.insert(source_id.clone(), source_effect_id);
+                            }
+                            Err(err) => {
+                                log::error!(
+                                    "Failed to receive response from source device {source_id} to upload effect: {:?}",
+                                    err
+                                );
+                            }
+                        }
+                    }
+
+                    // If no source devices uploaded the effect, don't bother
+                    // allocating an effect id.
+                    if source_effect_ids.is_empty() {
+                        log::debug!("No source device available to handle FF effect");
+                        target_dev.send(None)?;
+                    }
+
+                    // If upload was successful, return an effect ID
+                    let id = self.ff_effect_ids.iter().next().copied();
+                    if let Some(id) = id {
+                        log::debug!("Uploaded effect with effect id {id}");
+                        self.ff_effect_ids.remove(&id);
+                        self.ff_effect_id_source_map.insert(id, source_effect_ids);
+                        target_dev.send(Some(id))?;
+                    } else {
+                        target_dev.send(None)?;
+                    }
+                }
+                UinputOutputEvent::FFErase(effect_id) => {
+                    let effect_id = *effect_id as i16;
+                    // Erase the effect from source devices
+                    if let Some(source_effect_ids) = self.ff_effect_id_source_map.get(&effect_id) {
+                        for (source_id, source_effect_id) in source_effect_ids.iter() {
+                            let Some(source) = self.source_devices.get(source_id) else {
+                                continue;
+                            };
+                            log::debug!("Erasing effect from {source_id}");
+                            let (tx, rx) = std::sync::mpsc::channel();
+                            source
+                                .send(SourceCommand::EraseEffect(*source_effect_id, tx))
+                                .await?;
+
+                            // Wait for the result of the erase
+                            match rx.recv_timeout(Duration::from_secs(1)) {
+                                Ok(erase_result) => {
+                                    if let Err(e) = erase_result {
+                                        log::debug!(
+                                            "Failed to erase FF effect from {source_id}: {:?}",
+                                            e
+                                        );
+                                        continue;
+                                    }
+                                }
+                                Err(err) => {
+                                    log::error!("Failed to receive response from source device {source_id} to erase effect: {:?}", err);
+                                }
+                            }
+                        }
+                    }
+
+                    // Add the effect ID to list of available effect ids
+                    log::debug!("Erased effect with effect id {effect_id}");
+                    self.ff_effect_ids.insert(effect_id);
+                    self.ff_effect_id_source_map.remove(&effect_id);
+                }
+            }
+
+            log::trace!("Available effect IDs: {:?}", self.ff_effect_ids);
+            log::debug!("Used effect IDs: {:?}", self.ff_effect_id_source_map);
+
+            return Ok(());
+        }
+
+        // TODO: Only write the event to devices that are capabile of handling it
+        for (source_id, source) in self.source_devices.iter() {
+            // If this is a force feedback event, translate the effect id into
+            // the source device's effect id.
+            if let OutputEvent::Evdev(input_event) = event {
+                if input_event.event_type().0 == evdev::EventType::FORCEFEEDBACK.0 {
+                    // Lookup the source effect ids for the effect
+                    let effect_id = input_event.code() as i16;
+                    let value = input_event.value();
+                    let Some(source_effect_ids) = self.ff_effect_id_source_map.get(&effect_id)
+                    else {
+                        log::warn!("Received FF event with unknown id: {effect_id}");
+                        continue;
+                    };
+
+                    // Lookup the source effect id for this source device
+                    let Some(source_effect_id) = source_effect_ids.get(source_id) else {
+                        log::warn!("Unable to find source effect id for effect {effect_id} from {source_id}");
+                        continue;
+                    };
+
+                    // Create a new FF event with the source device effect id.
+                    let new_event = InputEvent::new_now(
+                        evdev::EventType::FORCEFEEDBACK.0,
+                        *source_effect_id as u16,
+                        value,
+                    );
+                    let output_event = OutputEvent::Evdev(new_event);
+
+                    // Write the FF event to the source device
+                    let event = SourceCommand::WriteEvent(output_event);
+                    source.send(event).await?;
+                    continue;
+                }
+            }
+
+            let event = SourceCommand::WriteEvent(event.clone());
+            source.send(event.clone()).await?;
+        }
 
         Ok(())
     }
@@ -1089,7 +1272,7 @@ impl CompositeDevice {
                 let id = device.get_id();
                 let device_path = device.get_device_path();
                 let source_device = source::SourceDevice::EventDevice(device);
-                self.source_devices.push(source_device);
+                self.source_devices_discovered.push(source_device);
                 self.source_device_paths.push(device_path);
                 self.source_devices_used.push(id.clone());
 
@@ -1119,7 +1302,7 @@ impl CompositeDevice {
                 let id = device.get_id();
                 let device_path = device.get_device_path();
                 let source_device = source::SourceDevice::HIDRawDevice(device);
-                self.source_devices.push(source_device);
+                self.source_devices_discovered.push(source_device);
                 self.source_device_paths.push(device_path);
                 self.source_devices_used.push(id.clone());
 
@@ -1148,7 +1331,7 @@ impl CompositeDevice {
                 let id = device.get_id();
                 let device_path = device.get_device_path();
                 let source_device = source::SourceDevice::IIODevice(device);
-                self.source_devices.push(source_device);
+                self.source_devices_discovered.push(source_device);
                 self.source_device_paths.push(device_path);
                 self.source_devices_used.push(id.clone());
 

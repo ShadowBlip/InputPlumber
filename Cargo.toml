@@ -34,6 +34,7 @@ log = { version = "0.4.20", features = [
   "max_level_trace",
   "release_max_level_debug",
 ] }
+nix = { version = "0.28.0", features = ["fs"] }
 packed_struct = "0.10.1"
 serde = { version = "1.0.192", features = ["derive"] }
 serde_yaml = "0.9.27"
