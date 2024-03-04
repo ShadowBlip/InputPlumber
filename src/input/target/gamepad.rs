@@ -4,10 +4,16 @@ use std::{collections::HashMap, error::Error};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
-    AbsInfo, AbsoluteAxisCode, AttributeSet, InputEvent, KeyCode, SynchronizationCode,
-    SynchronizationEvent, UinputAbsSetup,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffectCode, InputEvent, KeyCode,
+    SynchronizationCode, SynchronizationEvent, UinputAbsSetup,
 };
-use tokio::sync::{broadcast, mpsc};
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{self, error::TryRecvError},
+    },
+    time::Duration,
+};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
@@ -19,7 +25,10 @@ use crate::input::{
 
 use super::TargetCommand;
 
+/// Size of the [TargetCommand] buffer for receiving input events
 const BUFFER_SIZE: usize = 2048;
+/// How long to sleep before polling for events.
+const POLL_RATE: Duration = Duration::from_micros(1666);
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
 /// a [GenericGamepad].
@@ -98,30 +107,54 @@ impl GenericGamepad {
     /// Creates and runs the target device
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Creating virtual gamepad");
-        let mut device = self.create_virtual_device()?;
+        let device = self.create_virtual_device()?;
+        let mut event_stream = device.into_event_stream()?;
+        let device = event_stream.device_mut();
 
         // Query information about the device to get the absolute ranges
         let axes_map = self.get_abs_info();
 
-        // TODO: Listen for events (Force Feedback Events)
-        //let event_stream = device.into_event_stream()?;
-
-        // Listen for send events
-        log::debug!("Started listening for events to send");
-        while let Some(command) = self.rx.recv().await {
-            match command {
-                TargetCommand::WriteEvent(event) => {
-                    log::trace!("Got event to emit: {:?}", event);
-                    let evdev_events = self.translate_event(event, axes_map.clone());
-                    device.emit(evdev_events.as_slice())?;
-                    device.emit(&[SynchronizationEvent::new(
-                        SynchronizationCode::SYN_REPORT,
-                        0,
-                    )
-                    .into()])?;
+        log::debug!("Started listening for events");
+        loop {
+            // Listen for events (Force Feedback Events)
+            {
+                let result = device.fetch_events();
+                match result {
+                    Ok(events) => {
+                        for event in events {
+                            log::trace!("Found event: {:?}", event);
+                        }
+                    }
+                    Err(err) => match err.kind() {
+                        std::io::ErrorKind::WouldBlock => (),
+                        _ => return Err(err.kind().to_string().into()),
+                    },
                 }
-                TargetCommand::Stop => break,
-            };
+            }
+
+            // Listen for target commands
+            let result = self.rx.try_recv();
+            match result {
+                Ok(command) => match command {
+                    TargetCommand::WriteEvent(event) => {
+                        log::trace!("Got event to emit: {:?}", event);
+                        let evdev_events = self.translate_event(event, axes_map.clone());
+                        device.emit(evdev_events.as_slice())?;
+                        device.emit(&[SynchronizationEvent::new(
+                            SynchronizationCode::SYN_REPORT,
+                            0,
+                        )
+                        .into()])?;
+                    }
+                    TargetCommand::Stop => break,
+                },
+                Err(err) => match err {
+                    TryRecvError::Empty => (),
+                    TryRecvError::Disconnected => break,
+                },
+            }
+
+            tokio::time::sleep(POLL_RATE).await;
         }
 
         log::debug!("Stopping device");
@@ -206,13 +239,13 @@ impl GenericGamepad {
         let abs_hat0y = UinputAbsSetup::new(AbsoluteAxisCode::ABS_HAT0Y, dpad_setup);
 
         // Setup Force Feedback
-        //let mut ff = AttributeSet::<FFEffectCode>::new();
-        //ff.insert(FFEffectCode::FF_RUMBLE);
-        //ff.insert(FFEffectCode::FF_PERIODIC);
-        //ff.insert(FFEffectCode::FF_SQUARE);
-        //ff.insert(FFEffectCode::FF_TRIANGLE);
-        //ff.insert(FFEffectCode::FF_SINE);
-        //ff.insert(FFEffectCode::FF_GAIN);
+        let mut ff = AttributeSet::<FFEffectCode>::new();
+        ff.insert(FFEffectCode::FF_RUMBLE);
+        ff.insert(FFEffectCode::FF_PERIODIC);
+        ff.insert(FFEffectCode::FF_SQUARE);
+        ff.insert(FFEffectCode::FF_TRIANGLE);
+        ff.insert(FFEffectCode::FF_SINE);
+        ff.insert(FFEffectCode::FF_GAIN);
 
         // Build the device
         let device = VirtualDeviceBuilder::new()?
@@ -226,7 +259,8 @@ impl GenericGamepad {
             .with_absolute_axis(&abs_rz)?
             .with_absolute_axis(&abs_hat0x)?
             .with_absolute_axis(&abs_hat0y)?
-            //.with_ff(&ff)?
+            .with_ff(&ff)?
+            .with_ff_effects_max(16)
             .build()?;
 
         Ok(device)
