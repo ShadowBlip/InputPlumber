@@ -66,7 +66,7 @@ pub struct KeyboardDevice {
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
-    _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
+    composite_tx: Option<broadcast::Sender<composite_device::Command>>,
 }
 
 impl KeyboardDevice {
@@ -75,7 +75,7 @@ impl KeyboardDevice {
         Self {
             conn,
             dbus_path: None,
-            _composite_tx: None,
+            composite_tx: None,
             tx,
             rx,
         }
@@ -89,6 +89,12 @@ impl KeyboardDevice {
     /// Returns a transmitter channel that can be used to send events to this device
     pub fn transmitter(&self) -> mpsc::Sender<TargetCommand> {
         self.tx.clone()
+    }
+
+    /// Configures the device to send output events to the given composite device
+    /// channel.
+    pub fn set_composite_device(&mut self, tx: broadcast::Sender<composite_device::Command>) {
+        self.composite_tx = Some(tx);
     }
 
     /// Creates a new instance of the device interface on DBus.
@@ -115,6 +121,9 @@ impl KeyboardDevice {
         log::debug!("Started listening for events to send");
         while let Some(command) = self.rx.recv().await {
             match command {
+                TargetCommand::SetCompositeDevice(tx) => {
+                    self.set_composite_device(tx);
+                }
                 TargetCommand::WriteEvent(event) => {
                     //log::debug!("Got event to emit: {:?}", event);
                     let evdev_events = self.translate_event(event, axis_map.clone());

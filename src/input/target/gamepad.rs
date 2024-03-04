@@ -1,25 +1,43 @@
 //! The GenericGamepad target provides a simple generic virtual gamepad based
 //! on the XBox 360 gamepad.
-use std::{collections::HashMap, error::Error};
+use std::{
+    collections::HashMap,
+    error::Error,
+    ops::DerefMut,
+    os::fd::AsRawFd,
+    sync::{Arc, Mutex},
+    thread,
+};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
-    AbsInfo, AbsoluteAxisCode, AttributeSet, InputEvent, KeyCode, SynchronizationCode,
-    SynchronizationEvent, UinputAbsSetup,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, EventSummary, FFEffectCode, FFStatusCode, InputEvent,
+    KeyCode, SynchronizationCode, SynchronizationEvent, UInputCode, UinputAbsSetup,
 };
-use tokio::sync::{broadcast, mpsc};
+use nix::fcntl::{FcntlArg, OFlag};
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{self, error::TryRecvError},
+    },
+    time::Duration,
+};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::input::{
     capability::Capability,
-    composite_device,
+    composite_device::Command,
     event::{evdev::EvdevEvent, native::NativeEvent},
+    output_event::{OutputEvent, UinputOutputEvent},
 };
 
 use super::TargetCommand;
 
+/// Size of the [TargetCommand] buffer for receiving input events
 const BUFFER_SIZE: usize = 2048;
+/// How long to sleep before polling for events.
+const POLL_RATE: Duration = Duration::from_micros(1666);
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
 /// a [GenericGamepad].
@@ -46,7 +64,7 @@ pub struct GenericGamepad {
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
-    _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
+    composite_tx: Option<broadcast::Sender<Command>>,
 }
 
 impl GenericGamepad {
@@ -57,7 +75,7 @@ impl GenericGamepad {
             dbus_path: None,
             tx,
             rx,
-            _composite_tx: None,
+            composite_tx: None,
         }
     }
 
@@ -82,6 +100,12 @@ impl GenericGamepad {
         self.tx.clone()
     }
 
+    /// Configures the device to send output events to the given composite device
+    /// channel.
+    pub fn set_composite_device(&mut self, tx: broadcast::Sender<Command>) {
+        self.composite_tx = Some(tx);
+    }
+
     /// Creates a new instance of the dbus device interface on DBus.
     pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         let conn = self.conn.clone();
@@ -98,30 +122,38 @@ impl GenericGamepad {
     /// Creates and runs the target device
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Creating virtual gamepad");
-        let mut device = self.create_virtual_device()?;
+        let device = self.create_virtual_device()?;
+
+        // Put the device behind an Arc Mutex so it can be shared between the
+        // read and write threads
+        let device = Arc::new(Mutex::new(device));
 
         // Query information about the device to get the absolute ranges
         let axes_map = self.get_abs_info();
 
-        // TODO: Listen for events (Force Feedback Events)
-        //let event_stream = device.into_event_stream()?;
-
-        // Listen for send events
-        log::debug!("Started listening for events to send");
+        // Listen for events from source devices
+        log::debug!("Started listening for events");
         while let Some(command) = self.rx.recv().await {
             match command {
+                TargetCommand::SetCompositeDevice(tx) => {
+                    self.set_composite_device(tx.clone());
+
+                    // Spawn a thread to listen for force feedback events
+                    let ff_device = device.clone();
+                    GenericGamepad::spawn_ff_thread(ff_device, tx);
+                }
                 TargetCommand::WriteEvent(event) => {
-                    log::trace!("Got event to emit: {:?}", event);
+                    log::debug!("Got event to emit: {:?}", event);
                     let evdev_events = self.translate_event(event, axes_map.clone());
-                    device.emit(evdev_events.as_slice())?;
-                    device.emit(&[SynchronizationEvent::new(
-                        SynchronizationCode::SYN_REPORT,
-                        0,
-                    )
-                    .into()])?;
+                    if let Ok(mut dev) = device.lock() {
+                        dev.emit(evdev_events.as_slice())?;
+                        dev.emit(&[
+                            SynchronizationEvent::new(SynchronizationCode::SYN_REPORT, 0).into(),
+                        ])?;
+                    }
                 }
                 TargetCommand::Stop => break,
-            };
+            }
         }
 
         log::debug!("Stopping device");
@@ -206,13 +238,13 @@ impl GenericGamepad {
         let abs_hat0y = UinputAbsSetup::new(AbsoluteAxisCode::ABS_HAT0Y, dpad_setup);
 
         // Setup Force Feedback
-        //let mut ff = AttributeSet::<FFEffectCode>::new();
-        //ff.insert(FFEffectCode::FF_RUMBLE);
-        //ff.insert(FFEffectCode::FF_PERIODIC);
-        //ff.insert(FFEffectCode::FF_SQUARE);
-        //ff.insert(FFEffectCode::FF_TRIANGLE);
-        //ff.insert(FFEffectCode::FF_SINE);
-        //ff.insert(FFEffectCode::FF_GAIN);
+        let mut ff = AttributeSet::<FFEffectCode>::new();
+        ff.insert(FFEffectCode::FF_RUMBLE);
+        ff.insert(FFEffectCode::FF_PERIODIC);
+        ff.insert(FFEffectCode::FF_SQUARE);
+        ff.insert(FFEffectCode::FF_TRIANGLE);
+        ff.insert(FFEffectCode::FF_SINE);
+        ff.insert(FFEffectCode::FF_GAIN);
 
         // Build the device
         let device = VirtualDeviceBuilder::new()?
@@ -226,9 +258,133 @@ impl GenericGamepad {
             .with_absolute_axis(&abs_rz)?
             .with_absolute_axis(&abs_hat0x)?
             .with_absolute_axis(&abs_hat0y)?
-            //.with_ff(&ff)?
+            .with_ff(&ff)?
+            .with_ff_effects_max(16)
             .build()?;
 
+        // Set the device to do non-blocking reads
+        // TODO: use epoll to wake up when data is available
+        // https://github.com/emberian/evdev/blob/main/examples/evtest_nonblocking.rs
+        let raw_fd = device.as_raw_fd();
+        nix::fcntl::fcntl(raw_fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
+
         Ok(device)
+    }
+
+    /// Spawns the force-feedback handler thread
+    fn spawn_ff_thread(ff_device: Arc<Mutex<VirtualDevice>>, tx: broadcast::Sender<Command>) {
+        tokio::task::spawn_blocking(move || {
+            loop {
+                // Read any events
+                if let Err(e) = GenericGamepad::process_ff(&ff_device, &tx) {
+                    log::warn!("Error processing FF events: {:?}", e);
+                }
+
+                // Sleep for the poll rate interval
+                thread::sleep(POLL_RATE);
+            }
+        });
+    }
+
+    /// Process force feedback events from the given device
+    fn process_ff(
+        device: &Arc<Mutex<VirtualDevice>>,
+        composite_dev: &broadcast::Sender<Command>,
+    ) -> Result<(), Box<dyn Error>> {
+        // Listen for events (Force Feedback Events)
+        let events = match device.lock() {
+            Ok(mut dev) => {
+                let res = dev.deref_mut().fetch_events();
+                match res {
+                    Ok(events) => events.collect(),
+                    Err(err) => match err.kind() {
+                        // Do nothing if this would block
+                        std::io::ErrorKind::WouldBlock => vec![],
+                        _ => {
+                            log::trace!("Failed to fetch events: {:?}", err);
+                            return Err(err.into());
+                        }
+                    },
+                }
+            }
+            Err(err) => {
+                log::trace!("Failed to lock device mutex: {:?}", err);
+                return Err(err.to_string().into());
+            }
+        };
+
+        const STOPPED: i32 = FFStatusCode::FF_STATUS_STOPPED.0 as i32;
+        const PLAYING: i32 = FFStatusCode::FF_STATUS_PLAYING.0 as i32;
+
+        // Process the events
+        for event in events {
+            match event.destructure() {
+                EventSummary::UInput(event, UInputCode::UI_FF_UPLOAD, ..) => {
+                    log::debug!("Got FF upload event");
+                    // Claim ownership of the FF upload and convert it to a FF_UPLOAD
+                    // event
+                    let mut event = device
+                        .lock()
+                        .map_err(|e| e.to_string())?
+                        .process_ff_upload(event)?;
+
+                    log::debug!("Upload effect: {:?}", event.effect());
+
+                    // Send the effect data to be uploaded to the device and wait
+                    // for an effect ID to be generated.
+                    let (tx, rx) = std::sync::mpsc::channel::<Option<i16>>();
+                    let upload =
+                        OutputEvent::Uinput(UinputOutputEvent::FFUpload(event.effect(), tx));
+                    if let Err(e) = composite_dev.send(Command::ProcessOutputEvent(upload)) {
+                        event.set_retval(-1);
+                        return Err(e.into());
+                    }
+                    let effect_id = match rx.recv_timeout(Duration::from_secs(1)) {
+                        Ok(id) => id,
+                        Err(e) => {
+                            event.set_retval(-1);
+                            return Err(e.into());
+                        }
+                    };
+
+                    // Set the effect ID for the FF effect
+                    if let Some(id) = effect_id {
+                        event.set_effect_id(id);
+                        event.set_retval(0);
+                    } else {
+                        log::warn!("Failed to get effect ID to upload FF effect");
+                        event.set_retval(-1);
+                    }
+                }
+                EventSummary::UInput(event, UInputCode::UI_FF_ERASE, ..) => {
+                    log::debug!("Got FF erase event");
+                    // Claim ownership of the FF erase event and convert it to a FF_ERASE
+                    // event.
+                    let event = device
+                        .lock()
+                        .map_err(|e| e.to_string())?
+                        .process_ff_erase(event)?;
+                    log::debug!("Erase effect: {:?}", event.effect_id());
+
+                    let erase = OutputEvent::Uinput(UinputOutputEvent::FFErase(event.effect_id()));
+                    composite_dev.send(Command::ProcessOutputEvent(erase))?;
+                }
+                EventSummary::ForceFeedback(.., effect_id, STOPPED) => {
+                    log::debug!("Stopped effect ID: {}", effect_id.0);
+                    log::debug!("Stopping event: {:?}", event);
+                    composite_dev.send(Command::ProcessOutputEvent(OutputEvent::Evdev(event)))?;
+                }
+                EventSummary::ForceFeedback(.., effect_id, PLAYING) => {
+                    log::debug!("Playing effect ID: {}", effect_id.0);
+                    log::debug!("Playing event: {:?}", event);
+                    composite_dev.send(Command::ProcessOutputEvent(OutputEvent::Evdev(event)))?;
+                }
+                _ => {
+                    log::debug!("Unhandled event: {:?}", event);
+                }
+            }
+        }
+
+        Ok(())
     }
 }

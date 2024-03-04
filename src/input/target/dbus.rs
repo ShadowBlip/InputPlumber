@@ -61,7 +61,7 @@ pub struct DBusDevice {
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
-    _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
+    composite_tx: Option<broadcast::Sender<composite_device::Command>>,
 }
 
 impl DBusDevice {
@@ -72,7 +72,7 @@ impl DBusDevice {
             state: State::default(),
             conn,
             dbus_path: None,
-            _composite_tx: None,
+            composite_tx: None,
             tx,
             rx,
         }
@@ -86,6 +86,12 @@ impl DBusDevice {
     /// Returns a transmitter channel that can be used to send events to this device
     pub fn transmitter(&self) -> mpsc::Sender<TargetCommand> {
         self.tx.clone()
+    }
+
+    /// Configures the device to send output events to the given composite device
+    /// channel.
+    pub fn set_composite_device(&mut self, tx: broadcast::Sender<composite_device::Command>) {
+        self.composite_tx = Some(tx);
     }
 
     /// Creates a new instance of the dbus device interface on DBus.
@@ -109,6 +115,9 @@ impl DBusDevice {
         log::debug!("Started listening for events to send");
         while let Some(command) = self.rx.recv().await {
             match command {
+                TargetCommand::SetCompositeDevice(tx) => {
+                    self.set_composite_device(tx);
+                }
                 TargetCommand::WriteEvent(event) => {
                     //log::debug!("Got event to emit: {:?}", event);
                     let dbus_events = self.translate_event(event);

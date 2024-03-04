@@ -1,4 +1,6 @@
-use super::event::native::NativeEvent;
+use tokio::sync::broadcast::Sender;
+
+use super::{composite_device::Command, event::native::NativeEvent};
 
 pub mod dbus;
 pub mod gamepad;
@@ -24,5 +26,6 @@ pub enum TargetDeviceType {
 #[derive(Debug, Clone)]
 pub enum TargetCommand {
     WriteEvent(NativeEvent),
+    SetCompositeDevice(Sender<Command>),
     Stop,
 }
