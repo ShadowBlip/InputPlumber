@@ -22,7 +22,8 @@ mod watcher;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     SimpleLogger::new().init().unwrap();
-    log::info!("Starting InputPlumber");
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    log::info!("Starting InputPlumber v{}", VERSION);
 
     // Setup CTRL+C handler
     tokio::spawn(async move {
