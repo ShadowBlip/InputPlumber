@@ -6,19 +6,28 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: Gamepads
+name: OneXPlayer mini A07
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
-matches: []
+matches:
+  - dmi_data:
+      product_name: ONEXPLAYER mini A07
+      sys_vendor: ONE-NETBOOK
+      cpu_vendor: AuthenticAMD
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
     evdev:
-      handler: js*
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:03:00.3-4/input0
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
@@ -26,5 +35,5 @@ target_devices:
   - mouse
   - keyboard
 
-# The ID of a device event mapping in the 'event_maps' folder
-event_map_id: xb360
+# The ID of a device event mapping in the 'capability_maps' folder
+capability_map_id: oxp3

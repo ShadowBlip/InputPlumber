@@ -51,5 +51,5 @@ target_devices:
   - mouse
   - keyboard
 
-# The ID of a device event mapping in the 'event_maps' folder
-event_map_id: oxp2
+# The ID of a device event mapping in the 'capability_maps' folder
+capability_map_id: oxp2

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../schema/capability_map_v1.json
 # Schema version number
 version: 1
 
@@ -13,12 +14,49 @@ id: oxp3
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
   - name: Turbo
-    from: keyboard
-    source_capabilities:
-      - Keyboard:Key:LeftCtrl
-      - Keyboard:Key:LeftAlt
-      - Keyboard:Key:LeftMeta
-    target_capability: Gamepad:Button:Base
+    source_events:
+      - keyboard: KeyLeftCtrl
+      - keyboard: KeyLeftAlt
+      - keyboard: KeyLeftMeta
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: KB (Short Press)
+    source_events:
+      - keyboard: KeyRightCtrl
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyO
+    target_event:
+      gamepad:
+        button: Keyboard
+  - name: Orange Button (Short Press)
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyD
+    target_event:
+      gamepad:
+        button: Guide
+  - name: Orange Button (Long Press)
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyG
+    target_event:
+      gamepad:
+        button: QuickAccess2
+  - name: Turbo + Orange Button
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeySysrq
+    target_event:
+      gamepad:
+        button: Screenshot
+  - name: KB + Orange Button
+    source_events:
+      - keyboard: KeyRightCtrl
+      - keyboard: KeyRightAlt
+      - keyboard: KeyDelete
+    target_event:
+      keyboard: KeyF13
 
 # List of events to filter from the source devices
 filtered_events: []

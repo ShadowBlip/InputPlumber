@@ -111,7 +111,7 @@ impl GenericGamepad {
         while let Some(command) = self.rx.recv().await {
             match command {
                 TargetCommand::WriteEvent(event) => {
-                    //log::debug!("Got event to emit: {:?}", event);
+                    log::trace!("Got event to emit: {:?}", event);
                     let evdev_events = self.translate_event(event, axes_map.clone());
                     device.emit(evdev_events.as_slice())?;
                     device.emit(&[SynchronizationEvent::new(

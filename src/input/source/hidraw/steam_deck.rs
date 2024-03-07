@@ -238,7 +238,7 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::QuickAccess(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Base)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::DPadDown(value) => NativeEvent::new(

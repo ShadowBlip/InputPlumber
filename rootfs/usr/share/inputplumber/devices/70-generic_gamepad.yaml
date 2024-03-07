@@ -6,35 +6,22 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: Steam Deck
+name: Gamepads
 
-# Only use this profile if *any* of the given matches match. If this list is
+# Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
-matches:
-  - dmi_data:
-      product_name: Galileo
-      sys_vendor: Valve
-      cpu_vendor: AuthenticAMD
-  - dmi_data:
-      product_name: Jupiter
-      sys_vendor: Valve
-      cpu_vendor: AuthenticAMD
+matches: []
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
-    hidraw:
-      vendor_id: 0x28de
-      product_id: 0x1205
-      interface_num: 2
+    evdev:
+      handler: js*
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
   - gamepad
   - mouse
   - keyboard
-
-# The ID of a device event mapping in the 'event_maps' folder
-event_map_id: deck
