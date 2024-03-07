@@ -17,6 +17,63 @@ pub enum LoadError {
     DeserializeError(#[from] serde_yaml::Error),
 }
 
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct CapabilityMap {
+    pub version: u32,
+    pub kind: String,
+    pub name: String,
+    pub id: String,
+    pub mapping: Vec<CapabilityMapping>,
+    //pub filtered_events: Option<Vec<Capability>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct CapabilityMapping {
+    pub name: String,
+    pub source_events: Vec<Capability>,
+    pub target_event: Capability,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct Capability {
+    pub gamepad: Option<GamepadCapability>,
+    pub keyboard: Option<String>,
+    pub mouse: Option<MouseCapability>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct GamepadCapability {
+    pub axis: Option<String>,
+    pub button: Option<String>,
+    pub trigger: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct MouseCapability {
+    pub button: Option<String>,
+    pub motion: Option<String>,
+}
+
+impl CapabilityMap {
+    /// Load a [CapabilityMap] from the given YAML string
+    pub fn from_yaml(content: String) -> Result<CapabilityMap, LoadError> {
+        let device: CapabilityMap = serde_yaml::from_str(content.as_str())?;
+        Ok(device)
+    }
+
+    /// Load a [CapabilityMap] from the given YAML file
+    pub fn from_yaml_file(path: String) -> Result<CapabilityMap, LoadError> {
+        let file = std::fs::File::open(path)?;
+        let device: CapabilityMap = serde_yaml::from_reader(file)?;
+        Ok(device)
+    }
+}
+
 /// Defines a platform match for loading a [CompositeDevice]
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -64,23 +121,6 @@ pub struct Hidraw {
     pub handler: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct EventMapping {
-    pub name: String,
-    pub from: String,
-    pub source_events: Vec<Event>,
-    pub emits: Event,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct Event {
-    pub code: String,
-    #[serde(rename = "type")]
-    pub event_type: String,
-}
-
 /// Defines a combined device
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -89,7 +129,7 @@ pub struct CompositeDeviceConfig {
     pub kind: String,
     pub name: String,
     pub matches: Vec<Match>,
-    pub event_map_id: String,
+    pub capability_map_id: Option<String>,
     pub source_devices: Vec<SourceDevice>,
     pub target_devices: Option<Vec<String>>,
 }
@@ -118,23 +158,22 @@ impl CompositeDeviceConfig {
         Ok(evdev_exists && hidraw_exists)
     }
 
-    /// Returns true if all the hidraw source devices in the config exist on the system
+    /// Returns true if any of the hidraw source devices in the config exist on the system
     fn sources_exist_hidraw(&self) -> Result<bool, Box<dyn Error>> {
         let Some(hidraw_devices) = self.get_matching_hidraw()? else {
             return Ok(true);
         };
 
-        Ok(hidraw_devices.len() >= 1)
+        Ok(!hidraw_devices.is_empty())
     }
 
-    /// Returns true if all the evdev source devices in the config exist on the system
+    /// Returns true if any of the evdev source devices in the config exist on the system
     fn sources_exist_evdev(&self) -> Result<bool, Box<dyn Error>> {
         let Some(evdev_devices) = self.get_matching_evdev()? else {
             return Ok(true);
         };
-        let evdev_configs = self.get_evdev_configs();
 
-        Ok(evdev_configs.len() >= 1)
+        Ok(!evdev_devices.is_empty())
     }
 
     /// Returns an array of all defined hidraw source devices
@@ -233,9 +272,11 @@ impl CompositeDeviceConfig {
     ) -> Result<Option<Vec<procfs::device::Device>>, Box<dyn Error>> {
         // Only consider evdev devices
         let evdev_configs = self.get_evdev_configs();
+        log::debug!("Got evdev configs: {:?}", evdev_configs);
 
         // If there are no evdev definitions, consider it a match
         if evdev_configs.is_empty() {
+            log::debug!("No evdev config was defined");
             return Ok(None);
         }
         let mut matches: Vec<procfs::device::Device> = Vec::new();
@@ -261,6 +302,7 @@ impl CompositeDeviceConfig {
                     if !glob_match(name.as_str(), device.name.as_str()) {
                         continue;
                     }
+                    log::debug!("Name in config '{}' matches device {}", name, device.name);
                     has_matches = true;
                 }
 
@@ -268,6 +310,11 @@ impl CompositeDeviceConfig {
                     if !glob_match(phys_path.as_str(), device.phys_path.as_str()) {
                         continue;
                     }
+                    log::debug!(
+                        "Phys path in config '{}' matches device {}",
+                        phys_path,
+                        device.phys_path
+                    );
                     has_matches = true;
                 }
 
@@ -276,6 +323,7 @@ impl CompositeDeviceConfig {
                         if !glob_match(handler.as_str(), handle.as_str()) {
                             continue;
                         }
+                        log::debug!("Handler in config '{}' matches device {}", handler, handle);
                         has_matches = true;
                     }
                 }

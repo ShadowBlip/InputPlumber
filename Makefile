@@ -43,10 +43,17 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	install -D -m 644 rootfs/usr/lib/systemd/system/$(NAME).service \
 		$(PREFIX)/lib/systemd/system/$(NAME).service
-	install -D -m 644 rootfs/usr/share/$(NAME)/devices/steam_deck.yaml \
-		$(PREFIX)/share/$(NAME)/devices/steam_deck.yaml
+	install -D -m 644 -t $(PREFIX)/share/$(NAME)/devices/ \
+		rootfs/usr/share/$(NAME)/devices/*
+	install -D -m 644 -t $(PREFIX)/share/$(NAME)/schema/ \
+		rootfs/usr/share/$(NAME)/schema/*
+	install -D -m 644 -t $(PREFIX)/share/$(NAME)/capability_maps/ \
+		rootfs/usr/share/$(NAME)/capability_maps/*
+	install -D -m 644 -t $(PREFIX)/share/$(NAME)/profiles/ \
+		rootfs/usr/share/$(NAME)/profiles/*
+		
 	@echo ""
-	@echo "Install completed. Enable service with:" 
+	@echo "Install completed. Enable service with:"
 	@echo "  systemctl enable --now $(NAME)"
 
 .PHONY: uninstall
@@ -54,7 +61,10 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/bin/$(NAME)
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
-	rm $(PREFIX)/share/$(NAME)/devices/steam_deck.yaml
+	rm -rf $(PREFIX)/share/$(NAME)/devices/
+	rm -rf $(PREFIX)/share/$(NAME)/schema/
+	rm -rf $(PREFIX)/share/$(NAME)/capability_maps/
+	rm -rf $(PREFIX)/share/$(NAME)/profiles/
 
 ##@ Development
 
@@ -77,7 +87,7 @@ run: setup debug ## Build and run
 
 .PHONY: clean
 clean: ## Remove build artifacts
-	rm -rf target
+	rm -rf target dist .cache
 
 .PHONY: format
 format: ## Run rustfmt on all source files

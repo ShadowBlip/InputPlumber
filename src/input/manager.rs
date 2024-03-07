@@ -9,6 +9,8 @@ use zbus::zvariant::ObjectPath;
 use zbus::Connection;
 use zbus_macros::dbus_interface;
 
+use crate::config::CapabilityMap;
+use crate::config::CapabilityMapping;
 use crate::config::CompositeDeviceConfig;
 use crate::constants::BUS_PREFIX;
 use crate::constants::BUS_TARGETS_PREFIX;
@@ -216,9 +218,18 @@ impl Manager {
         // TODO: Check to see if there's already a composite device running
         // but without all its source devices
 
+        // Lookup the capability map associated with this config if it exists
+        let capability_map = if let Some(map_id) = config.capability_map_id.clone() {
+            log::debug!("Found capability mapping in config: {}", map_id);
+            let capability_map = self.load_capability_mappings().await;
+            capability_map.get(&map_id).cloned()
+        } else {
+            None
+        };
+
         // Create a composite device to manage these devices
         log::info!("Found matching source devices: {:?}", config.name);
-        let device = CompositeDevice::new(self.dbus.clone(), config)?;
+        let device = CompositeDevice::new(self.dbus.clone(), config, capability_map)?;
 
         // Check to see if there's already a CompositeDevice for
         // these source devices.
@@ -720,6 +731,58 @@ impl Manager {
         });
 
         Ok(())
+    }
+
+    /// Loads all capability mappings in all default locations and returns a hashmap
+    /// of the CapabilityMap ID and the [CapabilityMap].
+    pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMap> {
+        let mut mappings = HashMap::new();
+        let paths = vec![
+            "/usr/share/inputplumber/capability_maps",
+            "/etc/inputplumber/capability_maps.d",
+            "./rootfs/usr/share/inputplumber/capability_maps",
+        ];
+
+        // Look for capability mappings in all known locations
+        for path in paths {
+            let files = fs::read_dir(path);
+            if files.is_err() {
+                log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
+                continue;
+            }
+            let files = files.unwrap();
+
+            // Look at each file in the directory and try to load them
+            for file in files {
+                if file.is_err() {
+                    log::debug!("Failed read directory entry: {}", file.unwrap_err());
+                    continue;
+                }
+                let file = file.unwrap();
+                let filename = file.file_name();
+                let filename = filename.as_os_str().to_str().unwrap();
+
+                // Skip any non-yaml files
+                if !filename.ends_with(".yaml") {
+                    continue;
+                }
+
+                // Try to load the composite device profile
+                log::debug!("Found file: {}", file.path().display());
+                let mapping = CapabilityMap::from_yaml_file(file.path().display().to_string());
+                if mapping.is_err() {
+                    log::debug!(
+                        "Failed to parse capability mapping: {}",
+                        mapping.unwrap_err()
+                    );
+                    continue;
+                }
+                let map = mapping.unwrap();
+                mappings.insert(map.id.clone(), map);
+            }
+        }
+
+        mappings
     }
 
     /// Looks in all default locations for [CompositeDeviceConfig] definitions and

@@ -245,7 +245,7 @@ impl SteamDeckDevice {
                     GamepadButton::Start => self.state.menu = event.pressed(),
                     GamepadButton::Select => self.state.options = event.pressed(),
                     GamepadButton::Guide => self.state.steam = event.pressed(),
-                    GamepadButton::Base => self.state.quick_access = event.pressed(),
+                    GamepadButton::QuickAccess => self.state.quick_access = event.pressed(),
                     GamepadButton::DPadUp => self.state.up = event.pressed(),
                     GamepadButton::DPadDown => self.state.down = event.pressed(),
                     GamepadButton::DPadLeft => self.state.left = event.pressed(),
@@ -266,6 +266,7 @@ impl SteamDeckDevice {
                     GamepadButton::RightStickTouch => self.state.r_stick_touch = event.pressed(),
                     GamepadButton::RightTouchpadTouch => self.state.r_pad_touch = event.pressed(),
                     GamepadButton::RightTouchpadPress => self.state.r_pad_press = event.pressed(),
+                    _ => (),
                 },
                 Gamepad::Axis(axis) => match axis {
                     GamepadAxis::LeftStick => match value {
