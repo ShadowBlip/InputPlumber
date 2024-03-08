@@ -1,4 +1,4 @@
-use simple_logger::SimpleLogger;
+use std::env;
 use std::error::Error;
 use std::future::pending;
 use std::process;
@@ -21,7 +21,12 @@ mod watcher;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    SimpleLogger::new().init().unwrap();
+    let log_level = match env::var("LOG_LEVEL") {
+        Ok(value) => value,
+        Err(_) => "info".to_string(),
+    };
+    env::set_var("RUST_LOG", log_level);
+    env_logger::init();
     const VERSION: &str = env!("CARGO_PKG_VERSION");
     log::info!("Starting InputPlumber v{}", VERSION);
 
