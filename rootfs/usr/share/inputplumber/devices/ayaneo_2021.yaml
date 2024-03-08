@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=../schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: AYANEO 2021
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches:
+  - dmi_data:
+      product_name: AYA NEO FOUNDER
+      sys_vendor: AYA NEO
+  - dmi_data:
+      product_name: AYA NEO 2021
+      sys_vendor: AYANEO
+  - dmi_data:
+      product_name: AYANEO 2021
+      sys_vendor: AYANEO
+  - dmi_data:
+      product_name: AYANEO 2021 Pro
+      sys_vendor: AYANEO
+  - dmi_data:
+      product_name: AYANEO 2021 Pro Retro Power
+      sys_vendor: AYANEO
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:03:00.3-4/input0
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - gamepad
+  - mouse
+  - keyboard
+
+# The ID of a device event mapping in the 'event_maps' folder
+event_map_id: aya1
