@@ -7,10 +7,13 @@ description = "Open source input manager for Linux"
 
 [package.metadata.generate-rpm]
 assets = [
-  { source = "./target/release/inputplumber", dest = "/usr/bin/inputplumber", mode = "755" },
-  { source = "./rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", mode = "644" },
-  { source = "./rootfs/usr/lib/systemd/system/inputplumber.service", dest = "/usr/lib/systemd/system/inputplumber.service", mode = "644" },
-  { source = "./rootfs/usr/share/inputplumber/devices/steam_deck.yaml", dest = "/usr/share/inputplumber/devices/steam_deck.yaml", mode = "644" },
+  { source = "target/release/inputplumber", dest = "/usr/bin/inputplumber", mode = "755" },
+  { source = "rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", mode = "644" },
+  { source = "rootfs/usr/lib/systemd/system/inputplumber.service", dest = "/usr/lib/systemd/system/inputplumber.service", mode = "644" },
+  { source = "rootfs/usr/share/inputplumber/devices/*.yaml", dest = "/usr/share/inputplumber/devices/", mode = "644" },
+  { source = "rootfs/usr/share/inputplumber/schema/*.json", dest = "/usr/share/inputplumber/schema/", mode = "644" },
+  { source = "rootfs/usr/share/inputplumber/capability_maps/*.yaml", dest = "/usr/share/inputplumber/capability_maps/", mode = "644" },
+  { source = "rootfs/usr/share/inputplumber/profiles/*.yaml", dest = "/usr/share/inputplumber/profiles/", mode = "644" },
 ]
 
 [dependencies]
