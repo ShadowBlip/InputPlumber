@@ -13,18 +13,18 @@ name: Lenovo Legion Go
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: '83E1'
+      product_name: "83E1"
       sys_vendor: LENOVO
       cpu_vendor: AuthenticAMD
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  #- group: keyboard # Block data
-  #  hidraw:
-  #    vendor_id: 0x17ef
-  #    product_id: 0x6182
-  #    interface_num: 0
+  - group: keyboard # Block data
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6182
+      interface_num: 0
   - group: gamepad
     hidraw:
       vendor_id: 0x17ef
@@ -45,9 +45,16 @@ source_devices:
       vendor_id: 0x17ef
       product_id: 0x6185
       interface_num: 2
-
-# The ID of a device event mapping in the 'event_maps' folder
-event_map_id: lego
+  - group: gamepad
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6182"
+      name: "Generic X-Box pad"
+  - group: keyboard
+    evdev:
+      vendor_id: "17ef"
+      product_id: "618*"
+      name: "*Legion*Controller*"
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
