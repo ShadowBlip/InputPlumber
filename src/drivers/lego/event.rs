@@ -2,7 +2,7 @@
 #[derive(Clone, Debug)]
 pub enum Event {
     Button(ButtonEvent),
-    Accelerometer(AccelerometerEvent),
+    Gyro(GyroEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
     Status(StatusEvent),
@@ -36,9 +36,10 @@ pub struct JoyAxisInput {
 
 /// AccelerometerInput represents the state of the accelerometer (x, y, z) values
 #[derive(Clone, Debug)]
-pub struct AccelerometerInput {
+pub struct GyroInput {
     pub x: u8,
     pub y: u8,
+    pub z: u8,
 }
 
 // Status inputs contain some value that corresponds to the current status of a device.
@@ -130,11 +131,9 @@ pub enum TriggerEvent {
 
 /// AccelerometerEvent has data from the accelerometer
 #[derive(Clone, Debug)]
-pub enum AccelerometerEvent {
-    LeftAccelerometer(AccelerometerInput),
-    RightAccelerometer(AccelerometerInput),
-    //CenterAccelerometer(AccelerometerInput),
-    // TODO: Gyro from sysfs
+pub enum GyroEvent {
+    LeftGyro(GyroInput),
+    RightGyro(GyroInput),
 }
 
 #[derive(Clone, Debug)]

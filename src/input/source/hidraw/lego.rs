@@ -4,7 +4,7 @@ use hidapi::DeviceInfo;
 use tokio::sync::broadcast;
 
 use crate::{
-    drivers::lego::{self, driver::Driver, event::MouseAxisInput},
+    drivers::lego::{self, driver::Driver},
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse, MouseButton,
@@ -296,7 +296,7 @@ fn translate_event(event: lego::event::Event) -> NativeEvent {
         */
         lego::event::Event::Axis(axis) => match axis.clone() {
             lego::event::AxisEvent::Touchpad(_) => {
-                NativeEvent::new(Capability::NotImplemented, normalize_axis_value(axis))
+                NativeEvent::new(Capability::Mouse(Mouse::Motion), normalize_axis_value(axis))
             }
             lego::event::AxisEvent::LStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
