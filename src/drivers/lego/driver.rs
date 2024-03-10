@@ -1,12 +1,13 @@
 use std::{error::Error, ffi::CString, u8, vec};
 
 use hidapi::HidDevice;
-use packed_struct::PackedStruct;
+use packed_struct::{types::SizedInteger, PackedStruct};
 
 use super::{
     event::{
         AxisEvent, BinaryInput, ButtonEvent, Event, GyroEvent, GyroInput, JoyAxisInput,
-        MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput, TriggerEvent, TriggerInput,
+        MouseAxisInput, MouseButtonEvent, MouseWheelInput, StatusEvent, StatusInput,
+        TouchAxisInput, TriggerEvent, TriggerInput,
     },
     hid_report::{
         DInputDataLeftReport, DInputDataRightReport, KeyboardDataReport, MouseDataReport,
@@ -150,7 +151,7 @@ impl Driver {
                 }
             }
 
-            MOUSE_DATA | MOUSEFPS_DATA => {
+            MOUSEFPS_DATA => {
                 if bytes_read != MOUSE_PACKET_SIZE {
                     return Err("Invalid packet size for Mouse Data.".into());
                 }
@@ -317,9 +318,9 @@ impl Driver {
         let input_report = MouseDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        log::trace!("--- Input report ---");
-        log::trace!("{input_report}");
-        log::trace!("---- End Report ----");
+        //log::trace!("--- Input report ---");
+        //log::trace!("{input_report}");
+        //log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_mouseinput_state(input_report);
@@ -342,13 +343,55 @@ impl Driver {
 
     /// Translate the state into individual events
     fn translate_mouse(&self, old_state: Option<MouseDataReport>) -> Vec<Event> {
-        let events = Vec::new();
-        let Some(_) = self.mouse_state else {
+        let mut events = Vec::new();
+        let Some(state) = self.mouse_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(_) = old_state {}
+        if let Some(old_state) = old_state {
+            // Button Events
+            if state.y3 != old_state.y3 {
+                events.push(Event::MouseButton(MouseButtonEvent::Y3(BinaryInput {
+                    pressed: state.y3,
+                })));
+            }
+            if state.m3 != old_state.m3 {
+                events.push(Event::MouseButton(MouseButtonEvent::M3(BinaryInput {
+                    pressed: state.m3,
+                })));
+            }
+            if state.mouse_click != old_state.mouse_click {
+                events.push(Event::MouseButton(MouseButtonEvent::MouseClick(
+                    BinaryInput {
+                        pressed: state.mouse_click,
+                    },
+                )));
+            }
+            if state.m2 != old_state.m2 {
+                events.push(Event::MouseButton(MouseButtonEvent::M2(BinaryInput {
+                    pressed: state.m2,
+                })));
+            }
+            if state.m1 != old_state.m1 {
+                events.push(Event::MouseButton(MouseButtonEvent::M1(BinaryInput {
+                    pressed: state.m1,
+                })));
+            }
+
+            // Axis events
+            if state.mouse_x != old_state.mouse_x || state.mouse_y != old_state.mouse_y {
+                events.push(Event::Axis(AxisEvent::Mouse(MouseAxisInput {
+                    x: state.mouse_x.to_primitive(),
+                    y: state.mouse_y.to_primitive(),
+                })));
+            }
+            if state.mouse_z != old_state.mouse_z {
+                events.push(Event::Trigger(TriggerEvent::MouseWheel(MouseWheelInput {
+                    value: state.mouse_z,
+                })));
+            }
+        }
         events
     }
 
@@ -361,9 +404,9 @@ impl Driver {
         let input_report = TouchpadDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        log::trace!("--- Input report ---");
-        log::trace!("{input_report}");
-        log::trace!("---- End Report ----");
+        //log::trace!("--- Input report ---");
+        //log::trace!("{input_report}");
+        //log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_touchpad_state(input_report);
@@ -407,7 +450,7 @@ impl Driver {
         // Print input report for debugging
         //log::trace!("--- Input report ---");
         //log::trace!("{input_report}");
-        //log::trace!("---- End Report ----");
+        //log::trace!(" ---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_xinput_state(input_report);
@@ -434,6 +477,17 @@ impl Driver {
 
         // Translate state changes into events if they have changed
         if let Some(old_state) = old_state {
+            if state.gamepad_mode != old_state.gamepad_mode {
+                log::debug!(
+                    "Changed gamepad mode from {} to {}",
+                    old_state.gamepad_mode,
+                    state.gamepad_mode
+                );
+            }
+            if state.gamepad_mode == 2 {
+                log::debug!("In FPS Mode, rejecting gamepad input.");
+                return events;
+            }
             // Binary events
             if state.a != old_state.a {
                 events.push(Event::Button(ButtonEvent::A(BinaryInput {

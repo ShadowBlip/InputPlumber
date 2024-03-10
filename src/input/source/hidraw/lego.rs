@@ -173,7 +173,7 @@ fn translate_events(events: Vec<lego::event::Event>) -> Vec<NativeEvent> {
     events.into_iter().map(translate_event).collect()
 }
 
-/// Translate the given Steam Deck event into a native event
+/// Translate the given Legion Go event into a native event
 fn translate_event(event: lego::event::Event) -> NativeEvent {
     match event {
         lego::event::Event::Button(button) => match button {
@@ -323,6 +323,29 @@ fn translate_event(event: lego::event::Event) -> NativeEvent {
                 NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
             }
         },
+        lego::event::Event::MouseButton(button) => match button {
+            lego::event::MouseButtonEvent::Y3(value) => NativeEvent::new(
+                Capability::Mouse(Mouse::Button(MouseButton::Extra1)),
+                InputValue::Bool(value.pressed),
+            ),
+            lego::event::MouseButtonEvent::M1(value) => NativeEvent::new(
+                Capability::Mouse(Mouse::Button(MouseButton::Left)),
+                InputValue::Bool(value.pressed),
+            ),
+            lego::event::MouseButtonEvent::M2(value) => NativeEvent::new(
+                Capability::Mouse(Mouse::Button(MouseButton::Right)),
+                InputValue::Bool(value.pressed),
+            ),
+            lego::event::MouseButtonEvent::M3(value) => NativeEvent::new(
+                Capability::Mouse(Mouse::Button(MouseButton::Extra2)),
+                InputValue::Bool(value.pressed),
+            ),
+            lego::event::MouseButtonEvent::MouseClick(value) => NativeEvent::new(
+                Capability::Mouse(Mouse::Button(MouseButton::Middle)),
+                InputValue::Bool(value.pressed),
+            ),
+        },
+
         _ => NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false)),
     }
 }

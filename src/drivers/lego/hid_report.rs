@@ -242,11 +242,11 @@ pub struct XInputDataReport {
     pub r_controller_mode0: u8,
 
     #[packed_field(bytes = "9")]
-    pub unk_8: u8,
+    pub gamepad_mode: u8,
     #[packed_field(bytes = "10")]
-    pub unk_9: u8,
-    #[packed_field(bytes = "11")]
     pub unk_10: u8,
+    #[packed_field(bytes = "11")]
+    pub unk_11: u8,
 
     #[packed_field(bytes = "12")]
     pub l_controller_mode1: u8,
