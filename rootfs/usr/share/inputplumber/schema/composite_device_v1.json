@@ -158,6 +158,14 @@
         "phys_path": {
           "description": "Phys path as defined in /proc/bus/input/devices",
           "type": "string"
+        },
+        "vendor_id": {
+          "description": "ID Vendor defined in /proc/bus/input/devices",
+          "type": "string"
+        },
+        "product_id": {
+          "description": "ID Product defined in /proc/bus/input/devices",
+          "type": "string"
         }
       },
       "required": [],
