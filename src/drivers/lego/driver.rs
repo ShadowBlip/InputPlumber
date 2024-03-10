@@ -30,7 +30,7 @@ pub const DINPUTLEFT_DATA: u8 = 0x07;
 pub const DINPUTRIGHT_DATA: u8 = 0x08;
 pub const KEYBOARD_TOUCH_DATA: u8 = 0x01;
 pub const MOUSEFPS_DATA: u8 = 0x02;
-pub const MOUSE_DATA: u8 = 0x09;
+//pub const MOUSE_DATA: u8 = 0x09;
 pub const XINPUT_DATA: u8 = 0x04;
 
 // Input report axis ranges
