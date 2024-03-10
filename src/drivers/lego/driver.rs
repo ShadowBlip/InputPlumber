@@ -109,8 +109,8 @@ impl Driver {
 
         let report_id = buf[0];
         let slice = &buf[..bytes_read];
-        log::debug!("Got Report ID: {report_id}");
-        log::debug!("Got Report Size: {bytes_read}");
+        log::trace!("Got Report ID: {report_id}");
+        log::trace!("Got Report Size: {bytes_read}");
 
         match report_id {
             DINPUTLEFT_DATA => {
@@ -134,7 +134,7 @@ impl Driver {
             }
 
             KEYBOARD_TOUCH_DATA => {
-                log::debug!("Got keyboard/touch data.");
+                log::trace!("Got keyboard/touch data.");
                 if bytes_read != KEYBOARD_PACKET_SIZE {
                     if bytes_read != TOUCHPAD_PACKET_SIZE {
                         return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
@@ -171,7 +171,7 @@ impl Driver {
                 Ok(events)
             }
             _ => {
-                log::debug!("Invalid Report ID.");
+                log::trace!("Invalid Report ID.");
                 let events = vec![];
                 return Ok(events);
             }
@@ -186,9 +186,9 @@ impl Driver {
         let input_report = DInputDataLeftReport::unpack(&buf)?;
 
         // Print input report for debugging
-        // log::debug!("--- Input report ---");
-        // log::debug!("{input_report}");
-        // log::debug!("---- End Report ----");
+        // log::trace!("--- Input report ---");
+        // log::trace!("{input_report}");
+        // log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_dinputl_state(input_report);
@@ -230,9 +230,9 @@ impl Driver {
         let input_report = DInputDataRightReport::unpack(&buf)?;
 
         // Print input report for debugging
-        // log::debug!("--- Input report ---");
-        // log::debug!("{input_report}");
-        // log::debug!("---- End Report ----");
+        // log::trace!("--- Input report ---");
+        // log::trace!("{input_report}");
+        // log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_dinputr_state(input_report);
@@ -274,9 +274,9 @@ impl Driver {
         let input_report = KeyboardDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        // log::debug!("--- Input report ---");
-        // log::debug!("{input_report}");
-        // log::debug!("---- End Report ----");
+        // log::trace!("--- Input report ---");
+        // log::trace!("{input_report}");
+        // log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_keyboard_state(input_report);
@@ -318,9 +318,9 @@ impl Driver {
         let input_report = MouseDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        log::debug!("--- Input report ---");
-        log::debug!("{input_report}");
-        log::debug!("---- End Report ----");
+        log::trace!("--- Input report ---");
+        log::trace!("{input_report}");
+        log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_mouseinput_state(input_report);
@@ -362,9 +362,9 @@ impl Driver {
         let input_report = TouchpadDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        log::debug!("--- Input report ---");
-        log::debug!("{input_report}");
-        log::debug!("---- End Report ----");
+        log::trace!("--- Input report ---");
+        log::trace!("{input_report}");
+        log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_touchpad_state(input_report);
@@ -406,9 +406,9 @@ impl Driver {
         let input_report = XInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        //log::debug!("--- Input report ---");
-        //log::debug!("{input_report}");
-        //log::debug!("---- End Report ----");
+        //log::trace!("--- Input report ---");
+        //log::trace!("{input_report}");
+        //log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_xinput_state(input_report);

@@ -206,7 +206,7 @@ fn translate_event(event: lego::event::Event) -> NativeEvent {
                 InputValue::Bool(value.pressed),
             ),
             lego::event::ButtonEvent::QuickAccess(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Base)),
+                Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
                 InputValue::Bool(value.pressed),
             ),
             lego::event::ButtonEvent::DPadDown(value) => NativeEvent::new(
