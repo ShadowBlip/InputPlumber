@@ -351,13 +351,13 @@ pub struct XInputDataReport {
     pub touch_y_0: u16,
 
     #[packed_field(bytes = "30")]
-    pub left_accel_0: u8,
+    pub left_gyro_x: u8,
     #[packed_field(bytes = "31")]
-    pub left_accel_1: u8,
+    pub left_gyro_y: u8,
     #[packed_field(bytes = "32")]
-    pub right_accel_0: u8,
+    pub right_gyro_x: u8,
     #[packed_field(bytes = "33")]
-    pub right_accel_1: u8,
+    pub right_gyro_y: u8,
 
     #[packed_field(bytes = "34")]
     pub unk_34: u8,

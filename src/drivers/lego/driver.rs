@@ -1,17 +1,16 @@
-use std::{collections::HashMap, error::Error, ffi::CString, u8, vec};
+use std::{error::Error, ffi::CString, u8, vec};
 
 use hidapi::HidDevice;
-use packed_struct::{types::SizedInteger, PackedStruct};
+use packed_struct::PackedStruct;
 
 use super::{
     event::{
-        AccelerometerEvent, AccelerometerInput, AxisEvent, BinaryInput, ButtonEvent, Event,
-        JoyAxisInput, MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput, TriggerEvent,
-        TriggerInput,
+        AxisEvent, BinaryInput, ButtonEvent, Event, GyroEvent, GyroInput, JoyAxisInput,
+        MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput, TriggerEvent, TriggerInput,
     },
     hid_report::{
         DInputDataLeftReport, DInputDataRightReport, KeyboardDataReport, MouseDataReport,
-        ReportType, TouchpadDataReport, XInputDataReport,
+        TouchpadDataReport, XInputDataReport,
     },
 };
 
@@ -36,12 +35,12 @@ pub const XINPUT_DATA: u8 = 0x04;
 // Input report axis ranges
 // TODO: actual mouse range
 // TODO: ACCEL Left/Right X/Y, Z?
-pub const ACCEL_X_MAX: f64 = 255.0;
-pub const ACCEL_X_MIN: f64 = 0.0;
-pub const ACCEL_Y_MAX: f64 = 255.0;
-pub const ACCEL_Y_MIN: f64 = 0.0;
+//pub const GYRO_X_MAX: f64 = 255.0;
+//pub const GYRO_X_MIN: f64 = 0.0;
+//pub const GYRO_Y_MAX: f64 = 255.0;
+//pub const GYRO_Y_MIN: f64 = 0.0;
 pub const MOUSE_WHEEL_MAX: f64 = 120.0;
-pub const MOUSE_WHEEL_MIN: f64 = -120.0;
+//pub const MOUSE_WHEEL_MIN: f64 = -120.0;
 pub const MOUSE_X_MAX: f64 = 2048.0;
 pub const MOUSE_X_MIN: f64 = -2048.0;
 pub const MOUSE_Y_MAX: f64 = 2048.0;
@@ -55,19 +54,19 @@ pub const STICK_X_MIN: f64 = 0.0;
 pub const STICK_Y_MAX: f64 = 255.0;
 pub const STICK_Y_MIN: f64 = 0.0;
 pub const TRIGG_MAX: f64 = 255.0;
-pub const TRIGG_MIN: f64 = 0.0;
+//pub const TRIGG_MIN: f64 = 0.0;
 
 // NORMALIZED AXIS
-pub const ACCEL_X_NORM: f64 = 1.0 / ACCEL_X_MAX;
-pub const ACCEL_Y_NORM: f64 = 1.0 / ACCEL_Y_MAX;
-pub const MOUSE_WHEEL_NORM: f64 = 1.0 / MOUSE_WHEEL_MAX;
-pub const MOUSE_X_NORM: f64 = 1.0 / MOUSE_X_MAX;
-pub const MOUSE_Y_NORM: f64 = 1.0 / MOUSE_Y_MAX;
-pub const PAD_X_AXIS_NORM: f64 = 1.0 / PAD_X_MAX;
-pub const PAD_Y_AXIS_NORM: f64 = 1.0 / PAD_Y_MAX;
-pub const STICK_X_AXIS_NORM: f64 = 1.0 / STICK_X_MAX;
-pub const STICK_Y_AXIS_NORM: f64 = 1.0 / STICK_Y_MAX;
-pub const TRIGG_AXIS_NORM: f64 = 1.0 / TRIGG_MAX;
+//pub const GYRO_X_NORM: f64 = 1.0 / GYRO_X_MAX;
+//pub const ACCEL_Y_NORM: f64 = 1.0 / GYRO_Y_MAX;
+//pub const MOUSE_WHEEL_NORM: f64 = 1.0 / MOUSE_WHEEL_MAX;
+//pub const MOUSE_X_NORM: f64 = 1.0 / MOUSE_X_MAX;
+//pub const MOUSE_Y_NORM: f64 = 1.0 / MOUSE_Y_MAX;
+//pub const PAD_X_AXIS_NORM: f64 = 1.0 / PAD_X_MAX;
+//pub const PAD_Y_AXIS_NORM: f64 = 1.0 / PAD_Y_MAX;
+//pub const STICK_X_AXIS_NORM: f64 = 1.0 / STICK_X_MAX;
+//pub const STICK_Y_AXIS_NORM: f64 = 1.0 / STICK_Y_MAX;
+//pub const TRIGG_AXIS_NORM: f64 = 1.0 / TRIGG_MAX;
 
 pub struct Driver {
     dinputl_state: Option<DInputDataLeftReport>,
@@ -211,13 +210,13 @@ impl Driver {
 
     /// Translate the state into individual events
     fn translate_dinputl(&self, old_state: Option<DInputDataLeftReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.dinputl_state else {
+        let events = Vec::new();
+        let Some(_) = self.dinputl_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(old_state) = old_state {}
+        if let Some(_) = old_state {}
         events
     }
 
@@ -255,13 +254,13 @@ impl Driver {
 
     /// Translate the state into individual events
     fn translate_dinputr(&self, old_state: Option<DInputDataRightReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.dinputr_state else {
+        let events = Vec::new();
+        let Some(_) = self.dinputr_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(old_state) = old_state {}
+        if let Some(_) = old_state {}
         events
     }
 
@@ -299,13 +298,13 @@ impl Driver {
 
     /// Translate the state into individual events
     fn translate_keyboard(&self, old_state: Option<KeyboardDataReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.keyboard_state else {
+        let events = Vec::new();
+        let Some(_) = self.keyboard_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(old_state) = old_state {}
+        if let Some(_) = old_state {}
         events
     }
 
@@ -343,13 +342,13 @@ impl Driver {
 
     /// Translate the state into individual events
     fn translate_mouse(&self, old_state: Option<MouseDataReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.mouse_state else {
+        let events = Vec::new();
+        let Some(_) = self.mouse_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(old_state) = old_state {}
+        if let Some(_) = old_state {}
         events
     }
 
@@ -387,13 +386,13 @@ impl Driver {
 
     /// Translate the state into individual events
     fn translate_touch(&self, old_state: Option<TouchpadDataReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.touchpad_state else {
+        let events = Vec::new();
+        let Some(_) = self.touchpad_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(old_state) = old_state {}
+        if let Some(_) = old_state {}
         events
     }
 
@@ -595,18 +594,16 @@ impl Driver {
             }
 
             // Accelerometer events
-            events.push(Event::Accelerometer(AccelerometerEvent::LeftAccelerometer(
-                AccelerometerInput {
-                    x: state.left_accel_0,
-                    y: state.left_accel_1,
-                },
-            )));
-            events.push(Event::Accelerometer(
-                AccelerometerEvent::RightAccelerometer(AccelerometerInput {
-                    x: state.right_accel_0,
-                    y: state.right_accel_1,
-                }),
-            ));
+            events.push(Event::Gyro(GyroEvent::LeftGyro(GyroInput {
+                x: state.left_gyro_x,
+                y: state.left_gyro_y,
+                z: 0,
+            })));
+            events.push(Event::Gyro(GyroEvent::RightGyro(GyroInput {
+                x: state.right_gyro_x,
+                y: state.right_gyro_y,
+                z: 0,
+            })));
 
             // Status events
             if state.l_controller_battery != old_state.l_controller_battery {
