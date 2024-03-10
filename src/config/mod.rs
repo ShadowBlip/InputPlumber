@@ -110,6 +110,8 @@ pub struct Evdev {
     pub name: Option<String>,
     pub phys_path: Option<String>,
     pub handler: Option<String>,
+    pub vendor_id: Option<String>,
+    pub product_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -148,34 +150,6 @@ impl CompositeDeviceConfig {
         Ok(device)
     }
 
-    /// Checks to see if the [CompositeDeviceConfig] matches what is available
-    /// on the system.
-    pub fn sources_exist(&self) -> Result<bool, Box<dyn Error>> {
-        let evdev_exists = self.sources_exist_evdev()?;
-        log::debug!("Evdev Devices Exist: {}", evdev_exists);
-        let hidraw_exists = self.sources_exist_hidraw()?;
-        log::debug!("HIDRaw Devices Exist: {}", hidraw_exists);
-        Ok(evdev_exists && hidraw_exists)
-    }
-
-    /// Returns true if any of the hidraw source devices in the config exist on the system
-    fn sources_exist_hidraw(&self) -> Result<bool, Box<dyn Error>> {
-        let Some(hidraw_devices) = self.get_matching_hidraw()? else {
-            return Ok(true);
-        };
-
-        Ok(!hidraw_devices.is_empty())
-    }
-
-    /// Returns true if any of the evdev source devices in the config exist on the system
-    fn sources_exist_evdev(&self) -> Result<bool, Box<dyn Error>> {
-        let Some(evdev_devices) = self.get_matching_evdev()? else {
-            return Ok(true);
-        };
-
-        Ok(!evdev_devices.is_empty())
-    }
-
     /// Returns an array of all defined hidraw source devices
     fn get_hidraw_configs(&self) -> Vec<Hidraw> {
         self.source_devices
@@ -192,153 +166,100 @@ impl CompositeDeviceConfig {
             .collect()
     }
 
-    /// Returns a list of hidraw device information for all devices that
-    /// match the configuration.
-    pub fn get_matching_hidraw(&self) -> Result<Option<Vec<DeviceInfo>>, Box<dyn Error>> {
-        // Only consider hidraw devices
-        let hidraw_configs = self.get_hidraw_configs();
+    /// Returns true if a given hidraw device is within a list of hidraw configs.
+    pub fn has_matching_hidraw(&self, device: &DeviceInfo, hidraw_configs: &Vec<Hidraw>) -> bool {
+        for hidraw_config in hidraw_configs.clone() {
+            let hidraw_config = hidraw_config.clone();
+            let mut has_matches = false;
 
-        // If there are no hidraw definitions, consider it a match
-        if hidraw_configs.is_empty() {
-            return Ok(None);
-        }
-        let mut matches: Vec<DeviceInfo> = Vec::new();
-
-        // Keep track of potentially duplicate hidraw devices with the same
-        // vendor + product
-        let mut seen_devices: Vec<String> = Vec::new();
-
-        // Get all hidraw devices to match on and check to see if they match
-        // a hidraw definition in the config.
-        let api = HidApi::new()?;
-        let devices: Vec<DeviceInfo> = api.device_list().cloned().collect();
-        for device in devices {
-            for hidraw_config in hidraw_configs.clone() {
-                let hidraw_config = hidraw_config.clone();
-                let mut has_matches = false;
-
-                if let Some(vendor_id) = hidraw_config.vendor_id {
-                    if device.vendor_id() != vendor_id {
-                        continue;
-                    }
-                    has_matches = true;
-                }
-
-                if let Some(product_id) = hidraw_config.product_id {
-                    if device.product_id() != product_id {
-                        continue;
-                    }
-                    has_matches = true;
-                }
-
-                if let Some(interface_num) = hidraw_config.interface_num {
-                    if device.interface_number() != interface_num {
-                        continue;
-                    }
-                    has_matches = true;
-                }
-
-                if !has_matches {
+            if let Some(vendor_id) = hidraw_config.vendor_id {
+                if device.vendor_id() != vendor_id {
                     continue;
                 }
+                has_matches = true;
+            }
 
-                // Construct a device ID from the vendor and product to see
-                // if this device has already been matched.
-                let device_id = format!(
-                    "{:04x}:{:04x}:{}",
-                    device.vendor_id(),
-                    device.product_id(),
-                    device.interface_number()
-                );
-                if seen_devices.contains(&device_id) {
-                    log::debug!("Device already seen: {}", device_id);
+            if let Some(product_id) = hidraw_config.product_id {
+                if device.product_id() != product_id {
                     continue;
                 }
+                has_matches = true;
+            }
 
-                // If it's gotten this far, then the config has matched all
-                // non-empty fields!
-                matches.push(device.clone());
-                seen_devices.push(device_id);
+            if let Some(interface_num) = hidraw_config.interface_num {
+                if device.interface_number() != interface_num {
+                    continue;
+                }
+                has_matches = true;
+            }
+
+            if !has_matches {
+                return false;
             }
         }
-
-        Ok(Some(matches))
+        return true;
     }
 
-    /// Returns a list of evdev device information for all devices that match
-    /// the configuration
-    pub fn get_matching_evdev(
+    /// Returns true if a given evdev device is within a list of evdev configs.
+    pub fn has_matching_evdev(
         &self,
-    ) -> Result<Option<Vec<procfs::device::Device>>, Box<dyn Error>> {
-        // Only consider evdev devices
-        let evdev_configs = self.get_evdev_configs();
-        log::debug!("Got evdev configs: {:?}", evdev_configs);
-
-        // If there are no evdev definitions, consider it a match
-        if evdev_configs.is_empty() {
-            log::debug!("No evdev config was defined");
-            return Ok(None);
+        device: &procfs::device::Device,
+        evdev_configs: &Vec<Evdev>,
+    ) -> bool {
+        // TODO: Maybe in the future we will support virtual devices if we figure something
+        // out. Ignore virtual devices.
+        if is_virtual(&device) {
+            log::debug!("{} is virtual, skipping.", device.name);
+            return false;
         }
-        let mut matches: Vec<procfs::device::Device> = Vec::new();
 
-        // Get all evdev devices to match on and check to see if they match
-        // an evdev definition in the config.
-        let devices = procfs::device::get_all()?;
-        for device in devices {
-            // Ignore virtual devices.
-            // TODO: Maybe in the future we will support virtual devices if we figure something
-            // out.
+        let mut has_matches = false;
+        for evdev_config in evdev_configs.clone() {
+            let evdev_config = evdev_config.clone();
 
-            if is_virtual(&device) {
-                log::debug!("{} is virtual, skipping.", device.name);
-                continue;
-            }
-
-            for evdev_config in evdev_configs.clone() {
-                let evdev_config = evdev_config.clone();
-                let mut has_matches = false;
-
-                if let Some(name) = evdev_config.name {
-                    if !glob_match(name.as_str(), device.name.as_str()) {
-                        continue;
-                    }
-                    log::debug!("Name in config '{}' matches device {}", name, device.name);
-                    has_matches = true;
-                }
-
-                if let Some(phys_path) = evdev_config.phys_path {
-                    if !glob_match(phys_path.as_str(), device.phys_path.as_str()) {
-                        continue;
-                    }
-                    log::debug!(
-                        "Phys path in config '{}' matches device {}",
-                        phys_path,
-                        device.phys_path
-                    );
-                    has_matches = true;
-                }
-
-                if let Some(handler) = evdev_config.handler {
-                    for handle in device.handlers.clone() {
-                        if !glob_match(handler.as_str(), handle.as_str()) {
-                            continue;
-                        }
-                        log::debug!("Handler in config '{}' matches device {}", handler, handle);
-                        has_matches = true;
-                    }
-                }
-
-                if !has_matches {
+            if let Some(name) = evdev_config.name {
+                if !glob_match(name.as_str(), device.name.as_str()) {
                     continue;
                 }
+                has_matches = true;
+            }
 
-                // If it's gotten this far, then the config has matched all
-                // non-empty fields!
-                matches.push(device.clone());
+            if let Some(phys_path) = evdev_config.phys_path {
+                if !glob_match(phys_path.as_str(), device.phys_path.as_str()) {
+                    continue;
+                }
+                has_matches = true;
+            }
+
+            if let Some(handler) = evdev_config.handler {
+                for handle in device.handlers.clone() {
+                    if !glob_match(handler.as_str(), handle.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+            }
+
+            if let Some(vendor_id) = evdev_config.vendor_id {
+                if !glob_match(vendor_id.as_str(), device.id.vendor.as_str()) {
+                    continue;
+                }
+                has_matches = true
+            }
+
+            if let Some(product_id) = evdev_config.product_id {
+                if !glob_match(product_id.as_str(), device.id.product.as_str()) {
+                    continue;
+                }
+                has_matches = true
             }
         }
 
-        Ok(Some(matches))
+        if !has_matches {
+            return false;
+        }
+
+        return true;
     }
 
     /// Returns true if the configuration has a valid set of matches. This will
