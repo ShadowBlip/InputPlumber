@@ -13,7 +13,7 @@ IMAGE_TAG ?= latest
 
 # systemd-sysext variables 
 SYSEXT_ID ?= steamos
-SYSEXT_VERSION_ID ?= 3.5.15
+SYSEXT_VERSION_ID ?= 3.5.17
 
 # Include any user defined settings
 -include settings.mk

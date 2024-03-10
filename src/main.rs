@@ -69,5 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Do other things or go to wait forever
     pending::<()>().await;
 
+    log::info!("InputPlumber stopped");
+
     Ok(())
 }
