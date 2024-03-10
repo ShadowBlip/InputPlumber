@@ -696,9 +696,6 @@ impl Manager {
         log::debug!("HIDRaw added: {}", name);
         let path = format!("/dev/{}", name);
 
-        // Signal that a source device was added
-        //self.tx.send(Command::SourceDeviceAdded)?;
-
         // Look up the connected device using hidapi
         let devices = hidraw::list_devices()?;
         let device = devices

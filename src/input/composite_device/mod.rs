@@ -761,7 +761,6 @@ impl CompositeDevice {
                         emit_queue.push(event);
                         self.emitted_mappings
                             .insert(mapping.name.clone(), mapping.clone());
-                        todo!();
                     }
                     if let Some(gamepad) = &mapping.target_event.gamepad {
                         if let Some(button) = gamepad.button.as_ref() {
