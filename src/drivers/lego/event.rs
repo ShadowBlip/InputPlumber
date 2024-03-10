@@ -2,6 +2,7 @@
 #[derive(Clone, Debug)]
 pub enum Event {
     Button(ButtonEvent),
+    MouseButton(MouseButtonEvent),
     Gyro(GyroEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
@@ -112,6 +113,22 @@ pub enum ButtonEvent {
     /// Mouse wheel click on the back of the right controller
     MouseClick(BinaryInput),
 }
+
+/// Button events represend binary inputs
+#[derive(Clone, Debug)]
+pub enum MouseButtonEvent {
+    /// Y3 on the back of the right gamepad
+    Y3(BinaryInput),
+    /// M1 on the side of the right controller
+    M1(BinaryInput),
+    /// M2 on the side of the right controller
+    M2(BinaryInput),
+    /// M3 on the back of the right controller
+    M3(BinaryInput),
+    /// Mouse wheel click on the back of the right controller
+    MouseClick(BinaryInput),
+}
+
 /// Axis events are events that have (x, y) values
 #[derive(Clone, Debug)]
 pub enum AxisEvent {
