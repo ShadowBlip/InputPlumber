@@ -334,13 +334,18 @@ impl CompositeDevice {
                 }
             }
         }
-        log::debug!("CompositeDevice stopped");
+        log::info!(
+            "CompositeDevice stopping: {}",
+            self.dbus_path.as_ref().unwrap()
+        );
 
         // Stop all target devices
         log::debug!("Stopping target devices");
+        #[allow(clippy::for_kv_map)]
         for (_, target) in &self.target_devices {
             target.send(TargetCommand::Stop).await?;
         }
+        #[allow(clippy::for_kv_map)]
         for (_, target) in &self.target_dbus_devices {
             target.send(TargetCommand::Stop).await?;
         }
@@ -359,7 +364,10 @@ impl CompositeDevice {
             res?;
         }
 
-        log::debug!("All source devices have closed");
+        log::info!(
+            "CompositeDevice stopped: {}",
+            self.dbus_path.as_ref().unwrap()
+        );
 
         Ok(())
     }
@@ -833,7 +841,8 @@ impl CompositeDevice {
 
             self.source_device_ids.remove(idx);
         }
-        return Ok(());
+
+        Ok(())
     }
 
     fn add_source_device(&mut self, device_info: SourceDeviceInfo) -> Result<(), Box<dyn Error>> {

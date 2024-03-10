@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
-use log::logger;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use zbus::fdo;
@@ -43,7 +42,7 @@ const BUFFER_SIZE: usize = 1024;
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
 pub enum Command {
-    SourceDeviceAdded(SourceDeviceInfo),
+    SourceDeviceAdded { id: String, info: SourceDeviceInfo },
     SourceDeviceRemoved { id: String },
     EventDeviceAdded { name: String },
     EventDeviceRemoved { name: String },
@@ -191,8 +190,8 @@ impl Manager {
                         log::error!("Error creating composite device: {:?}", e);
                     }
                 }
-                Command::SourceDeviceAdded(device) => {
-                    if let Err(e) = self.on_source_device_added(device).await {
+                Command::SourceDeviceAdded { id, info } => {
+                    if let Err(e) = self.on_source_device_added(id, info).await {
                         log::error!("Error handling added source device: {:?}", e);
                     }
                 }
@@ -208,6 +207,8 @@ impl Manager {
                 }
             }
         }
+
+        log::info!("Stopped input manager");
 
         Ok(())
     }
@@ -458,6 +459,7 @@ impl Manager {
     /// will be created and started.
     async fn on_source_device_added(
         &mut self,
+        id: String,
         device_info: SourceDeviceInfo,
     ) -> Result<(), Box<dyn Error>> {
         // Check all existing composite devices to see if this device is part of
@@ -477,11 +479,11 @@ impl Manager {
                         if let Some(evdev) = source_device.evdev {
                             configs.push(evdev);
                         }
-                        if configs.len() == 0 {
+                        if configs.is_empty() {
                             continue;
                         }
                         if config.has_matching_evdev(&info, &configs) {
-                            log::info!("Found missing device, adding source device to existing composite device");
+                            log::info!("Found missing device, adding source device {id} to existing composite device: {composite_device}");
                             let handle = self.composite_devices.get(composite_device.as_str());
                             if handle.is_none() {
                                 log::error!(
@@ -491,6 +493,9 @@ impl Manager {
                                 continue;
                             }
                             self.add_event_device_to_composite_device(&info, handle.unwrap())?;
+                            self.source_devices_used
+                                .insert(id, composite_device.clone());
+
                             return Ok(());
                         }
                     }
@@ -502,11 +507,11 @@ impl Manager {
                         if let Some(hidraw) = source_device.hidraw {
                             configs.push(hidraw);
                         }
-                        if configs.len() == 0 {
+                        if configs.is_empty() {
                             continue;
                         }
                         if config.has_matching_hidraw(&info, &configs) {
-                            log::info!("Found missing device, adding source device to existing composite device");
+                            log::info!("Found missing device, adding source device {id} to existing composite device: {composite_device}");
                             let handle = self.composite_devices.get(composite_device.as_str());
                             if handle.is_none() {
                                 log::error!(
@@ -516,6 +521,8 @@ impl Manager {
                                 continue;
                             }
                             self.add_hidraw_device_to_composite_device(&info, handle.unwrap())?;
+                            self.source_devices_used
+                                .insert(id, composite_device.clone());
 
                             return Ok(());
                         }
@@ -548,7 +555,7 @@ impl Manager {
                         if let Some(evdev) = source_device.evdev {
                             configs.push(evdev);
                         }
-                        if configs.len() == 0 {
+                        if configs.is_empty() {
                             continue;
                         }
                         if config.has_matching_evdev(&info, &configs) {
@@ -574,7 +581,7 @@ impl Manager {
                         if let Some(hidraw) = source_device.hidraw {
                             configs.push(hidraw);
                         }
-                        if configs.len() == 0 {
+                        if configs.is_empty() {
                             continue;
                         }
                         if config.has_matching_hidraw(&info, &configs) {
@@ -648,13 +655,14 @@ impl Manager {
         .await?;
 
         // Signal that a source device was added
-        self.tx.send(Command::SourceDeviceAdded(
-            SourceDeviceInfo::EvdevDeviceInfo(info),
-        ))?;
+        let id = format!("evdev://{}", handler);
+        self.tx.send(Command::SourceDeviceAdded {
+            id: id.clone(),
+            info: SourceDeviceInfo::EvdevDeviceInfo(info),
+        })?;
 
         // Add the device as a source device
         let path = source::evdev::get_dbus_path(handler.clone());
-        let id = format!("evdev://{}", handler);
         self.source_devices.insert(id, path);
 
         Ok(())
@@ -667,6 +675,7 @@ impl Manager {
         // Remove the device from our hashmap
         let id = format!("evdev://{}", handler);
         self.source_devices.remove(&id);
+        self.source_devices_used.remove(&id);
 
         // Remove the DBus interface
         let path = source::evdev::get_dbus_path(handler);
@@ -704,25 +713,30 @@ impl Manager {
         source::hidraw::DBusInterface::listen_on_dbus(self.dbus.clone(), info.clone()).await?;
 
         // Signal that a source device was added
-        self.tx.send(Command::SourceDeviceAdded(
-            SourceDeviceInfo::HIDRawDeviceInfo(info),
-        ))?;
+        let id = format!("hidraw://{}", name);
+        self.tx.send(Command::SourceDeviceAdded {
+            id: id.clone(),
+            info: SourceDeviceInfo::HIDRawDeviceInfo(info),
+        })?;
 
         // Add the device as a source device
         let path = source::hidraw::get_dbus_path(path);
-        let id = format!("hidraw://{}", name);
         self.source_devices.insert(id, path);
 
         Ok(())
     }
 
     /// Called when a hidraw device (e.g. /dev/hidraw0) is removed
-    async fn on_hidraw_removed(&self, name: String) -> Result<(), Box<dyn Error>> {
+    async fn on_hidraw_removed(&mut self, name: String) -> Result<(), Box<dyn Error>> {
         log::debug!("HIDRaw removed: {}", name);
         let id = format!("hidraw://{}", name);
 
         // Signal that a source device was removed
-        self.tx.send(Command::SourceDeviceRemoved { id })?;
+        self.tx
+            .send(Command::SourceDeviceRemoved { id: id.clone() })?;
+
+        self.source_devices.remove(&id);
+        self.source_devices_used.remove(&id);
 
         Ok(())
     }
@@ -885,9 +899,9 @@ impl Manager {
     pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMap> {
         let mut mappings = HashMap::new();
         let paths = vec![
-            "/usr/share/inputplumber/capability_maps",
-            "/etc/inputplumber/capability_maps.d",
             "./rootfs/usr/share/inputplumber/capability_maps",
+            "/etc/inputplumber/capability_maps.d",
+            "/usr/share/inputplumber/capability_maps",
         ];
 
         // Look for capability mappings in all known locations
@@ -935,13 +949,14 @@ impl Manager {
         let task = tokio::task::spawn_blocking(move || {
             let mut devices: Vec<CompositeDeviceConfig> = Vec::new();
             let paths = vec![
-                "/usr/share/inputplumber/devices",
-                "/etc/inputplumber/devices.d",
                 "./rootfs/usr/share/inputplumber/devices",
+                "/etc/inputplumber/devices.d",
+                "/usr/share/inputplumber/devices",
             ];
 
             // Look for composite device profiles in all known locations
             for path in paths {
+                log::debug!("Checking {path} for composite device configs");
                 let files = fs::read_dir(path);
                 if files.is_err() {
                     log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
@@ -979,7 +994,12 @@ impl Manager {
             devices
         });
 
-        task.await.unwrap_or_default()
+        let result = task.await;
+        if let Err(ref e) = result {
+            log::error!("Failed to run task to list device configs: {:?}", e);
+        }
+
+        result.unwrap_or_default()
     }
 
     /// Creates a DBus object
@@ -989,6 +1009,9 @@ impl Manager {
         self.dbus.object_server().at(manager_path, iface).await?;
         Ok(())
     }
+
+    /// Send a signal using the given composite device handle that a new source
+    /// device should be started.
     fn add_event_device_to_composite_device(
         &self,
         device_info: &procfs::device::Device,
@@ -1002,6 +1025,8 @@ impl Manager {
         Ok(())
     }
 
+    /// Send a signal using the given composite device handle that a new source
+    /// device should be started.
     fn add_hidraw_device_to_composite_device(
         &self,
         device_info: &hidapi::DeviceInfo,

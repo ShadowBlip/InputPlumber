@@ -168,36 +168,32 @@ impl CompositeDeviceConfig {
 
     /// Returns true if a given hidraw device is within a list of hidraw configs.
     pub fn has_matching_hidraw(&self, device: &DeviceInfo, hidraw_configs: &Vec<Hidraw>) -> bool {
+        log::debug!("Checking hidraw config: {:?}", hidraw_configs);
         for hidraw_config in hidraw_configs.clone() {
             let hidraw_config = hidraw_config.clone();
-            let mut has_matches = false;
 
             if let Some(vendor_id) = hidraw_config.vendor_id {
                 if device.vendor_id() != vendor_id {
                     continue;
                 }
-                has_matches = true;
             }
 
             if let Some(product_id) = hidraw_config.product_id {
                 if device.product_id() != product_id {
                     continue;
                 }
-                has_matches = true;
             }
 
             if let Some(interface_num) = hidraw_config.interface_num {
                 if device.interface_number() != interface_num {
                     continue;
                 }
-                has_matches = true;
             }
 
-            if !has_matches {
-                return false;
-            }
+            return true;
         }
-        return true;
+
+        false
     }
 
     /// Returns true if a given evdev device is within a list of evdev configs.
@@ -208,12 +204,11 @@ impl CompositeDeviceConfig {
     ) -> bool {
         // TODO: Maybe in the future we will support virtual devices if we figure something
         // out. Ignore virtual devices.
-        if is_virtual(&device) {
+        if is_virtual(device) {
             log::debug!("{} is virtual, skipping.", device.name);
             return false;
         }
 
-        let mut has_matches = false;
         for evdev_config in evdev_configs.clone() {
             let evdev_config = evdev_config.clone();
 
@@ -221,22 +216,24 @@ impl CompositeDeviceConfig {
                 if !glob_match(name.as_str(), device.name.as_str()) {
                     continue;
                 }
-                has_matches = true;
             }
 
             if let Some(phys_path) = evdev_config.phys_path {
                 if !glob_match(phys_path.as_str(), device.phys_path.as_str()) {
                     continue;
                 }
-                has_matches = true;
             }
 
             if let Some(handler) = evdev_config.handler {
+                let mut has_matches = false;
                 for handle in device.handlers.clone() {
                     if !glob_match(handler.as_str(), handle.as_str()) {
                         continue;
                     }
                     has_matches = true;
+                }
+                if !has_matches {
+                    continue;
                 }
             }
 
@@ -244,22 +241,18 @@ impl CompositeDeviceConfig {
                 if !glob_match(vendor_id.as_str(), device.id.vendor.as_str()) {
                     continue;
                 }
-                has_matches = true
             }
 
             if let Some(product_id) = evdev_config.product_id {
                 if !glob_match(product_id.as_str(), device.id.product.as_str()) {
                     continue;
                 }
-                has_matches = true
             }
+
+            return true;
         }
 
-        if !has_matches {
-            return false;
-        }
-
-        return true;
+        false
     }
 
     /// Returns true if the configuration has a valid set of matches. This will
