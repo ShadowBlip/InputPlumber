@@ -103,8 +103,7 @@ impl HIDRawDevice {
             let tx = self.composite_tx.clone();
             let driver = steam_deck::DeckController::new(self.info.clone(), tx);
             driver.run().await?;
-        }
-        if self.info.vendor_id() == drivers::lego::driver::VID
+        } else if self.info.vendor_id() == drivers::lego::driver::VID
             && (self.info.product_id() == drivers::lego::driver::PID
                 || self.info.product_id() == drivers::lego::driver::PID2)
         {
@@ -112,6 +111,13 @@ impl HIDRawDevice {
             let tx = self.composite_tx.clone();
             let driver = lego::LegionController::new(self.info.clone(), tx);
             driver.run().await?;
+        } else {
+            return Err(format!(
+                "No driver for hidraw interface found. VID: {}, PID: {}",
+                self.info.vendor_id(),
+                self.info.product_id()
+            )
+            .into());
         }
 
         Ok(())

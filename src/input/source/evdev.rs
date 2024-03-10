@@ -102,7 +102,8 @@ impl EventDevice {
     pub async fn run(&self) -> Result<(), Box<dyn Error>> {
         let path = self.get_device_path();
         log::debug!("Opening device at: {}", path);
-        let device = Device::open(path.clone())?;
+        let mut device = Device::open(path.clone())?;
+        device.grab()?;
 
         // Query information about the device to get the absolute ranges
         let mut axes_info = HashMap::new();

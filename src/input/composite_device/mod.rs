@@ -16,6 +16,7 @@ use crate::{
 use super::{
     capability,
     event::{native::InputValue, Event},
+    manager::SourceDeviceInfo,
     source::SourceDevice,
     target::TargetCommand,
 };
@@ -46,8 +47,9 @@ pub enum Command {
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
     GetTargetDevicePaths(mpsc::Sender<Vec<String>>),
     GetDBusDevicePaths(mpsc::Sender<Vec<String>>),
-    SourceDeviceAdded,
+    SourceDeviceAdded(SourceDeviceInfo),
     SourceDeviceStopped(String),
+    SourceDeviceRemoved(String),
     Stop,
 }
 
@@ -150,8 +152,8 @@ impl DBusInterface {
 /// Defines a handle to a [CompositeDevice] for communication
 #[derive(Debug)]
 pub struct Handle {
-    tx: broadcast::Sender<Command>,
-    rx: broadcast::Receiver<Command>,
+    pub tx: broadcast::Sender<Command>,
+    pub rx: broadcast::Receiver<Command>,
 }
 
 impl Handle {
@@ -192,6 +194,8 @@ pub struct CompositeDevice {
     source_device_paths: Vec<String>,
     /// Unique identifiers for source devices. E.g. ["evdev://event0"]
     source_device_ids: Vec<String>,
+    /// All currently running source device threads
+    source_device_tasks: JoinSet<()>,
     /// Unique identifiers for running source devices. E.g. ["evdev://event0"]
     source_devices_used: Vec<String>,
     /// Map of DBus paths to their respective transmitter channel.
@@ -206,64 +210,12 @@ impl CompositeDevice {
     pub fn new(
         conn: Connection,
         config: CompositeDeviceConfig,
+        device_info: SourceDeviceInfo,
         capability_map: Option<CapabilityMap>,
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating CompositeDevice with config: {}", config.name);
         let (tx, rx) = broadcast::channel(BUFFER_SIZE);
-        let mut source_devices: Vec<SourceDevice> = Vec::new();
-        let mut source_device_paths: Vec<String> = Vec::new();
-        let mut source_device_ids: Vec<String> = Vec::new();
-
-        // Open evdev source devices based on configuration
-        if let Some(evdev_devices) = config.get_matching_evdev()? {
-            if !evdev_devices.is_empty() {
-                log::debug!("Found event devices");
-            }
-            for info in evdev_devices {
-                // Create an instance of the device
-                log::debug!("Adding source device: {:?}", info);
-                let device = source::evdev::EventDevice::new(info, tx.clone());
-
-                // Get the capabilities of the source device.
-                //let capabilities = device.get_capabilities()?;
-
-                // TODO: Based on the capability map in the config, translate
-                // the capabilities.
-
-                // Keep track of the source device
-                let id = device.get_id();
-                let device_path = device.get_device_path();
-                let source_device = source::SourceDevice::EventDevice(device);
-                source_devices.push(source_device);
-                source_device_paths.push(device_path);
-                source_device_ids.push(id);
-            }
-        }
-
-        // Open hidraw source devices based on configuration
-        if let Some(hidraw_devices) = config.get_matching_hidraw()? {
-            if !hidraw_devices.is_empty() {
-                log::debug!("Found hidraw devices");
-            }
-            for info in hidraw_devices {
-                log::debug!("Adding source device: {:?}", info);
-                let device = source::hidraw::HIDRawDevice::new(info, tx.clone());
-
-                // Get the capabilities of the source device.
-                //let capabilities = device.get_capabilities()?;
-
-                let id = device.get_id();
-                let device_path = device.get_device_path();
-                let source_device = source::SourceDevice::HIDRawDevice(device);
-                source_devices.push(source_device);
-                source_device_paths.push(device_path);
-                source_device_ids.push(id);
-            }
-        }
-
-        log::debug!("Finished adding source devices");
-
-        Ok(Self {
+        let mut device = Self {
             conn,
             config,
             capability_map,
@@ -274,13 +226,16 @@ impl CompositeDevice {
             intercept_mode: InterceptMode::None,
             tx,
             rx,
-            source_devices,
-            source_device_paths,
-            source_device_ids,
+            source_devices: Vec::new(),
+            source_device_paths: Vec::new(),
+            source_device_ids: Vec::new(),
+            source_device_tasks: JoinSet::new(),
             source_devices_used: Vec::new(),
             target_devices: HashMap::new(),
             target_dbus_devices: HashMap::new(),
-        })
+        };
+        device.add_source_device(device_info)?;
+        Ok(device)
     }
 
     /// Creates a new instance of the composite device interface on DBus.
@@ -312,7 +267,7 @@ impl CompositeDevice {
         }
 
         // Start all source devices
-        let mut tasks = self.run_source_devices().await?;
+        self.run_source_devices().await?;
 
         // Keep track of all target devices
         self.target_devices = targets;
@@ -350,7 +305,11 @@ impl CompositeDevice {
                         log::error!("Failed to send dbus device paths: {:?}", e);
                     }
                 }
-                Command::SourceDeviceAdded => todo!(),
+                Command::SourceDeviceAdded(device_info) => {
+                    if let Err(e) = self.on_source_device_added(device_info).await {
+                        log::error!("Failed to add source device: {:?}", e);
+                    }
+                }
                 Command::SourceDeviceStopped(device_id) => {
                     log::debug!("Detected source device removal: {}", device_id);
                     let idx = self
@@ -362,6 +321,11 @@ impl CompositeDevice {
                     }
                     if self.source_devices_used.is_empty() {
                         break;
+                    }
+                }
+                Command::SourceDeviceRemoved(id) => {
+                    if let Err(e) = self.on_source_device_removed(id).await {
+                        log::error!("Failed to remove source device: {:?}", e);
                     }
                 }
                 Command::Stop => {
@@ -391,7 +355,7 @@ impl CompositeDevice {
 
         // Wait on all tasks
         log::debug!("Waiting for source device tasks to finish");
-        while let Some(res) = tasks.join_next().await {
+        while let Some(res) = self.source_device_tasks.join_next().await {
             res?;
         }
 
@@ -438,9 +402,8 @@ impl CompositeDevice {
 
     /// Start and run the source devices that this composite device will
     /// consume.
-    async fn run_source_devices(&mut self) -> Result<JoinSet<()>, Box<dyn Error>> {
+    async fn run_source_devices(&mut self) -> Result<(), Box<dyn Error>> {
         // Keep a list of all the tasks
-        let mut tasks = JoinSet::new();
 
         // Hide all source devices
         // TODO: Make this configurable
@@ -449,6 +412,7 @@ impl CompositeDevice {
             hide_device(source_path).await?;
         }
 
+        log::debug!("Starting new source devices");
         // Start listening for events from all source devices
         let sources = self.source_devices.drain(..);
         for source in sources {
@@ -459,7 +423,7 @@ impl CompositeDevice {
                     let device_id = device.get_id();
                     self.source_devices_used.push(device_id.clone());
                     let tx = self.tx.clone();
-                    tasks.spawn(async move {
+                    self.source_device_tasks.spawn(async move {
                         if let Err(e) = device.run().await {
                             log::error!("Failed running event device: {:?}", e);
                         }
@@ -476,7 +440,7 @@ impl CompositeDevice {
                     let device_id = device.get_id();
                     self.source_devices_used.push(device_id.clone());
                     let tx = self.tx.clone();
-                    tasks.spawn(async move {
+                    self.source_device_tasks.spawn(async move {
                         if let Err(e) = device.run().await {
                             log::error!("Failed running hidraw device: {:?}", e);
                         }
@@ -488,8 +452,8 @@ impl CompositeDevice {
                 }
             }
         }
-
-        Ok(tasks)
+        log::debug!("All source device tasks started");
+        Ok(())
     }
 
     /// Process a single event from a source device. Events are piped through
@@ -789,6 +753,7 @@ impl CompositeDevice {
                         emit_queue.push(event);
                         self.emitted_mappings
                             .insert(mapping.name.clone(), mapping.clone());
+                        todo!();
                     }
                     if let Some(gamepad) = &mapping.target_event.gamepad {
                         if let Some(button) = gamepad.button.as_ref() {
@@ -823,6 +788,90 @@ impl CompositeDevice {
             self.tx.send(Command::ProcessEvent(Event::Native(event)))?;
         }
 
+        Ok(())
+    }
+
+    async fn on_source_device_added(
+        &mut self,
+        device_info: SourceDeviceInfo,
+    ) -> Result<(), Box<dyn Error>> {
+        self.add_source_device(device_info)?;
+        self.run_source_devices().await?;
+        log::debug!(
+            "Finished adding source device. All sources: {:?}",
+            self.source_device_ids
+        );
+        Ok(())
+    }
+
+    async fn on_source_device_removed(&mut self, id: String) -> Result<(), Box<dyn Error>> {
+        if id.starts_with("evdev://") {
+            let name = id.strip_prefix("evdev://").unwrap();
+            let path = format!("/dev/input/{}", name);
+
+            if let Some(idx) = self.source_device_paths.iter().position(|str| str == &path) {
+                self.source_device_paths.remove(idx);
+            };
+
+            let Some(idx) = self.source_device_ids.iter().position(|str| str == &id) else {
+                return Ok(());
+            };
+
+            self.source_device_ids.remove(idx);
+        }
+        if id.starts_with("hidraw://") {
+            let name = id.strip_prefix("hidraw://").unwrap();
+            let path = format!("/dev/{}", name);
+
+            if let Some(idx) = self.source_device_paths.iter().position(|str| str == &path) {
+                self.source_device_paths.remove(idx);
+            };
+
+            let Some(idx) = self.source_device_ids.iter().position(|str| str == &id) else {
+                return Ok(());
+            };
+
+            self.source_device_ids.remove(idx);
+        }
+        return Ok(());
+    }
+
+    fn add_source_device(&mut self, device_info: SourceDeviceInfo) -> Result<(), Box<dyn Error>> {
+        let device_info = device_info.clone();
+        match device_info {
+            SourceDeviceInfo::EvdevDeviceInfo(info) => {
+                // Create an instance of the device
+                log::debug!("Adding source device: {:?}", info);
+                let device = source::evdev::EventDevice::new(info, self.tx.clone());
+                // Get the capabilities of the source device.
+                //let capabilities = device.get_capabilities()?;
+
+                // TODO: Based on the capability map in the config, translate
+                // the capabilities.
+                // Keep track of the source device
+                let id = device.get_id();
+                let device_path = device.get_device_path();
+                let source_device = source::SourceDevice::EventDevice(device);
+                self.source_devices.push(source_device);
+                self.source_device_paths.push(device_path);
+                self.source_device_ids.push(id);
+            }
+
+            SourceDeviceInfo::HIDRawDeviceInfo(info) => {
+                log::debug!("Adding source device: {:?}", info);
+                let device = source::hidraw::HIDRawDevice::new(info, self.tx.clone());
+
+                // Get the capabilities of the source device.
+                //let capabilities = device.get_capabilities()?;
+
+                let id = device.get_id();
+                let device_path = device.get_device_path();
+                let source_device = source::SourceDevice::HIDRawDevice(device);
+                self.source_devices.push(source_device);
+                self.source_device_paths.push(device_path);
+                self.source_device_ids.push(id);
+            }
+        }
         Ok(())
     }
 }
