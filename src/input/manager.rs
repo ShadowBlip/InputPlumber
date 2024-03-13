@@ -11,6 +11,7 @@ use zbus_macros::dbus_interface;
 
 use crate::config::CapabilityMap;
 use crate::config::CompositeDeviceConfig;
+use crate::config::SourceDevice;
 use crate::constants::BUS_PREFIX;
 use crate::constants::BUS_TARGETS_PREFIX;
 use crate::dmi::data::DMIData;
@@ -113,15 +114,22 @@ pub struct Manager {
     /// The receive side of the channel used to listen for [Command] messages
     /// from other objects.
     rx: broadcast::Receiver<Command>,
+    /// Mapping of source devices to their SourceDevice objects.
+    /// E.g. {"evdev://event0": <SourceDevice>}
+    source_devices: HashMap<String, SourceDevice>,
     /// Mapping of source devices to their DBus path
     /// E.g. {"evdev://event0": "/org/shadowblip/InputPlumber/devices/source/event0"}
-    source_devices: HashMap<String, String>,
+    source_device_dbus_paths: HashMap<String, String>,
     /// Map of source devices being used by a [CompositeDevice].
     /// E.g. {"evdev://event0": "/org/shadowblip/InputPlumber/CompositeDevice0"}
     source_devices_used: HashMap<String, String>,
     /// Mapping of DBus path to its corresponding [CompositeDevice] handle
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <Handle>}
     composite_devices: HashMap<String, composite_device::Handle>,
+    /// Mapping of all source devices used by composite devices with the CompositeDevice path as
+    /// the key for the hashmap.
+    /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<SourceDevice>}
+    composite_device_sources: HashMap<String, Vec<SourceDevice>>,
     /// Mapping of DBus path to its corresponding [CompositeDeviceConfig]
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <CompositeDeviceConfig>}
     used_configs: HashMap<String, CompositeDeviceConfig>,
@@ -146,9 +154,11 @@ impl Manager {
             tx,
             composite_devices: HashMap::new(),
             source_devices: HashMap::new(),
+            source_device_dbus_paths: HashMap::new(),
             source_devices_used: HashMap::new(),
             target_devices: HashMap::new(),
             used_configs: HashMap::new(),
+            composite_device_sources: HashMap::new(),
         }
     }
 
@@ -245,7 +255,7 @@ impl Manager {
         // these source devices.
         // TODO: Should we allow multiple composite devices with the same source?
         let mut devices_in_use = false;
-        let source_device_ids = device.get_source_device_ids();
+        let source_device_ids = device.get_source_devices_used();
         for (id, path) in self.source_devices_used.iter() {
             if !source_device_ids.contains(id) {
                 continue;
@@ -364,16 +374,29 @@ impl Manager {
         mut device: CompositeDevice,
         config: CompositeDeviceConfig,
         target_types: Option<Vec<String>>,
+        source_device: SourceDevice,
     ) -> Result<(), Box<dyn Error>> {
         // Generate the DBus tree path for this composite device
         let path = self.next_composite_dbus_path();
 
         // Keep track of the source devices that this composite device is
         // using.
-        let source_device_ids = device.get_source_device_ids();
+        let source_device_ids = device.get_source_devices_used();
         for id in source_device_ids {
-            self.source_devices_used.insert(id, path.clone());
+            self.source_devices_used.insert(id.clone(), path.clone());
+            self.source_devices.insert(id, source_device.clone());
         }
+
+        let composite_id = path.clone();
+        if !self.composite_device_sources.contains_key(&composite_id) {
+            self.composite_device_sources
+                .insert(composite_id.clone(), Vec::new());
+        }
+        let sources = self
+            .composite_device_sources
+            .get_mut(&composite_id)
+            .unwrap();
+        sources.push(source_device);
 
         // Create a DBus interface for the device
         device.listen_on_dbus(path.clone()).await?;
@@ -464,25 +487,40 @@ impl Manager {
     ) -> Result<(), Box<dyn Error>> {
         // Check all existing composite devices to see if this device is part of
         // their config
-        for composite_device in self.composite_devices.keys() {
+        'start: for composite_device in self.composite_devices.keys() {
             let Some(config) = self.used_configs.get(composite_device) else {
                 continue;
             };
             log::debug!("Checking existing config {:?} for device", config.name);
             let source_devices = config.source_devices.clone();
-            let device_info = device_info.clone();
-            match device_info {
+            match device_info.clone() {
                 SourceDeviceInfo::EvdevDeviceInfo(info) => {
                     log::debug!("Checking if existing composite device is missing event device");
-                    let mut configs = Vec::new();
                     for source_device in source_devices {
-                        if let Some(evdev) = source_device.evdev {
-                            configs.push(evdev);
-                        }
-                        if configs.is_empty() {
+                        if source_device.evdev.is_none() {
                             continue;
                         }
-                        if config.has_matching_evdev(&info, &configs) {
+                        if config.has_matching_evdev(&info, &source_device.clone().evdev.unwrap()) {
+                            // Check if the device has already been used in this config or not, stop here if the device must be unique.
+                            if let Some(sources) =
+                                self.composite_device_sources.get(composite_device)
+                            {
+                                for source in sources {
+                                    if source != &source_device {
+                                        continue;
+                                    }
+                                    if let Some(unique) = source_device.clone().unique {
+                                        if unique {
+                                            log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                            break 'start;
+                                        }
+                                    } else {
+                                        log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                        break 'start;
+                                    }
+                                }
+                            }
+
                             log::info!("Found missing device, adding source device {id} to existing composite device: {composite_device}");
                             let handle = self.composite_devices.get(composite_device.as_str());
                             if handle.is_none() {
@@ -494,23 +532,51 @@ impl Manager {
                             }
                             self.add_event_device_to_composite_device(&info, handle.unwrap())?;
                             self.source_devices_used
-                                .insert(id, composite_device.clone());
+                                .insert(id.clone(), composite_device.clone());
+                            let composite_id = composite_device.clone();
+                            if !self.composite_device_sources.contains_key(&composite_id) {
+                                self.composite_device_sources
+                                    .insert(composite_id.clone(), Vec::new());
+                            }
+                            let sources = self
+                                .composite_device_sources
+                                .get_mut(&composite_id)
+                                .unwrap();
+                            sources.push(source_device.clone());
+                            self.source_devices.insert(id, source_device.clone());
 
                             return Ok(());
                         }
                     }
                 }
                 SourceDeviceInfo::HIDRawDeviceInfo(info) => {
-                    let mut configs = Vec::new();
                     log::debug!("Checking if existing composite device is missing hidraw device");
                     for source_device in source_devices {
-                        if let Some(hidraw) = source_device.hidraw {
-                            configs.push(hidraw);
-                        }
-                        if configs.is_empty() {
+                        if source_device.hidraw.is_none() {
                             continue;
                         }
-                        if config.has_matching_hidraw(&info, &configs) {
+                        if config.has_matching_hidraw(&info, &source_device.clone().hidraw.unwrap())
+                        {
+                            // Check if the device has already been used in this config or not, stop here if the device must be unique.
+                            if let Some(sources) =
+                                self.composite_device_sources.get(composite_device)
+                            {
+                                for source in sources {
+                                    if source != &source_device {
+                                        continue;
+                                    }
+                                    if let Some(unique) = source_device.clone().unique {
+                                        if unique {
+                                            log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                            break 'start;
+                                        }
+                                    } else {
+                                        log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                        break 'start;
+                                    }
+                                }
+                            }
+
                             log::info!("Found missing device, adding source device {id} to existing composite device: {composite_device}");
                             let handle = self.composite_devices.get(composite_device.as_str());
                             if handle.is_none() {
@@ -522,8 +588,19 @@ impl Manager {
                             }
                             self.add_hidraw_device_to_composite_device(&info, handle.unwrap())?;
                             self.source_devices_used
-                                .insert(id, composite_device.clone());
+                                .insert(id.clone(), composite_device.clone());
+                            let composite_id = composite_device.clone();
+                            if !self.composite_device_sources.contains_key(&composite_id) {
+                                self.composite_device_sources
+                                    .insert(composite_id.clone(), Vec::new());
+                            }
+                            let sources = self
+                                .composite_device_sources
+                                .get_mut(&composite_id)
+                                .unwrap();
+                            sources.push(source_device.clone());
 
+                            self.source_devices.insert(id, source_device.clone());
                             return Ok(());
                         }
                     }
@@ -547,55 +624,60 @@ impl Manager {
             }
 
             let source_devices = config.source_devices.clone();
-            let dev_info = device_info.clone();
-            match dev_info {
+            match device_info.clone() {
                 SourceDeviceInfo::EvdevDeviceInfo(info) => {
-                    let mut configs = Vec::new();
                     for source_device in source_devices {
-                        if let Some(evdev) = source_device.evdev {
-                            configs.push(evdev);
-                        }
-                        if configs.is_empty() {
+                        if source_device.evdev.is_none() {
                             continue;
                         }
-                        if config.has_matching_evdev(&info, &configs) {
+                        // how to refrence source devices used by this config?
+
+                        if config.has_matching_evdev(&info, &source_device.clone().evdev.unwrap()) {
                             log::info!("Found a matching event device, creating composite device");
                             let device = self
-                                .create_composite_device_from_config(&config, device_info)
+                                .create_composite_device_from_config(&config, device_info.clone())
                                 .await?;
 
                             // Get the target input devices from the config
                             let target_devices_config = config.target_devices.clone();
 
                             // Create the composite deivce
-                            self.start_composite_device(device, config, target_devices_config)
-                                .await?;
+                            self.start_composite_device(
+                                device,
+                                config,
+                                target_devices_config,
+                                source_device.clone(),
+                            )
+                            .await?;
 
                             return Ok(());
                         }
                     }
                 }
                 SourceDeviceInfo::HIDRawDeviceInfo(info) => {
-                    let mut configs = Vec::new();
                     for source_device in source_devices {
-                        if let Some(hidraw) = source_device.hidraw {
-                            configs.push(hidraw);
-                        }
-                        if configs.is_empty() {
+                        if source_device.hidraw.is_none() {
                             continue;
                         }
-                        if config.has_matching_hidraw(&info, &configs) {
+                        if config.has_matching_hidraw(&info, &source_device.clone().hidraw.unwrap())
+                        {
                             log::info!("Found a matching hidraw device, creating composite device");
                             let device = self
-                                .create_composite_device_from_config(&config, device_info)
+                                .create_composite_device_from_config(&config, device_info.clone())
                                 .await?;
 
                             // Get the target input devices from the config
                             let target_devices_config = config.target_devices.clone();
 
                             // Create the composite deivce
-                            self.start_composite_device(device, config, target_devices_config)
-                                .await?;
+                            self.start_composite_device(
+                                device,
+                                config,
+                                target_devices_config,
+                                source_device.clone(),
+                            )
+                            .await?;
+
                             return Ok(());
                         }
                     }
@@ -622,8 +704,21 @@ impl Manager {
 
         handle
             .tx
-            .send(composite_device::Command::SourceDeviceRemoved(id))?;
+            .send(composite_device::Command::SourceDeviceRemoved(id.clone()))?;
 
+        let Some(sources) = self.composite_device_sources.get_mut(composite_device_path) else {
+            return Err(format!("CompostiteDevice {} not found", composite_device_path).into());
+        };
+        let Some(device) = self.source_devices.get(&id) else {
+            return Err(format!("Device {} not found in source devices", id).into());
+        };
+
+        let idx = sources.iter().position(|item| item == device);
+        if idx.is_none() {
+            return Err(format!("Device {} not found in composite device sources", id).into());
+        }
+        sources.remove(idx.unwrap());
+        self.source_devices.remove(&id);
         Ok(())
     }
 
@@ -663,7 +758,7 @@ impl Manager {
 
         // Add the device as a source device
         let path = source::evdev::get_dbus_path(handler.clone());
-        self.source_devices.insert(id, path);
+        self.source_device_dbus_paths.insert(id, path);
 
         Ok(())
     }
@@ -674,7 +769,7 @@ impl Manager {
 
         // Remove the device from our hashmap
         let id = format!("evdev://{}", handler);
-        self.source_devices.remove(&id);
+        self.source_device_dbus_paths.remove(&id);
         self.source_devices_used.remove(&id);
 
         // Remove the DBus interface
@@ -718,7 +813,7 @@ impl Manager {
 
         // Add the device as a source device
         let path = source::hidraw::get_dbus_path(path);
-        self.source_devices.insert(id, path);
+        self.source_device_dbus_paths.insert(id, path);
 
         Ok(())
     }
@@ -732,7 +827,7 @@ impl Manager {
         self.tx
             .send(Command::SourceDeviceRemoved { id: id.clone() })?;
 
-        self.source_devices.remove(&id);
+        self.source_device_dbus_paths.remove(&id);
         self.source_devices_used.remove(&id);
 
         Ok(())
