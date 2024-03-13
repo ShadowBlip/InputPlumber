@@ -25,12 +25,17 @@ source_devices:
       vendor_id: 0x17ef
       product_id: 0x6182
       interface_num: 0
+  - group: mouse # Touch Device
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6182
+      interface_num: 1
   - group: gamepad
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6182
       interface_num: 2
-  - group: mouse  # Only for optical X/Y
+  - group: mouse # Only for optical X/Y
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6182
@@ -51,6 +56,7 @@ source_devices:
       product_id: "6182"
       name: "Generic X-Box pad"
   - group: keyboard
+    unique: false
     evdev:
       vendor_id: "17ef"
       product_id: "618*"

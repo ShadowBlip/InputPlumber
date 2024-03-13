@@ -192,8 +192,6 @@ pub struct CompositeDevice {
     source_devices: Vec<SourceDevice>,
     /// Physical device path for source devices. E.g. ["/dev/input/event0"]
     source_device_paths: Vec<String>,
-    /// Unique identifiers for source devices. E.g. ["evdev://event0"]
-    source_device_ids: Vec<String>,
     /// All currently running source device threads
     source_device_tasks: JoinSet<()>,
     /// Unique identifiers for running source devices. E.g. ["evdev://event0"]
@@ -228,7 +226,6 @@ impl CompositeDevice {
             rx,
             source_devices: Vec::new(),
             source_device_paths: Vec::new(),
-            source_device_ids: Vec::new(),
             source_device_tasks: JoinSet::new(),
             source_devices_used: Vec::new(),
             target_devices: HashMap::new(),
@@ -311,21 +308,21 @@ impl CompositeDevice {
                     }
                 }
                 Command::SourceDeviceStopped(device_id) => {
-                    log::debug!("Detected source device removal: {}", device_id);
-                    let idx = self
-                        .source_devices_used
-                        .iter()
-                        .position(|v| v.clone() == device_id);
-                    if let Some(idx) = idx {
-                        self.source_devices_used.remove(idx);
+                    log::debug!("Detected source device stopped: {}", device_id);
+                    if let Err(e) = self.on_source_device_removed(device_id).await {
+                        log::error!("Failed to remove source device: {:?}", e);
                     }
                     if self.source_devices_used.is_empty() {
                         break;
                     }
                 }
-                Command::SourceDeviceRemoved(id) => {
-                    if let Err(e) = self.on_source_device_removed(id).await {
+                Command::SourceDeviceRemoved(device_id) => {
+                    log::debug!("Detected source device removed: {}", device_id);
+                    if let Err(e) = self.on_source_device_removed(device_id).await {
                         log::error!("Failed to remove source device: {:?}", e);
+                    }
+                    if self.source_devices_used.is_empty() {
+                        break;
                     }
                 }
                 Command::Stop => {
@@ -393,8 +390,8 @@ impl CompositeDevice {
     }
 
     /// Returns an array of all source devices ids being used by this device.
-    pub fn get_source_device_ids(&self) -> Vec<String> {
-        self.source_device_ids.clone()
+    pub fn get_source_devices_used(&self) -> Vec<String> {
+        self.source_devices_used.clone()
     }
 
     /// Sets the DBus target devices on the [CompositeDevice].
@@ -806,7 +803,7 @@ impl CompositeDevice {
         self.run_source_devices().await?;
         log::debug!(
             "Finished adding source device. All sources: {:?}",
-            self.source_device_ids
+            self.source_devices_used
         );
         Ok(())
     }
@@ -820,11 +817,11 @@ impl CompositeDevice {
                 self.source_device_paths.remove(idx);
             };
 
-            let Some(idx) = self.source_device_ids.iter().position(|str| str == &id) else {
+            let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) else {
                 return Ok(());
             };
 
-            self.source_device_ids.remove(idx);
+            self.source_devices_used.remove(idx);
         }
         if id.starts_with("hidraw://") {
             let name = id.strip_prefix("hidraw://").unwrap();
@@ -834,11 +831,11 @@ impl CompositeDevice {
                 self.source_device_paths.remove(idx);
             };
 
-            let Some(idx) = self.source_device_ids.iter().position(|str| str == &id) else {
+            let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) else {
                 return Ok(());
             };
 
-            self.source_device_ids.remove(idx);
+            self.source_devices_used.remove(idx);
         }
 
         Ok(())
@@ -862,7 +859,7 @@ impl CompositeDevice {
                 let source_device = source::SourceDevice::EventDevice(device);
                 self.source_devices.push(source_device);
                 self.source_device_paths.push(device_path);
-                self.source_device_ids.push(id);
+                self.source_devices_used.push(id);
             }
 
             SourceDeviceInfo::HIDRawDeviceInfo(info) => {
@@ -877,7 +874,7 @@ impl CompositeDevice {
                 let source_device = source::SourceDevice::HIDRawDevice(device);
                 self.source_devices.push(source_device);
                 self.source_device_paths.push(device_path);
-                self.source_device_ids.push(id);
+                self.source_devices_used.push(id);
             }
         }
         Ok(())

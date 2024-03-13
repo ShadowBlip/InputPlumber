@@ -135,6 +135,10 @@
         },
         "hidraw": {
           "$ref": "#/definitions/Hidraw"
+        },
+        "unique": {
+          "description": "If false, any devices matching this description will be added to the existing composite device. Defaults to true.",
+          "type": "boolean"
         }
       },
       "required": [

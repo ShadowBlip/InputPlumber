@@ -1,8 +1,7 @@
-use std::error::Error;
 use std::io;
 
 use glob_match::glob_match;
-use hidapi::{DeviceInfo, HidApi};
+use hidapi::DeviceInfo;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -75,14 +74,14 @@ impl CapabilityMap {
 }
 
 /// Defines a platform match for loading a [CompositeDevice]
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Match {
     pub dmi_data: Option<DMIMatch>,
 }
 
 /// Match DMI data for loading a [CompositeDevice]
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct DMIMatch {
     pub bios_release: Option<String>,
@@ -96,15 +95,16 @@ pub struct DMIMatch {
     pub cpu_vendor: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct SourceDevice {
     pub group: String,
     pub evdev: Option<Evdev>,
     pub hidraw: Option<Hidraw>,
+    pub unique: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Evdev {
     pub name: Option<String>,
@@ -114,7 +114,7 @@ pub struct Evdev {
     pub product_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Hidraw {
     pub vendor_id: Option<u16>,
@@ -124,7 +124,7 @@ pub struct Hidraw {
 }
 
 /// Defines a combined device
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct CompositeDeviceConfig {
     pub version: u32,
@@ -167,92 +167,83 @@ impl CompositeDeviceConfig {
     }
 
     /// Returns true if a given hidraw device is within a list of hidraw configs.
-    pub fn has_matching_hidraw(&self, device: &DeviceInfo, hidraw_configs: &Vec<Hidraw>) -> bool {
-        log::debug!("Checking hidraw config: {:?}", hidraw_configs);
-        for hidraw_config in hidraw_configs.clone() {
-            let hidraw_config = hidraw_config.clone();
+    pub fn has_matching_hidraw(&self, device: &DeviceInfo, hidraw_config: &Hidraw) -> bool {
+        log::debug!("Checking hidraw config: {:?}", hidraw_config);
+        let hidraw_config = hidraw_config.clone();
 
-            if let Some(vendor_id) = hidraw_config.vendor_id {
-                if device.vendor_id() != vendor_id {
-                    continue;
-                }
+        if let Some(vendor_id) = hidraw_config.vendor_id {
+            if device.vendor_id() != vendor_id {
+                return false;
             }
-
-            if let Some(product_id) = hidraw_config.product_id {
-                if device.product_id() != product_id {
-                    continue;
-                }
-            }
-
-            if let Some(interface_num) = hidraw_config.interface_num {
-                if device.interface_number() != interface_num {
-                    continue;
-                }
-            }
-
-            return true;
         }
 
-        false
+        if let Some(product_id) = hidraw_config.product_id {
+            if device.product_id() != product_id {
+                return false;
+            }
+        }
+
+        if let Some(interface_num) = hidraw_config.interface_num {
+            if device.interface_number() != interface_num {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Returns true if a given evdev device is within a list of evdev configs.
     pub fn has_matching_evdev(
         &self,
         device: &procfs::device::Device,
-        evdev_configs: &Vec<Evdev>,
+        evdev_config: &Evdev,
     ) -> bool {
-        // TODO: Maybe in the future we will support virtual devices if we figure something
-        // out. Ignore virtual devices.
+        //TODO: Check if the evdev has no proterties defined, that would always match.
+
         if is_virtual(device) {
             log::debug!("{} is virtual, skipping.", device.name);
             return false;
         }
 
-        for evdev_config in evdev_configs.clone() {
-            let evdev_config = evdev_config.clone();
+        let evdev_config = evdev_config.clone();
 
-            if let Some(name) = evdev_config.name {
-                if !glob_match(name.as_str(), device.name.as_str()) {
-                    continue;
-                }
+        if let Some(name) = evdev_config.name {
+            if !glob_match(name.as_str(), device.name.as_str()) {
+                return false;
             }
-
-            if let Some(phys_path) = evdev_config.phys_path {
-                if !glob_match(phys_path.as_str(), device.phys_path.as_str()) {
-                    continue;
-                }
-            }
-
-            if let Some(handler) = evdev_config.handler {
-                let mut has_matches = false;
-                for handle in device.handlers.clone() {
-                    if !glob_match(handler.as_str(), handle.as_str()) {
-                        continue;
-                    }
-                    has_matches = true;
-                }
-                if !has_matches {
-                    continue;
-                }
-            }
-
-            if let Some(vendor_id) = evdev_config.vendor_id {
-                if !glob_match(vendor_id.as_str(), device.id.vendor.as_str()) {
-                    continue;
-                }
-            }
-
-            if let Some(product_id) = evdev_config.product_id {
-                if !glob_match(product_id.as_str(), device.id.product.as_str()) {
-                    continue;
-                }
-            }
-
-            return true;
         }
 
-        false
+        if let Some(phys_path) = evdev_config.phys_path {
+            if !glob_match(phys_path.as_str(), device.phys_path.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(handler) = evdev_config.handler {
+            let mut has_matches = false;
+            for handle in device.handlers.clone() {
+                if !glob_match(handler.as_str(), handle.as_str()) {
+                    continue;
+                }
+                has_matches = true;
+            }
+            if !has_matches {
+                return false;
+            }
+        }
+
+        if let Some(vendor_id) = evdev_config.vendor_id {
+            if !glob_match(vendor_id.as_str(), device.id.vendor.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(product_id) = evdev_config.product_id {
+            if !glob_match(product_id.as_str(), device.id.product.as_str()) {
+                return false;
+            }
+        }
+        true
     }
 
     /// Returns true if the configuration has a valid set of matches. This will
@@ -350,12 +341,12 @@ impl CompositeDeviceConfig {
 
 /// Determines if a procfs device is virtual or real.
 fn is_virtual(device: &procfs::device::Device) -> bool {
-    if device.phys_path != "" {
+    if !device.phys_path.is_empty() {
         return false;
     }
 
     if device.sysfs_path.contains("/devices/virtual") {
         return true;
     }
-    return false;
+    false
 }
