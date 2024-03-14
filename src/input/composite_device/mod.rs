@@ -9,12 +9,16 @@ use zbus_macros::dbus_interface;
 
 use crate::{
     config::{CapabilityMap, CapabilityMapping, CompositeDeviceConfig},
-    input::{event::native::NativeEvent, source},
+    input::{
+        capability::{Gamepad, GamepadButton},
+        event::native::NativeEvent,
+        source,
+    },
     udev::{hide_device, unhide_device},
 };
 
 use super::{
-    capability,
+    capability::{Capability, Keyboard},
     event::{native::InputValue, Event},
     manager::SourceDeviceInfo,
     source::SourceDevice,
@@ -173,10 +177,10 @@ pub struct CompositeDevice {
     /// Capability mapping for the CompositeDevice
     capability_map: Option<CapabilityMap>,
     /// List of input capabilities that can be translated by the capability map
-    translatable_capabilities: Vec<capability::Capability>,
+    translatable_capabilities: Vec<Capability>,
     /// List of currently "pressed" actions used to translate multiple input
     /// sequences into a single input event.
-    translatable_active_inputs: Vec<capability::Capability>,
+    translatable_active_inputs: Vec<Capability>,
     /// Keep track of translated events we've emitted so we can send
     /// release events
     emitted_mappings: HashMap<String, CapabilityMapping>,
@@ -477,7 +481,7 @@ impl CompositeDevice {
         log::trace!("Event capability: {:?}", cap);
 
         // Only send valid events to the target device(s)
-        if cap == capability::Capability::NotImplemented {
+        if cap == Capability::NotImplemented {
             log::trace!("Refusing to send 'NotImplemented' event to target devices");
             return Ok(());
         }
@@ -499,18 +503,13 @@ impl CompositeDevice {
 
         // Process the event depending on the intercept mode
         let mode = self.intercept_mode.clone();
-        if matches!(mode, InterceptMode::Pass) {
-            let capability = event.as_capability();
-            if let capability::Capability::Gamepad(gamepad) = capability {
-                if let capability::Gamepad::Button(btn) = gamepad {
-                    if let capability::GamepadButton::Guide = btn {
-                        // Set the intercept mode while the button is pressed
-                        if event.pressed() {
-                            log::debug!("Intercepted guide button press");
-                            self.set_intercept_mode(InterceptMode::Always);
-                        }
-                    }
-                }
+        if matches!(mode, InterceptMode::Pass)
+            && cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
+        {
+            // Set the intercept mode while the button is pressed
+            if event.pressed() {
+                log::debug!("Intercepted guide button press");
+                self.set_intercept_mode(InterceptMode::Always);
             }
         }
 
@@ -522,17 +521,32 @@ impl CompositeDevice {
 
     /// Writes the given event to the appropriate target device.
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
-        let event = TargetCommand::WriteEvent(event);
-
         // If the device is in intercept mode, only send events to DBus
         // target devices.
         if matches!(self.intercept_mode, InterceptMode::Always) {
+            let event = TargetCommand::WriteEvent(event);
+            #[allow(clippy::for_kv_map)]
             for (_, target) in &self.target_dbus_devices {
                 target.send(event.clone()).await?;
             }
             return Ok(());
         }
 
+        // When intercept mode is enabled, send ALL Guide button events over DBus
+        if matches!(self.intercept_mode, InterceptMode::Pass) {
+            let cap = event.as_capability();
+            if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)) {
+                let event = TargetCommand::WriteEvent(event);
+                #[allow(clippy::for_kv_map)]
+                for (_, target) in &self.target_dbus_devices {
+                    target.send(event.clone()).await?;
+                }
+                return Ok(());
+            }
+        }
+
+        let event = TargetCommand::WriteEvent(event);
+        #[allow(clippy::for_kv_map)]
         for (_, target) in &self.target_devices {
             target.send(event.clone()).await?;
         }
@@ -549,14 +563,14 @@ impl CompositeDevice {
         for mapping in map.mapping.iter() {
             for source_event in mapping.source_events.iter() {
                 if let Some(keyboard) = source_event.keyboard.as_ref() {
-                    let key = capability::Keyboard::from_str(keyboard.as_str());
+                    let key = Keyboard::from_str(keyboard.as_str());
                     if key.is_err() {
                         return Err(
                             format!("Invalid or unimplemented capability: {keyboard}").into()
                         );
                     }
                     let key = key.unwrap();
-                    let cap = capability::Capability::Keyboard(key);
+                    let cap = Capability::Keyboard(key);
                     self.translatable_capabilities.push(cap)
                 }
                 if let Some(gamepad) = source_event.gamepad.as_ref() {
@@ -631,7 +645,7 @@ impl CompositeDevice {
                 // Loop through each source capability in the mapping
                 for source_event in mapping.source_events.iter() {
                     if let Some(keyboard) = source_event.keyboard.as_ref() {
-                        let key = capability::Keyboard::from_str(keyboard.as_str());
+                        let key = Keyboard::from_str(keyboard.as_str());
                         if key.is_err() {
                             log::error!(
                                 "Invalid or unimplemented capability: {}",
@@ -640,7 +654,7 @@ impl CompositeDevice {
                             continue;
                         }
                         let key = key.unwrap();
-                        let cap = capability::Capability::Keyboard(key);
+                        let cap = Capability::Keyboard(key);
                         if self.translatable_active_inputs.contains(&cap) {
                             has_keys_pressed = true;
                             break;
@@ -657,7 +671,7 @@ impl CompositeDevice {
                 // If no more inputs are being pressed, send a release event.
                 if !has_keys_pressed {
                     if let Some(keyboard) = &mapping.target_event.keyboard {
-                        let key = capability::Keyboard::from_str(keyboard.as_str());
+                        let key = Keyboard::from_str(keyboard.as_str());
                         if key.is_err() {
                             log::error!(
                                 "Invalid or unimplemented capability: {}",
@@ -666,7 +680,7 @@ impl CompositeDevice {
                             continue;
                         }
                         let key = key.unwrap();
-                        let cap = capability::Capability::Keyboard(key);
+                        let cap = Capability::Keyboard(key);
                         let event = NativeEvent::new(cap, InputValue::Bool(false));
                         log::trace!("Adding event to emit queue: {:?}", event);
                         emit_queue.push(event);
@@ -674,7 +688,7 @@ impl CompositeDevice {
                     }
                     if let Some(gamepad) = &mapping.target_event.gamepad {
                         if let Some(button) = gamepad.button.as_ref() {
-                            let btn = capability::GamepadButton::from_str(button.as_str());
+                            let btn = GamepadButton::from_str(button.as_str());
                             if btn.is_err() {
                                 log::error!(
                                     "Invalid or unimplemented capability: {}",
@@ -683,8 +697,7 @@ impl CompositeDevice {
                                 continue;
                             }
                             let btn = btn.unwrap();
-                            let cap =
-                                capability::Capability::Gamepad(capability::Gamepad::Button(btn));
+                            let cap = Capability::Gamepad(Gamepad::Button(btn));
                             let event = NativeEvent::new(cap, InputValue::Bool(false));
                             log::trace!("Adding event to emit queue: {:?}", event);
                             emit_queue.push(event);
@@ -702,7 +715,7 @@ impl CompositeDevice {
                 let mut is_missing_keys = false;
                 for source_event in mapping.source_events.iter() {
                     if let Some(keyboard) = source_event.keyboard.as_ref() {
-                        let key = capability::Keyboard::from_str(keyboard.as_str());
+                        let key = Keyboard::from_str(keyboard.as_str());
                         if key.is_err() {
                             log::error!(
                                 "Invalid or unimplemented capability: {}",
@@ -711,7 +724,7 @@ impl CompositeDevice {
                             continue;
                         }
                         let key = key.unwrap();
-                        let cap = capability::Capability::Keyboard(key);
+                        let cap = Capability::Keyboard(key);
                         if !self.translatable_active_inputs.contains(&cap) {
                             is_missing_keys = true;
                             break;
@@ -719,7 +732,7 @@ impl CompositeDevice {
                     }
                     if let Some(gamepad) = source_event.gamepad.as_ref() {
                         if let Some(button) = gamepad.button.as_ref() {
-                            let btn = capability::GamepadButton::from_str(button.as_str());
+                            let btn = GamepadButton::from_str(button.as_str());
                             if btn.is_err() {
                                 log::error!(
                                     "Invalid or unimplemented capability: {}",
@@ -728,8 +741,7 @@ impl CompositeDevice {
                                 continue;
                             }
                             let btn = btn.unwrap();
-                            let cap =
-                                capability::Capability::Gamepad(capability::Gamepad::Button(btn));
+                            let cap = Capability::Gamepad(Gamepad::Button(btn));
                             if !self.translatable_active_inputs.contains(&cap) {
                                 is_missing_keys = true;
                                 break;
@@ -743,7 +755,7 @@ impl CompositeDevice {
 
                 if !is_missing_keys {
                     if let Some(keyboard) = &mapping.target_event.keyboard {
-                        let key = capability::Keyboard::from_str(keyboard.as_str());
+                        let key = Keyboard::from_str(keyboard.as_str());
                         if key.is_err() {
                             log::error!(
                                 "Invalid or unimplemented capability: {}",
@@ -752,7 +764,7 @@ impl CompositeDevice {
                             continue;
                         }
                         let key = key.unwrap();
-                        let cap = capability::Capability::Keyboard(key);
+                        let cap = Capability::Keyboard(key);
                         let event = NativeEvent::new(cap, InputValue::Bool(true));
                         log::trace!("Adding event to emit queue: {:?}", event);
                         emit_queue.push(event);
@@ -761,7 +773,7 @@ impl CompositeDevice {
                     }
                     if let Some(gamepad) = &mapping.target_event.gamepad {
                         if let Some(button) = gamepad.button.as_ref() {
-                            let btn = capability::GamepadButton::from_str(button.as_str());
+                            let btn = GamepadButton::from_str(button.as_str());
                             if btn.is_err() {
                                 log::error!(
                                     "Invalid or unimplemented capability: {}",
@@ -770,8 +782,7 @@ impl CompositeDevice {
                                 continue;
                             }
                             let btn = btn.unwrap();
-                            let cap =
-                                capability::Capability::Gamepad(capability::Gamepad::Button(btn));
+                            let cap = Capability::Gamepad(Gamepad::Button(btn));
                             let event = NativeEvent::new(cap, InputValue::Bool(true));
                             log::trace!("Adding event to emit queue: {:?}", event);
                             emit_queue.push(event);
