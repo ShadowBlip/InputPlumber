@@ -321,6 +321,7 @@ impl KeyboardDevice {
         keys.insert(KeyCode::KEY_F22);
         keys.insert(KeyCode::KEY_F23);
         keys.insert(KeyCode::KEY_F24);
+        keys.insert(KeyCode::KEY_PROG1);
 
         let device = VirtualDeviceBuilder::new()?
             .name("InputPlumber Keyboard")
@@ -494,6 +495,7 @@ fn capability_from_key_string(key: &str) -> Capability {
         "KEY_F22" => Capability::Keyboard(Keyboard::KeyF22),
         "KEY_F23" => Capability::Keyboard(Keyboard::KeyF23),
         "KEY_F24" => Capability::Keyboard(Keyboard::KeyF24),
+        "KEY_PROG1" => Capability::Keyboard(Keyboard::KeyProg1),
         _ => Capability::NotImplemented,
     }
 }

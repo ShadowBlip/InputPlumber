@@ -6,15 +6,15 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: Anbernic Win 600
+name: AYANEO KUN
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: Win600
-      sys_vendor: ANBERNIC 
+      product_name: AYANEO KUN
+      sys_vendor: AYANEO
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -22,7 +22,7 @@ source_devices:
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:02:00.3-5/input0
+      phys_path: usb-0000:c4:00.3-4.1/input0
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
@@ -35,4 +35,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-event_map_id: anb1
+capability_map_id: aya6

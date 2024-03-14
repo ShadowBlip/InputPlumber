@@ -492,6 +492,7 @@ pub enum Keyboard {
     KeyF22,
     KeyF23,
     KeyF24,
+    KeyProg1,
 }
 
 impl fmt::Display for Keyboard {
@@ -657,6 +658,7 @@ impl fmt::Display for Keyboard {
             Keyboard::KeyF22 => write!(f, "KeyF22"),
             Keyboard::KeyF23 => write!(f, "KeyF23"),
             Keyboard::KeyF24 => write!(f, "KeyF24"),
+            Keyboard::KeyProg1 => write!(f, "KeyProg1"),
         }
     }
 }
@@ -826,6 +828,7 @@ impl FromStr for Keyboard {
             "KeyF22" => Ok(Keyboard::KeyF22),
             "KeyF23" => Ok(Keyboard::KeyF23),
             "KeyF24" => Ok(Keyboard::KeyF24),
+            "KeyProg1" => Ok(Keyboard::KeyProg1),
             _ => Err(()),
         }
     }

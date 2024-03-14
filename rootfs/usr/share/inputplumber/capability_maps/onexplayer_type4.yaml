@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../schema/capability_map_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: OneXPlayer Type 4
+
+# Unique identifier of the capability mapping
+id: oxp4
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Volume Up
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyD
+    target_event:
+      keyboard: KeyVolumeUp
+  - name: Volume Down
+    source_events:
+      - keyboard: KeyO
+      - keyboard: KeyLeftCtrl
+      - keyboard: KeyLeftMeta
+    target_event:
+      keyboard: KeyVolumeDown
+  - name: Turbo
+    source_events:
+      - keyboard: KeyLeftCtrl
+      - keyboard: KeyLeftAlt
+      - keyboard: KeyLeftMeta
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+# List of events to filter from the source devices
+filtered_events: []

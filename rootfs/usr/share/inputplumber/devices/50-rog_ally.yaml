@@ -22,39 +22,12 @@ source_devices:
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:08:00.3-2/input0
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:09:00.3-2/input0
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:0a:00.3-2/input0
+      phys_path: usb-0000:0[8-a]:00.3-2/input0
   - group: keyboard
+    unique: false
     evdev:
       name: Asus Keyboard
-      phys_path: usb-0000:08:00.3-3/input0
-  - group: keyboard
-    evdev:
-      name: Asus Keyboard
-      phys_path: usb-0000:08:00.3-3/input2
-  - group: keyboard
-    evdev:
-      name: Asus Keyboard
-      phys_path: usb-0000:09:00.3-3/input0
-  - group: keyboard
-    evdev:
-      name: Asus Keyboard
-      phys_path: usb-0000:09:00.3-3/input2
-  - group: keyboard
-    evdev:
-      name: Asus Keyboard
-      phys_path: usb-0000:0a:00.3-3/input0
-  - group: keyboard
-    evdev:
-      name: Asus Keyboard
-      phys_path: usb-0000:0a:00.3-3/input2
+      phys_path: usb-0000:0[8-a]:00.3-3/input[0-2]
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
@@ -63,4 +36,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-event_map_id: ally1
+capability_map_id: aly1

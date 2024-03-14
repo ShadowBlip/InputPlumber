@@ -289,7 +289,7 @@ impl EvdevEvent {
                 KeyCode::KEY_SENDFILE => Capability::NotImplemented,
                 KeyCode::KEY_DELETEFILE => Capability::NotImplemented,
                 KeyCode::KEY_XFER => Capability::NotImplemented,
-                KeyCode::KEY_PROG1 => Capability::NotImplemented,
+                KeyCode::KEY_PROG1 => Capability::Keyboard(Keyboard::KeyProg1),
                 KeyCode::KEY_PROG2 => Capability::NotImplemented,
                 KeyCode::KEY_WWW => Capability::Keyboard(Keyboard::KeyWww),
                 KeyCode::KEY_MSDOS => Capability::NotImplemented,
@@ -786,6 +786,7 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
             Keyboard::KeyF22 => vec![KeyCode::KEY_F22.0],
             Keyboard::KeyF23 => vec![KeyCode::KEY_F23.0],
             Keyboard::KeyF24 => vec![KeyCode::KEY_F24.0],
+            Keyboard::KeyProg1 => vec![KeyCode::KEY_PROG1.0],
         },
     }
 }

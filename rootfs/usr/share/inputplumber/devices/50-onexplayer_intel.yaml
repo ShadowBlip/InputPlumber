@@ -18,7 +18,7 @@ matches:
       cpu_vendor: GenuineIntel
   - dmi_data:
       product_name: ONE XPLAYER
-      sys_vendor: ONE-NETBOOK
+      sys_vendor: ONE-NETBOOK TECHNOLOGY CO., LTD.
       cpu_vendor: GenuineIntel
 
 # One or more source devices to combine into a single virtual device. The events
