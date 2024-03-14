@@ -35,4 +35,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-event_map_id: gpd2
+capability_map_id: gpd2

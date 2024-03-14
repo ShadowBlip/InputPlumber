@@ -6,25 +6,18 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: AYANEO AIR Plus
+name: AYANEO 2
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: AIR Plus
-      board_name:  AB05-AMD
+      product_name: AYANEO 2
       sys_vendor: AYANEO
   - dmi_data:
-      product_name: AIR Plus
-      board_name:  AB05-Intel
+      product_name: GEEK
       sys_vendor: AYANEO
-  - dmi_data:
-      product_name: AIR Plus
-      board_name:  AB05-Mendocino
-      sys_vendor: AYANEO
-  
   
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -32,11 +25,7 @@ source_devices:
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:64:00.3-3/input0
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:00:14.0-6/input0
+      phys_path: usb-0000:e4:00.3-4/input0
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
@@ -49,4 +38,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-event_map_id: aya5
+capability_map_id: aya4

@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../schema/capability_map_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: OneXPlayer Type 2
+
+# Unique identifier of the capability mapping
+id: oxp2
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: KB (Short Press)
+    source_events:
+      - keyboard: KeyRightCtrl
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyO
+    target_event:
+      gamepad:
+        button: Keyboard
+  - name: Orange Button (Short Press)
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyD
+    target_event:
+      gamepad:
+        button: Guide
+  - name: Orange Button (Long Press)
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyG
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: Turbo + Orange Button
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeySysrq
+    target_event:
+      gamepad:
+        button: QuickAccess2
+  - name: KB + Orange Button
+    source_events:
+      - keyboard: KeyRightCtrl
+      - keyboard: KeyRightAlt
+      - keyboard: KeyDelete
+    target_event:
+      gamepad:
+        button: Screenshot
+
+# List of events to filter from the source devices
+filtered_events: []

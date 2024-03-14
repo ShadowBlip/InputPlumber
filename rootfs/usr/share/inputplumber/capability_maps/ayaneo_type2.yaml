@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=../schema/capability_map_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: AYANEO Type 2
+
+# Unique identifier of the capability mapping
+id: aya2
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Custom v1
+    source_events:
+      - keyboard: KeyApostrophe
+      - keyboard: KeyCopy
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: Custom v2
+    source_events:
+      - keyboard: KeyD
+      - keyboard: KeyLeftMeta
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: Aya Space v1
+    source_events:
+      - keyboard: KeyKpEnter
+      - keyboard: KeyLeft
+      - keyboard: KeyCopy
+    target_event:
+      gamepad:
+        button: Guide
+  - name: Aya Space v2
+    source_events:
+      - keyboard: KeyF12
+      - keyboard: KeyRightCtrl
+      - keyboard: KeyLeftMeta
+    target_event:
+      gamepad:
+        button: Guide
+
+# List of events to filter from the source devices
+filtered_events: []

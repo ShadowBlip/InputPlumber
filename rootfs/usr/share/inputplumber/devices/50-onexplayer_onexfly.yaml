@@ -6,15 +6,15 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: GPD Win4
+name: ONEXPLAYER ONEXFLY
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: G1618-04
-      sys_vendor: GPD
+      product_name: ONEXPLAYER F1
+      sys_vendor: ONE-NETBOOK
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -22,11 +22,11 @@ source_devices:
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:73:00.3-4.1/input0
+      phys_path: usb-0000:c4:00.3-4/input0
   - group: keyboard
     evdev:
-      name:   Mouse for Windows
-      phys_path: usb-0000:73:00.3-4.2/input0
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
@@ -35,4 +35,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-event_map_id: gpd3
+capability_map_id: oxp3
