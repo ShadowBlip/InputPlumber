@@ -130,12 +130,15 @@ pub struct Manager {
     /// the key for the hashmap.
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<SourceDevice>}
     composite_device_sources: HashMap<String, Vec<SourceDevice>>,
+    /// Map of target devices being used by a [CompositeDevice].
+    /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<"/org/shadowblip/InputPlumber/devices/target/dbus0">}
+    composite_device_targets: HashMap<String, Vec<String>>,
     /// Mapping of DBus path to its corresponding [CompositeDeviceConfig]
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <CompositeDeviceConfig>}
     used_configs: HashMap<String, CompositeDeviceConfig>,
     /// Mapping of target devices to their respective handles
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Handle>}
-    target_devices: HashMap<String, mpsc::Sender<NativeEvent>>,
+    target_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
 }
 
 impl Manager {
@@ -159,6 +162,7 @@ impl Manager {
             target_devices: HashMap::new(),
             used_configs: HashMap::new(),
             composite_device_sources: HashMap::new(),
+            composite_device_targets: HashMap::new(),
         }
     }
 
@@ -294,7 +298,7 @@ impl Manager {
     /// Start and run the given target devices. Returns a HashMap of transmitters
     /// to send events to the given targets.
     async fn start_target_devices(
-        &self,
+        &mut self,
         targets: Vec<TargetDeviceType>,
     ) -> Result<HashMap<String, mpsc::Sender<TargetCommand>>, Box<dyn Error>> {
         let mut target_devices = HashMap::new();
@@ -305,6 +309,7 @@ impl Manager {
                     let path = self.next_target_path("keyboard")?;
                     let event_tx = device.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
+                    self.target_devices.insert(path.clone(), event_tx.clone());
                     device.listen_on_dbus(path).await?;
                     tokio::spawn(async move {
                         if let Err(e) = device.run().await {
@@ -317,6 +322,7 @@ impl Manager {
                     let path = self.next_target_path("mouse")?;
                     let event_tx = mouse.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
+                    self.target_devices.insert(path.clone(), event_tx.clone());
                     mouse.listen_on_dbus(path).await?;
                     tokio::spawn(async move {
                         if let Err(e) = mouse.run().await {
@@ -329,6 +335,7 @@ impl Manager {
                     let path = self.next_target_path("gamepad")?;
                     let event_tx = gamepad.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
+                    self.target_devices.insert(path.clone(), event_tx.clone());
                     gamepad.listen_on_dbus(path).await?;
                     tokio::spawn(async move {
                         if let Err(e) = gamepad.run().await {
@@ -341,6 +348,7 @@ impl Manager {
                     let path = self.next_target_path("dbus")?;
                     let event_tx = device.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
+                    self.target_devices.insert(path.clone(), event_tx.clone());
                     device.listen_on_dbus(path).await?;
                     tokio::spawn(async move {
                         if let Err(e) = device.run().await {
@@ -353,6 +361,7 @@ impl Manager {
                     let path = self.next_target_path("gamepad")?;
                     let event_tx = device.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
+                    self.target_devices.insert(path.clone(), event_tx.clone());
                     device.listen_on_dbus(path).await?;
                     tokio::spawn(async move {
                         if let Err(e) = device.run().await {
@@ -387,14 +396,14 @@ impl Manager {
             self.source_devices.insert(id, source_device.clone());
         }
 
-        let composite_id = path.clone();
-        if !self.composite_device_sources.contains_key(&composite_id) {
+        let composite_path = path.clone();
+        if !self.composite_device_sources.contains_key(&composite_path) {
             self.composite_device_sources
-                .insert(composite_id.clone(), Vec::new());
+                .insert(composite_path.clone(), Vec::new());
         }
         let sources = self
             .composite_device_sources
-            .get_mut(&composite_id)
+            .get_mut(&composite_path)
             .unwrap();
         sources.push(source_device);
 
@@ -404,9 +413,16 @@ impl Manager {
         // Get a handle to the device
         let handle = device.handle();
 
+        // Keep track of target devices that this composite device is using
+        let mut target_device_paths = Vec::new();
+
         // Create a DBus target device
         let dbus_device = self.create_target_device("dbus").await?;
         let dbus_devices = self.start_target_devices(vec![dbus_device]).await?;
+        let dbus_paths = dbus_devices.keys();
+        for dbus_path in dbus_paths {
+            target_device_paths.push(dbus_path.clone());
+        }
         device.set_dbus_devices(dbus_devices);
 
         // Create target devices based on the configuration
@@ -420,6 +436,10 @@ impl Manager {
 
         // Start the target input devices
         let targets = self.start_target_devices(target_devices).await?;
+        let target_paths = targets.keys();
+        for target_path in target_paths {
+            target_device_paths.push(target_path.clone());
+        }
 
         // Run the device
         let dbus_path = path.clone();
@@ -440,6 +460,9 @@ impl Manager {
         log::debug!("Managed source devices: {:?}", self.source_devices_used);
         self.used_configs.insert(path, config);
         log::debug!("Used configs: {:?}", self.used_configs);
+        self.composite_device_targets
+            .insert(composite_path.clone(), target_device_paths);
+        log::debug!("Used target devices: {:?}", self.composite_device_targets);
 
         Ok(())
     }
@@ -467,11 +490,20 @@ impl Manager {
             self.source_devices_used.remove::<String>(&id);
         }
 
+        // Find any target devices that were in use by the composite device
+        if let Some(target_device_paths) = self.composite_device_targets.get(&path) {
+            for target_device_path in target_device_paths {
+                self.target_devices.remove(target_device_path);
+            }
+        }
+
         // Remove the composite device from our list
         self.composite_devices.remove::<String>(&path);
         log::debug!("Composite device removed: {}", path);
         self.used_configs.remove::<String>(&path);
         log::debug!("Used config removed: {}", path);
+        self.composite_device_targets.remove(&path);
+        log::debug!("Used target devices: {:?}", self.composite_device_targets);
 
         Ok(())
     }
