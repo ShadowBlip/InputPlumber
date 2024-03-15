@@ -430,7 +430,6 @@ impl CompositeDevice {
                 // then start listening for inputs from that device.
                 SourceDevice::EventDevice(device) => {
                     let device_id = device.get_id();
-                    self.source_devices_used.push(device_id.clone());
                     let tx = self.tx.clone();
                     self.source_device_tasks.spawn(async move {
                         if let Err(e) = device.run().await {
@@ -447,7 +446,6 @@ impl CompositeDevice {
                 // then start listening for inputs from that device.
                 SourceDevice::HIDRawDevice(device) => {
                     let device_id = device.get_id();
-                    self.source_devices_used.push(device_id.clone());
                     let tx = self.tx.clone();
                     self.source_device_tasks.spawn(async move {
                         if let Err(e) = device.run().await {
@@ -828,11 +826,9 @@ impl CompositeDevice {
                 self.source_device_paths.remove(idx);
             };
 
-            let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) else {
-                return Ok(());
+            if let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) {
+                self.source_devices_used.remove(idx);
             };
-
-            self.source_devices_used.remove(idx);
         }
         if id.starts_with("hidraw://") {
             let name = id.strip_prefix("hidraw://").unwrap();
@@ -842,12 +838,19 @@ impl CompositeDevice {
                 self.source_device_paths.remove(idx);
             };
 
-            let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) else {
-                return Ok(());
+            if let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) {
+                self.source_devices_used.remove(idx);
             };
-
-            self.source_devices_used.remove(idx);
         }
+
+        log::debug!(
+            "Current source device paths: {:?}",
+            self.source_device_paths
+        );
+        log::debug!(
+            "Current source devices used: {:?}",
+            self.source_devices_used
+        );
 
         Ok(())
     }
