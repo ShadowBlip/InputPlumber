@@ -43,6 +43,8 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	install -D -m 644 rootfs/usr/lib/systemd/system/$(NAME).service \
 		$(PREFIX)/lib/systemd/system/$(NAME).service
+	install -D -m 644 rootfs/usr/lib/udev/hwdb.d/59-inputplumber.hwdb \
+		$(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb
 	install -D -m 644 -t $(PREFIX)/share/$(NAME)/devices/ \
 		rootfs/usr/share/$(NAME)/devices/*
 	install -D -m 644 -t $(PREFIX)/share/$(NAME)/schema/ \
@@ -61,6 +63,7 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/bin/$(NAME)
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
+	rm $(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb
 	rm -rf $(PREFIX)/share/$(NAME)/devices/
 	rm -rf $(PREFIX)/share/$(NAME)/schema/
 	rm -rf $(PREFIX)/share/$(NAME)/capability_maps/
