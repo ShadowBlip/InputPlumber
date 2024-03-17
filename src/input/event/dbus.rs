@@ -24,6 +24,8 @@ pub enum Action {
     R1,
     R2,
     R3,
+    VolumeUp,
+    VolumeDown,
 }
 
 impl Action {
@@ -48,6 +50,8 @@ impl Action {
             Action::R1 => "ui_r1",
             Action::R2 => "ui_r2",
             Action::R3 => "ui_r3",
+            Action::VolumeUp => "ui_volume_up",
+            Action::VolumeDown => "ui_volume_down",
         }
     }
 
@@ -289,8 +293,8 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Keyboard::KeyInsert => vec![Action::None],
             Keyboard::KeyDelete => vec![Action::None],
             Keyboard::KeyMute => vec![Action::None],
-            Keyboard::KeyVolumeDown => vec![Action::None],
-            Keyboard::KeyVolumeUp => vec![Action::None],
+            Keyboard::KeyVolumeDown => vec![Action::VolumeUp],
+            Keyboard::KeyVolumeUp => vec![Action::VolumeDown],
             Keyboard::KeyPower => vec![Action::None],
             Keyboard::KeyKpEqual => vec![Action::None],
             Keyboard::KeyPause => vec![Action::None],
