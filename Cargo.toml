@@ -14,6 +14,7 @@ assets = [
   { source = "rootfs/usr/share/inputplumber/schema/*.json", dest = "/usr/share/inputplumber/schema/", mode = "644" },
   { source = "rootfs/usr/share/inputplumber/capability_maps/*.yaml", dest = "/usr/share/inputplumber/capability_maps/", mode = "644" },
   { source = "rootfs/usr/share/inputplumber/profiles/*.yaml", dest = "/usr/share/inputplumber/profiles/", mode = "644" },
+  { source = "rootfs/usr/lib/udev/hwdb.d/59-inputplumber.hwdb", dest = "/usr/lib/udev/hwdb.d/59-inputplumber.hwdb", mode = "644" },
 ]
 
 [dependencies]
