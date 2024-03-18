@@ -572,7 +572,26 @@ impl CompositeDevice {
                     self.translatable_capabilities.push(cap)
                 }
                 if let Some(gamepad) = source_event.gamepad.as_ref() {
-                    unimplemented!();
+                    if let Some(axis) = gamepad.axis.clone() {
+                        unimplemented!(); //  We might need to look at the struct for this to track
+                                          //  positive vs negative values.
+                    }
+                    if let Some(button) = gamepad.button.clone() {
+                        let button = GamepadButton::from_str(&button);
+                        if button.is_err() {
+                            return Err(
+                                <Box<dyn Error>>::from(
+                                    "Invalid or unimplemented capability: button".to_string(),
+                                ), //" {button}").into()
+                            );
+                        }
+                        let button = button.unwrap();
+                        let cap = Capability::Gamepad(Gamepad::Button(button));
+                        self.translatable_capabilities.push(cap)
+                    }
+                    if let Some(trigger) = gamepad.trigger.clone() {
+                        unimplemented!();
+                    }
                 }
                 if let Some(mouse) = source_event.mouse.as_ref() {
                     unimplemented!();
@@ -659,8 +678,28 @@ impl CompositeDevice {
                         }
                     }
                     if let Some(gamepad) = source_event.gamepad.as_ref() {
-                        unimplemented!();
+                        if let Some(axis) = gamepad.axis.clone() {
+                            unimplemented!(); //  We might need to look at the struct for this to track
+                                              //  positive vs negative values.
+                        }
+                        if let Some(button) = gamepad.button.clone() {
+                            let button = GamepadButton::from_str(&button);
+                            if button.is_err() {
+                                log::error!("Invalid or unimplemented capability: button");
+                                continue;
+                            }
+                            let button = button.unwrap();
+                            let cap = Capability::Gamepad(Gamepad::Button(button));
+                            if self.translatable_active_inputs.contains(&cap) {
+                                has_keys_pressed = true;
+                                break;
+                            }
+                        }
+                        if let Some(trigger) = gamepad.trigger.clone() {
+                            unimplemented!();
+                        }
                     }
+
                     if let Some(mouse) = source_event.mouse.as_ref() {
                         unimplemented!();
                     }
