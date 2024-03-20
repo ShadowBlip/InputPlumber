@@ -8,6 +8,7 @@ pub mod keyboard;
 pub mod mouse;
 pub mod steam_deck;
 pub mod xb360;
+pub mod dualsense;
 
 /// A [TargetDevice] is any virtual input device that emits input events
 #[derive(Debug)]
