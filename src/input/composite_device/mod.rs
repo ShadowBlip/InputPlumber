@@ -10,7 +10,7 @@ use zbus_macros::dbus_interface;
 use crate::{
     config::{CapabilityMap, CapabilityMapping, CompositeDeviceConfig},
     input::{
-        capability::{Gamepad, GamepadButton},
+        capability::{Gamepad, GamepadButton, GamepadTrigger},
         event::native::NativeEvent,
         source,
     },
@@ -599,7 +599,18 @@ impl CompositeDevice {
                         self.translatable_capabilities.push(cap)
                     }
                     if let Some(trigger) = gamepad.trigger.clone() {
-                        unimplemented!();
+                        let trigger = GamepadTrigger::from_str(&trigger);
+                        if trigger.is_err() {
+                            return Err(
+                                <Box<dyn Error>>::from(
+                                    "Invalid or unimplemented capability: trigger".to_string(),
+                                ), //" {trigger}").into()
+                            );
+                        }
+
+                        let trigger = trigger.unwrap();
+                        let cap = Capability::Gamepad(Gamepad::Trigger(trigger));
+                        self.translatable_capabilities.push(cap)
                     }
                 }
                 if let Some(mouse) = source_event.mouse.as_ref() {
@@ -705,7 +716,17 @@ impl CompositeDevice {
                             }
                         }
                         if let Some(trigger) = gamepad.trigger.clone() {
-                            unimplemented!();
+                            let trigger = GamepadTrigger::from_str(&trigger);
+                            if trigger.is_err() {
+                                log::error!("Invalid or unimplemented capability: button");
+                                continue;
+                            }
+                            let trigger = trigger.unwrap();
+                            let cap = Capability::Gamepad(Gamepad::Trigger(trigger));
+                            if self.translatable_active_inputs.contains(&cap) {
+                                has_keys_pressed = true;
+                                break;
+                            }
                         }
                     }
 

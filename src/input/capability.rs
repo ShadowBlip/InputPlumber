@@ -330,6 +330,22 @@ impl fmt::Display for GamepadTrigger {
     }
 }
 
+impl FromStr for GamepadTrigger {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "LeftTrigger" => Ok(GamepadTrigger::LeftTrigger),
+            "LeftTouchpadForce" => Ok(GamepadTrigger::LeftTouchpadForce),
+            "LeftStickForce" => Ok(GamepadTrigger::LeftStickForce),
+            "RightTrigger" => Ok(GamepadTrigger::RightTrigger),
+            "RightTouchpadForce" => Ok(GamepadTrigger::RightTouchpadForce),
+            "RightStickForce" => Ok(GamepadTrigger::RightStickForce),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyboard {
     KeyEsc,
