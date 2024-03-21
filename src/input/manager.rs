@@ -31,7 +31,6 @@ use crate::procfs;
 use crate::watcher;
 
 use super::composite_device::Handle;
-use super::event::native::NativeEvent;
 use super::target::TargetCommand;
 
 const DEV_PATH: &str = "/dev";

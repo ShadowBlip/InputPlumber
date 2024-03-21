@@ -485,7 +485,7 @@ impl CompositeDevice {
         }
 
         // Check if the event needs to be translated based on the
-        // capability map. Translated events will be re-enqueued, so this will
+        // capability map. Translated events will be emitted here, so this will
         // return early.
         log::trace!(
             "Translatable capabilities: {:?}",
@@ -497,8 +497,17 @@ impl CompositeDevice {
             return Ok(());
         }
 
-        // TODO: Translate the event based on the device profile.
+        // TODO: Translate the event based on the device profile. This should be a separate
+        // function that returns an event_queue
 
+        // Process the event
+        self.emit_event(event).await?;
+
+        Ok(())
+    }
+
+    async fn emit_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+        let cap = event.as_capability();
         // Process the event depending on the intercept mode
         let mode = self.intercept_mode.clone();
         if matches!(mode, InterceptMode::Pass)
@@ -511,7 +520,7 @@ impl CompositeDevice {
             }
         }
 
-        // Write the event
+        log::trace!("Emitting event: {:?}", event);
         self.write_event(event).await?;
 
         Ok(())
@@ -834,10 +843,12 @@ impl CompositeDevice {
             }
         }
 
+        // TODO: Translate the event(s) based on the device profile. This should be a separate
+        // function that returns an event_queue
+
         // Emit the translated events
         for event in emit_queue {
-            log::trace!("Emitting event: {:?}", event);
-            self.tx.send(Command::ProcessEvent(Event::Native(event)))?;
+            self.emit_event(event).await?;
         }
 
         Ok(())
