@@ -14,9 +14,7 @@ use zbus_macros::dbus_interface;
 
 use crate::{
     drivers::dualsense::{
-        driver::*,
-        hid_report::PackedInputDataReport,
-        report_descriptor::*,
+        driver::*, hid_report::PackedInputDataReport, report_descriptor::*, usb::hid_report::PackedInputDataReport
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton},
@@ -74,17 +72,21 @@ impl DBusInterface {
 }
 
 #[derive(Debug)]
-pub struct DualSenseDevice {
+pub struct DualSenseDevice<T>
+where
+    T: PackedInputDataReport {
     conn: Connection,
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
-    state: PackedInputDataReport,
+    state: T,
     _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
     hardware: DualSenseHardware,
 }
 
-impl DualSenseDevice {
+impl<T> DualSenseDevice<T>
+where
+    T: PackedInputDataReport {
     pub fn new(conn: Connection, hardware: DualSenseHardware) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
@@ -120,7 +122,7 @@ impl DualSenseDevice {
     /// Creates and runs the target device
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Creating virtual dualsense controller");
-        let (device_tx, mut device_rx) = mpsc::channel::<PackedInputDataReport>(BUFFER_SIZE);
+        let (device_tx, mut device_rx) = mpsc::channel::<T>(BUFFER_SIZE);
         let mut device = self.create_virtual_device()?;
 
         // Spawn the device in its own blocking thread
@@ -154,12 +156,14 @@ impl DualSenseDevice {
                                 report_number,
                                 report_type,
                             } => {
+                                /*
                                 log::debug!("Received GetReport event: id: {id}, num: {report_number}, type: {:?}", report_type);
                                 let _ = device.write_get_report_reply(
                                     id,
                                     0,
                                     CONTROLLER_DESCRIPTOR.to_vec(),
                                 );
+                                */
                             }
                             OutputEvent::SetReport {
                                 id,
@@ -193,7 +197,7 @@ impl DualSenseDevice {
 
                 // Update the frame counter every iteration
                 frame += 1;
-                state.frame = Integer::from_primitive(frame);
+                state.set_frame_number((frame % 256u32) as u8);
 
                 // Pack the state into a binary array
                 let data = state.pack();
@@ -202,6 +206,8 @@ impl DualSenseDevice {
                     continue;
                 }
                 let data = data.unwrap();
+                let byte_array = data.iter().map(|a| a).collect::<Vec<u8>>();
+                
 
                 // Write the state to the virtual HID
                 if let Err(e) = device.write(&data) {
@@ -334,14 +340,7 @@ impl DualSenseDevice {
                         InputValue::Bool(_) => (),
                         InputValue::Float(_) => (),
                         InputValue::Vector2 { x, y } => {
-                            if let Some(x) = x {
-                                let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
-                                self.state.l_stick_x = Integer::from_primitive(value);
-                            }
-                            if let Some(y) = y {
-                                let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
-                                self.state.l_stick_y = Integer::from_primitive(-value);
-                            }
+                            
                         }
                         InputValue::Vector3 { x, y, z } => (),
                     },
@@ -349,14 +348,6 @@ impl DualSenseDevice {
                         InputValue::Bool(_) => (),
                         InputValue::Float(_) => (),
                         InputValue::Vector2 { x, y } => {
-                            if let Some(x) = x {
-                                let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
-                                self.state.r_stick_x = Integer::from_primitive(value);
-                            }
-                            if let Some(y) = y {
-                                let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
-                                self.state.r_stick_y = Integer::from_primitive(-value);
-                            }
                         }
                         InputValue::Vector3 { x, y, z } => (),
                     },
@@ -364,40 +355,7 @@ impl DualSenseDevice {
                         InputValue::Bool(_) => (),
                         InputValue::Float(_) => (),
                         InputValue::Vector2 { x, y } => {
-                            if let Some(x) = x {
-                                let value = denormalize_signed_value(x, -1.0, 1.0);
-                                match value.cmp(&0) {
-                                    Ordering::Less => {
-                                        self.state.left = true;
-                                        self.state.right = false;
-                                    }
-                                    Ordering::Equal => {
-                                        self.state.left = false;
-                                        self.state.right = false;
-                                    }
-                                    Ordering::Greater => {
-                                        self.state.right = true;
-                                        self.state.left = false;
-                                    }
-                                }
-                            }
-                            if let Some(y) = y {
-                                let value = denormalize_signed_value(y, -1.0, 1.0);
-                                match value.cmp(&0) {
-                                    Ordering::Less => {
-                                        self.state.up = true;
-                                        self.state.down = false;
-                                    }
-                                    Ordering::Equal => {
-                                        self.state.down = false;
-                                        self.state.up = false;
-                                    }
-                                    Ordering::Greater => {
-                                        self.state.down = true;
-                                        self.state.up = false;
-                                    }
-                                }
-                            }
+                            
                         }
                         InputValue::Vector3 { x, y, z } => (),
                     },
