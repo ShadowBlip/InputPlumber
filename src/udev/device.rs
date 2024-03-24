@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     fs::{self, read_link},
-    path::{self, Path},
 };
 
 /// Container for system devices

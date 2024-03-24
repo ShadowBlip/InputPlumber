@@ -173,7 +173,7 @@ impl Driver {
             _ => {
                 log::trace!("Invalid Report ID.");
                 let events = vec![];
-                return Ok(events);
+                Ok(events)
             }
         }
     }

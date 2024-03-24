@@ -31,8 +31,8 @@ serde_yaml = "0.9.27"
 thiserror = "1.0.56"
 tokio = { version = "*", features = ["full"] }
 uhid-virt = "0.0.7"
-zbus = { version = "3.14.1", default-features = false, features = ["tokio"] }
-zbus_macros = "3.14.1"
+zbus = { version = "4.1.2", default-features = false, features = ["tokio"] }
+zbus_macros = "4.1.2"
 
 [profile.release]
 debug = false
