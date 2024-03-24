@@ -1,9 +1,6 @@
 use std::{collections::HashMap, error::Error};
 
-use evdev::{
-    AbsoluteAxisCode, AbsoluteAxisEvent, AttributeSet, Device, EventSummary, EventType, InputEvent,
-    KeyCode, KeyEvent,
-};
+use evdev::{AbsoluteAxisCode, Device, EventType, KeyCode};
 use tokio::sync::broadcast;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
