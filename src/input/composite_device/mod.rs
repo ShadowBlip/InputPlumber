@@ -557,11 +557,18 @@ impl CompositeDevice {
             self.translate_capability(&event).await?;
             return Ok(());
         }
+        self.handle_event(event).await?;
 
+        Ok(())
+    }
+
+    /// Translate and write the given event to the appropriate target devices
+    async fn handle_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
         // TODO: Translate the event based on the device profile.
 
         // Process the event depending on the intercept mode
         let mode = self.intercept_mode.clone();
+        let cap = event.as_capability();
         if matches!(mode, InterceptMode::Pass)
             && cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
         {
@@ -859,7 +866,7 @@ impl CompositeDevice {
         // Emit the translated events
         for event in emit_queue {
             log::trace!("Emitting event: {:?}", event);
-            self.tx.send(Command::ProcessEvent(Event::Native(event)))?;
+            self.handle_event(event).await?;
         }
 
         Ok(())
