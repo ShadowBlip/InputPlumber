@@ -8,7 +8,11 @@ use tokio::sync::broadcast;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
-use crate::{constants::BUS_PREFIX, drivers, input::composite_device::Command};
+use crate::{
+    constants::BUS_PREFIX,
+    drivers,
+    input::{capability::Capability, composite_device::Command},
+};
 
 /// DBusInterface exposing information about a HIDRaw device
 pub struct DBusInterface {
@@ -138,6 +142,12 @@ impl HIDRawDevice {
     /// Returns the full path to the device handler (e.g. /dev/hidraw0)
     pub fn get_device_path(&self) -> String {
         self.info.path().to_string_lossy().to_string()
+    }
+
+    /// Returns capabilities of this input device
+    pub fn get_capabilities(&self) -> Result<Vec<Capability>, Box<dyn Error>> {
+        // TODO: This
+        Ok(vec![])
     }
 }
 

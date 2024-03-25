@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error};
 
-use evdev::{AbsoluteAxisCode, Device, EventType, KeyCode};
+use evdev::{AbsoluteAxisCode, Device, EventType, InputEvent, KeyCode};
 use tokio::sync::broadcast;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
@@ -175,34 +175,42 @@ impl EventDevice {
         let events = device.supported_events();
         for event in events.iter() {
             match event {
-                EventType::SYNCHRONIZATION => (),
+                EventType::SYNCHRONIZATION => {
+                    capabilities.push(Capability::Sync);
+                }
                 EventType::KEY => {
                     let Some(keys) = device.supported_keys() else {
                         continue;
                     };
                     for key in keys.iter() {
-                        let capability = match key {
-                            KeyCode::KEY_LEFT => Capability::None,
-                            KeyCode::KEY_UP => Capability::None,
-                            KeyCode::BTN_SOUTH => {
-                                Capability::Gamepad(Gamepad::Button(GamepadButton::South))
-                            }
-                            KeyCode::BTN_NORTH => {
-                                Capability::Gamepad(Gamepad::Button(GamepadButton::North))
-                            }
-                            KeyCode::BTN_WEST => {
-                                Capability::Gamepad(Gamepad::Button(GamepadButton::West))
-                            }
-                            KeyCode::BTN_EAST => {
-                                Capability::Gamepad(Gamepad::Button(GamepadButton::East))
-                            }
-                            _ => Capability::None,
-                        };
-                        capabilities.push(capability);
+                        let input_event = InputEvent::new(event.0, key.0, 0);
+                        let evdev_event = EvdevEvent::from(input_event);
+                        let cap = evdev_event.as_capability();
+                        capabilities.push(cap);
                     }
                 }
-                EventType::RELATIVE => (),
-                EventType::ABSOLUTE => (),
+                EventType::RELATIVE => {
+                    let Some(rel) = device.supported_relative_axes() else {
+                        continue;
+                    };
+                    for axis in rel.iter() {
+                        let input_event = InputEvent::new(event.0, axis.0, 0);
+                        let evdev_event = EvdevEvent::from(input_event);
+                        let cap = evdev_event.as_capability();
+                        capabilities.push(cap);
+                    }
+                }
+                EventType::ABSOLUTE => {
+                    let Some(abs) = device.supported_absolute_axes() else {
+                        continue;
+                    };
+                    for axis in abs.iter() {
+                        let input_event = InputEvent::new(event.0, axis.0, 0);
+                        let evdev_event = EvdevEvent::from(input_event);
+                        let cap = evdev_event.as_capability();
+                        capabilities.push(cap);
+                    }
+                }
                 EventType::MISC => (),
                 EventType::SWITCH => (),
                 EventType::LED => (),
