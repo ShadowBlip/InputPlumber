@@ -628,23 +628,11 @@ impl CompositeDevice {
         // Loop over each mapping and try to match source events
         for mapping in map.mapping.iter() {
             for source_event in mapping.source_events.iter() {
-                if let Some(keyboard) = source_event.keyboard.as_ref() {
-                    let key = Keyboard::from_str(keyboard.as_str());
-                    if key.is_err() {
-                        return Err(
-                            format!("Invalid or unimplemented capability: {keyboard}").into()
-                        );
-                    }
-                    let key = key.unwrap();
-                    let cap = Capability::Keyboard(key);
-                    self.translatable_capabilities.push(cap)
+                let cap = source_event.clone().into();
+                if cap == Capability::NotImplemented {
+                    continue;
                 }
-                if let Some(gamepad) = source_event.gamepad.as_ref() {
-                    unimplemented!();
-                }
-                if let Some(mouse) = source_event.mouse.as_ref() {
-                    unimplemented!();
-                }
+                self.translatable_capabilities.push(cap);
             }
         }
 
@@ -706,159 +694,57 @@ impl CompositeDevice {
             // then we need to check to see if ALL of its events no longer exist in
             // translatable_active_inputs.
             if !event.pressed() && self.emitted_mappings.contains_key(&mapping.name) {
-                let mut has_keys_pressed = false;
+                let mut has_source_event_pressed = false;
 
                 // Loop through each source capability in the mapping
                 for source_event in mapping.source_events.iter() {
-                    if let Some(keyboard) = source_event.keyboard.as_ref() {
-                        let key = Keyboard::from_str(keyboard.as_str());
-                        if key.is_err() {
-                            log::error!(
-                                "Invalid or unimplemented capability: {}",
-                                keyboard.as_str()
-                            );
-                            continue;
-                        }
-                        let key = key.unwrap();
-                        let cap = Capability::Keyboard(key);
-                        if self.translatable_active_inputs.contains(&cap) {
-                            has_keys_pressed = true;
-                            break;
-                        }
+                    let cap = source_event.clone().into();
+                    if cap == Capability::NotImplemented {
+                        continue;
                     }
-                    if let Some(gamepad) = source_event.gamepad.as_ref() {
-                        unimplemented!();
-                    }
-                    if let Some(mouse) = source_event.mouse.as_ref() {
-                        unimplemented!();
+                    if self.translatable_active_inputs.contains(&cap) {
+                        has_source_event_pressed = true;
+                        break;
                     }
                 }
 
                 // If no more inputs are being pressed, send a release event.
-                if !has_keys_pressed {
-                    if let Some(keyboard) = &mapping.target_event.keyboard {
-                        let key = Keyboard::from_str(keyboard.as_str());
-                        if key.is_err() {
-                            log::error!(
-                                "Invalid or unimplemented capability: {}",
-                                keyboard.as_str()
-                            );
-                            continue;
-                        }
-                        let key = key.unwrap();
-                        let cap = Capability::Keyboard(key);
-                        let event = NativeEvent::new(cap, InputValue::Bool(false));
-                        log::trace!("Adding event to emit queue: {:?}", event);
-                        emit_queue.push(event);
-                        self.emitted_mappings.remove(&mapping.name);
+                if !has_source_event_pressed {
+                    let cap = mapping.target_event.clone().into();
+                    if cap == Capability::NotImplemented {
+                        continue;
                     }
-                    if let Some(gamepad) = &mapping.target_event.gamepad {
-                        if let Some(button) = gamepad.button.as_ref() {
-                            let btn = GamepadButton::from_str(button.as_str());
-                            if btn.is_err() {
-                                log::error!(
-                                    "Invalid or unimplemented capability: {}",
-                                    button.as_str()
-                                );
-                                continue;
-                            }
-                            let btn = btn.unwrap();
-                            let cap = Capability::Gamepad(Gamepad::Button(btn));
-                            let event = NativeEvent::new(cap, InputValue::Bool(false));
-                            log::trace!("Adding event to emit queue: {:?}", event);
-                            emit_queue.push(event);
-                            self.emitted_mappings.remove(&mapping.name);
-                        }
-                    }
-                    if let Some(mouse) = &mapping.target_event.mouse {
-                        unimplemented!();
-                    }
+                    let event = NativeEvent::new(cap, InputValue::Bool(false));
+                    log::trace!("Adding event to emit queue: {:?}", event);
+                    emit_queue.push(event);
+                    self.emitted_mappings.remove(&mapping.name);
                 }
             }
 
             // If the event is pressed, check for any matches to send a 'press' event
             if event.pressed() {
-                let mut is_missing_keys = false;
+                let mut is_missing_source_event = false;
                 for source_event in mapping.source_events.iter() {
-                    if let Some(keyboard) = source_event.keyboard.as_ref() {
-                        let key = Keyboard::from_str(keyboard.as_str());
-                        if key.is_err() {
-                            log::error!(
-                                "Invalid or unimplemented capability: {}",
-                                keyboard.as_str()
-                            );
-                            continue;
-                        }
-                        let key = key.unwrap();
-                        let cap = Capability::Keyboard(key);
-                        if !self.translatable_active_inputs.contains(&cap) {
-                            is_missing_keys = true;
-                            break;
-                        }
+                    let cap = source_event.clone().into();
+                    if cap == Capability::NotImplemented {
+                        continue;
                     }
-                    if let Some(gamepad) = source_event.gamepad.as_ref() {
-                        if let Some(button) = gamepad.button.as_ref() {
-                            let btn = GamepadButton::from_str(button.as_str());
-                            if btn.is_err() {
-                                log::error!(
-                                    "Invalid or unimplemented capability: {}",
-                                    button.as_str()
-                                );
-                                continue;
-                            }
-                            let btn = btn.unwrap();
-                            let cap = Capability::Gamepad(Gamepad::Button(btn));
-                            if !self.translatable_active_inputs.contains(&cap) {
-                                is_missing_keys = true;
-                                break;
-                            }
-                        }
-                    }
-                    if let Some(mouse) = source_event.mouse.as_ref() {
-                        unimplemented!();
+                    if !self.translatable_active_inputs.contains(&cap) {
+                        is_missing_source_event = true;
+                        break;
                     }
                 }
 
-                if !is_missing_keys {
-                    if let Some(keyboard) = &mapping.target_event.keyboard {
-                        let key = Keyboard::from_str(keyboard.as_str());
-                        if key.is_err() {
-                            log::error!(
-                                "Invalid or unimplemented capability: {}",
-                                keyboard.as_str()
-                            );
-                            continue;
-                        }
-                        let key = key.unwrap();
-                        let cap = Capability::Keyboard(key);
-                        let event = NativeEvent::new(cap, InputValue::Bool(true));
-                        log::trace!("Adding event to emit queue: {:?}", event);
-                        emit_queue.push(event);
-                        self.emitted_mappings
-                            .insert(mapping.name.clone(), mapping.clone());
+                if !is_missing_source_event {
+                    let cap = mapping.target_event.clone().into();
+                    if cap == Capability::NotImplemented {
+                        continue;
                     }
-                    if let Some(gamepad) = &mapping.target_event.gamepad {
-                        if let Some(button) = gamepad.button.as_ref() {
-                            let btn = GamepadButton::from_str(button.as_str());
-                            if btn.is_err() {
-                                log::error!(
-                                    "Invalid or unimplemented capability: {}",
-                                    button.as_str()
-                                );
-                                continue;
-                            }
-                            let btn = btn.unwrap();
-                            let cap = Capability::Gamepad(Gamepad::Button(btn));
-                            let event = NativeEvent::new(cap, InputValue::Bool(true));
-                            log::trace!("Adding event to emit queue: {:?}", event);
-                            emit_queue.push(event);
-                            self.emitted_mappings
-                                .insert(mapping.name.clone(), mapping.clone());
-                        }
-                    }
-                    if let Some(mouse) = &mapping.target_event.mouse {
-                        unimplemented!();
-                    }
+                    let event = NativeEvent::new(cap, InputValue::Bool(true));
+                    log::trace!("Adding event to emit queue: {:?}", event);
+                    emit_queue.push(event);
+                    self.emitted_mappings
+                        .insert(mapping.name.clone(), mapping.clone());
                 }
             }
         }
