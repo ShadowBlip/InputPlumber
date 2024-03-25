@@ -1,8 +1,10 @@
 use std::{fmt, str::FromStr};
 
+use crate::config;
+
 /// A capability describes what kind of input events an input device is capable
 /// of emitting.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Capability {
     /// Used to purposefully disable input capabilities
     None,
@@ -41,7 +43,51 @@ impl FromStr for Capability {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl From<config::Capability> for Capability {
+    fn from(value: config::Capability) -> Self {
+        if let Some(keyboard_string) = value.keyboard.as_ref() {
+            let key = Keyboard::from_str(keyboard_string.as_str());
+            if key.is_err() {
+                log::error!("Invalid keyboard string: {keyboard_string}");
+                return Capability::NotImplemented;
+            }
+            let key = key.unwrap();
+            return Capability::Keyboard(key);
+        }
+        if let Some(gamepad) = value.gamepad.as_ref() {
+            if let Some(axis_string) = gamepad.axis.clone() {
+                unimplemented!(); //  We might need to look at the struct for this to track
+                                  //  positive vs negative values.
+            }
+            if let Some(button_string) = gamepad.button.clone() {
+                let button = GamepadButton::from_str(&button_string);
+                if button.is_err() {
+                    log::error!("Invalid or unimplemented button: {button_string}");
+                    return Capability::NotImplemented;
+                }
+                let button = button.unwrap();
+                return Capability::Gamepad(Gamepad::Button(button));
+            }
+            if let Some(trigger_string) = gamepad.trigger.clone() {
+                let trigger = GamepadTrigger::from_str(&trigger_string);
+                if trigger.is_err() {
+                    log::error!("Invalid or unimplemented trigger: {trigger_string}");
+                    return Capability::NotImplemented;
+                }
+
+                let trigger = trigger.unwrap();
+                return Capability::Gamepad(Gamepad::Trigger(trigger));
+            }
+        }
+        if let Some(mouse) = value.mouse.as_ref() {
+            unimplemented!();
+        }
+
+        Capability::NotImplemented
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Gamepad {
     /// Gamepad Buttons typically use binary input that represents button presses
     Button(GamepadButton),
@@ -66,7 +112,7 @@ impl fmt::Display for Gamepad {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Mouse {
     /// Represents (x, y) relative mouse motion
     Motion,
@@ -83,7 +129,7 @@ impl fmt::Display for Mouse {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MouseButton {
     /// Left mouse button
     Left,
@@ -122,7 +168,7 @@ impl fmt::Display for MouseButton {
 }
 
 /// Gamepad Buttons typically use binary input that represents button presses
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GamepadButton {
     /// South action, Sony Cross x, Xbox A, Nintendo B
     South,
@@ -283,7 +329,7 @@ impl FromStr for GamepadButton {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GamepadAxis {
     LeftStick,
     RightStick,
@@ -307,7 +353,7 @@ impl fmt::Display for GamepadAxis {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GamepadTrigger {
     LeftTrigger,
     LeftTouchpadForce,
@@ -330,7 +376,23 @@ impl fmt::Display for GamepadTrigger {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl FromStr for GamepadTrigger {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "LeftTrigger" => Ok(GamepadTrigger::LeftTrigger),
+            "LeftTouchpadForce" => Ok(GamepadTrigger::LeftTouchpadForce),
+            "LeftStickForce" => Ok(GamepadTrigger::LeftStickForce),
+            "RightTrigger" => Ok(GamepadTrigger::RightTrigger),
+            "RightTouchpadForce" => Ok(GamepadTrigger::RightTouchpadForce),
+            "RightStickForce" => Ok(GamepadTrigger::RightStickForce),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Keyboard {
     KeyEsc,
     Key1,

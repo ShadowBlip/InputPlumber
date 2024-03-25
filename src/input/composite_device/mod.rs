@@ -1,4 +1,8 @@
-use std::{collections::HashMap, error::Error, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    str::FromStr,
+};
 
 use tokio::{
     sync::{broadcast, mpsc},
@@ -46,6 +50,7 @@ pub enum InterceptMode {
 #[derive(Debug, Clone)]
 pub enum Command {
     ProcessEvent(Event),
+    GetCapabilities(mpsc::Sender<HashSet<Capability>>),
     SetInterceptMode(InterceptMode),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
@@ -76,6 +81,40 @@ impl DBusInterface {
     #[dbus_interface(property)]
     async fn name(&self) -> fdo::Result<String> {
         Ok("CompositeDevice".into())
+    }
+
+    /// List of capabilities that all source devices implement
+    #[dbus_interface(property)]
+    async fn capabilities(&self) -> fdo::Result<Vec<String>> {
+        let (sender, mut receiver) = mpsc::channel::<HashSet<Capability>>(1);
+        self.tx
+            .send(Command::GetCapabilities(sender))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let Some(capabilities) = receiver.recv().await else {
+            return Ok(Vec::new());
+        };
+
+        let mut capability_strings = Vec::new();
+        for cap in capabilities {
+            let str = match cap {
+                Capability::Gamepad(gamepad) => match gamepad {
+                    Gamepad::Button(button) => format!("Gamepad:Button:{}", button),
+                    Gamepad::Axis(axis) => format!("Gamepad:Axis:{}", axis),
+                    Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{}", trigger),
+                    Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
+                    Gamepad::Gyro => "Gamepad:Gyro".to_string(),
+                },
+                Capability::Mouse(mouse) => match mouse {
+                    super::capability::Mouse::Motion => "Mouse:Motion".to_string(),
+                    super::capability::Mouse::Button(button) => format!("Mouse:Button:{}", button),
+                },
+                Capability::Keyboard(key) => format!("Keyboard:{}", key),
+                _ => cap.to_string(),
+            };
+            capability_strings.push(str);
+        }
+
+        Ok(capability_strings)
     }
 
     /// List of source devices that this composite device is processing inputs for
@@ -174,6 +213,8 @@ pub struct CompositeDevice {
     conn: Connection,
     /// Configuration for the CompositeDevice
     config: CompositeDeviceConfig,
+    /// Capabilities describe all input capabilities from all source devices
+    capabilities: HashSet<Capability>,
     /// Capability mapping for the CompositeDevice
     capability_map: Option<CapabilityMap>,
     /// List of input capabilities that can be translated by the capability map
@@ -220,6 +261,7 @@ impl CompositeDevice {
         let mut device = Self {
             conn,
             config,
+            capabilities: HashSet::new(),
             capability_map,
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
@@ -235,7 +277,26 @@ impl CompositeDevice {
             target_devices: HashMap::new(),
             target_dbus_devices: HashMap::new(),
         };
+
+        // Load the capability map if one was defined
+        if device.capability_map.is_some() {
+            device.load_capability_map()?;
+        }
+
+        // If a capability map is defined, add those target capabilities to
+        // the hashset of implemented capabilities.
+        if let Some(map) = device.capability_map.as_ref() {
+            for mapping in map.mapping.clone() {
+                let cap = mapping.target_event.clone().into();
+                if cap == Capability::NotImplemented {
+                    continue;
+                }
+                device.capabilities.insert(cap);
+            }
+        }
+
         device.add_source_device(device_info)?;
+
         Ok(device)
     }
 
@@ -262,11 +323,6 @@ impl CompositeDevice {
     ) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting composite device");
 
-        // Load the capability map if one was defined
-        if self.capability_map.is_some() {
-            self.load_capability_map()?;
-        }
-
         // Start all source devices
         self.run_source_devices().await?;
 
@@ -281,6 +337,11 @@ impl CompositeDevice {
                 Command::ProcessEvent(event) => {
                     if let Err(e) = self.process_event(event).await {
                         log::error!("Failed to process event: {:?}", e);
+                    }
+                }
+                Command::GetCapabilities(sender) => {
+                    if let Err(e) = sender.send(self.capabilities.clone()).await {
+                        log::error!("Failed to send capabilities: {:?}", e);
                     }
                 }
                 Command::SetInterceptMode(mode) => self.set_intercept_mode(mode),
@@ -862,8 +923,17 @@ impl CompositeDevice {
                 // Create an instance of the device
                 log::debug!("Adding source device: {:?}", info);
                 let device = source::evdev::EventDevice::new(info, self.tx.clone());
+
                 // Get the capabilities of the source device.
-                //let capabilities = device.get_capabilities()?;
+                // TODO: When we *remove* a source device, we also need to remove
+                // capabilities
+                let capabilities = device.get_capabilities()?;
+                for cap in capabilities {
+                    if self.translatable_capabilities.contains(&cap) {
+                        continue;
+                    }
+                    self.capabilities.insert(cap);
+                }
 
                 // TODO: Based on the capability map in the config, translate
                 // the capabilities.
@@ -881,7 +951,13 @@ impl CompositeDevice {
                 let device = source::hidraw::HIDRawDevice::new(info, self.tx.clone());
 
                 // Get the capabilities of the source device.
-                //let capabilities = device.get_capabilities()?;
+                let capabilities = device.get_capabilities()?;
+                for cap in capabilities {
+                    if self.translatable_capabilities.contains(&cap) {
+                        continue;
+                    }
+                    self.capabilities.insert(cap);
+                }
 
                 let id = device.get_id();
                 let device_path = device.get_device_path();
@@ -891,6 +967,7 @@ impl CompositeDevice {
                 self.source_devices_used.push(id);
             }
         }
+
         Ok(())
     }
 }
