@@ -10,7 +10,7 @@ use zbus_macros::dbus_interface;
 
 use crate::{
     constants::BUS_PREFIX,
-    drivers,
+    drivers::{self},
     input::{capability::Capability, composite_device::Command},
 };
 
@@ -146,8 +146,21 @@ impl HIDRawDevice {
 
     /// Returns capabilities of this input device
     pub fn get_capabilities(&self) -> Result<Vec<Capability>, Box<dyn Error>> {
-        // TODO: This
-        Ok(vec![])
+        if self.info.vendor_id() == steam_deck::VID && self.info.product_id() == steam_deck::PID {
+            Ok(Vec::from(steam_deck::CAPABILITIES))
+        } else if self.info.vendor_id() == drivers::lego::driver::VID
+            && (self.info.product_id() == drivers::lego::driver::PID
+                || self.info.product_id() == drivers::lego::driver::PID2)
+        {
+            Ok(Vec::from(lego::CAPABILITIES))
+        } else {
+            Err(format!(
+                "No driver for hidraw interface found. VID: {}, PID: {}",
+                self.info.vendor_id(),
+                self.info.product_id()
+            )
+            .into())
+        }
     }
 }
 
