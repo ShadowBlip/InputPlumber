@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
-    str::FromStr,
 };
 
 use tokio::{
@@ -12,7 +11,7 @@ use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::{
-    config::{CapabilityMap, CapabilityMapping, CompositeDeviceConfig},
+    config::{CapabilityMap, CapabilityMapping, CompositeDeviceConfig, DeviceProfile},
     input::{
         capability::{Gamepad, GamepadButton},
         event::native::NativeEvent,
@@ -22,7 +21,7 @@ use crate::{
 };
 
 use super::{
-    capability::{Capability, Keyboard},
+    capability::Capability,
     event::{native::InputValue, Event},
     manager::SourceDeviceInfo,
     source::SourceDevice,
@@ -217,6 +216,10 @@ pub struct CompositeDevice {
     capabilities: HashSet<Capability>,
     /// Capability mapping for the CompositeDevice
     capability_map: Option<CapabilityMap>,
+    /// Name of the urrently loaded [DeviceProfile] for the CompositeDevice
+    device_profile: Option<String>,
+    /// Map of profile capabilities and the capabilities they translate into
+    device_profile_map: HashMap<Capability, Vec<Capability>>,
     /// List of input capabilities that can be translated by the capability map
     translatable_capabilities: Vec<Capability>,
     /// List of currently "pressed" actions used to translate multiple input
@@ -263,6 +266,8 @@ impl CompositeDevice {
             config,
             capabilities: HashSet::new(),
             capability_map,
+            device_profile: None,
+            device_profile_map: HashMap::new(),
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
             emitted_mappings: HashMap::new(),
@@ -282,6 +287,16 @@ impl CompositeDevice {
         if device.capability_map.is_some() {
             device.load_capability_map()?;
         }
+
+        // Load the default profile
+        let profile_path = "/usr/share/inputplumber/profiles/default.yaml";
+        if let Err(error) = device.load_device_profile_from_path(profile_path.to_string()) {
+            log::warn!(
+                "Unable to load default profile at {}. {}",
+                profile_path,
+                error
+            );
+        };
 
         // If a capability map is defined, add those target capabilities to
         // the hashset of implemented capabilities.
@@ -564,24 +579,31 @@ impl CompositeDevice {
 
     /// Translate and write the given event to the appropriate target devices
     async fn handle_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
-        // TODO: Translate the event based on the device profile.
+        // Translate using the device profile.
 
-        // Process the event depending on the intercept mode
-        let mode = self.intercept_mode.clone();
-        let cap = event.as_capability();
-        if matches!(mode, InterceptMode::Pass)
-            && cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
-        {
-            // Set the intercept mode while the button is pressed
-            if event.pressed() {
-                log::debug!("Intercepted guide button press");
-                self.set_intercept_mode(InterceptMode::Always);
+        let events = if self.device_profile.is_some() {
+            self.translate_event(&event).await?
+        } else {
+            vec![event]
+        };
+
+        for event in events {
+            // Process the event depending on the intercept mode
+            let mode = self.intercept_mode.clone();
+            let cap = event.as_capability();
+            if matches!(mode, InterceptMode::Pass)
+                && cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
+            {
+                // Set the intercept mode while the button is pressed
+                if event.pressed() {
+                    log::debug!("Intercepted guide button press");
+                    self.set_intercept_mode(InterceptMode::Always);
+                }
             }
+
+            // Write the event
+            self.write_event(event).await?;
         }
-
-        // Write the event
-        self.write_event(event).await?;
-
         Ok(())
     }
 
@@ -862,5 +884,51 @@ impl CompositeDevice {
         }
 
         Ok(())
+    }
+
+    /// Translates the given event into a Vec of events based on the currently loaded
+    /// [DeviceProfile]
+    async fn translate_event(
+        &self,
+        event: &NativeEvent,
+    ) -> Result<Vec<NativeEvent>, Box<dyn Error>> {
+        let cap = event.as_capability();
+        if let Some(target_capabilities) = self.device_profile_map.get(&cap) {
+            let mut events = Vec::new();
+            for capy in target_capabilities {
+                let event = NativeEvent::new(capy.clone(), event.get_value());
+                events.push(event);
+            }
+            return Ok(events);
+        }
+
+        Ok(vec![event.clone()])
+    }
+
+    pub fn load_device_profile_from_path(&mut self, path: String) -> Result<(), Box<dyn Error>> {
+        // Remove all outdated capabily mappings.
+        self.device_profile_map.clear();
+        // Open the device profile.
+        let profile = DeviceProfile::from_yaml_file(path.clone());
+        match profile {
+            Ok(profile) => {
+                self.device_profile = Some(profile.name);
+                // Loop through every mapping in the profile, extrace the source and target events,
+                // and map them into out profile map.
+                for mapping in profile.mapping.iter() {
+                    let source_event_cap: Capability = mapping.source_event.clone().into();
+                    let mut capabilities = Vec::new();
+                    for cap in mapping.target_events.clone() {
+                        let capy: Capability = cap.into();
+                        capabilities.push(capy);
+                    }
+                    self.device_profile_map
+                        .insert(source_event_cap, capabilities);
+                }
+                Ok(())
+            }
+            // Something went wrong here
+            Err(error) => Err(error.into()),
+        }
     }
 }

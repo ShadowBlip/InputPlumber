@@ -18,6 +18,23 @@ pub enum LoadError {
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
+pub struct DeviceProfile {
+    pub version: u32, //useful?
+    pub kind: String, //useful?
+    pub name: String, //useful?
+    pub mapping: Vec<ProfileMapping>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct ProfileMapping {
+    pub name: String,
+    pub source_event: Capability,
+    pub target_events: Vec<Capability>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
 pub struct CapabilityMap {
     pub version: u32,
     pub kind: String,
@@ -41,14 +58,40 @@ pub struct Capability {
     pub gamepad: Option<GamepadCapability>,
     pub keyboard: Option<String>,
     pub mouse: Option<MouseCapability>,
+    pub dbus: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct GamepadCapability {
-    pub axis: Option<String>,
+    pub axis: Option<AxisCapability>,
     pub button: Option<String>,
-    pub trigger: Option<String>,
+    pub trigger: Option<TriggerCapability>,
+    pub gyro: Option<GyroCapability>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct AxisCapability {
+    pub name: String,
+    pub direction: Option<String>,
+    pub deadzone: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct TriggerCapability {
+    pub name: String,
+    pub deadzone: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct GyroCapability {
+    pub name: String,
+    pub direction: Option<String>,
+    pub deadzone: Option<f64>,
+    pub axis: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -56,6 +99,21 @@ pub struct GamepadCapability {
 pub struct MouseCapability {
     pub button: Option<String>,
     pub motion: Option<String>,
+}
+
+impl DeviceProfile {
+    /// Load a [CapabilityProfile] from the given YAML string
+    pub fn from_yaml(content: String) -> Result<DeviceProfile, LoadError> {
+        let device: DeviceProfile = serde_yaml::from_str(content.as_str())?;
+        Ok(device)
+    }
+
+    /// Load a [CapabilityProfile] from the given YAML file
+    pub fn from_yaml_file(path: String) -> Result<DeviceProfile, LoadError> {
+        let file = std::fs::File::open(path)?;
+        let device: DeviceProfile = serde_yaml::from_reader(file)?;
+        Ok(device)
+    }
 }
 
 impl CapabilityMap {

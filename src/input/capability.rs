@@ -68,10 +68,13 @@ impl From<config::Capability> for Capability {
                 let button = button.unwrap();
                 return Capability::Gamepad(Gamepad::Button(button));
             }
-            if let Some(trigger_string) = gamepad.trigger.clone() {
-                let trigger = GamepadTrigger::from_str(&trigger_string);
+            if let Some(trigger_capability) = gamepad.trigger.clone() {
+                let trigger = GamepadTrigger::from_str(&trigger_capability.name);
                 if trigger.is_err() {
-                    log::error!("Invalid or unimplemented trigger: {trigger_string}");
+                    log::error!(
+                        "Invalid or unimplemented trigger: {}",
+                        trigger_capability.name
+                    );
                     return Capability::NotImplemented;
                 }
 
