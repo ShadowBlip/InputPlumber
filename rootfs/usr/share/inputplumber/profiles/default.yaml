@@ -1,50 +1,113 @@
-# yaml-language-server: $schema=../schema/virtual_device_profile_v1.json
+# yaml-language-server: $schema=../schema/device_profile_v1.json
 # Schema version number
 version: 1
 
 # The type of configuration schema
-kind: VirtualDeviceProfile
+kind: DeviceProfile
 
 # Name of the device profile
 name: Default
 
-# Type of gamepad to emulate.
-# "auto" will copy the name/vendor from the source devices
-# Options: ["auto", "xb360", "ps3", "ps4", "ps5", "switchpro"]
-gamepad_type: "ps5"
-
 # Profile mappings
 mapping:
+  # Button to button
   - name: Guide Button
-    output_behavior: sequence
     source_event:
-      code: mode
-    output_events:
-      - code: mode
+      keyboard: KeyRightCtrl
+    target_events:
+      - gamepad:
+          button: Guide
 
-  - name: Quick Menu Button
-    output_behavior: sequence
+  # Button to axis direction
+  - name: A to axis
     source_event:
-      type: EV_KEY
-      code: BTN_BASE
-      kind: evdev
-    output_events:
-      - code: open_quick_menu
-        kind: dbus
+      keyboard: KeyA
+    target_events:
+      - gamepad:
+          axis:
+            name: Hat1
+            direction: left
 
-  - name: Keyboard Button
-    output_behavior: sequence
+  # Axis direction to button
+  - name: A
     source_event:
-      type: EV_KEY
-      code: KEY_KEYBOARD
-      kind: evdev
-    output_events:
-      - code: open_keyboard
-        kind: dbus
+      gamepad:
+        axis:
+          name: LeftStick
+          direction: left
+          deadzone: 0.3 # defaults to 0.3
+    target_events:
+      - keyboard: KeyA
 
-  - name: West Button
-    output_behavior: sequence
+  # Axis to mouse
+  - name: Joystick Mouse
     source_event:
-      code: west_button
-    output_events:
-      - code: north_button
+      gamepad:
+        axis:
+          name: RightStick
+    target_events:
+      - mouse:
+          motion: continuous
+
+  # Gyro to mouse
+  - name: Gyro Mouse
+    source_event:
+      gamepad:
+        gyro:
+          name: Gyro1
+    target_events:
+      - mouse:
+          motion: continuous
+
+  # Gyro to axis
+  - name: Gyro Stick
+    source_event:
+      gamepad:
+        gyro:
+          name: Gyro1
+    target_events:
+      - gamepad:
+          axis:
+            name: RightStick
+
+  # Gyro to key press
+  - name: Gyro Key
+    source_event:
+      gamepad:
+        gyro:
+          name: Gyro1
+          axis: yaw
+          direction: positive
+          deadzone: 0.3
+    target_events:
+      - keyboard: KeyW
+
+  # Key to input chord
+  - name: Steam QuickAccess Chord
+    source_event:
+      gamepad:
+        button: QuickAccess
+    target_events:
+      - gamepad:
+          button: Guide
+      - gamepad:
+          button: South
+
+  # Key to DBus event
+  - name: DBus QuickAccess
+    source_event:
+      gamepad:
+        button: QuickAccess
+    target_events:
+      - dbus: Quick
+
+  # Trigger to button
+  - name: Trigger to button
+    source_event:
+      gamepad:
+        trigger:
+          name: LeftTrigger
+          deadzone: 0.4
+    target_events:
+      - gamepad:
+          button: South

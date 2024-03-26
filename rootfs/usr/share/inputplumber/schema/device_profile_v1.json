@@ -1,0 +1,216 @@
+{
+  "$schema": "http://json-schema.org/draft-06/schema#",
+  "$ref": "#/definitions/DeviceProfile",
+  "definitions": {
+    "DeviceProfile": {
+      "title": "DeviceProfile",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "mapping": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Mapping"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "mapping",
+        "name",
+        "version"
+      ]
+    },
+    "Mapping": {
+      "title": "Mapping",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source_event": {
+          "$ref": "#/definitions/Event"
+        },
+        "target_events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Event"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "source_event",
+        "target_events"
+      ]
+    },
+    "Event": {
+      "title": "Event",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "keyboard": {
+          "type": "string"
+        },
+        "mouse": {
+          "$ref": "#/definitions/MouseEvent"
+        },
+        "dbus": {
+          "type": "string"
+        },
+        "gamepad": {
+          "$ref": "#/definitions/GamepadEvent"
+        }
+      },
+      "required": []
+    },
+    "MouseEvent": {
+      "title": "MouseEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "motion": {
+          "type": "string",
+          "enum": [
+            "continuous"
+          ]
+        },
+        "button": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "GamepadEvent": {
+      "title": "GamepadEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "axis": {
+          "$ref": "#/definitions/AxisEvent"
+        },
+        "gyro": {
+          "$ref": "#/definitions/GyroEvent"
+        },
+        "trigger": {
+          "$ref": "#/definitions/TriggerEvent"
+        },
+        "button": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "GyroEvent": {
+      "title": "GyroEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "Gyro1",
+            "Gyro2",
+            "Gyro3"
+          ]
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "positive",
+            "negative"
+          ]
+        },
+        "deadzone": {
+          "type": "number",
+          "default": 0.3,
+          "description": "Optional deadzone from 0.0 - 1.0. When this deadzone threshold is crossed, this input is considered 'pressed'."
+        },
+        "axis": {
+          "type": "string",
+          "description": "Pitch, roll, or yaw",
+          "enum": [
+            "pitch",
+            "roll",
+            "yaw"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "TriggerEvent": {
+      "title": "TriggerEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "LeftTrigger",
+            "LeftTouchpadForce",
+            "LeftStickForce",
+            "RightTrigger",
+            "RightTouchpadForce",
+            "RightStickForce"
+          ]
+        },
+        "deadzone": {
+          "type": "number",
+          "default": 0.3,
+          "description": "Optional deadzone from 0.0 - 1.0. When this deadzone threshold is crossed, this input is considered 'pressed'."
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "AxisEvent": {
+      "title": "AxisEvent",
+      "type": "object",
+      "description": "Axis events such as LeftStick, RightStick, etc.",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "LeftStick",
+            "RightStick",
+            "Hat1",
+            "Hat2",
+            "Hat3"
+          ]
+        },
+        "direction": {
+          "type": "string",
+          "description": "Optional direction of the axis. Used when converting axis events into button events.",
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ]
+        },
+        "deadzone": {
+          "type": "number",
+          "default": 0.3,
+          "description": "Optional deadzone from 0.0 - 1.0. When this deadzone threshold is crossed, this input is considered 'pressed'."
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  }
+}
