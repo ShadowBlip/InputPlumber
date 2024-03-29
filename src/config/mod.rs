@@ -5,7 +5,14 @@ use hidapi::DeviceInfo;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{dmi::data::DMIData, procfs};
+use crate::{
+    dmi::data::DMIData,
+    input::{
+        capability,
+        event::native::{InputValue, NativeEvent},
+    },
+    procfs,
+};
 
 /// Represents all possible errors loading a [CompositeDevice]
 #[derive(Debug, Error)]
@@ -25,12 +32,79 @@ pub struct DeviceProfile {
     pub mapping: Vec<ProfileMapping>,
 }
 
+impl DeviceProfile {
+    /// Load a [CapabilityProfile] from the given YAML string
+    pub fn from_yaml(content: String) -> Result<DeviceProfile, LoadError> {
+        let device: DeviceProfile = serde_yaml::from_str(content.as_str())?;
+        Ok(device)
+    }
+
+    /// Load a [CapabilityProfile] from the given YAML file
+    pub fn from_yaml_file(path: String) -> Result<DeviceProfile, LoadError> {
+        let file = std::fs::File::open(path)?;
+        let device: DeviceProfile = serde_yaml::from_reader(file)?;
+        Ok(device)
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct ProfileMapping {
     pub name: String,
-    pub source_event: Capability,
-    pub target_events: Vec<Capability>,
+    pub source_event: CapabilityConfig,
+    pub target_events: Vec<CapabilityConfig>,
+}
+
+impl ProfileMapping {
+    /// Returns true if the given event matches this profile mapping's source
+    /// event. This method assumes that the event capability already matches, so
+    /// this should only be called when trying to match specific properties of
+    /// a capability. I.e. Checking if an axis event matches "direction: left"
+    pub fn source_matches_properties(&self, event: &NativeEvent) -> bool {
+        // Gamepad event
+        if let Some(gamepad) = self.source_event.gamepad.as_ref() {
+            // Gamepad Axis
+            if let Some(axis) = gamepad.axis.as_ref() {
+                // Axis was defined for source event!
+                if let Some(direction) = axis.direction.as_ref() {
+                    // A direction was defined!
+                    let value = event.get_value();
+                    return match value {
+                        InputValue::Vector2 { x, y } => match direction.as_str() {
+                            // Left should be a negative value
+                            "left" => x.filter(|&x| x <= 0.0).is_some(),
+                            // Right should be a positive value
+                            "right" => x.filter(|&x| x >= 0.0).is_some(),
+                            // Up should be a negative value
+                            "up" => y.filter(|&y| y <= 0.0).is_some(),
+                            // Down should be a positive value
+                            "down" => y.filter(|&y| y >= 0.0).is_some(),
+                            _ => false,
+                        },
+                        // Other values should never be used if this was an axis
+                        _ => false,
+                    };
+                } else {
+                    // If no direction was defined for an axis, then this should match
+                    return true;
+                }
+            }
+            // Gamepad trigger
+            else if let Some(trigger) = gamepad.trigger.as_ref() {
+                // Trigger was defined for source event!
+                return true;
+            }
+            // Gamepad gyro
+            else if let Some(gyro) = gamepad.gyro.as_ref() {
+                // Gyro was defined for source event!
+                // TODO: this
+            }
+        }
+
+        // If no other input types were defined in the config, then it counts as
+        // a match.
+        true
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -44,17 +118,32 @@ pub struct CapabilityMap {
     //pub filtered_events: Option<Vec<Capability>>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct CapabilityMapping {
-    pub name: String,
-    pub source_events: Vec<Capability>,
-    pub target_event: Capability,
+impl CapabilityMap {
+    /// Load a [CapabilityMap] from the given YAML string
+    pub fn from_yaml(content: String) -> Result<CapabilityMap, LoadError> {
+        let device: CapabilityMap = serde_yaml::from_str(content.as_str())?;
+        Ok(device)
+    }
+
+    /// Load a [CapabilityMap] from the given YAML file
+    pub fn from_yaml_file(path: String) -> Result<CapabilityMap, LoadError> {
+        let file = std::fs::File::open(path)?;
+        let device: CapabilityMap = serde_yaml::from_reader(file)?;
+        Ok(device)
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
-pub struct Capability {
+pub struct CapabilityMapping {
+    pub name: String,
+    pub source_events: Vec<CapabilityConfig>,
+    pub target_event: CapabilityConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct CapabilityConfig {
     pub gamepad: Option<GamepadCapability>,
     pub keyboard: Option<String>,
     pub mouse: Option<MouseCapability>,
@@ -99,36 +188,6 @@ pub struct GyroCapability {
 pub struct MouseCapability {
     pub button: Option<String>,
     pub motion: Option<String>,
-}
-
-impl DeviceProfile {
-    /// Load a [CapabilityProfile] from the given YAML string
-    pub fn from_yaml(content: String) -> Result<DeviceProfile, LoadError> {
-        let device: DeviceProfile = serde_yaml::from_str(content.as_str())?;
-        Ok(device)
-    }
-
-    /// Load a [CapabilityProfile] from the given YAML file
-    pub fn from_yaml_file(path: String) -> Result<DeviceProfile, LoadError> {
-        let file = std::fs::File::open(path)?;
-        let device: DeviceProfile = serde_yaml::from_reader(file)?;
-        Ok(device)
-    }
-}
-
-impl CapabilityMap {
-    /// Load a [CapabilityMap] from the given YAML string
-    pub fn from_yaml(content: String) -> Result<CapabilityMap, LoadError> {
-        let device: CapabilityMap = serde_yaml::from_str(content.as_str())?;
-        Ok(device)
-    }
-
-    /// Load a [CapabilityMap] from the given YAML file
-    pub fn from_yaml_file(path: String) -> Result<CapabilityMap, LoadError> {
-        let file = std::fs::File::open(path)?;
-        let device: CapabilityMap = serde_yaml::from_reader(file)?;
-        Ok(device)
-    }
 }
 
 /// Defines a platform match for loading a [CompositeDevice]

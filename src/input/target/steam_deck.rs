@@ -266,12 +266,13 @@ impl SteamDeckDevice {
                     GamepadButton::RightStickTouch => self.state.r_stick_touch = event.pressed(),
                     GamepadButton::RightTouchpadTouch => self.state.r_pad_touch = event.pressed(),
                     GamepadButton::RightTouchpadPress => self.state.r_pad_press = event.pressed(),
-		    GamepadButton::LeftPaddle3 => (),
+                    GamepadButton::LeftPaddle3 => (),
                     GamepadButton::RightPaddle3 => (),
                     _ => (),
                 },
                 Gamepad::Axis(axis) => match axis {
                     GamepadAxis::LeftStick => match value {
+                        InputValue::None => (),
                         InputValue::Bool(_) => (),
                         InputValue::Float(_) => (),
                         InputValue::Vector2 { x, y } => {
@@ -287,6 +288,7 @@ impl SteamDeckDevice {
                         InputValue::Vector3 { x, y, z } => (),
                     },
                     GamepadAxis::RightStick => match value {
+                        InputValue::None => (),
                         InputValue::Bool(_) => (),
                         InputValue::Float(_) => (),
                         InputValue::Vector2 { x, y } => {
@@ -302,6 +304,7 @@ impl SteamDeckDevice {
                         InputValue::Vector3 { x, y, z } => (),
                     },
                     GamepadAxis::Hat1 => match value {
+                        InputValue::None => (),
                         InputValue::Bool(_) => (),
                         InputValue::Float(_) => (),
                         InputValue::Vector2 { x, y } => {

@@ -11,7 +11,10 @@ use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::{
-    config::{CapabilityMap, CapabilityMapping, CompositeDeviceConfig, DeviceProfile},
+    config::{
+        CapabilityConfig, CapabilityMap, CapabilityMapping, CompositeDeviceConfig, DeviceProfile,
+        ProfileMapping,
+    },
     input::{
         capability::{Gamepad, GamepadButton},
         event::native::NativeEvent,
@@ -21,7 +24,7 @@ use crate::{
 };
 
 use super::{
-    capability::Capability,
+    capability::{Capability, Mouse},
     event::{native::InputValue, Event},
     manager::SourceDeviceInfo,
     source::SourceDevice,
@@ -104,8 +107,8 @@ impl DBusInterface {
                     Gamepad::Gyro => "Gamepad:Gyro".to_string(),
                 },
                 Capability::Mouse(mouse) => match mouse {
-                    super::capability::Mouse::Motion => "Mouse:Motion".to_string(),
-                    super::capability::Mouse::Button(button) => format!("Mouse:Button:{}", button),
+                    Mouse::Motion => "Mouse:Motion".to_string(),
+                    Mouse::Button(button) => format!("Mouse:Button:{}", button),
                 },
                 Capability::Keyboard(key) => format!("Keyboard:{}", key),
                 _ => cap.to_string(),
@@ -216,10 +219,14 @@ pub struct CompositeDevice {
     capabilities: HashSet<Capability>,
     /// Capability mapping for the CompositeDevice
     capability_map: Option<CapabilityMap>,
-    /// Name of the urrently loaded [DeviceProfile] for the CompositeDevice
+    /// Name of the currently loaded [DeviceProfile] for the CompositeDevice.
+    /// The [DeviceProfile] is used to translate input events.
     device_profile: Option<String>,
     /// Map of profile capabilities and the capabilities they translate into
     device_profile_map: HashMap<Capability, Vec<Capability>>,
+    /// Map of profile source events to translate to one or more profile mapping
+    /// configs that define how the source event should be translated.
+    device_profile_config_map: HashMap<Capability, Vec<ProfileMapping>>,
     /// List of input capabilities that can be translated by the capability map
     translatable_capabilities: Vec<Capability>,
     /// List of currently "pressed" actions used to translate multiple input
@@ -268,6 +275,7 @@ impl CompositeDevice {
             capability_map,
             device_profile: None,
             device_profile_map: HashMap::new(),
+            device_profile_config_map: HashMap::new(),
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
             emitted_mappings: HashMap::new(),
@@ -579,8 +587,7 @@ impl CompositeDevice {
 
     /// Translate and write the given event to the appropriate target devices
     async fn handle_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
-        // Translate using the device profile.
-
+        // Translate the event using the device profile.
         let events = if self.device_profile.is_some() {
             self.translate_event(&event).await?
         } else {
@@ -604,6 +611,7 @@ impl CompositeDevice {
             // Write the event
             self.write_event(event).await?;
         }
+
         Ok(())
     }
 
@@ -780,6 +788,295 @@ impl CompositeDevice {
         Ok(())
     }
 
+    /// Translates the given event into a Vec of events based on the currently loaded
+    /// [DeviceProfile]
+    async fn translate_event(
+        &self,
+        event: &NativeEvent,
+    ) -> Result<Vec<NativeEvent>, Box<dyn Error>> {
+        // Lookup the profile mapping associated with this event capability. If
+        // none is found, return the original un-translated event.
+        let cap = event.as_capability();
+        if let Some(mappings) = self.device_profile_config_map.get(&cap) {
+            // Find which mapping in the device profile matches this source event
+            let matched_mapping = mappings
+                .iter()
+                .find(|mapping| mapping.source_matches_properties(event));
+
+            // If a mapping was found, translate the event based on the found
+            // mapping.
+            if let Some(mapping) = matched_mapping {
+                log::trace!(
+                    "Found translation for event {:?} in profile mapping: {}",
+                    cap,
+                    mapping.name
+                );
+
+                // Translate the event into the defined target event(s)
+                let mut events = Vec::new();
+                for target_event in mapping.target_events.iter() {
+                    // TODO: We can cache this conversion for faster translation
+                    let target_cap: Capability = target_event.clone().into();
+                    let value = self.translate_event_value(
+                        &cap,
+                        &mapping.source_event,
+                        &target_cap,
+                        target_event,
+                        &event.get_value(),
+                    );
+                    if matches!(value, InputValue::None) {
+                        continue;
+                    }
+
+                    let event = NativeEvent::new(target_cap, value);
+                    events.push(event);
+                }
+
+                return Ok(events);
+            }
+        }
+
+        Ok(vec![event.clone()])
+    }
+
+    /// Translates the event value based on the source and target.
+    fn translate_event_value(
+        &self,
+        source_cap: &Capability,
+        source_config: &CapabilityConfig,
+        target_cap: &Capability,
+        target_config: &CapabilityConfig,
+        value: &InputValue,
+    ) -> InputValue {
+        match source_cap {
+            // None values cannot be translated
+            Capability::None => InputValue::None,
+            // NotImplemented values cannot be translated
+            Capability::NotImplemented => InputValue::None,
+            // Sync values can only be translated to '0'
+            Capability::Sync => InputValue::Bool(false),
+            // Gamepad -> ...
+            Capability::Gamepad(gamepad) => {
+                match gamepad {
+                    // Gamepad Button -> ...
+                    Gamepad::Button(_) => match target_cap {
+                        // Gamepad Button -> None
+                        Capability::None => InputValue::None,
+                        // Gamepad Button -> NotImplemented
+                        Capability::NotImplemented => InputValue::None,
+                        // Gamepad Button -> Sync
+                        Capability::Sync => InputValue::Bool(false),
+                        // Gamepad Button -> Gamepad
+                        Capability::Gamepad(gamepad) => match gamepad {
+                            // Gamepad Button -> Gamepad Button
+                            Gamepad::Button(_) => value.clone(),
+                            // Gamepad Button -> Axis
+                            Gamepad::Axis(_) => {
+                                // Use provided mapping to determine axis values
+                                if let Some(gamepad_config) = target_config.gamepad.as_ref() {
+                                    if let Some(axis) = gamepad_config.axis.as_ref() {
+                                        if let Some(direction) = axis.direction.as_ref() {
+                                            // Get the button value
+                                            let button_value = match value {
+                                                InputValue::Bool(v) => {
+                                                    if *v {
+                                                        1.0
+                                                    } else {
+                                                        0.0
+                                                    }
+                                                }
+                                                InputValue::Float(v) => *v,
+                                                _ => 0.0,
+                                            };
+
+                                            // Create a vector2 value based on axis direction
+                                            match direction.as_str() {
+                                                // Left should be a negative value
+                                                "left" => InputValue::Vector2 {
+                                                    x: Some(-button_value),
+                                                    y: None,
+                                                },
+                                                // Right should be a positive value
+                                                "right" => InputValue::Vector2 {
+                                                    x: Some(button_value),
+                                                    y: None,
+                                                },
+                                                // Up should be a negative value
+                                                "up" => InputValue::Vector2 {
+                                                    x: None,
+                                                    y: Some(-button_value),
+                                                },
+                                                // Down should be a positive value
+                                                "down" => InputValue::Vector2 {
+                                                    x: None,
+                                                    y: Some(button_value),
+                                                },
+                                                _ => {
+                                                    log::warn!(
+                                                        "Invalid axis direction: {direction}"
+                                                    );
+                                                    InputValue::None
+                                                }
+                                            }
+                                        } else {
+                                            log::warn!("No axis direction defined to translate button to axis");
+                                            InputValue::None
+                                        }
+                                    } else {
+                                        log::warn!("No axis config to translate button to axis");
+                                        InputValue::None
+                                    }
+                                } else {
+                                    log::warn!("No gamepad config to translate button to axis");
+                                    InputValue::None
+                                }
+                            }
+                            // Gamepad Button -> Trigger
+                            Gamepad::Trigger(_) => todo!(),
+                            // Gamepad Button -> Accelerometer
+                            Gamepad::Accelerometer => todo!(),
+                            // Gamepad Button -> Gyro
+                            Gamepad::Gyro => todo!(),
+                        },
+                        // Gamepad Button -> Mouse
+                        Capability::Mouse(mouse) => match mouse {
+                            // Gamepad Button -> Mouse Motion
+                            Mouse::Motion => todo!(),
+                            // Gamepad Button -> Mouse Button
+                            Mouse::Button(_) => value.clone(),
+                        },
+                        // Gamepad Button -> Keyboard
+                        Capability::Keyboard(_) => value.clone(),
+                    },
+                    // Axis -> ...
+                    Gamepad::Axis(_) => {
+                        match target_cap {
+                            // Axis -> None
+                            Capability::None => InputValue::None,
+                            // Axis -> NotImplemented
+                            Capability::NotImplemented => InputValue::None,
+                            // Axis -> Sync
+                            Capability::Sync => InputValue::None,
+                            // Axis -> Gamepad
+                            Capability::Gamepad(gamepad) => match gamepad {
+                                // Axis -> Button
+                                Gamepad::Button(_) => {
+                                    if let Some(gamepad_config) = source_config.gamepad.as_ref() {
+                                        if let Some(axis) = gamepad_config.axis.as_ref() {
+                                            let threshold = axis.deadzone.unwrap_or(0.3);
+                                            if let Some(direction) = axis.direction.as_ref() {
+                                                // TODO: Axis input is a special case where we need
+                                                // to keep track of the state of the axis and only
+                                                // emit events whenever the axis passes or falls
+                                                // below the defined threshold
+
+                                                // Get the axis value
+                                                let (x, y) = match value {
+                                                    InputValue::Vector2 { x, y } => (*x, *y),
+                                                    InputValue::Vector3 { x, y, z: _ } => (*x, *y),
+                                                    _ => (None, None),
+                                                };
+
+                                                match direction.as_str() {
+                                                    // Left should be a negative value
+                                                    "left" => {
+                                                        if let Some(x) = x {
+                                                            if x <= -threshold {
+                                                                InputValue::Bool(true)
+                                                            } else {
+                                                                InputValue::Bool(false)
+                                                            }
+                                                        } else {
+                                                            InputValue::Bool(false)
+                                                        }
+                                                    }
+                                                    // Right should be a positive value
+                                                    "right" => {
+                                                        if let Some(x) = x {
+                                                            if x >= threshold {
+                                                                InputValue::Bool(true)
+                                                            } else {
+                                                                InputValue::Bool(false)
+                                                            }
+                                                        } else {
+                                                            InputValue::Bool(false)
+                                                        }
+                                                    }
+                                                    // Up should be a negative value
+                                                    "up" => {
+                                                        if let Some(y) = y {
+                                                            if y <= -threshold {
+                                                                InputValue::Bool(true)
+                                                            } else {
+                                                                InputValue::Bool(false)
+                                                            }
+                                                        } else {
+                                                            InputValue::Bool(false)
+                                                        }
+                                                    }
+                                                    // Down should be a positive value
+                                                    "down" => {
+                                                        if let Some(y) = y {
+                                                            if y >= threshold {
+                                                                InputValue::Bool(true)
+                                                            } else {
+                                                                InputValue::Bool(false)
+                                                            }
+                                                        } else {
+                                                            InputValue::Bool(false)
+                                                        }
+                                                    }
+                                                    _ => {
+                                                        log::warn!(
+                                                            "Invalid axis direction: {direction}"
+                                                        );
+                                                        InputValue::None
+                                                    }
+                                                }
+                                            } else {
+                                                log::warn!("No axis direction defined to translate axis to button");
+                                                InputValue::None
+                                            }
+                                        } else {
+                                            log::warn!(
+                                                "No axis config to translate axis to button"
+                                            );
+                                            InputValue::None
+                                        }
+                                    } else {
+                                        log::warn!("No gamepad config to translate axis to button");
+                                        InputValue::None
+                                    }
+                                }
+                                // Axis -> Axis
+                                Gamepad::Axis(_) => value.clone(),
+                                // Axis -> Trigger
+                                Gamepad::Trigger(_) => todo!(),
+                                // Axis -> Accelerometer
+                                Gamepad::Accelerometer => todo!(),
+                                // Axis -> Gyro
+                                Gamepad::Gyro => todo!(),
+                            },
+                            Capability::Mouse(_) => todo!(),
+                            Capability::Keyboard(_) => todo!(),
+                        }
+                    }
+                    // Trigger -> ...
+                    Gamepad::Trigger(_) => todo!(),
+                    // Accelerometer -> ...
+                    Gamepad::Accelerometer => todo!(),
+                    // Gyro -> ...
+                    Gamepad::Gyro => todo!(),
+                }
+            }
+            // Mouse -> ...
+            Capability::Mouse(_) => todo!(),
+            // Keyboard -> ...
+            Capability::Keyboard(_) => todo!(),
+        }
+    }
+
+    /// Executed whenever a source device is added to this [CompositeDevice].
     async fn on_source_device_added(
         &mut self,
         device_info: SourceDeviceInfo,
@@ -793,6 +1090,7 @@ impl CompositeDevice {
         Ok(())
     }
 
+    /// Executed whenever a source device is removed from this [CompositeDevice]
     async fn on_source_device_removed(&mut self, id: String) -> Result<(), Box<dyn Error>> {
         if id.starts_with("evdev://") {
             let name = id.strip_prefix("evdev://").unwrap();
@@ -831,6 +1129,7 @@ impl CompositeDevice {
         Ok(())
     }
 
+    /// Creates and adds a source device using the given [SourceDeviceInfo]
     fn add_source_device(&mut self, device_info: SourceDeviceInfo) -> Result<(), Box<dyn Error>> {
         let device_info = device_info.clone();
         match device_info {
@@ -886,49 +1185,44 @@ impl CompositeDevice {
         Ok(())
     }
 
-    /// Translates the given event into a Vec of events based on the currently loaded
-    /// [DeviceProfile]
-    async fn translate_event(
-        &self,
-        event: &NativeEvent,
-    ) -> Result<Vec<NativeEvent>, Box<dyn Error>> {
-        let cap = event.as_capability();
-        if let Some(target_capabilities) = self.device_profile_map.get(&cap) {
-            let mut events = Vec::new();
-            for capy in target_capabilities {
-                let event = NativeEvent::new(capy.clone(), event.get_value());
-                events.push(event);
-            }
-            return Ok(events);
-        }
-
-        Ok(vec![event.clone()])
-    }
-
+    /// Load the given device profile from the given path
     pub fn load_device_profile_from_path(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         // Remove all outdated capabily mappings.
         self.device_profile_map.clear();
-        // Open the device profile.
-        let profile = DeviceProfile::from_yaml_file(path.clone());
-        match profile {
-            Ok(profile) => {
-                self.device_profile = Some(profile.name);
-                // Loop through every mapping in the profile, extrace the source and target events,
-                // and map them into out profile map.
-                for mapping in profile.mapping.iter() {
-                    let source_event_cap: Capability = mapping.source_event.clone().into();
-                    let mut capabilities = Vec::new();
-                    for cap in mapping.target_events.clone() {
-                        let capy: Capability = cap.into();
-                        capabilities.push(capy);
-                    }
-                    self.device_profile_map
-                        .insert(source_event_cap, capabilities);
-                }
-                Ok(())
+        self.device_profile_config_map.clear();
+
+        // Load and parse the device profile
+        let profile = DeviceProfile::from_yaml_file(path.clone())?;
+        self.device_profile = Some(profile.name);
+
+        // Loop through every mapping in the profile, extract the source and target events,
+        // and map them into our profile map.
+        for mapping in profile.mapping.iter() {
+            // Convert the source event configuration in the mapping into a
+            // capability that can be easily matched on during event translation
+            let source_event_cap: Capability = mapping.source_event.clone().into();
+
+            // Convert the target events configuration into a vector of capabilities
+            // that can be easily used to create translated events.
+            let mut target_events_caps = Vec::new();
+            for cap_config in mapping.target_events.clone() {
+                let cap: Capability = cap_config.into();
+                target_events_caps.push(cap);
             }
-            // Something went wrong here
-            Err(error) => Err(error.into()),
+
+            // Insert the target event capabilities to translate to
+            // TODO: This wont work
+            self.device_profile_map
+                .insert(source_event_cap.clone(), target_events_caps);
+
+            // Insert the translation config for this event
+            let config_map = self
+                .device_profile_config_map
+                .entry(source_event_cap)
+                .or_default();
+            config_map.push(mapping.clone());
         }
+
+        Ok(())
     }
 }

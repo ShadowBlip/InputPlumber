@@ -351,6 +351,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
 /// Returns a DBus event from the given DBus event action and input value.
 fn dbus_event_from_value(action: Action, input_value: InputValue) -> Option<DBusEvent> {
     let value = match input_value {
+        InputValue::None => None,
         InputValue::Bool(value) => {
             if value {
                 Some(1.0)

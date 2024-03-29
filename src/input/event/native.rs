@@ -5,6 +5,7 @@ use super::evdev::EvdevEvent;
 /// InputValue represents different ways to represent a value from an input event.
 #[derive(Debug, Clone)]
 pub enum InputValue {
+    None,
     Bool(bool),
     Float(f64),
     Vector2 {
@@ -16,6 +17,19 @@ pub enum InputValue {
         y: Option<f64>,
         z: Option<f64>,
     },
+}
+
+impl InputValue {
+    /// Returns whether or not the value is "pressed"
+    pub fn pressed(&self) -> bool {
+        match self {
+            InputValue::None => false,
+            InputValue::Bool(value) => *value,
+            InputValue::Float(value) => *value != 0.0,
+            InputValue::Vector2 { x: _, y: _ } => true,
+            InputValue::Vector3 { x: _, y: _, z: _ } => true,
+        }
+    }
 }
 
 /// A native event represents an InputPlumber event
@@ -42,12 +56,7 @@ impl NativeEvent {
 
     /// Returns whether or not the event is "pressed"
     pub fn pressed(&self) -> bool {
-        match self.value {
-            InputValue::Bool(value) => value,
-            InputValue::Float(value) => value != 0.0,
-            InputValue::Vector2 { x, y } => todo!(),
-            InputValue::Vector3 { x, y, z } => todo!(),
-        }
+        self.value.pressed()
     }
 }
 
