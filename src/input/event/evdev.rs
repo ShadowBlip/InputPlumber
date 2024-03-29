@@ -800,6 +800,7 @@ fn input_event_from_value(
     input: InputValue,
 ) -> Option<InputEvent> {
     let value = match input {
+        InputValue::None => None,
         InputValue::Bool(value) => {
             // Convert the binary input value into an integar
             let value = if value { 1 } else { 0 };

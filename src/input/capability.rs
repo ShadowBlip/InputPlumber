@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use crate::config;
+use crate::config::{self, CapabilityConfig};
 
 /// A capability describes what kind of input events an input device is capable
 /// of emitting.
@@ -43,8 +43,8 @@ impl FromStr for Capability {
     }
 }
 
-impl From<config::Capability> for Capability {
-    fn from(value: config::Capability) -> Self {
+impl From<CapabilityConfig> for Capability {
+    fn from(value: CapabilityConfig) -> Self {
         if let Some(keyboard_string) = value.keyboard.as_ref() {
             let key = Keyboard::from_str(keyboard_string.as_str());
             if key.is_err() {
