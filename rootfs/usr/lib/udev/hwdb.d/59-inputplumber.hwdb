@@ -5,3 +5,8 @@ evdev:name:AT Translated Set 2 keyboard:dmi:*:svnAYANEO:*
   KEYBOARD_KEY_68=f17
   KEYBOARD_KEY_69=f18
 
+# OrangePi Devices
+  evdev:name:AT Translated Set 2 keyboard:dmi:*:svnOrangePi:pnNEO-01:*
+  KEYBOARD_KEY_66=f15
+  KEYBOARD_KEY_67=f16
+
