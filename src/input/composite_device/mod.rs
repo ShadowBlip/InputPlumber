@@ -17,10 +17,13 @@ use crate::{
     },
     input::{
         capability::{Capability, Gamepad, GamepadButton, Mouse},
-        event::{native::NativeEvent, value::InputValue, Event},
+        event::{
+            native::NativeEvent,
+            value::{InputValue, TranslationError},
+            Event,
+        },
         manager::SourceDeviceInfo,
-        source,
-        source::SourceDevice,
+        source::{self, SourceDevice},
         target::TargetCommand,
     },
     udev::{hide_device, unhide_device},
@@ -812,12 +815,43 @@ impl CompositeDevice {
                 for target_event in mapping.target_events.iter() {
                     // TODO: We can cache this conversion for faster translation
                     let target_cap: Capability = target_event.clone().into();
-                    let value = event.get_value().translate(
+                    let result = event.get_value().translate(
                         &source_cap,
                         &mapping.source_event,
                         &target_cap,
                         target_event,
                     );
+                    let value = match result {
+                        Ok(v) => v,
+                        Err(err) => {
+                            match err {
+                                TranslationError::NotImplemented => {
+                                    log::trace!(
+                                        "Translation not implemented for profile mapping '{}': {:?} -> {:?}",
+                                        mapping.name,
+                                        source_cap,
+                                        target_cap,
+                                    );
+                                    continue;
+                                }
+                                TranslationError::ImpossibleTranslation(msg) => {
+                                    log::warn!(
+                                        "Impossible translation for profile mapping '{}': {msg}",
+                                        mapping.name
+                                    );
+                                    continue;
+                                }
+                                TranslationError::InvalidSourceConfig(msg) => {
+                                    log::warn!("Invalid source event config in profile mapping '{}': {msg}", mapping.name);
+                                    continue;
+                                }
+                                TranslationError::InvalidTargetConfig(msg) => {
+                                    log::warn!("Invalid target event config in profile mapping '{}': {msg}", mapping.name);
+                                    continue;
+                                }
+                            }
+                        }
+                    };
                     if matches!(value, InputValue::None) {
                         continue;
                     }
