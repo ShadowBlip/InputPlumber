@@ -45,20 +45,20 @@ impl FromStr for Capability {
 
 impl From<CapabilityConfig> for Capability {
     fn from(value: CapabilityConfig) -> Self {
-        if let Some(keyboard_string) = value.keyboard.as_ref() {
-            let key = Keyboard::from_str(keyboard_string.as_str());
-            if key.is_err() {
-                log::error!("Invalid keyboard string: {keyboard_string}");
-                return Capability::NotImplemented;
-            }
-            let key = key.unwrap();
-            return Capability::Keyboard(key);
-        }
+        // Gamepad
         if let Some(gamepad) = value.gamepad.as_ref() {
-            if let Some(axis_string) = gamepad.axis.clone() {
-                unimplemented!(); //  We might need to look at the struct for this to track
-                                  //  positive vs negative values.
+            // Axis
+            if let Some(axis_config) = gamepad.axis.clone() {
+                let axis = GamepadAxis::from_str(&axis_config.name);
+                if axis.is_err() {
+                    log::error!("Invalid or unimplemented axis: {}", axis_config.name);
+                    return Capability::NotImplemented;
+                }
+                let axis = axis.unwrap();
+                return Capability::Gamepad(Gamepad::Axis(axis));
             }
+
+            // Button
             if let Some(button_string) = gamepad.button.clone() {
                 let button = GamepadButton::from_str(&button_string);
                 if button.is_err() {
@@ -68,6 +68,8 @@ impl From<CapabilityConfig> for Capability {
                 let button = button.unwrap();
                 return Capability::Gamepad(Gamepad::Button(button));
             }
+
+            // Trigger
             if let Some(trigger_capability) = gamepad.trigger.clone() {
                 let trigger = GamepadTrigger::from_str(&trigger_capability.name);
                 if trigger.is_err() {
@@ -81,8 +83,47 @@ impl From<CapabilityConfig> for Capability {
                 let trigger = trigger.unwrap();
                 return Capability::Gamepad(Gamepad::Trigger(trigger));
             }
+
+            // Gyro
+            if let Some(gyro_capability) = gamepad.gyro.clone() {
+                unimplemented!();
+            }
+
+            // TODO: Accelerometer
         }
+
+        // Keyboard
+        if let Some(keyboard_string) = value.keyboard.as_ref() {
+            let key = Keyboard::from_str(keyboard_string.as_str());
+            if key.is_err() {
+                log::error!("Invalid keyboard string: {keyboard_string}");
+                return Capability::NotImplemented;
+            }
+            let key = key.unwrap();
+            return Capability::Keyboard(key);
+        }
+
+        // Mouse
         if let Some(mouse) = value.mouse.as_ref() {
+            // Motion
+            if mouse.motion.is_some() {
+                return Capability::Mouse(Mouse::Motion);
+            }
+
+            // Button
+            if let Some(button_string) = mouse.button.clone() {
+                let button = MouseButton::from_str(&button_string);
+                if button.is_err() {
+                    log::error!("Invalid or unimplemented button: {button_string}");
+                    return Capability::NotImplemented;
+                }
+                let button = button.unwrap();
+                return Capability::Mouse(Mouse::Button(button));
+            }
+        }
+
+        // DBus
+        if let Some(dbus) = value.dbus.as_ref() {
             unimplemented!();
         }
 
@@ -166,6 +207,25 @@ impl fmt::Display for MouseButton {
             MouseButton::WheelRight => write!(f, "WheelRight"),
             MouseButton::Extra1 => write!(f, "Extra1"),
             MouseButton::Extra2 => write!(f, "Extra2"),
+        }
+    }
+}
+
+impl FromStr for MouseButton {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Left" => Ok(MouseButton::Left),
+            "Right" => Ok(MouseButton::Right),
+            "Middle" => Ok(MouseButton::Middle),
+            "WheelUp" => Ok(MouseButton::WheelUp),
+            "WheelDown" => Ok(MouseButton::WheelDown),
+            "WheelLeft" => Ok(MouseButton::WheelLeft),
+            "WheelRight" => Ok(MouseButton::WheelRight),
+            "Extra1" => Ok(MouseButton::Extra1),
+            "Extra2" => Ok(MouseButton::Extra2),
+            _ => Err(()),
         }
     }
 }
@@ -352,6 +412,21 @@ impl fmt::Display for GamepadAxis {
             GamepadAxis::Hat2 => write!(f, "Hat2"),
             GamepadAxis::Hat3 => write!(f, "Hat3"),
             GamepadAxis::Buttons(_, _) => write!(f, "Buttons"),
+        }
+    }
+}
+
+impl FromStr for GamepadAxis {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "LeftStick" => Ok(GamepadAxis::LeftStick),
+            "RightStick" => Ok(GamepadAxis::RightStick),
+            "Hat1" => Ok(GamepadAxis::Hat1),
+            "Hat2" => Ok(GamepadAxis::Hat2),
+            "Hat3" => Ok(GamepadAxis::Hat3),
+            _ => Err(()),
         }
     }
 }

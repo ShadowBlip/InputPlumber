@@ -121,8 +121,13 @@ impl InputValue {
                                 // Axis -> Gyro
                                 Gamepad::Gyro => Err(TranslationError::NotImplemented),
                             },
-                            Capability::Mouse(_) => Err(TranslationError::NotImplemented),
-                            Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
+                            // Axis -> Mouse
+                            Capability::Mouse(mouse) => match mouse {
+                                Mouse::Motion => Err(TranslationError::NotImplemented),
+                                Mouse::Button(_) => self.translate_axis_to_button(source_config),
+                            },
+                            // Axis -> Keyboard
+                            Capability::Keyboard(_) => self.translate_axis_to_button(source_config),
                         }
                     }
                     // Trigger -> ...
