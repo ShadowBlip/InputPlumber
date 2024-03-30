@@ -2,6 +2,8 @@ use std::{fmt, str::FromStr};
 
 use crate::config::CapabilityConfig;
 
+use super::event::dbus::Action;
+
 /// A capability describes what kind of input events an input device is capable
 /// of emitting.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -12,6 +14,8 @@ pub enum Capability {
     NotImplemented,
     /// Evdev syncronize event
     Sync,
+    /// DBus is only implemented by DBus target devices
+    DBus(Action),
     Gamepad(Gamepad),
     Mouse(Mouse),
     Keyboard(Keyboard),
@@ -26,6 +30,7 @@ impl fmt::Display for Capability {
             Capability::Gamepad(_) => write!(f, "Gamepad"),
             Capability::Mouse(_) => write!(f, "Mouse"),
             Capability::Keyboard(_) => write!(f, "Keyboard"),
+            Capability::DBus(_) => write!(f, "DBus"),
         }
     }
 }
@@ -48,7 +53,7 @@ impl From<CapabilityConfig> for Capability {
         // Gamepad
         if let Some(gamepad) = value.gamepad.as_ref() {
             // Axis
-            if let Some(axis_config) = gamepad.axis.clone() {
+            if let Some(axis_config) = gamepad.axis.as_ref() {
                 let axis = GamepadAxis::from_str(&axis_config.name);
                 if axis.is_err() {
                     log::error!("Invalid or unimplemented axis: {}", axis_config.name);
@@ -70,7 +75,7 @@ impl From<CapabilityConfig> for Capability {
             }
 
             // Trigger
-            if let Some(trigger_capability) = gamepad.trigger.clone() {
+            if let Some(trigger_capability) = gamepad.trigger.as_ref() {
                 let trigger = GamepadTrigger::from_str(&trigger_capability.name);
                 if trigger.is_err() {
                     log::error!(
@@ -85,7 +90,7 @@ impl From<CapabilityConfig> for Capability {
             }
 
             // Gyro
-            if let Some(gyro_capability) = gamepad.gyro.clone() {
+            if let Some(gyro_capability) = gamepad.gyro.as_ref() {
                 unimplemented!();
             }
 
@@ -111,8 +116,8 @@ impl From<CapabilityConfig> for Capability {
             }
 
             // Button
-            if let Some(button_string) = mouse.button.clone() {
-                let button = MouseButton::from_str(&button_string);
+            if let Some(button_string) = mouse.button.as_ref() {
+                let button = MouseButton::from_str(button_string);
                 if button.is_err() {
                     log::error!("Invalid or unimplemented button: {button_string}");
                     return Capability::NotImplemented;
@@ -123,8 +128,14 @@ impl From<CapabilityConfig> for Capability {
         }
 
         // DBus
-        if let Some(dbus) = value.dbus.as_ref() {
-            unimplemented!();
+        if let Some(action_string) = value.dbus.as_ref() {
+            let action = Action::from_str(action_string);
+            if action.is_err() {
+                log::error!("Invalid or unimplemented dbus action: {action_string}");
+                return Capability::NotImplemented;
+            }
+            let action = action.unwrap();
+            return Capability::DBus(action);
         }
 
         Capability::NotImplemented

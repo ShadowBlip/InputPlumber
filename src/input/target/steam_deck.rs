@@ -236,6 +236,7 @@ impl SteamDeckDevice {
             Capability::None => (),
             Capability::NotImplemented => (),
             Capability::Sync => (),
+            Capability::DBus(_) => (),
             Capability::Gamepad(gamepad) => match gamepad {
                 Gamepad::Button(btn) => match btn {
                     GamepadButton::South => self.state.a = event.pressed(),

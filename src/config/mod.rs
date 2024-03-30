@@ -26,6 +26,7 @@ pub struct DeviceProfile {
     pub version: u32, //useful?
     pub kind: String, //useful?
     pub name: String, //useful?
+    pub description: Option<String>,
     pub mapping: Vec<ProfileMapping>,
 }
 
