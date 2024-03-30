@@ -21,7 +21,7 @@ use crate::{
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton},
         composite_device,
-        event::native::{InputValue, NativeEvent},
+        event::{native::NativeEvent, value::InputValue},
     },
 };
 

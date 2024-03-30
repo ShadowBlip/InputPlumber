@@ -1,36 +1,6 @@
 use crate::input::capability::Capability;
 
-use super::evdev::EvdevEvent;
-
-/// InputValue represents different ways to represent a value from an input event.
-#[derive(Debug, Clone)]
-pub enum InputValue {
-    None,
-    Bool(bool),
-    Float(f64),
-    Vector2 {
-        x: Option<f64>,
-        y: Option<f64>,
-    },
-    Vector3 {
-        x: Option<f64>,
-        y: Option<f64>,
-        z: Option<f64>,
-    },
-}
-
-impl InputValue {
-    /// Returns whether or not the value is "pressed"
-    pub fn pressed(&self) -> bool {
-        match self {
-            InputValue::None => false,
-            InputValue::Bool(value) => *value,
-            InputValue::Float(value) => *value != 0.0,
-            InputValue::Vector2 { x: _, y: _ } => true,
-            InputValue::Vector3 { x: _, y: _, z: _ } => true,
-        }
-    }
-}
+use super::{evdev::EvdevEvent, value::InputValue};
 
 /// A native event represents an InputPlumber event
 #[derive(Debug, Clone)]

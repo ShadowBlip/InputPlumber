@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use crate::config::{self, CapabilityConfig};
+use crate::config::CapabilityConfig;
 
 /// A capability describes what kind of input events an input device is capable
 /// of emitting.

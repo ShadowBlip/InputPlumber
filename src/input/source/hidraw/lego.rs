@@ -10,10 +10,7 @@ use crate::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse, MouseButton,
         },
         composite_device::Command,
-        event::{
-            native::{InputValue, NativeEvent},
-            Event,
-        },
+        event::{native::NativeEvent, value::InputValue, Event},
     },
 };
 
