@@ -12,8 +12,7 @@ use zbus_macros::dbus_interface;
 
 use crate::{
     config::{
-        CapabilityConfig, CapabilityMap, CapabilityMapping, CompositeDeviceConfig, DeviceProfile,
-        ProfileMapping,
+        CapabilityMap, CapabilityMapping, CompositeDeviceConfig, DeviceProfile, ProfileMapping,
     },
     input::{
         capability::{Capability, Gamepad, GamepadButton, Mouse},
@@ -29,6 +28,7 @@ use crate::{
     udev::{hide_device, unhide_device},
 };
 
+/// Size of the command channel buffer for processing input events and commands.
 const BUFFER_SIZE: usize = 2048;
 
 /// The [InterceptMode] defines whether or not inputs should be routed over
@@ -59,6 +59,8 @@ pub enum Command {
     SourceDeviceAdded(SourceDeviceInfo),
     SourceDeviceStopped(String),
     SourceDeviceRemoved(String),
+    GetProfileName(mpsc::Sender<String>),
+    LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
     Stop,
 }
 
@@ -81,6 +83,43 @@ impl DBusInterface {
     #[dbus_interface(property)]
     async fn name(&self) -> fdo::Result<String> {
         Ok("CompositeDevice".into())
+    }
+
+    /// Name of the currently loaded profile
+    #[dbus_interface(property)]
+    async fn profile_name(&self) -> fdo::Result<String> {
+        let (sender, mut receiver) = mpsc::channel::<String>(1);
+        self.tx
+            .send(Command::GetProfileName(sender))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let Some(profile_name) = receiver.recv().await else {
+            return Ok("".to_string());
+        };
+
+        Ok(profile_name)
+    }
+
+    /// Load the device profile from the given path
+    async fn load_profile_path(&self, path: String) -> fdo::Result<()> {
+        let (sender, mut receiver) = mpsc::channel::<Result<(), String>>(1);
+        self.tx
+            .send(Command::LoadProfilePath(path, sender))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        let Some(result) = receiver.recv().await else {
+            return Err(fdo::Error::Failed(
+                "No response from CompositeDevice".to_string(),
+            ));
+        };
+
+        if let Err(e) = result {
+            return Err(fdo::Error::Failed(format!(
+                "Failed to load profile: {:?}",
+                e
+            )));
+        }
+
+        Ok(())
     }
 
     /// List of capabilities that all source devices implement
@@ -409,6 +448,22 @@ impl CompositeDevice {
                     }
                     if self.source_devices_used.is_empty() {
                         break;
+                    }
+                }
+                Command::GetProfileName(sender) => {
+                    let profile_name = self.device_profile.clone().unwrap_or_default();
+                    if let Err(e) = sender.send(profile_name).await {
+                        log::error!("Failed to send profile name: {:?}", e);
+                    }
+                }
+                Command::LoadProfilePath(path, sender) => {
+                    log::info!("Loading profile from path: {path}");
+                    let result = match self.load_device_profile_from_path(path.clone()) {
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(e.to_string()),
+                    };
+                    if let Err(e) = sender.send(result).await {
+                        log::error!("Failed to send load profile result: {:?}", e);
                     }
                 }
                 Command::Stop => {
@@ -826,7 +881,7 @@ impl CompositeDevice {
                         Err(err) => {
                             match err {
                                 TranslationError::NotImplemented => {
-                                    log::trace!(
+                                    log::warn!(
                                         "Translation not implemented for profile mapping '{}': {:?} -> {:?}",
                                         mapping.name,
                                         source_cap,
@@ -864,6 +919,7 @@ impl CompositeDevice {
             }
         }
 
+        log::trace!("No translation mapping found for event: {:?}", source_cap);
         Ok(vec![event.clone()])
     }
 
@@ -978,17 +1034,21 @@ impl CompositeDevice {
 
     /// Load the given device profile from the given path
     pub fn load_device_profile_from_path(&mut self, path: String) -> Result<(), Box<dyn Error>> {
-        // Remove all outdated capabily mappings.
+        log::debug!("Loading device profile from path: {path}");
+        // Remove all outdated capability mappings.
+        log::debug!("Clearing old device profile mappings");
         self.device_profile_map.clear();
         self.device_profile_config_map.clear();
 
         // Load and parse the device profile
         let profile = DeviceProfile::from_yaml_file(path.clone())?;
-        self.device_profile = Some(profile.name);
+        self.device_profile = Some(profile.name.clone());
 
         // Loop through every mapping in the profile, extract the source and target events,
         // and map them into our profile map.
         for mapping in profile.mapping.iter() {
+            log::debug!("Loading mapping from profile: {}", mapping.name);
+
             // Convert the source event configuration in the mapping into a
             // capability that can be easily matched on during event translation
             let source_event_cap: Capability = mapping.source_event.clone().into();
@@ -1014,6 +1074,7 @@ impl CompositeDevice {
             config_map.push(mapping.clone());
         }
 
+        log::debug!("Successfully loaded device profile: {}", profile.name);
         Ok(())
     }
 }
