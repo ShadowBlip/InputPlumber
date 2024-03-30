@@ -63,6 +63,8 @@ impl InputValue {
             Capability::NotImplemented => Ok(InputValue::None),
             // Sync values can only be translated to '0'
             Capability::Sync => Ok(InputValue::Bool(false)),
+            // DBus -> ...
+            Capability::DBus(_) => Ok(self.clone()),
             // Gamepad -> ...
             Capability::Gamepad(gamepad) => {
                 match gamepad {
@@ -75,6 +77,8 @@ impl InputValue {
                             Capability::NotImplemented => Ok(InputValue::None),
                             // Gamepad Button -> Sync
                             Capability::Sync => Ok(InputValue::Bool(false)),
+                            // Gamepad Button -> DBus
+                            Capability::DBus(_) => Ok(self.clone()),
                             // Gamepad Button -> Gamepad
                             Capability::Gamepad(gamepad) => match gamepad {
                                 // Gamepad Button -> Gamepad Button
@@ -108,6 +112,8 @@ impl InputValue {
                             Capability::NotImplemented => Ok(InputValue::None),
                             // Axis -> Sync
                             Capability::Sync => Ok(InputValue::None),
+                            // Axis -> DBus
+                            Capability::DBus(_) => Ok(self.clone()),
                             // Axis -> Gamepad
                             Capability::Gamepad(gamepad) => match gamepad {
                                 // Axis -> Button

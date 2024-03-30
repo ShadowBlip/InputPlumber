@@ -551,6 +551,7 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
         Capability::None => vec![],
         Capability::NotImplemented => vec![],
         Capability::Sync => vec![0],
+        Capability::DBus(_) => vec![],
         Capability::Gamepad(gamepad) => match gamepad {
             Gamepad::Button(btn) => match btn {
                 GamepadButton::South => vec![KeyCode::BTN_SOUTH.0],

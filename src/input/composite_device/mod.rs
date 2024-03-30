@@ -670,6 +670,18 @@ impl CompositeDevice {
 
     /// Writes the given event to the appropriate target device.
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+        let cap = event.as_capability();
+
+        // If this event implements the DBus capability, send the event to DBus devices
+        if matches!(cap, Capability::DBus(_)) {
+            let event = TargetCommand::WriteEvent(event);
+            #[allow(clippy::for_kv_map)]
+            for (_, target) in &self.target_dbus_devices {
+                target.send(event.clone()).await?;
+            }
+            return Ok(());
+        }
+
         // If the device is in intercept mode, only send events to DBus
         // target devices.
         if matches!(self.intercept_mode, InterceptMode::Always) {
@@ -682,16 +694,15 @@ impl CompositeDevice {
         }
 
         // When intercept mode is enabled, send ALL Guide button events over DBus
-        if matches!(self.intercept_mode, InterceptMode::Pass) {
-            let cap = event.as_capability();
-            if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)) {
-                let event = TargetCommand::WriteEvent(event);
-                #[allow(clippy::for_kv_map)]
-                for (_, target) in &self.target_dbus_devices {
-                    target.send(event.clone()).await?;
-                }
-                return Ok(());
+        if matches!(self.intercept_mode, InterceptMode::Pass)
+            && cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
+        {
+            let event = TargetCommand::WriteEvent(event);
+            #[allow(clippy::for_kv_map)]
+            for (_, target) in &self.target_dbus_devices {
+                target.send(event.clone()).await?;
             }
+            return Ok(());
         }
 
         let event = TargetCommand::WriteEvent(event);

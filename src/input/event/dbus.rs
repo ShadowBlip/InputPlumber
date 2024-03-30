@@ -1,9 +1,11 @@
+use std::str::FromStr;
+
 use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, Keyboard};
 
 use super::{native::NativeEvent, value::InputValue};
 
 /// Actions represent all possible DBus event actions
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Action {
     None,
     Guide,
@@ -60,6 +62,37 @@ impl Action {
     }
 }
 
+impl FromStr for Action {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "none" => Ok(Action::None),
+            "ui_guide" => Ok(Action::Guide),
+            "ui_quick" => Ok(Action::Quick),
+            "ui_context" => Ok(Action::Context),
+            "ui_option" => Ok(Action::Option),
+            "ui_select" => Ok(Action::Select),
+            "ui_accept" => Ok(Action::Accept),
+            "ui_back" => Ok(Action::Back),
+            "ui_action" => Ok(Action::ActOn),
+            "ui_left" => Ok(Action::Left),
+            "ui_right" => Ok(Action::Right),
+            "ui_up" => Ok(Action::Up),
+            "ui_down" => Ok(Action::Down),
+            "ui_l1" => Ok(Action::L1),
+            "ui_l2" => Ok(Action::L2),
+            "ui_l3" => Ok(Action::L3),
+            "ui_r1" => Ok(Action::R1),
+            "ui_r2" => Ok(Action::R2),
+            "ui_r3" => Ok(Action::R3),
+            "ui_volume_up" => Ok(Action::VolumeUp),
+            "ui_volume_down" => Ok(Action::VolumeDown),
+            _ => Err(()),
+        }
+    }
+}
+
 /// A [DBusEvent] can be sent as a DBus signal
 #[derive(Debug, Clone)]
 pub struct DBusEvent {
@@ -107,6 +140,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
         Capability::None => vec![Action::None],
         Capability::NotImplemented => vec![Action::None],
         Capability::Sync => vec![Action::None],
+        Capability::DBus(action) => vec![action],
         Capability::Gamepad(gamepad) => match gamepad {
             Gamepad::Button(btn) => match btn {
                 GamepadButton::South => vec![Action::Accept],
