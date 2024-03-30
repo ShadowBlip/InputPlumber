@@ -12,10 +12,7 @@ use zbus_macros::dbus_interface;
 use crate::input::{
     capability::{Capability, Keyboard},
     composite_device,
-    event::{
-        evdev::EvdevEvent,
-        native::{InputValue, NativeEvent},
-    },
+    event::{evdev::EvdevEvent, native::NativeEvent, value::InputValue},
 };
 
 use super::TargetCommand;

@@ -6,7 +6,7 @@ use crate::input::capability::{
     Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard,
 };
 
-use super::native::{InputValue, NativeEvent};
+use super::{native::NativeEvent, value::InputValue};
 
 #[derive(Debug, Clone)]
 pub struct EvdevEvent {

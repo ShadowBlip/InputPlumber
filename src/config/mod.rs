@@ -7,10 +7,7 @@ use thiserror::Error;
 
 use crate::{
     dmi::data::DMIData,
-    input::{
-        capability,
-        event::native::{InputValue, NativeEvent},
-    },
+    input::event::{native::NativeEvent, value::InputValue},
     procfs,
 };
 

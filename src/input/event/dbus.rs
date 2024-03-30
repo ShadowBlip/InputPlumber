@@ -1,6 +1,6 @@
 use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, Keyboard};
 
-use super::native::{InputValue, NativeEvent};
+use super::{native::NativeEvent, value::InputValue};
 
 /// Actions represent all possible DBus event actions
 #[derive(Debug, Clone)]
