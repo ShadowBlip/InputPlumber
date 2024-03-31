@@ -259,8 +259,6 @@ pub struct CompositeDevice {
     /// Name of the currently loaded [DeviceProfile] for the CompositeDevice.
     /// The [DeviceProfile] is used to translate input events.
     device_profile: Option<String>,
-    /// Map of profile capabilities and the capabilities they translate into
-    device_profile_map: HashMap<Capability, Vec<Capability>>,
     /// Map of profile source events to translate to one or more profile mapping
     /// configs that define how the source event should be translated.
     device_profile_config_map: HashMap<Capability, Vec<ProfileMapping>>,
@@ -311,7 +309,6 @@ impl CompositeDevice {
             capabilities: HashSet::new(),
             capability_map,
             device_profile: None,
-            device_profile_map: HashMap::new(),
             device_profile_config_map: HashMap::new(),
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
@@ -1048,7 +1045,6 @@ impl CompositeDevice {
         log::debug!("Loading device profile from path: {path}");
         // Remove all outdated capability mappings.
         log::debug!("Clearing old device profile mappings");
-        self.device_profile_map.clear();
         self.device_profile_config_map.clear();
 
         // Load and parse the device profile
@@ -1071,11 +1067,6 @@ impl CompositeDevice {
                 let cap: Capability = cap_config.into();
                 target_events_caps.push(cap);
             }
-
-            // Insert the target event capabilities to translate to
-            // TODO: This wont work
-            self.device_profile_map
-                .insert(source_event_cap.clone(), target_events_caps);
 
             // Insert the translation config for this event
             let config_map = self

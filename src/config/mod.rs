@@ -99,6 +99,36 @@ impl ProfileMapping {
             }
         }
 
+        // Mouse event
+        if let Some(mouse) = self.source_event.mouse.as_ref() {
+            // Mouse motion
+            if let Some(motion) = mouse.motion.as_ref() {
+                // Mouse motion was defined for source event!
+                if let Some(direction) = motion.direction.as_ref() {
+                    // A direction was defined!
+                    let value = event.get_value();
+                    return match value {
+                        InputValue::Vector2 { x, y } => match direction.as_str() {
+                            // Left should be a negative value
+                            "left" => x.filter(|&x| x <= 0.0).is_some(),
+                            // Right should be a positive value
+                            "right" => x.filter(|&x| x >= 0.0).is_some(),
+                            // Up should be a negative value
+                            "up" => y.filter(|&y| y <= 0.0).is_some(),
+                            // Down should be a positive value
+                            "down" => y.filter(|&y| y >= 0.0).is_some(),
+                            _ => false,
+                        },
+                        // Other values should never be used if this was an axis
+                        _ => false,
+                    };
+                } else {
+                    // If no direction was defined for mouse motion, then this should match
+                    return true;
+                }
+            }
+        }
+
         // If no other input types were defined in the config, then it counts as
         // a match.
         true
@@ -185,7 +215,14 @@ pub struct GyroCapability {
 #[serde(rename_all = "snake_case")]
 pub struct MouseCapability {
     pub button: Option<String>,
-    pub motion: Option<String>,
+    pub motion: Option<MouseMotionCapability>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct MouseMotionCapability {
+    pub direction: Option<String>,
+    pub speed_pps: Option<u64>,
 }
 
 /// Defines a platform match for loading a [CompositeDevice]

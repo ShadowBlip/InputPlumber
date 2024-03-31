@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=../schema/device_profile_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: DeviceProfile
+
+# Name of the device profile
+name: Test Profile
+
+# Profile mappings
+mapping:
+  # Button to button
+  - name: Guide Button
+    source_event:
+      keyboard: KeyRightCtrl
+    target_events:
+      - gamepad:
+          button: Guide
+
+  # Button to axis direction
+  - name: A to axis
+    source_event:
+      keyboard: KeyA
+    target_events:
+      - gamepad:
+          axis:
+            name: Hat1
+            direction: left
+
+  # Axis direction to button
+  - name: A
+    source_event:
+      gamepad:
+        axis:
+          name: LeftStick
+          direction: left
+          deadzone: 0.3 # defaults to 0.3
+    target_events:
+      - keyboard: KeyA
+
+  - name: D
+    source_event:
+      gamepad:
+        axis:
+          name: LeftStick
+          direction: right
+          deadzone: 0.3 # defaults to 0.3
+    target_events:
+      - keyboard: KeyD
+
+  # Axis to mouse
+  - name: Joystick Mouse
+    source_event:
+      gamepad:
+        axis:
+          name: RightStick
+    target_events:
+      - mouse:
+          motion: {}
+
+  # Gyro to mouse
+  - name: Gyro Mouse
+    source_event:
+      gamepad:
+        gyro:
+          name: Gyro1
+    target_events:
+      - mouse:
+          motion: {}
+
+  # Gyro to axis
+  - name: Gyro Stick
+    source_event:
+      gamepad:
+        gyro:
+          name: Gyro1
+    target_events:
+      - gamepad:
+          axis:
+            name: RightStick
+
+  # Gyro to key press
+  - name: Gyro Key
+    source_event:
+      gamepad:
+        gyro:
+          name: Gyro1
+          axis: yaw
+          direction: positive
+          deadzone: 0.3
+    target_events:
+      - keyboard: KeyW
+
+  # Key to input chord
+  - name: Steam QuickAccess Chord
+    source_event:
+      gamepad:
+        button: QuickAccess
+    target_events:
+      - gamepad:
+          button: Guide
+      - gamepad:
+          button: South
+
+  # Key to DBus event
+  - name: DBus QuickAccess
+    source_event:
+      gamepad:
+        button: QuickAccess
+    target_events:
+      - dbus: ui_quick
+
+  # Trigger to button
+  - name: Trigger to button
+    source_event:
+      gamepad:
+        trigger:
+          name: LeftTrigger
+          deadzone: 0.4
+    target_events:
+      - gamepad:
+          button: South
