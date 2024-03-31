@@ -1,5 +1,28 @@
 
-# Source EventDevice DBus Interface API
+# Gamepad DBus Interface API
+
+## org.freedesktop.DBus.Peer
+
+### Methods
+
+#### Ping
+
+
+
+
+#### GetMachineId
+
+
+
+##### Arguments
+
+| Name | Direction | Type | Description |
+| --- | :---: | :---: | --- |
+  | **** | *out* | *s* |  |
+  
+
+
+### Signals
 
 ## org.freedesktop.DBus.Properties
 
@@ -59,29 +82,6 @@
   | **invalidated\_properties** | ** | *as* |  |
   
 
-## org.freedesktop.DBus.Peer
-
-### Methods
-
-#### Ping
-
-
-
-
-#### GetMachineId
-
-
-
-##### Arguments
-
-| Name | Direction | Type | Description |
-| --- | :---: | :---: | --- |
-  | **** | *out* | *s* |  |
-  
-
-
-### Signals
-
 ## org.freedesktop.DBus.Introspectable
 
 ### Methods
@@ -100,19 +100,14 @@
 
 ### Signals
 
-## org.shadowblip.Input.Source.EventDevice
+## org.shadowblip.Input.Gamepad
 
 ### Properties
 
 
 | Name | Access | Type | Description |
 | --- | :---: | :---: | --- |
-| **DevicePath** | *read* | *s* |  |
-| **Handlers** | *read* | *as* |  |
 | **Name** | *read* | *s* |  |
-| **PhysPath** | *read* | *s* |  |
-| **SysfsPath** | *read* | *s* |  |
-| **UniqueId** | *read* | *s* |  |
 
 ### Methods
 

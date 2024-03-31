@@ -1,18 +1,11 @@
 
-# Manager DBus Interface API
+# DBusDevice DBus Interface API
 
-## org.shadowblip.InputManager
-
-### Properties
-
-
-| Name | Access | Type | Description |
-| --- | :---: | :---: | --- |
-| **InterceptMode** | *read* | *s* |  |
+## org.freedesktop.DBus.Introspectable
 
 ### Methods
 
-#### CreateCompositeDevice
+#### Introspect
 
 
 
@@ -20,18 +13,48 @@
 
 | Name | Direction | Type | Description |
 | --- | :---: | :---: | --- |
-  | **config\_path** | *in* | *s* |  |
   | **** | *out* | *s* |  |
   
 
 
 ### Signals
 
-## org.freedesktop.DBus.Introspectable
+## org.shadowblip.Input.DBusDevice
+
+### Properties
+
+
+| Name | Access | Type | Description |
+| --- | :---: | :---: | --- |
+| **Name** | *read* | *s* |  |
 
 ### Methods
 
-#### Introspect
+
+### Signals
+
+#### InputEvent
+
+
+
+##### Arguments
+
+| Name | Direction | Type | Description |
+| --- | :---: | :---: | --- |
+  | **event** | ** | *s* |  |
+  | **value** | ** | *d* |  |
+  
+
+## org.freedesktop.DBus.Peer
+
+### Methods
+
+#### Ping
+
+
+
+
+#### GetMachineId
 
 
 
@@ -102,26 +125,3 @@
   | **changed\_properties** | ** | *a{sv}* |  |
   | **invalidated\_properties** | ** | *as* |  |
   
-
-## org.freedesktop.DBus.Peer
-
-### Methods
-
-#### Ping
-
-
-
-
-#### GetMachineId
-
-
-
-##### Arguments
-
-| Name | Direction | Type | Description |
-| --- | :---: | :---: | --- |
-  | **** | *out* | *s* |  |
-  
-
-
-### Signals
