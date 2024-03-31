@@ -79,7 +79,6 @@ mapping:
       - mouse:
           motion:
             speed_pps: 800 # default to 800pps
-            direction: left
 
   # Buttons
   - name: Menu

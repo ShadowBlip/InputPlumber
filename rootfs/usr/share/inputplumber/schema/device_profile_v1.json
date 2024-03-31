@@ -298,6 +298,8 @@
         "direction": {
           "type": "string",
           "enum": [
+            "horizontal",
+            "vertical",
             "left",
             "right",
             "up",

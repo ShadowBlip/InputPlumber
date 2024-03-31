@@ -129,7 +129,10 @@ impl InputValue {
                             },
                             // Axis -> Mouse
                             Capability::Mouse(mouse) => match mouse {
-                                Mouse::Motion => Err(TranslationError::NotImplemented),
+                                // Axis -> Mouse Motion
+                                Mouse::Motion => self
+                                    .translate_axis_to_mouse_motion(source_config, target_config),
+                                // Axis -> Mouse Button
                                 Mouse::Button(_) => self.translate_axis_to_button(source_config),
                             },
                             // Axis -> Keyboard
@@ -137,7 +140,38 @@ impl InputValue {
                         }
                     }
                     // Trigger -> ...
-                    Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
+                    Gamepad::Trigger(_) => match target_cap {
+                        // Trigger -> None
+                        Capability::None => Ok(InputValue::None),
+                        // Trigger -> NotImplemented
+                        Capability::NotImplemented => Ok(InputValue::None),
+                        // Trigger -> Sync
+                        Capability::Sync => Ok(InputValue::None),
+                        // Trigger -> DBus
+                        Capability::DBus(_) => Ok(self.clone()),
+                        // Trigger -> Gamepad
+                        Capability::Gamepad(gamepad) => match gamepad {
+                            // Trigger -> Button
+                            Gamepad::Button(_) => self.translate_trigger_to_button(source_config),
+                            // Trigger -> Axis
+                            Gamepad::Axis(_) => Err(TranslationError::NotImplemented),
+                            // Trigger -> Trigger
+                            Gamepad::Trigger(_) => Ok(self.clone()),
+                            // Trigger -> Accelerometer
+                            Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
+                            // Trigger -> Gyro
+                            Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                        },
+                        // Trigger -> Mouse
+                        Capability::Mouse(mouse) => match mouse {
+                            // Trigger -> Mouse Motion
+                            Mouse::Motion => Err(TranslationError::NotImplemented),
+                            // Trigger -> Mouse Button
+                            Mouse::Button(_) => self.translate_trigger_to_button(source_config),
+                        },
+                        // Trigger -> Keyboard
+                        Capability::Keyboard(_) => self.translate_trigger_to_button(source_config),
+                    },
                     // Accelerometer -> ...
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                     // Gyro -> ...
@@ -148,6 +182,137 @@ impl InputValue {
             Capability::Mouse(_) => Err(TranslationError::NotImplemented),
             // Keyboard -> ...
             Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
+        }
+    }
+
+    /// Translate the axis value into mouse motion
+    fn translate_axis_to_mouse_motion(
+        &self,
+        source_config: &CapabilityConfig,
+        target_config: &CapabilityConfig,
+    ) -> Result<InputValue, TranslationError> {
+        // Use provided mapping to determine mouse motion value
+        if let Some(mouse_config) = target_config.mouse.as_ref() {
+            if let Some(mouse_motion) = mouse_config.motion.as_ref() {
+                // Get the mouse speed in pixels-per-second
+                let speed_pps = mouse_motion.speed_pps.unwrap_or(800);
+
+                // Get the value from the axis event
+                let (mut x, mut y) = match self {
+                    InputValue::Vector2 { x, y } => (*x, *y),
+                    InputValue::Vector3 { x, y, z: _ } => (*x, *y),
+                    _ => (None, None),
+                };
+
+                // Check to see if the value is below a given threshold to prevent
+                // mouse movements for axes that don't recenter to 0.
+                if let Some(value) = x {
+                    if value.abs() < 0.20 {
+                        x = Some(0.0);
+                    }
+                }
+                if let Some(value) = y {
+                    if value.abs() < 0.20 {
+                        y = Some(0.0);
+                    }
+                }
+
+                // Multiply the value by the speed
+                if let Some(value) = x {
+                    x = Some(value * speed_pps as f64);
+                }
+                if let Some(value) = y {
+                    y = Some(value * speed_pps as f64);
+                }
+
+                // If a direction is defined, map only the selected directions to
+                // the value.
+                if let Some(direction) = mouse_motion.direction.as_ref() {
+                    // Create a vector2 value based on axis direction
+                    match direction.as_str() {
+                        // Horizontal takes both positive and negative
+                        "horizontal" => Ok(InputValue::Vector2 { x, y: None }),
+                        // Vertical takes both positive and negative
+                        "vertical" => Ok(InputValue::Vector2 { x: None, y }),
+                        // Left should be a negative value
+                        "left" => {
+                            if let Some(x) = x {
+                                if x <= 0.0 {
+                                    Ok(InputValue::Vector2 {
+                                        x: Some(x),
+                                        y: None,
+                                    })
+                                } else {
+                                    Ok(InputValue::Vector2 { x: None, y: None })
+                                }
+                            } else {
+                                Ok(InputValue::Vector2 { x: None, y: None })
+                            }
+                        }
+                        // Right should be a positive value
+                        "right" => {
+                            if let Some(x) = x {
+                                if x >= 0.0 {
+                                    Ok(InputValue::Vector2 {
+                                        x: Some(x),
+                                        y: None,
+                                    })
+                                } else {
+                                    Ok(InputValue::Vector2 { x: None, y: None })
+                                }
+                            } else {
+                                Ok(InputValue::Vector2 { x: None, y: None })
+                            }
+                        }
+                        // Up should be a negative value
+                        "up" => {
+                            if let Some(y) = y {
+                                if y <= 0.0 {
+                                    Ok(InputValue::Vector2 {
+                                        x: None,
+                                        y: Some(y),
+                                    })
+                                } else {
+                                    Ok(InputValue::Vector2 { x: None, y: None })
+                                }
+                            } else {
+                                Ok(InputValue::Vector2 { x: None, y: None })
+                            }
+                        }
+                        // Down should be a positive value
+                        "down" => {
+                            if let Some(y) = y {
+                                if y >= 0.0 {
+                                    Ok(InputValue::Vector2 {
+                                        x: None,
+                                        y: Some(y),
+                                    })
+                                } else {
+                                    Ok(InputValue::Vector2 { x: None, y: None })
+                                }
+                            } else {
+                                Ok(InputValue::Vector2 { x: None, y: None })
+                            }
+                        }
+                        _ => Err(TranslationError::InvalidTargetConfig(format!(
+                            "Invalid axis direction: {direction}"
+                        ))),
+                    }
+                }
+                // If no direction is defined, map both axes to the mouse values
+                else {
+                    Ok(InputValue::Vector2 { x, y })
+                }
+            } else {
+                Err(TranslationError::InvalidTargetConfig(
+                    "No mouse motion config to translate axis to mouse motion".to_string(),
+                ))
+            }
+            //
+        } else {
+            Err(TranslationError::InvalidTargetConfig(
+                "No mouse config to translate axis to mouse motion".to_string(),
+            ))
         }
     }
 
@@ -311,6 +476,39 @@ impl InputValue {
                     Err(TranslationError::InvalidSourceConfig(
                         "No axis direction defined to translate button to axis".to_string(),
                     ))
+                }
+            } else {
+                Err(TranslationError::InvalidSourceConfig(
+                    "No axis config to translate button to axis".to_string(),
+                ))
+            }
+        } else {
+            Err(TranslationError::InvalidSourceConfig(
+                "No gamepad config to translate button to axis".to_string(),
+            ))
+        }
+    }
+
+    /// Translate the trigger value into a button value based on the given config.
+    fn translate_trigger_to_button(
+        &self,
+        source_config: &CapabilityConfig,
+    ) -> Result<InputValue, TranslationError> {
+        if let Some(gamepad_config) = source_config.gamepad.as_ref() {
+            if let Some(trigger) = gamepad_config.trigger.as_ref() {
+                // Get the threshold to consider the trigger as 'pressed' or not
+                let threshold = trigger.deadzone.unwrap_or(0.3);
+
+                // Get the trigger value
+                let value = match self {
+                    InputValue::Float(value) => *value,
+                    _ => 0.0,
+                };
+
+                if value >= threshold {
+                    Ok(InputValue::Bool(true))
+                } else {
+                    Ok(InputValue::Bool(false))
                 }
             } else {
                 Err(TranslationError::InvalidSourceConfig(
