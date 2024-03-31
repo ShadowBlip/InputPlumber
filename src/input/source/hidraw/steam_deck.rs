@@ -22,11 +22,20 @@ pub const PID: u16 = 0x1205;
 pub struct DeckController {
     info: DeviceInfo,
     composite_tx: broadcast::Sender<Command>,
+    device_id: String,
 }
 
 impl DeckController {
-    pub fn new(info: DeviceInfo, composite_tx: broadcast::Sender<Command>) -> Self {
-        Self { info, composite_tx }
+    pub fn new(
+        info: DeviceInfo,
+        composite_tx: broadcast::Sender<Command>,
+        device_id: String,
+    ) -> Self {
+        Self {
+            info,
+            composite_tx,
+            device_id,
+        }
     }
 
     pub async fn run(&self) -> Result<(), Box<dyn Error>> {
@@ -36,6 +45,7 @@ impl DeckController {
 
         // Spawn a blocking task to read the events
         let device_path = path.clone();
+        let device_id = self.device_id.clone();
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
                 let mut driver = Driver::new(device_path.clone())?;
@@ -47,7 +57,10 @@ impl DeckController {
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
                         }
-                        tx.send(Command::ProcessEvent(Event::Native(event)))?;
+                        tx.send(Command::ProcessEvent(
+                            device_id.clone(),
+                            Event::Native(event),
+                        ))?;
                     }
 
                     // Polling interval is about 4ms so we can sleep a little

@@ -130,6 +130,11 @@
             "gamepad"
           ]
         },
+        "blocked": {
+          "description": "If true, device will be grabbed but no events from this device will reach target devices. Defaults to false.",
+          "type": "boolean",
+          "default": false
+        },
         "evdev": {
           "$ref": "#/definitions/Evdev"
         },

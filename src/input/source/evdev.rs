@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error};
 
-use evdev::{AbsoluteAxisCode, Device, EventType, InputEvent, KeyCode};
+use evdev::{AbsoluteAxisCode, Device, EventType, InputEvent};
 use tokio::sync::broadcast;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
@@ -8,7 +8,7 @@ use zbus_macros::dbus_interface;
 use crate::{
     constants::BUS_PREFIX,
     input::{
-        capability::{Capability, Gamepad, GamepadButton},
+        capability::Capability,
         composite_device::Command,
         event::{evdev::EvdevEvent, Event},
     },
@@ -132,7 +132,8 @@ impl EventDevice {
 
             // Send the event to the composite device
             let event = Event::Evdev(evdev_event);
-            self.composite_tx.send(Command::ProcessEvent(event))?;
+            self.composite_tx
+                .send(Command::ProcessEvent(self.get_id(), event))?;
         }
         log::debug!("Stopped reading device events");
 

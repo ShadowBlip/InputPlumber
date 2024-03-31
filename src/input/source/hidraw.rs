@@ -105,7 +105,7 @@ impl HIDRawDevice {
         if self.info.vendor_id() == steam_deck::VID && self.info.product_id() == steam_deck::PID {
             log::info!("Detected Steam Deck");
             let tx = self.composite_tx.clone();
-            let driver = steam_deck::DeckController::new(self.info.clone(), tx);
+            let driver = steam_deck::DeckController::new(self.info.clone(), tx, self.get_id());
             driver.run().await?;
         } else if self.info.vendor_id() == drivers::lego::driver::VID
             && (self.info.product_id() == drivers::lego::driver::PID
@@ -113,7 +113,7 @@ impl HIDRawDevice {
         {
             log::info!("Detected Legion Go");
             let tx = self.composite_tx.clone();
-            let driver = lego::LegionController::new(self.info.clone(), tx);
+            let driver = lego::LegionController::new(self.info.clone(), tx, self.get_id());
             driver.run().await?;
         } else {
             return Err(format!(
