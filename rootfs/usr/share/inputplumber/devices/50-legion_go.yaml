@@ -21,6 +21,7 @@ matches:
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: keyboard # Block data
+    blocked: true
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6182
@@ -56,6 +57,7 @@ source_devices:
       product_id: "6182"
       name: "Generic X-Box pad"
   - group: keyboard
+    blocked: true
     unique: false
     evdev:
       vendor_id: "17ef"

@@ -7,7 +7,10 @@ use thiserror::Error;
 
 use crate::{
     dmi::data::DMIData,
-    input::event::{native::NativeEvent, value::InputValue},
+    input::{
+        event::{native::NativeEvent, value::InputValue},
+        manager::SourceDeviceInfo,
+    },
     procfs,
 };
 
@@ -254,6 +257,7 @@ pub struct SourceDevice {
     pub evdev: Option<Evdev>,
     pub hidraw: Option<Hidraw>,
     pub unique: Option<bool>,
+    pub blocked: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -316,6 +320,31 @@ impl CompositeDeviceConfig {
             .iter()
             .filter_map(|device| device.evdev.clone())
             .collect()
+    }
+
+    /// Returns a [SourceDevice] if it matches the given [SourceDeviceInfo].
+    pub fn get_matching_device(&self, device: &SourceDeviceInfo) -> Option<SourceDevice> {
+        match device {
+            SourceDeviceInfo::EvdevDeviceInfo(evdev) => {
+                for config in self.source_devices.iter() {
+                    if let Some(evdev_config) = config.evdev.as_ref() {
+                        if self.has_matching_evdev(evdev, evdev_config) {
+                            return Some(config.clone());
+                        }
+                    }
+                }
+            }
+            SourceDeviceInfo::HIDRawDeviceInfo(hidraw) => {
+                for config in self.source_devices.iter() {
+                    if let Some(hidraw_config) = config.hidraw.as_ref() {
+                        if self.has_matching_hidraw(hidraw, hidraw_config) {
+                            return Some(config.clone());
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// Returns true if a given hidraw device is within a list of hidraw configs.

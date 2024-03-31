@@ -109,8 +109,8 @@ impl Driver {
 
         let report_id = buf[0];
         let slice = &buf[..bytes_read];
-        log::trace!("Got Report ID: {report_id}");
-        log::trace!("Got Report Size: {bytes_read}");
+        //log::trace!("Got Report ID: {report_id}");
+        //log::trace!("Got Report Size: {bytes_read}");
 
         match report_id {
             DINPUTLEFT_DATA => {

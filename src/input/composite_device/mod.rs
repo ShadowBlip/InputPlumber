@@ -49,7 +49,7 @@ pub enum InterceptMode {
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
 pub enum Command {
-    ProcessEvent(Event),
+    ProcessEvent(String, Event),
     GetCapabilities(mpsc::Sender<HashSet<Capability>>),
     SetInterceptMode(InterceptMode),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
@@ -280,6 +280,9 @@ pub struct CompositeDevice {
     rx: broadcast::Receiver<Command>,
     /// Source devices that this composite device will consume.
     source_devices: Vec<SourceDevice>,
+    /// HashSet of source devices that are blocked from passing their input events to target
+    /// events.
+    source_devices_blocked: HashSet<String>,
     /// Physical device path for source devices. E.g. ["/dev/input/event0"]
     source_device_paths: Vec<String>,
     /// All currently running source device threads
@@ -318,6 +321,7 @@ impl CompositeDevice {
             tx,
             rx,
             source_devices: Vec::new(),
+            source_devices_blocked: HashSet::new(),
             source_device_paths: Vec::new(),
             source_device_tasks: JoinSet::new(),
             source_devices_used: Vec::new(),
@@ -391,8 +395,8 @@ impl CompositeDevice {
         while let Ok(cmd) = self.rx.recv().await {
             //log::debug!("Received command: {:?}", cmd);
             match cmd {
-                Command::ProcessEvent(event) => {
-                    if let Err(e) = self.process_event(event).await {
+                Command::ProcessEvent(device_id, event) => {
+                    if let Err(e) = self.process_event(device_id, event).await {
                         log::error!("Failed to process event: {:?}", e);
                     }
                 }
@@ -599,8 +603,17 @@ impl CompositeDevice {
 
     /// Process a single event from a source device. Events are piped through
     /// a translation layer, then dispatched to the appropriate target device(s)
-    async fn process_event(&mut self, raw_event: Event) -> Result<(), Box<dyn Error>> {
-        log::trace!("Received event: {:?}", raw_event);
+    async fn process_event(
+        &mut self,
+        device_id: String,
+        raw_event: Event,
+    ) -> Result<(), Box<dyn Error>> {
+        log::trace!("Received event: {:?} from {device_id}", raw_event);
+
+        if self.source_devices_blocked.contains(&device_id) {
+            log::trace!("Blocking event! {:?}", raw_event);
+            return Ok(());
+        }
 
         // Convert the event into a NativeEvent
         let event: NativeEvent = match raw_event {
@@ -958,6 +971,7 @@ impl CompositeDevice {
             if let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) {
                 self.source_devices_used.remove(idx);
             };
+            self.source_devices_blocked.remove(&id);
         }
         if id.starts_with("hidraw://") {
             let name = id.strip_prefix("hidraw://").unwrap();
@@ -970,6 +984,7 @@ impl CompositeDevice {
             if let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) {
                 self.source_devices_used.remove(idx);
             };
+            self.source_devices_blocked.remove(&id);
         }
 
         log::debug!(
@@ -987,11 +1002,11 @@ impl CompositeDevice {
     /// Creates and adds a source device using the given [SourceDeviceInfo]
     fn add_source_device(&mut self, device_info: SourceDeviceInfo) -> Result<(), Box<dyn Error>> {
         let device_info = device_info.clone();
-        match device_info {
+        match device_info.clone() {
             SourceDeviceInfo::EvdevDeviceInfo(info) => {
                 // Create an instance of the device
                 log::debug!("Adding source device: {:?}", info);
-                let device = source::evdev::EventDevice::new(info, self.tx.clone());
+                let device = source::evdev::EventDevice::new(info.clone(), self.tx.clone());
 
                 // Get the capabilities of the source device.
                 // TODO: When we *remove* a source device, we also need to remove
@@ -1012,7 +1027,16 @@ impl CompositeDevice {
                 let source_device = source::SourceDevice::EventDevice(device);
                 self.source_devices.push(source_device);
                 self.source_device_paths.push(device_path);
-                self.source_devices_used.push(id);
+                self.source_devices_used.push(id.clone());
+
+                // Check if this device should be blocked from sending events to target devices.
+                if let Some(device_config) = self.config.get_matching_device(&device_info) {
+                    if let Some(blocked) = device_config.blocked {
+                        if blocked {
+                            self.source_devices_blocked.insert(id);
+                        }
+                    }
+                };
             }
 
             SourceDeviceInfo::HIDRawDeviceInfo(info) => {
@@ -1033,7 +1057,16 @@ impl CompositeDevice {
                 let source_device = source::SourceDevice::HIDRawDevice(device);
                 self.source_devices.push(source_device);
                 self.source_device_paths.push(device_path);
-                self.source_devices_used.push(id);
+                self.source_devices_used.push(id.clone());
+
+                // Check if this device should be blocked from sending events to target devices.
+                if let Some(device_config) = self.config.get_matching_device(&device_info) {
+                    if let Some(blocked) = device_config.blocked {
+                        if blocked {
+                            self.source_devices_blocked.insert(id);
+                        }
+                    }
+                };
             }
         }
 
