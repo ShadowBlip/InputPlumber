@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode};
+use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, RelativeAxisCode};
 
 use crate::input::capability::{
-    Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard,
+    Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard, Mouse, MouseButton,
 };
 
 use super::{native::NativeEvent, value::InputValue};
@@ -506,6 +506,10 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
     match capability {
         Capability::Sync => Some(EventType::SYNCHRONIZATION),
         Capability::Keyboard(_) => Some(EventType::KEY),
+        Capability::Mouse(mouse) => match mouse {
+            Mouse::Motion => Some(EventType::RELATIVE),
+            Mouse::Button(_) => Some(EventType::KEY),
+        },
         Capability::Gamepad(gamepad) => match gamepad {
             Gamepad::Button(button) => match button {
                 GamepadButton::DPadUp => Some(EventType::ABSOLUTE),
@@ -625,7 +629,20 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
             Gamepad::Accelerometer => vec![],
             Gamepad::Gyro => vec![],
         },
-        Capability::Mouse(_) => vec![],
+        Capability::Mouse(mouse) => match mouse {
+            Mouse::Motion => vec![RelativeAxisCode::REL_X.0, RelativeAxisCode::REL_Y.0],
+            Mouse::Button(button) => match button {
+                MouseButton::Left => vec![KeyCode::BTN_LEFT.0],
+                MouseButton::Right => vec![KeyCode::BTN_RIGHT.0],
+                MouseButton::Middle => vec![KeyCode::BTN_MIDDLE.0],
+                MouseButton::WheelUp => vec![],
+                MouseButton::WheelDown => vec![],
+                MouseButton::WheelLeft => vec![],
+                MouseButton::WheelRight => vec![],
+                MouseButton::Extra1 => vec![KeyCode::BTN_EXTRA.0],
+                MouseButton::Extra2 => vec![],
+            },
+        },
         Capability::Keyboard(key) => match key {
             Keyboard::KeyEsc => vec![KeyCode::KEY_ESC.0],
             Keyboard::Key1 => vec![KeyCode::KEY_1.0],
@@ -841,8 +858,16 @@ fn input_event_from_value(
                     _ => todo!(),
                 }
             } else {
-                // Cannot convert axis input without axis info
-                None
+                match event_type {
+                    // Cannot denormalize value without axis info
+                    EventType::ABSOLUTE => None,
+                    EventType::RELATIVE => match RelativeAxisCode(code) {
+                        RelativeAxisCode::REL_X => Some(x? as i32),
+                        RelativeAxisCode::REL_Y => Some(y? as i32),
+                        _ => None,
+                    },
+                    _ => None,
+                }
             }
         }
         InputValue::Vector3 { x: _, y: _, z: _ } => todo!(),

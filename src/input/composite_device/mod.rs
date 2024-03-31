@@ -971,7 +971,7 @@ impl CompositeDevice {
                         continue;
                     }
 
-                    let event = NativeEvent::new(target_cap, value);
+                    let event = NativeEvent::new_translated(source_cap.clone(), target_cap, value);
                     events.push(event);
                 }
 
