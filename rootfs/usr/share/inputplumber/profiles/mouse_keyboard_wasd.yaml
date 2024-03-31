@@ -21,6 +21,13 @@ mapping:
     target_events:
       - dbus: ui_guide
 
+  - name: Quick Access
+    source_event:
+      gamepad:
+        button: QuickAccess
+    target_events:
+      - dbus: ui_quick
+
   # Left Stick
   - name: Left
     source_event:
@@ -70,7 +77,9 @@ mapping:
           name: RightStick
     target_events:
       - mouse:
-          motion: continuous
+          motion:
+            speed_pps: 800 # default to 800pps
+            direction: left
 
   # Buttons
   - name: Menu

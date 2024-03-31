@@ -271,10 +271,7 @@
       "additionalProperties": false,
       "properties": {
         "motion": {
-          "type": "string",
-          "enum": [
-            "continuous"
-          ]
+          "$ref": "#/definitions/MouseMotionEvent"
         },
         "button": {
           "type": "string",
@@ -292,6 +289,27 @@
         }
       },
       "required": []
+    },
+    "MouseMotionEvent": {
+      "title": "MouseMotionEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ]
+        },
+        "speed_pps": {
+          "type": "number",
+          "description": "Speed of the target motion event in pixels per second",
+          "default": 800
+        }
+      }
     },
     "GamepadEvent": {
       "title": "GamepadEvent",
