@@ -149,6 +149,25 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz
 	mv $(CACHE_DIR)/$(NAME).raw $@
 	cd dist && sha256sum $(NAME).raw > $(NAME).raw.sha256.txt
 
+.PHONY: dbus-xml
+dbus-xml: ## Generate DBus XML spec from running InputPlumber
+	busctl introspect org.shadowblip.InputPlumber \
+		--xml-interface /org/shadowblip/InputPlumber/Manager > ./bindings/dbus-xml/org.shadowblip.Input.Manager.xml
+	busctl introspect org.shadowblip.InputPlumber \
+		--xml-interface /org/shadowblip/InputPlumber/CompositeDevice0 > ./bindings/dbus-xml/org.shadowblip.Input.CompositeDevice.xml
+	busctl introspect org.shadowblip.InputPlumber \
+		--xml-interface /org/shadowblip/InputPlumber/devices/target/dbus0 > ./bindings/dbus-xml/org.shadowblip.Input.DBusDevice.xml
+	busctl introspect org.shadowblip.InputPlumber \
+		--xml-interface /org/shadowblip/InputPlumber/devices/target/keyboard0 > ./bindings/dbus-xml/org.shadowblip.Input.Keyboard.xml
+	busctl introspect org.shadowblip.InputPlumber \
+		--xml-interface /org/shadowblip/InputPlumber/devices/target/mouse0 > ./bindings/dbus-xml/org.shadowblip.Input.Mouse.xml
+	busctl introspect org.shadowblip.InputPlumber \
+		--xml-interface /org/shadowblip/InputPlumber/devices/target/gamepad0 > ./bindings/dbus-xml/org.shadowblip.Input.Gamepad.xml
+	busctl introspect org.shadowblip.InputPlumber \
+		--xml-interface /org/shadowblip/InputPlumber/devices/source/event0 > ./bindings/dbus-xml/org.shadowblip.Input.Source.EventDevice.xml
+	busctl introspect org.shadowblip.InputPlumber \
+		--xml-interface /org/shadowblip/InputPlumber/devices/source/hidraw0 > ./bindings/dbus-xml/org.shadowblip.Input.Source.HIDRawDevice.xml
+
 XSL_TEMPLATE := ./docs/dbus2markdown.xsl
 .PHONY: docs
 docs: ## Generate markdown docs for DBus interfaces
@@ -157,14 +176,18 @@ docs: ## Generate markdown docs for DBus interfaces
 	sed -i 's/DBus Interface API/Manager DBus Interface API/g' ./docs/manager.md
 	xsltproc --novalid -o docs/composite_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.CompositeDevice.xml
 	sed -i 's/DBus Interface API/CompositeDevice DBus Interface API/g' ./docs/composite_device.md
+	xsltproc --novalid -o docs/target_dbus.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.DBusDevice.xml
+	sed -i 's/DBus Interface API/DBusDevice DBus Interface API/g' ./docs/target_dbus.md
+	xsltproc --novalid -o docs/target_keyboard.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Keyboard.xml
+	sed -i 's/DBus Interface API/Keyboard DBus Interface API/g' ./docs/target_keyboard.md
+	xsltproc --novalid -o docs/target_mouse.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Mouse.xml
+	sed -i 's/DBus Interface API/Mouse DBus Interface API/g' ./docs/target_mouse.md
+	xsltproc --novalid -o docs/target_gamepad.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Gamepad.xml
+	sed -i 's/DBus Interface API/Gamepad DBus Interface API/g' ./docs/target_gamepad.md
 	xsltproc --novalid -o docs/source_event_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Source.EventDevice.xml
 	sed -i 's/DBus Interface API/Source EventDevice DBus Interface API/g' ./docs/source_event_device.md
 	xsltproc --novalid -o docs/source_hidraw_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Source.HIDRawDevice.xml
 	sed -i 's/DBus Interface API/Source HIDRaw DBus Interface API/g' ./docs/source_hidraw_device.md
-	xsltproc --novalid -o docs/keyboard.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Keyboard
-	sed -i 's/DBus Interface API/Keyboard DBus Interface API/g' ./docs/keyboard.md
-	xsltproc --novalid -o docs/target_dbus_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.DBusDevice.xml
-	sed -i 's/DBus Interface API/Target DBus Device Interface API/g' ./docs/target_dbus_device.md
 
 # Refer to .releaserc.yaml for release configuration
 .PHONY: sem-release 

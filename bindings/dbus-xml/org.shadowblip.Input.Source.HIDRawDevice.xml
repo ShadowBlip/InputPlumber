@@ -2,6 +2,16 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node>
+  <interface name="org.shadowblip.Input.Source.HIDRawDevice">
+    <property name="InterfaceNumber" type="i" access="read"/>
+    <property name="Manufacturer" type="s" access="read"/>
+    <property name="Path" type="s" access="read"/>
+    <property name="Product" type="s" access="read"/>
+    <property name="ProductId" type="s" access="read"/>
+    <property name="ReleaseNumber" type="s" access="read"/>
+    <property name="SerialNumber" type="s" access="read"/>
+    <property name="VendorId" type="s" access="read"/>
+  </interface>
   <interface name="org.freedesktop.DBus.Properties">
     <method name="Get">
       <arg name="interface_name" type="s" direction="in"/>
@@ -30,16 +40,6 @@
     <method name="Introspect">
       <arg type="s" direction="out"/>
     </method>
-  </interface>
-  <interface name="org.shadowblip.Input.Source.HIDRawDevice">
-    <property name="InterfaceNumber" type="i" access="read"/>
-    <property name="Manufacturer" type="s" access="read"/>
-    <property name="Path" type="s" access="read"/>
-    <property name="Product" type="s" access="read"/>
-    <property name="ProductId" type="s" access="read"/>
-    <property name="ReleaseNumber" type="s" access="read"/>
-    <property name="SerialNumber" type="s" access="read"/>
-    <property name="VendorId" type="s" access="read"/>
   </interface>
   <interface name="org.freedesktop.DBus.Peer">
     <method name="Ping">

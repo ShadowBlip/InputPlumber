@@ -2,6 +2,13 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping">
+    </method>
+    <method name="GetMachineId">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
   <interface name="org.freedesktop.DBus.Properties">
     <method name="Get">
       <arg name="interface_name" type="s" direction="in"/>
@@ -26,28 +33,16 @@
       <arg name="invalidated_properties" type="as"/>
     </signal>
   </interface>
-  <interface name="org.freedesktop.DBus.Peer">
-    <method name="Ping">
-    </method>
-    <method name="GetMachineId">
-      <arg type="s" direction="out"/>
-    </method>
-  </interface>
   <interface name="org.freedesktop.DBus.Introspectable">
     <method name="Introspect">
       <arg type="s" direction="out"/>
     </method>
   </interface>
-  <interface name="org.shadowblip.Input.Source.EventDevice">
+  <interface name="org.shadowblip.Input.Gamepad">
     <!--
-     Returns the full path to the device handler (e.g. /dev/input/event3)
+     Name of the DBus device
      -->
-    <property name="DevicePath" type="s" access="read"/>
-    <property name="Handlers" type="as" access="read"/>
     <property name="Name" type="s" access="read"/>
-    <property name="PhysPath" type="s" access="read"/>
-    <property name="SysfsPath" type="s" access="read"/>
-    <property name="UniqueId" type="s" access="read"/>
   </interface>
 </node>
 
