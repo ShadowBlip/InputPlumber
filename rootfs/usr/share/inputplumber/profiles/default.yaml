@@ -9,4 +9,45 @@ kind: DeviceProfile
 name: Default
 
 # Profile mappings
-mapping: []
+mapping:
+  - name: QuickAccess
+    source_event:
+      gamepad:
+        button: QuickAccess
+    target_events:
+      - gamepad:
+          button: Guide
+      - gamepad:
+          button: South
+  - name: LeftTop
+    source_event:
+      gamepad:
+        button: LeftTop
+    target_events:
+      - gamepad:
+          button: Guide
+      - gamepad:
+          button: North
+  - name: RightTop
+    source_event:
+      gamepad:
+        button: RightTop
+    target_events:
+      - gamepad:
+          button: Guide
+      - gamepad:
+          button: RightBumper
+  - name: LeftPaddle
+    source_event:
+      gamepad:
+        button: LeftPaddle1
+    target_events:
+      - gamepad:
+          button: LeftStick
+  - name: RightPaddle
+    source_event:
+      gamepad:
+        button: RightPaddle1
+    target_events:
+      - gamepad:
+          button: RightStick
