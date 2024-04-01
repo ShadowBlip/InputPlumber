@@ -6,6 +6,7 @@ use std::{
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinSet,
+    time::{sleep, Duration},
 };
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
@@ -61,6 +62,7 @@ pub enum Command {
     SourceDeviceRemoved(String),
     GetProfileName(mpsc::Sender<String>),
     LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
+    WriteEvent(NativeEvent),
     Stop,
 }
 
@@ -467,6 +469,11 @@ impl CompositeDevice {
                         log::error!("Failed to send load profile result: {:?}", e);
                     }
                 }
+                Command::WriteEvent(event) => {
+                    if let Err(e) = self.write_event(event).await {
+                        log::error!("Failed to write event: {:?}", e);
+                    }
+                }
                 Command::Stop => {
                     log::debug!("Stopping CompositeDevice");
                     break;
@@ -650,12 +657,30 @@ impl CompositeDevice {
 
     /// Translate and write the given event to the appropriate target devices
     async fn handle_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+        // Check if we need to reverse the event list.
+        let is_pressed = event.pressed();
+        // Check if this is is a single event or multiple events.
+        let mut is_chord = false;
+        // Track the delay for chord events.
+        let mut sleep_time = 0;
+
         // Translate the event using the device profile.
-        let events = if self.device_profile.is_some() {
+        let mut events = if self.device_profile.is_some() {
             self.translate_event(&event).await?
         } else {
             vec![event]
         };
+
+        // Check if we need to reverse the event list.
+        if events.len() > 1 {
+            is_chord = true;
+            if !is_pressed {
+                events = events.into_iter().rev().collect();
+                // To support on_release events, we need to sleep past the time it takes to emit
+                // the down events.
+                sleep_time = 80 * events.len() as u64;
+            }
+        }
 
         for event in events {
             // Process the event depending on the intercept mode
@@ -671,10 +696,24 @@ impl CompositeDevice {
                 }
             }
 
-            // Write the event
-            self.write_event(event).await?;
+            // Add a keypress delay for event chords. This is required to
+            // support steam chords as it will pass through ro miss events if they aren't properly
+            // timed.
+            if is_chord {
+                let tx = self.tx.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(sleep_time)).await;
+                    if let Err(e) = tx.send(Command::WriteEvent(event)) {
+                        log::error!("Failed to send chord event command: {:?}", e);
+                    }
+                });
+                // Increment the sleep time.
+                sleep_time += 80;
+            } else {
+                // for single events we can emit immediatly without tokio overhead.
+                self.write_event(event).await?;
+            }
         }
-
         Ok(())
     }
 
