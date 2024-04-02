@@ -7,6 +7,9 @@ ALL_ROOTFS := $(shell find rootfs -type f)
 PREFIX ?= /usr
 CACHE_DIR := .cache
 
+# Build variables
+BUILD_TYPE ?= release
+
 # Docker image variables
 IMAGE_NAME ?= inputplumber-builder
 IMAGE_TAG ?= latest
@@ -37,7 +40,7 @@ help: ## Display this help.
 
 .PHONY: install
 install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr)
-	install -D -m 755 target/release/$(NAME) \
+	install -D -m 755 target/$(BUILD_TYPE)/$(NAME) \
 		$(PREFIX)/bin/$(NAME)
 	install -D -m 644 rootfs/usr/share/dbus-1/system.d/$(DBUS_NAME).conf \
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
@@ -71,13 +74,16 @@ uninstall: ## Uninstall inputplumber
 
 ##@ Development
 
+.PHONY: build ## Build (Default: BUILD_TYPE=release)
+build: target/$(BUILD_TYPE)/$(NAME)
+
 .PHONY: debug
 debug: target/debug/$(NAME)  ## Build debug build
 target/debug/$(NAME): $(ALL_RS) Cargo.lock
 	cargo build
 
-.PHONY: build
-build: target/release/$(NAME) ## Build release build
+.PHONY: release
+release: target/release/$(NAME) ## Build release build
 target/release/$(NAME): $(ALL_RS) Cargo.lock
 	cargo build --release
 
