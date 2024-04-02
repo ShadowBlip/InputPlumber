@@ -640,12 +640,11 @@ impl CompositeDevice {
         device_id: String,
         raw_event: Event,
     ) -> Result<(), Box<dyn Error>> {
-        log::trace!("Received event: {:?} from {device_id}", raw_event);
-
         if self.source_devices_blocked.contains(&device_id) {
             log::trace!("Blocking event! {:?}", raw_event);
             return Ok(());
         }
+        log::trace!("Received event: {:?} from {device_id}", raw_event);
 
         // Convert the event into a NativeEvent
         let event: NativeEvent = match raw_event {

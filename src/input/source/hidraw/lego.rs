@@ -4,7 +4,10 @@ use hidapi::DeviceInfo;
 use tokio::sync::broadcast;
 
 use crate::{
-    drivers::lego::{self, driver::Driver},
+    drivers::lego::{
+        driver::{self, Driver},
+        event,
+    },
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse, MouseButton,
@@ -102,56 +105,51 @@ fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
 
 /// Normalize the value to something between -1.0 and 1.0 based on the Deck's
 /// minimum and maximum axis ranges.
-fn normalize_axis_value(event: lego::event::AxisEvent) -> InputValue {
+fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
     match event {
-        lego::event::AxisEvent::Touchpad(value) => {
-            let min = lego::driver::PAD_X_MIN;
-            let max = lego::driver::PAD_X_MAX;
+        event::AxisEvent::Touchpad(value) => {
+            let min = driver::PAD_X_MIN;
+            let max = driver::PAD_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = lego::driver::PAD_Y_MAX; // uses inverted Y-axis
-            let max = lego::driver::PAD_Y_MIN;
+            let min = driver::PAD_Y_MAX; // uses inverted Y-axis
+            let max = driver::PAD_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
-        lego::event::AxisEvent::LStick(value) => {
-            let min = lego::driver::STICK_X_MIN;
-            let max = lego::driver::STICK_X_MAX;
+        event::AxisEvent::LStick(value) => {
+            let min = driver::STICK_X_MIN;
+            let max = driver::STICK_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = lego::driver::STICK_Y_MAX; // uses inverted Y-axis
-            let max = lego::driver::STICK_Y_MIN;
+            let min = driver::STICK_Y_MAX; // uses inverted Y-axis
+            let max = driver::STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
-        lego::event::AxisEvent::RStick(value) => {
-            let min = lego::driver::STICK_X_MIN;
-            let max = lego::driver::STICK_X_MAX;
+        event::AxisEvent::RStick(value) => {
+            let min = driver::STICK_X_MIN;
+            let max = driver::STICK_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = lego::driver::STICK_Y_MAX; // uses inverted Y-axis
-            let max = lego::driver::STICK_Y_MIN;
+            let min = driver::STICK_Y_MAX; // uses inverted Y-axis
+            let max = driver::STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
-        lego::event::AxisEvent::Mouse(value) => {
-            let min = lego::driver::MOUSE_X_MIN;
-            let max = lego::driver::MOUSE_X_MAX;
-            let x = normalize_signed_value(value.x as f64, min, max);
+        event::AxisEvent::Mouse(value) => {
+            let x = value.x as f64;
             let x = Some(x);
-
-            let min = lego::driver::MOUSE_Y_MIN;
-            let max = lego::driver::MOUSE_Y_MAX;
-            let y = normalize_signed_value(value.y as f64, min, max);
+            let y = value.y as f64;
             let y = Some(y);
 
             InputValue::Vector2 { x, y }
@@ -161,125 +159,125 @@ fn normalize_axis_value(event: lego::event::AxisEvent) -> InputValue {
 
 /// Normalize the trigger value to something between 0.0 and 1.0 based on the Deck's
 /// maximum axis ranges.
-fn normalize_trigger_value(event: lego::event::TriggerEvent) -> InputValue {
+fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
     match event {
-        lego::event::TriggerEvent::ATriggerL(value) => {
-            let max = lego::driver::TRIGG_MAX;
+        event::TriggerEvent::ATriggerL(value) => {
+            let max = driver::TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
-        lego::event::TriggerEvent::ATriggerR(value) => {
-            let max = lego::driver::TRIGG_MAX;
+        event::TriggerEvent::ATriggerR(value) => {
+            let max = driver::TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
-        lego::event::TriggerEvent::MouseWheel(value) => {
-            let max = lego::driver::MOUSE_WHEEL_MAX;
+        event::TriggerEvent::MouseWheel(value) => {
+            let max = driver::MOUSE_WHEEL_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
     }
 }
 
 /// Translate the given Steam Deck events into native events
-fn translate_events(events: Vec<lego::event::Event>) -> Vec<NativeEvent> {
+fn translate_events(events: Vec<event::Event>) -> Vec<NativeEvent> {
     events.into_iter().map(translate_event).collect()
 }
 
 /// Translate the given Legion Go event into a native event
-fn translate_event(event: lego::event::Event) -> NativeEvent {
+fn translate_event(event: event::Event) -> NativeEvent {
     match event {
-        lego::event::Event::Button(button) => match button {
-            lego::event::ButtonEvent::A(value) => NativeEvent::new(
+        event::Event::Button(button) => match button {
+            event::ButtonEvent::A(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::X(value) => NativeEvent::new(
+            event::ButtonEvent::X(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::B(value) => NativeEvent::new(
+            event::ButtonEvent::B(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::Y(value) => NativeEvent::new(
+            event::ButtonEvent::Y(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::Menu(value) => NativeEvent::new(
+            event::ButtonEvent::Menu(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::View(value) => NativeEvent::new(
+            event::ButtonEvent::View(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::Legion(value) => NativeEvent::new(
+            event::ButtonEvent::Legion(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::QuickAccess(value) => NativeEvent::new(
+            event::ButtonEvent::QuickAccess(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::DPadDown(value) => NativeEvent::new(
+            event::ButtonEvent::DPadDown(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::DPadUp(value) => NativeEvent::new(
+            event::ButtonEvent::DPadUp(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::DPadLeft(value) => NativeEvent::new(
+            event::ButtonEvent::DPadLeft(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::DPadRight(value) => NativeEvent::new(
+            event::ButtonEvent::DPadRight(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::LB(value) => NativeEvent::new(
+            event::ButtonEvent::LB(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::DTriggerL(value) => NativeEvent::new(
+            event::ButtonEvent::DTriggerL(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::ThumbL(value) => NativeEvent::new(
+            event::ButtonEvent::ThumbL(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::Y1(value) => NativeEvent::new(
+            event::ButtonEvent::Y1(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::Y2(value) => NativeEvent::new(
+            event::ButtonEvent::Y2(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::RB(value) => NativeEvent::new(
+            event::ButtonEvent::RB(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::DTriggerR(value) => NativeEvent::new(
+            event::ButtonEvent::DTriggerR(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::ThumbR(value) => NativeEvent::new(
+            event::ButtonEvent::ThumbR(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::Y3(value) => NativeEvent::new(
+            event::ButtonEvent::Y3(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::M3(value) => NativeEvent::new(
+            event::ButtonEvent::M3(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::M2(value) => NativeEvent::new(
+            event::ButtonEvent::M2(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::ButtonEvent::MouseClick(value) => NativeEvent::new(
+            event::ButtonEvent::MouseClick(value) => NativeEvent::new(
                 Capability::Mouse(Mouse::Button(MouseButton::Middle)),
                 InputValue::Bool(value.pressed),
             ),
@@ -304,53 +302,53 @@ fn translate_event(event: lego::event::Event) -> NativeEvent {
             ),
         },
         */
-        lego::event::Event::Axis(axis) => match axis.clone() {
-            lego::event::AxisEvent::Touchpad(_) => {
+        event::Event::Axis(axis) => match axis.clone() {
+            event::AxisEvent::Touchpad(_) => {
                 NativeEvent::new(Capability::Mouse(Mouse::Motion), normalize_axis_value(axis))
             }
-            lego::event::AxisEvent::LStick(_) => NativeEvent::new(
+            event::AxisEvent::LStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
                 normalize_axis_value(axis),
             ),
-            lego::event::AxisEvent::RStick(_) => NativeEvent::new(
+            event::AxisEvent::RStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
                 normalize_axis_value(axis),
             ),
-            lego::event::AxisEvent::Mouse(_) => {
+            event::AxisEvent::Mouse(_) => {
                 NativeEvent::new(Capability::Mouse(Mouse::Motion), normalize_axis_value(axis))
             }
         },
-        lego::event::Event::Trigger(trigg) => match trigg.clone() {
-            lego::event::TriggerEvent::ATriggerL(_) => NativeEvent::new(
+        event::Event::Trigger(trigg) => match trigg.clone() {
+            event::TriggerEvent::ATriggerL(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
                 normalize_trigger_value(trigg),
             ),
-            lego::event::TriggerEvent::ATriggerR(_) => NativeEvent::new(
+            event::TriggerEvent::ATriggerR(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
                 normalize_trigger_value(trigg),
             ),
-            lego::event::TriggerEvent::MouseWheel(_) => {
+            event::TriggerEvent::MouseWheel(_) => {
                 NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
             }
         },
-        lego::event::Event::MouseButton(button) => match button {
-            lego::event::MouseButtonEvent::Y3(value) => NativeEvent::new(
-                Capability::Mouse(Mouse::Button(MouseButton::Extra1)),
+        event::Event::MouseButton(button) => match button {
+            event::MouseButtonEvent::Y3(value) => NativeEvent::new(
+                Capability::Mouse(Mouse::Button(MouseButton::Extra)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::MouseButtonEvent::M1(value) => NativeEvent::new(
+            event::MouseButtonEvent::M1(value) => NativeEvent::new(
                 Capability::Mouse(Mouse::Button(MouseButton::Left)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::MouseButtonEvent::M2(value) => NativeEvent::new(
+            event::MouseButtonEvent::M2(value) => NativeEvent::new(
                 Capability::Mouse(Mouse::Button(MouseButton::Right)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::MouseButtonEvent::M3(value) => NativeEvent::new(
-                Capability::Mouse(Mouse::Button(MouseButton::Extra2)),
+            event::MouseButtonEvent::M3(value) => NativeEvent::new(
+                Capability::Mouse(Mouse::Button(MouseButton::Side)),
                 InputValue::Bool(value.pressed),
             ),
-            lego::event::MouseButtonEvent::MouseClick(value) => NativeEvent::new(
+            event::MouseButtonEvent::MouseClick(value) => NativeEvent::new(
                 Capability::Mouse(Mouse::Button(MouseButton::Middle)),
                 InputValue::Bool(value.pressed),
             ),
@@ -393,6 +391,6 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Mouse(Mouse::Button(MouseButton::Left)),
     Capability::Mouse(Mouse::Button(MouseButton::Right)),
     Capability::Mouse(Mouse::Button(MouseButton::Middle)),
-    Capability::Mouse(Mouse::Button(MouseButton::Extra1)),
-    Capability::Mouse(Mouse::Button(MouseButton::Extra2)),
+    Capability::Mouse(Mouse::Button(MouseButton::Extra)),
+    Capability::Mouse(Mouse::Button(MouseButton::Side)),
 ];

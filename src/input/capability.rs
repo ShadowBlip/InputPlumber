@@ -201,9 +201,9 @@ pub enum MouseButton {
     /// Mouse wheel right
     WheelRight,
     /// Extra mouse button, usually on the side of the mouse
-    Extra1,
+    Extra,
     /// Extra mouse button, usually on the side of the mouse
-    Extra2,
+    Side,
 }
 
 impl fmt::Display for MouseButton {
@@ -216,8 +216,8 @@ impl fmt::Display for MouseButton {
             MouseButton::WheelDown => write!(f, "WheelDown"),
             MouseButton::WheelLeft => write!(f, "WheelLeft"),
             MouseButton::WheelRight => write!(f, "WheelRight"),
-            MouseButton::Extra1 => write!(f, "Extra1"),
-            MouseButton::Extra2 => write!(f, "Extra2"),
+            MouseButton::Extra => write!(f, "Extra1"),
+            MouseButton::Side => write!(f, "Extra2"),
         }
     }
 }
@@ -234,8 +234,8 @@ impl FromStr for MouseButton {
             "WheelDown" => Ok(MouseButton::WheelDown),
             "WheelLeft" => Ok(MouseButton::WheelLeft),
             "WheelRight" => Ok(MouseButton::WheelRight),
-            "Extra1" => Ok(MouseButton::Extra1),
-            "Extra2" => Ok(MouseButton::Extra2),
+            "Extra1" => Ok(MouseButton::Extra),
+            "Extra2" => Ok(MouseButton::Side),
             _ => Err(()),
         }
     }

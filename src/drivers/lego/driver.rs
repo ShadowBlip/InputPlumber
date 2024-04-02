@@ -26,10 +26,10 @@ const MOUSE_PACKET_SIZE: usize = 7;
 const TOUCHPAD_PACKET_SIZE: usize = 20;
 const HID_TIMEOUT: i32 = 5000;
 
-pub const DINPUTLEFT_DATA: u8 = 0x07;
-pub const DINPUTRIGHT_DATA: u8 = 0x08;
+pub const DINPUT_LEFT_DATA: u8 = 0x07;
+pub const DINPUT_RIGHT_DATA: u8 = 0x08;
 pub const KEYBOARD_TOUCH_DATA: u8 = 0x01;
-pub const MOUSEFPS_DATA: u8 = 0x02;
+pub const MOUSE_FPS_DATA: u8 = 0x02;
 //pub const MOUSE_DATA: u8 = 0x09;
 pub const XINPUT_DATA: u8 = 0x04;
 
@@ -42,10 +42,6 @@ pub const XINPUT_DATA: u8 = 0x04;
 //pub const GYRO_Y_MIN: f64 = 0.0;
 pub const MOUSE_WHEEL_MAX: f64 = 120.0;
 //pub const MOUSE_WHEEL_MIN: f64 = -120.0;
-pub const MOUSE_X_MAX: f64 = 2048.0;
-pub const MOUSE_X_MIN: f64 = -2048.0;
-pub const MOUSE_Y_MAX: f64 = 2048.0;
-pub const MOUSE_Y_MIN: f64 = -2048.0;
 pub const PAD_X_MAX: f64 = 1024.0;
 pub const PAD_X_MIN: f64 = 0.0;
 pub const PAD_Y_MAX: f64 = 1024.0;
@@ -56,18 +52,6 @@ pub const STICK_Y_MAX: f64 = 255.0;
 pub const STICK_Y_MIN: f64 = 0.0;
 pub const TRIGG_MAX: f64 = 255.0;
 //pub const TRIGG_MIN: f64 = 0.0;
-
-// NORMALIZED AXIS
-//pub const GYRO_X_NORM: f64 = 1.0 / GYRO_X_MAX;
-//pub const ACCEL_Y_NORM: f64 = 1.0 / GYRO_Y_MAX;
-//pub const MOUSE_WHEEL_NORM: f64 = 1.0 / MOUSE_WHEEL_MAX;
-//pub const MOUSE_X_NORM: f64 = 1.0 / MOUSE_X_MAX;
-//pub const MOUSE_Y_NORM: f64 = 1.0 / MOUSE_Y_MAX;
-//pub const PAD_X_AXIS_NORM: f64 = 1.0 / PAD_X_MAX;
-//pub const PAD_Y_AXIS_NORM: f64 = 1.0 / PAD_Y_MAX;
-//pub const STICK_X_AXIS_NORM: f64 = 1.0 / STICK_X_MAX;
-//pub const STICK_Y_AXIS_NORM: f64 = 1.0 / STICK_Y_MAX;
-//pub const TRIGG_AXIS_NORM: f64 = 1.0 / TRIGG_MAX;
 
 pub struct Driver {
     dinputl_state: Option<DInputDataLeftReport>,
@@ -113,7 +97,7 @@ impl Driver {
         //log::trace!("Got Report Size: {bytes_read}");
 
         match report_id {
-            DINPUTLEFT_DATA => {
+            DINPUT_LEFT_DATA => {
                 if bytes_read != DINPUT_PACKET_SIZE {
                     return Err("Invalid packet size for Direct Input Data.".into());
                 }
@@ -123,7 +107,7 @@ impl Driver {
                 Ok(events)
             }
 
-            DINPUTRIGHT_DATA => {
+            DINPUT_RIGHT_DATA => {
                 if bytes_read != DINPUT_PACKET_SIZE {
                     return Err("Invalid packet size for Direct Input Data.".into());
                 }
@@ -151,7 +135,7 @@ impl Driver {
                 }
             }
 
-            MOUSEFPS_DATA => {
+            MOUSE_FPS_DATA => {
                 if bytes_read != MOUSE_PACKET_SIZE {
                     return Err("Invalid packet size for Mouse Data.".into());
                 }
@@ -171,7 +155,7 @@ impl Driver {
                 Ok(events)
             }
             _ => {
-                log::trace!("Invalid Report ID.");
+                //log::trace!("Invalid Report ID.");
                 let events = vec![];
                 Ok(events)
             }
@@ -210,14 +194,14 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_dinputl(&self, old_state: Option<DInputDataLeftReport>) -> Vec<Event> {
+    fn translate_dinputl(&self, _old_state: Option<DInputDataLeftReport>) -> Vec<Event> {
         let events = Vec::new();
         let Some(_) = self.dinputl_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(_) = old_state {}
+        //if let Some(_) = old_state {}
         events
     }
 
@@ -254,14 +238,14 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_dinputr(&self, old_state: Option<DInputDataRightReport>) -> Vec<Event> {
+    fn translate_dinputr(&self, _old_state: Option<DInputDataRightReport>) -> Vec<Event> {
         let events = Vec::new();
         let Some(_) = self.dinputr_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(_) = old_state {}
+        //if let Some(_) = old_state {}
         events
     }
 
@@ -298,14 +282,14 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_keyboard(&self, old_state: Option<KeyboardDataReport>) -> Vec<Event> {
+    fn translate_keyboard(&self, _old_state: Option<KeyboardDataReport>) -> Vec<Event> {
         let events = Vec::new();
         let Some(_) = self.keyboard_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(_) = old_state {}
+        //if let Some(_) = old_state {}
         events
     }
 
@@ -323,10 +307,10 @@ impl Driver {
         //log::trace!("---- End Report ----");
 
         // Update the state
-        let old_dinput_state = self.update_mouseinput_state(input_report);
+        let old_mouse_state = self.update_mouseinput_state(input_report);
 
         // Translate the state into a stream of input events
-        let events = self.translate_mouse(old_dinput_state);
+        let events = self.translate_mouse(old_mouse_state);
 
         Ok(events)
     }
@@ -428,14 +412,14 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_touch(&self, old_state: Option<TouchpadDataReport>) -> Vec<Event> {
+    fn translate_touch(&self, _old_state: Option<TouchpadDataReport>) -> Vec<Event> {
         let events = Vec::new();
         let Some(_) = self.touchpad_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        if let Some(_) = old_state {}
+        //if let Some(_) = old_state {}
         events
     }
 
@@ -485,7 +469,7 @@ impl Driver {
                 );
             }
             if state.gamepad_mode == 2 {
-                log::debug!("In FPS Mode, rejecting gamepad input.");
+                //log::debug!("In FPS Mode, rejecting gamepad input.");
                 return events;
             }
             // Binary events

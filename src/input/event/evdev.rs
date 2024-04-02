@@ -83,6 +83,18 @@ impl EvdevEvent {
                 },
                 _ => InputValue::Float(normal_value),
             },
+            EventType::RELATIVE => match RelativeAxisCode(code) {
+                RelativeAxisCode::REL_X => InputValue::Vector2 {
+                    x: Some(normal_value),
+                    y: None,
+                },
+                RelativeAxisCode::REL_Y => InputValue::Vector2 {
+                    x: None,
+                    y: Some(normal_value),
+                },
+                _ => InputValue::Float(normal_value),
+            },
+
             _ => InputValue::Float(normal_value),
         }
     }
@@ -125,6 +137,12 @@ impl EvdevEvent {
         match event_type {
             EventType::SYNCHRONIZATION => Capability::Sync,
             EventType::KEY => match KeyCode::new(code) {
+                // Mouse Buttons
+                KeyCode::BTN_LEFT => Capability::Mouse(Mouse::Button(MouseButton::Left)),
+                KeyCode::BTN_RIGHT => Capability::Mouse(Mouse::Button(MouseButton::Right)),
+                KeyCode::BTN_MIDDLE => Capability::Mouse(Mouse::Button(MouseButton::Middle)),
+                KeyCode::BTN_SIDE => Capability::Mouse(Mouse::Button(MouseButton::Side)),
+                KeyCode::BTN_EXTRA => Capability::Mouse(Mouse::Button(MouseButton::Extra)),
                 // Gamepad Buttons
                 KeyCode::BTN_SOUTH => Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
                 KeyCode::BTN_NORTH => Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
@@ -414,7 +432,12 @@ impl EvdevEvent {
                 )),
                 _ => Capability::NotImplemented,
             },
-            EventType::RELATIVE => Capability::NotImplemented,
+            EventType::RELATIVE => match RelativeAxisCode(code) {
+                RelativeAxisCode::REL_X => Capability::Mouse(Mouse::Motion),
+                RelativeAxisCode::REL_Y => Capability::Mouse(Mouse::Motion),
+                RelativeAxisCode::REL_WHEEL => Capability::NotImplemented,
+                _ => Capability::NotImplemented,
+            },
             EventType::MISC => Capability::NotImplemented,
             EventType::SWITCH => Capability::NotImplemented,
             EventType::LED => Capability::NotImplemented,
@@ -639,8 +662,8 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 MouseButton::WheelDown => vec![],
                 MouseButton::WheelLeft => vec![],
                 MouseButton::WheelRight => vec![],
-                MouseButton::Extra1 => vec![KeyCode::BTN_EXTRA.0],
-                MouseButton::Extra2 => vec![],
+                MouseButton::Extra => vec![KeyCode::BTN_EXTRA.0],
+                MouseButton::Side => vec![KeyCode::BTN_SIDE.0],
             },
         },
         Capability::Keyboard(key) => match key {
