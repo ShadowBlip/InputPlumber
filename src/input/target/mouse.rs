@@ -193,6 +193,8 @@ impl MouseDevice {
         buttons.insert(KeyCode::BTN_LEFT);
         buttons.insert(KeyCode::BTN_RIGHT);
         buttons.insert(KeyCode::BTN_MIDDLE);
+        buttons.insert(KeyCode::BTN_SIDE);
+        buttons.insert(KeyCode::BTN_EXTRA);
         let device = VirtualDeviceBuilder::new()?
             .name("InputPlumber Mouse")
             .with_keys(&buttons)?
