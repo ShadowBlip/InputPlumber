@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use crate::{
     dmi::data::DMIData,
+    iio,
     input::{
         event::{native::NativeEvent, value::InputValue},
         manager::SourceDeviceInfo,
@@ -256,6 +257,7 @@ pub struct SourceDevice {
     pub group: String,
     pub evdev: Option<Evdev>,
     pub hidraw: Option<Hidraw>,
+    pub iio: Option<IIO>,
     pub unique: Option<bool>,
     pub blocked: Option<bool>,
 }
@@ -277,6 +279,14 @@ pub struct Hidraw {
     pub product_id: Option<u16>,
     pub interface_num: Option<i32>,
     pub handler: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct IIO {
+    pub id: Option<String>,
+    pub name: Option<String>,
 }
 
 /// Defines a combined device
@@ -343,6 +353,15 @@ impl CompositeDeviceConfig {
                     }
                 }
             }
+            SourceDeviceInfo::IIODeviceInfo(iio) => {
+                for config in self.source_devices.iter() {
+                    if let Some(iio_config) = config.iio.as_ref() {
+                        if self.has_matching_iio(iio, iio_config) {
+                            return Some(config.clone());
+                        }
+                    }
+                }
+            }
         }
         None
     }
@@ -366,6 +385,32 @@ impl CompositeDeviceConfig {
 
         if let Some(interface_num) = hidraw_config.interface_num {
             if device.interface_number() != interface_num {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Returns true if a given iio device is within a list of iio configs.
+    pub fn has_matching_iio(&self, device: &iio::device::Device, iio_config: &IIO) -> bool {
+        log::debug!("Checking iio config: {:?}", iio_config);
+        let iio_config = iio_config.clone();
+
+        if let Some(id) = iio_config.id {
+            let Some(device_id) = device.id.as_ref() else {
+                return false;
+            };
+            if !glob_match(id.as_str(), device_id.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(name) = iio_config.name {
+            let Some(device_name) = device.name.as_ref() else {
+                return false;
+            };
+            if !glob_match(name.as_str(), device_name.as_str()) {
                 return false;
             }
         }

@@ -16,6 +16,7 @@ use crate::constants::BUS_PREFIX;
 use crate::constants::BUS_TARGETS_PREFIX;
 use crate::dmi::data::DMIData;
 use crate::dmi::get_dmi_data;
+use crate::iio;
 use crate::input::composite_device;
 use crate::input::composite_device::CompositeDevice;
 use crate::input::source;
@@ -35,6 +36,7 @@ use super::target::TargetCommand;
 
 const DEV_PATH: &str = "/dev";
 const INPUT_PATH: &str = "/dev/input";
+const IIO_PATH: &str = "/sys/bus/iio/devices";
 const BUFFER_SIZE: usize = 1024;
 
 /// Manager commands define all the different ways to interact with [Manager]
@@ -48,15 +50,20 @@ pub enum Command {
     EventDeviceRemoved { name: String },
     HIDRawAdded { name: String },
     HIDRawRemoved { name: String },
+    IIODeviceAdded { name: String },
+    IIODeviceRemoved { name: String },
     CreateCompositeDevice { config: CompositeDeviceConfig },
     CompositeDeviceStopped(String),
 }
 
+/// Information used to create a source device
 #[derive(Debug, Clone)]
 pub enum SourceDeviceInfo {
     EvdevDeviceInfo(procfs::device::Device),
     HIDRawDeviceInfo(hidapi::DeviceInfo),
+    IIODeviceInfo(iio::device::Device),
 }
+
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
 /// a [Manager]. It works by sending command messages to a channel that the
 /// [Manager] is listening on.
@@ -196,6 +203,16 @@ impl Manager {
                 Command::HIDRawRemoved { name } => {
                     if let Err(e) = self.on_hidraw_removed(name).await {
                         log::error!("Error removing hidraw device: {:?}", e);
+                    }
+                }
+                Command::IIODeviceAdded { name } => {
+                    if let Err(e) = self.on_iio_added(name).await {
+                        log::error!("Error adding iio device: {:?}", e);
+                    }
+                }
+                Command::IIODeviceRemoved { name } => {
+                    if let Err(e) = self.on_iio_removed(name).await {
+                        log::error!("Error removing iio device: {:?}", e);
                     }
                 }
                 Command::CreateCompositeDevice { config } => {
@@ -636,6 +653,61 @@ impl Manager {
                         }
                     }
                 }
+                SourceDeviceInfo::IIODeviceInfo(info) => {
+                    log::debug!("Checking if existing composite device is missing hidraw device");
+                    for source_device in source_devices {
+                        if source_device.iio.is_none() {
+                            continue;
+                        }
+                        if config.has_matching_iio(&info, &source_device.clone().iio.unwrap()) {
+                            // Check if the device has already been used in this config or not, stop here if the device must be unique.
+                            if let Some(sources) =
+                                self.composite_device_sources.get(composite_device)
+                            {
+                                for source in sources {
+                                    if source != &source_device {
+                                        continue;
+                                    }
+                                    if let Some(unique) = source_device.clone().unique {
+                                        if unique {
+                                            log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                            break 'start;
+                                        }
+                                    } else {
+                                        log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                        break 'start;
+                                    }
+                                }
+                            }
+
+                            log::info!("Found missing device, adding source device {id} to existing composite device: {composite_device}");
+                            let handle = self.composite_devices.get(composite_device.as_str());
+                            if handle.is_none() {
+                                log::error!(
+                                    "No existing composite device found for key {}",
+                                    composite_device.as_str()
+                                );
+                                continue;
+                            }
+                            self.add_iio_device_to_composite_device(&info, handle.unwrap())?;
+                            self.source_devices_used
+                                .insert(id.clone(), composite_device.clone());
+                            let composite_id = composite_device.clone();
+                            if !self.composite_device_sources.contains_key(&composite_id) {
+                                self.composite_device_sources
+                                    .insert(composite_id.clone(), Vec::new());
+                            }
+                            let sources = self
+                                .composite_device_sources
+                                .get_mut(&composite_id)
+                                .unwrap();
+                            sources.push(source_device.clone());
+
+                            self.source_devices.insert(id, source_device.clone());
+                            return Ok(());
+                        }
+                    }
+                }
             }
             log::debug!("Device does not match existing device: {:?}", config.name);
         }
@@ -693,6 +765,33 @@ impl Manager {
                         if config.has_matching_hidraw(&info, &source_device.clone().hidraw.unwrap())
                         {
                             log::info!("Found a matching hidraw device, creating composite device");
+                            let device = self
+                                .create_composite_device_from_config(&config, device_info.clone())
+                                .await?;
+
+                            // Get the target input devices from the config
+                            let target_devices_config = config.target_devices.clone();
+
+                            // Create the composite deivce
+                            self.start_composite_device(
+                                device,
+                                config,
+                                target_devices_config,
+                                source_device.clone(),
+                            )
+                            .await?;
+
+                            return Ok(());
+                        }
+                    }
+                }
+                SourceDeviceInfo::IIODeviceInfo(info) => {
+                    for source_device in source_devices {
+                        if source_device.iio.is_none() {
+                            continue;
+                        }
+                        if config.has_matching_iio(&info, &source_device.clone().iio.unwrap()) {
+                            log::info!("Found a matching iio device, creating composite device");
                             let device = self
                                 .create_composite_device_from_config(&config, device_info.clone())
                                 .await?;
@@ -864,6 +963,53 @@ impl Manager {
         Ok(())
     }
 
+    /// Called when an iio device (e.g. /sys/bus/iio/devices/iio:device0) is added
+    async fn on_iio_added(&mut self, id: String) -> Result<(), Box<dyn Error>> {
+        log::debug!("IIO device added: {}", id);
+        let path = format!("/sys/bus/iio/devices/{}", id);
+
+        // Look up the connected device using hidapi
+        let devices = iio::device::list_devices()?;
+        let device = devices
+            .iter()
+            .find(|dev| dev.id.clone().unwrap_or_default() == id)
+            .cloned();
+        let Some(info) = device else {
+            return Err(format!("Failed to find device information for: {}", path).into());
+        };
+
+        // Create a DBus interface for the hidraw device
+        source::iio::DBusInterface::listen_on_dbus(self.dbus.clone(), info.clone()).await?;
+
+        // Signal that a source device was added
+        let id = format!("iio://{}", id);
+        self.tx.send(Command::SourceDeviceAdded {
+            id: id.clone(),
+            info: SourceDeviceInfo::IIODeviceInfo(info),
+        })?;
+
+        // Add the device as a source device
+        let path = source::iio::get_dbus_path(path);
+        self.source_device_dbus_paths.insert(id, path);
+
+        Ok(())
+    }
+
+    /// Called when an iio device (e.g. /sys/bus/iio/devices/iio:device0) is removed
+    async fn on_iio_removed(&mut self, id: String) -> Result<(), Box<dyn Error>> {
+        log::debug!("IIO device removed: {}", id);
+        let id = format!("iio://{}", id);
+
+        // Signal that a source device was removed
+        self.tx
+            .send(Command::SourceDeviceRemoved { id: id.clone() })?;
+
+        self.source_device_dbus_paths.remove(&id);
+        self.source_devices_used.remove(&id);
+
+        Ok(())
+    }
+
     /// Returns the next available target device dbus path
     fn next_target_path(&self, kind: &str) -> Result<String, Box<dyn Error>> {
         let max = 2048;
@@ -915,6 +1061,13 @@ impl Manager {
         tokio::task::spawn_blocking(move || {
             log::debug!("Started watcher thread");
             watcher::watch(INPUT_PATH.into(), tx)
+        });
+
+        // Start watcher thread to listen for iio device changes
+        let tx = watcher_tx.clone();
+        tokio::task::spawn_blocking(move || {
+            log::debug!("Started watcher thread");
+            watcher::watch(IIO_PATH.into(), tx)
         });
 
         log::debug!("Performing initial input device discovery");
@@ -972,6 +1125,30 @@ impl Manager {
             }
         }
 
+        // Perform an initial iio device discovery
+        let paths = std::fs::read_dir(IIO_PATH)?;
+        for entry in paths {
+            if let Err(e) = entry {
+                log::warn!("Unable to read from directory: {:?}", e);
+                continue;
+            }
+            let path = entry.unwrap().file_name();
+            let path = path.into_string().ok();
+            let Some(path) = path else {
+                continue;
+            };
+            log::debug!("Discovered iio device: {:?}", path);
+            let result = watcher_tx
+                .send(watcher::WatchEvent::Create {
+                    name: path,
+                    base_path: IIO_PATH.into(),
+                })
+                .await;
+            if let Err(e) = result {
+                log::error!("Unable to send command: {:?}", e);
+            }
+        }
+
         log::debug!("Initial input device discovery complete");
 
         // Start a task to dispatch filesystem watch events to the `run()` loop
@@ -993,6 +1170,11 @@ impl Manager {
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
+                        } else if base_path == IIO_PATH {
+                            let result = cmd_tx.send(Command::IIODeviceAdded { name });
+                            if let Err(e) = result {
+                                log::error!("Unable to send command: {:?}", e);
+                            }
                         }
                     }
                     // Delete events
@@ -1004,6 +1186,11 @@ impl Manager {
                             }
                         } else if name.starts_with("hidraw") {
                             let result = cmd_tx.send(Command::HIDRawRemoved { name });
+                            if let Err(e) = result {
+                                log::error!("Unable to send command: {:?}", e);
+                            }
+                        } else if base_path == IIO_PATH {
+                            let result = cmd_tx.send(Command::IIODeviceRemoved { name });
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
@@ -1159,6 +1346,22 @@ impl Manager {
         let device_info = device_info.clone();
         tx.send(composite_device::Command::SourceDeviceAdded(
             SourceDeviceInfo::HIDRawDeviceInfo(device_info),
+        ))?;
+
+        Ok(())
+    }
+
+    /// Send a signal using the given composite device handle that a new source
+    /// device should be started.
+    fn add_iio_device_to_composite_device(
+        &self,
+        info: &iio::device::Device,
+        handle: &Handle,
+    ) -> Result<(), Box<dyn Error>> {
+        let tx = &handle.tx;
+        let device_info = info.clone();
+        tx.send(composite_device::Command::SourceDeviceAdded(
+            SourceDeviceInfo::IIODeviceInfo(device_info),
         ))?;
 
         Ok(())

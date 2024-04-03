@@ -28,6 +28,9 @@ source_devices:
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
+  - group: imu
+    iio:
+      name: i2c-BMI0160:00
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
