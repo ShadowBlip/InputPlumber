@@ -14,6 +14,7 @@ mod config;
 mod constants;
 mod dmi;
 mod drivers;
+mod iio;
 mod input;
 mod procfs;
 mod udev;

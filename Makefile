@@ -92,7 +92,7 @@ all: build debug ## Build release and debug builds
 
 .PHONY: run
 run: setup debug ## Build and run
-	sudo ./target/debug/$(NAME)
+	sudo LOG_LEVEL=$(LOG_LEVEL) ./target/debug/$(NAME)
 
 .PHONY: clean
 clean: ## Remove build artifacts

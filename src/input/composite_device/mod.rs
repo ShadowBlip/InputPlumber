@@ -498,6 +498,10 @@ impl CompositeDevice {
 
         // Unhide all source devices
         for source_path in self.source_device_paths.clone() {
+            if source_path.starts_with("/sys/bus/iio/devices") {
+                log::debug!("Skipping unhiding IIO device: {source_path}");
+                continue;
+            }
             log::debug!("Un-hiding device: {}", source_path);
             if let Err(e) = unhide_device(source_path.clone()).await {
                 log::debug!("Unable to unhide device {source_path}: {:?}", e);
@@ -562,6 +566,11 @@ impl CompositeDevice {
         // Hide all source devices
         // TODO: Make this configurable
         for source_path in self.source_device_paths.clone() {
+            // Skip hiding IIO devices
+            if source_path.starts_with("/sys/bus/iio/devices") {
+                log::debug!("Skipping hiding IIO device: {source_path}");
+                continue;
+            }
             log::debug!("Hiding device: {}", source_path);
             hide_device(source_path).await?;
         }
@@ -597,6 +606,22 @@ impl CompositeDevice {
                             log::error!("Failed running hidraw device: {:?}", e);
                         }
                         log::debug!("HIDRaw device closed");
+                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
+                            log::error!("Failed to send device stop command: {:?}", e);
+                        }
+                    });
+                }
+
+                // If the source device is an iio device (i.e. /sys/bus/iio/devices/iio:device0),
+                // then start listening for inputs from that device.
+                SourceDevice::IIODevice(device) => {
+                    let device_id = device.get_id();
+                    let tx = self.tx.clone();
+                    self.source_device_tasks.spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed running iio device: {:?}", e);
+                        }
+                        log::debug!("IIO device closed");
                         if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
                             log::error!("Failed to send device stop command: {:?}", e);
                         }
@@ -754,6 +779,7 @@ impl CompositeDevice {
             return Ok(());
         }
 
+        // TODO: Only write the event to devices that are capabile of handling it
         let event = TargetCommand::WriteEvent(event);
         #[allow(clippy::for_kv_map)]
         for (_, target) in &self.target_devices {
@@ -1094,6 +1120,35 @@ impl CompositeDevice {
                 let id = device.get_id();
                 let device_path = device.get_device_path();
                 let source_device = source::SourceDevice::HIDRawDevice(device);
+                self.source_devices.push(source_device);
+                self.source_device_paths.push(device_path);
+                self.source_devices_used.push(id.clone());
+
+                // Check if this device should be blocked from sending events to target devices.
+                if let Some(device_config) = self.config.get_matching_device(&device_info) {
+                    if let Some(blocked) = device_config.blocked {
+                        if blocked {
+                            self.source_devices_blocked.insert(id);
+                        }
+                    }
+                };
+            }
+            SourceDeviceInfo::IIODeviceInfo(info) => {
+                log::debug!("Adding source device: {:?}", info);
+                let device = source::iio::IIODevice::new(info, self.tx.clone());
+
+                // Get the capabilities of the source device.
+                let capabilities = device.get_capabilities()?;
+                for cap in capabilities {
+                    if self.translatable_capabilities.contains(&cap) {
+                        continue;
+                    }
+                    self.capabilities.insert(cap);
+                }
+
+                let id = device.get_id();
+                let device_path = device.get_device_path();
+                let source_device = source::SourceDevice::IIODevice(device);
                 self.source_devices.push(source_device);
                 self.source_device_paths.push(device_path);
                 self.source_devices_used.push(id.clone());

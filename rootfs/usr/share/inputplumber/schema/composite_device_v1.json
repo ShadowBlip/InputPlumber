@@ -127,7 +127,8 @@
           "enum": [
             "keyboard",
             "mouse",
-            "gamepad"
+            "gamepad",
+            "imu"
           ]
         },
         "blocked": {
@@ -140,6 +141,9 @@
         },
         "hidraw": {
           "$ref": "#/definitions/Hidraw"
+        },
+        "iio": {
+          "$ref": "#/definitions/IIO"
         },
         "unique": {
           "description": "If false, any devices matching this description will be added to the existing composite device. Defaults to true.",
@@ -204,6 +208,20 @@
         "vendor_id"
       ],
       "title": "Hidraw"
+    },
+    "IIO": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "IIO handler for the source device in /sys/bus/iio/devices/*",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "title": "IIO"
     }
   }
 }
