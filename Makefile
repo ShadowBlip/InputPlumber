@@ -149,6 +149,24 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz
 	echo ID=$(SYSEXT_ID) > $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
 	echo VERSION_ID=$(SYSEXT_VERSION_ID) >> $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
 
+	# Install libserialport in the extension for libiio compatibility in SteamOS
+	rm -rf $(CACHE_DIR)/libserialport*
+	wget https://archlinux.org/packages/extra/x86_64/libserialport/download/ \
+	  -O $(CACHE_DIR)/libserialport.tar.zst
+	zstd -d $(CACHE_DIR)/libserialport.tar.zst
+	mkdir -p $(CACHE_DIR)/libserialport
+	tar xvf $(CACHE_DIR)/libserialport.tar -C $(CACHE_DIR)/libserialport
+	cp -r $(CACHE_DIR)/libserialport/usr/lib/libserialport* $(CACHE_DIR)/$(NAME)/usr/lib
+	
+	@# Install libiio in the extension for SteamOS compatibility
+	rm -rf $(CACHE_DIR)/libiio*
+	wget https://archlinux.org/packages/extra/x86_64/libiio/download/ \
+		-O $(CACHE_DIR)/libiio.tar.zst
+	zstd -d $(CACHE_DIR)/libiio.tar.zst
+	mkdir -p $(CACHE_DIR)/libiio
+	tar xvf $(CACHE_DIR)/libiio.tar -C $(CACHE_DIR)/libiio
+	cp -r $(CACHE_DIR)/libiio/usr/lib/libiio* $(CACHE_DIR)/$(NAME)/usr/lib
+
 	@# Build the extension archive
 	cd $(CACHE_DIR) && mksquashfs $(NAME) $(NAME).raw
 	rm -rf $(CACHE_DIR)/$(NAME)
