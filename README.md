@@ -27,6 +27,11 @@ and translate their input to a variety of virtual device formats.
 
 ## Install
 
+InputPlumber requires the following system dependencies:
+
+- `libevdev`
+- `libiio`
+
 You can install with:
 
 ```bash

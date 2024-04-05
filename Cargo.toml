@@ -17,6 +17,10 @@ assets = [
   { source = "rootfs/usr/lib/udev/hwdb.d/59-inputplumber.hwdb", dest = "/usr/lib/udev/hwdb.d/59-inputplumber.hwdb", mode = "644" },
 ]
 
+[package.metadata.generate-rpm.requires]
+libiio = "*"
+libevdev = "*"
+
 [dependencies]
 env_logger = "0.11.3"
 evdev = { git = "https://github.com/emberian/evdev.git", features = ["tokio"] }
