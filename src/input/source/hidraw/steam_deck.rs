@@ -6,7 +6,11 @@ use hidapi::DeviceInfo;
 use tokio::sync::broadcast;
 
 use crate::{
-    drivers::steam_deck::{self, driver::Driver, hid_report::LIZARD_SLEEP_SEC},
+    drivers::steam_deck::{
+        self,
+        driver::{Driver, ACCEL_SCALE},
+        hid_report::LIZARD_SLEEP_SEC,
+    },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         composite_device::Command,
@@ -334,15 +338,15 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
         },
         steam_deck::event::Event::Accelerometer(accel) => match accel {
             steam_deck::event::AccelerometerEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::NotImplemented,
+                Capability::Gamepad(Gamepad::Accelerometer),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(value.x as f64 * ACCEL_SCALE),
+                    y: Some(value.y as f64 * ACCEL_SCALE),
+                    z: Some(value.z as f64 * ACCEL_SCALE),
                 },
             ),
             steam_deck::event::AccelerometerEvent::Attitude(value) => NativeEvent::new(
-                Capability::NotImplemented,
+                Capability::Gamepad(Gamepad::Gyro),
                 InputValue::Vector3 {
                     x: Some(value.x as f64),
                     y: Some(value.y as f64),
