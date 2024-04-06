@@ -151,7 +151,13 @@ pub enum Gamepad {
     /// Gamepad Trigger typically uses a single unsigned integar value that represents
     /// how far a trigger has been pulled
     Trigger(GamepadTrigger),
+    /// Accelerometer events measure the current acceleration of a device. This is
+    /// normally used to determine which way is "down" as there will be a constant
+    /// acceleration towards the center of the earth at 9.8 meters per second.
+    /// Typical will use (x, y, z) values normalized to meters per second.
     Accelerometer,
+    /// Gyro events measure the angular velocity of a device measured
+    /// with (x, y, z) values normalized to radians per second.
     Gyro,
 }
 

@@ -219,34 +219,31 @@ pub struct PackedInputDataReport {
     #[packed_field(bytes = "22..=23", endian = "lsb")]
     pub r_pad_y: Integer<i16, packed_bits::Bits<16>>,
 
-    // Accelerometer?
     // byte 24-29
     #[packed_field(bytes = "24..=25", endian = "lsb")]
-    pub accel_x: Integer<i16, packed_bits::Bits<16>>, // Accelerometers I think.  Needs more testing.
+    pub accel_x: Integer<i16, packed_bits::Bits<16>>, // Accelerometers
     #[packed_field(bytes = "26..=27", endian = "lsb")]
     pub accel_y: Integer<i16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "28..=29", endian = "lsb")]
     pub accel_z: Integer<i16, packed_bits::Bits<16>>,
 
-    // Gyro?
     // byte 30-35
     #[packed_field(bytes = "30..=31", endian = "lsb")]
-    pub pitch: Integer<i16, packed_bits::Bits<16>>, // Attitude (?)  Needs more testing
+    pub pitch: Integer<i16, packed_bits::Bits<16>>, // Gyro
     #[packed_field(bytes = "32..=33", endian = "lsb")]
     pub yaw: Integer<i16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "34..=35", endian = "lsb")]
     pub roll: Integer<i16, packed_bits::Bits<16>>,
 
-    // Magnetometer?
     // byte 36-43
     #[packed_field(bytes = "36..=37", endian = "lsb")]
-    pub _gyro0: Integer<i16, packed_bits::Bits<16>>, // Not sure what these are...
+    pub _magn_0: Integer<i16, packed_bits::Bits<16>>, // Magnetometer
     #[packed_field(bytes = "38..=39", endian = "lsb")]
-    pub _gyro1: Integer<i16, packed_bits::Bits<16>>, // Seems like they might be additional gyros for extra precision (?)
+    pub _magn_1: Integer<i16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "40..=41", endian = "lsb")]
-    pub _gyro2: Integer<i16, packed_bits::Bits<16>>,
+    pub _magn_2: Integer<i16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "42..=43", endian = "lsb")]
-    pub _gyro3: Integer<i16, packed_bits::Bits<16>>,
+    pub _magn_3: Integer<i16, packed_bits::Bits<16>>,
 
     // byte 44-47
     #[packed_field(bytes = "44..=45", endian = "lsb")]
@@ -354,10 +351,10 @@ impl PackedInputDataReport {
             pitch: Integer::from_primitive(0),
             yaw: Integer::from_primitive(0),
             roll: Integer::from_primitive(0),
-            _gyro0: Integer::from_primitive(0),
-            _gyro1: Integer::from_primitive(0),
-            _gyro2: Integer::from_primitive(0),
-            _gyro3: Integer::from_primitive(0),
+            _magn_0: Integer::from_primitive(0),
+            _magn_1: Integer::from_primitive(0),
+            _magn_2: Integer::from_primitive(0),
+            _magn_3: Integer::from_primitive(0),
             l_trigg: Integer::from_primitive(0),
             r_trigg: Integer::from_primitive(0),
             l_stick_x: Integer::from_primitive(0),
