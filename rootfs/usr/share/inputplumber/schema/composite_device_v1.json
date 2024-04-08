@@ -47,7 +47,13 @@
               "keyboard",
               "gamepad",
               "xb360",
-              "deck"
+              "deck",
+              "ds5",
+              "ds5-usb",
+              "ds5-bt",
+              "ds5-edge",
+              "ds5-edge-usb",
+              "ds5-edge-bt"
             ]
           }
         }
