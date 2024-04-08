@@ -157,7 +157,7 @@ pub enum Gamepad {
     /// Typical will use (x, y, z) values normalized to meters per second.
     Accelerometer,
     /// Gyro events measure the angular velocity of a device measured
-    /// with (x, y, z) values normalized to radians per second.
+    /// with (x, y, z) values normalized to degrees per second.
     Gyro,
 }
 

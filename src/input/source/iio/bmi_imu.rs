@@ -1,5 +1,5 @@
 use core::time;
-use std::{error::Error, thread};
+use std::{error::Error, f64::consts::PI, thread};
 
 use tokio::sync::broadcast;
 
@@ -94,11 +94,12 @@ fn translate_event(event: bmi_imu::event::Event) -> NativeEvent {
             NativeEvent::new(cap, value)
         }
         bmi_imu::event::Event::Gyro(data) => {
+            // Translate gyro values into the expected units of degrees per sec
             let cap = Capability::Gamepad(Gamepad::Gyro);
             let value = InputValue::Vector3 {
-                x: Some(data.x),
-                y: Some(data.y),
-                z: Some(data.z),
+                x: Some(data.x * (180.0 / PI)),
+                y: Some(data.y * (180.0 / PI)),
+                z: Some(data.z * (180.0 / PI)),
             };
             NativeEvent::new(cap, value)
         }

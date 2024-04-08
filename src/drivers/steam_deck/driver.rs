@@ -18,6 +18,8 @@ pub const VID: u16 = 0x28de;
 pub const PID: u16 = 0x1205;
 /// Scale to multiply accelerometer values to get in units of meters per second
 pub const ACCEL_SCALE: f64 = 0.0006125;
+/// Scale to multiply gyro values to get in units of degrees per second
+//pub const GYRO_SCALE: f64 = 0.0625;
 /// Size of the HID packet
 const PACKET_SIZE: usize = 64;
 /// Timeout in milliseconds for reading an HID packet

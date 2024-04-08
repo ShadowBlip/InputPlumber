@@ -428,6 +428,9 @@ impl CompositeDevice {
                 Command::ProcessEvent(device_id, event) => {
                     if let Err(e) = self.process_event(device_id, event).await {
                         log::error!("Failed to process event: {:?}", e);
+                        // TODO: Use proper errors to check for 'SendError' and
+                        // stop the composite device
+                        break;
                     }
                 }
                 Command::ProcessOutputEvent(event) => {

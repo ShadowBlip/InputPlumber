@@ -22,6 +22,9 @@ use crate::input::composite_device::CompositeDevice;
 use crate::input::source;
 use crate::input::source::hidraw;
 use crate::input::target::dbus::DBusDevice;
+use crate::input::target::dualsense;
+use crate::input::target::dualsense::DualSenseDevice;
+use crate::input::target::dualsense::DualSenseHardware;
 use crate::input::target::gamepad::GenericGamepad;
 use crate::input::target::keyboard::KeyboardDevice;
 use crate::input::target::mouse::MouseDevice;
@@ -301,6 +304,27 @@ impl Manager {
         let device = match kind {
             "gamepad" => TargetDeviceType::GenericGamepad(GenericGamepad::new(self.dbus.clone())),
             "deck" => TargetDeviceType::SteamDeck(SteamDeckDevice::new(self.dbus.clone())),
+            "ds5" | "ds5-usb" | "ds5-bt" | "ds5-edge" | "ds5-edge-usb" | "ds5-edge-bt" => {
+                let hw = match kind {
+                    "ds5" | "ds5-usb" => DualSenseHardware::new(
+                        dualsense::ModelType::Normal,
+                        dualsense::BusType::Usb,
+                    ),
+                    "ds5-bt" => DualSenseHardware::new(
+                        dualsense::ModelType::Normal,
+                        dualsense::BusType::Bluetooth,
+                    ),
+                    "ds5-edge" | "ds5-edge-usb" => {
+                        DualSenseHardware::new(dualsense::ModelType::Edge, dualsense::BusType::Usb)
+                    }
+                    "ds5-edge-bt" => DualSenseHardware::new(
+                        dualsense::ModelType::Edge,
+                        dualsense::BusType::Bluetooth,
+                    ),
+                    _ => DualSenseHardware::default(),
+                };
+                TargetDeviceType::DualSense(DualSenseDevice::new(self.dbus.clone(), hw))
+            }
             "xb360" => TargetDeviceType::XBox360(XBox360Controller::new()),
             "dbus" => TargetDeviceType::DBus(DBusDevice::new(self.dbus.clone())),
             "mouse" => TargetDeviceType::Mouse(MouseDevice::new(self.dbus.clone())),
@@ -384,6 +408,19 @@ impl Manager {
                             log::error!("Failed to run target steam deck device: {:?}", e);
                         }
                         log::debug!("Target steam deck device closed");
+                    });
+                }
+                TargetDeviceType::DualSense(mut device) => {
+                    let path = self.next_target_path("gamepad")?;
+                    let event_tx = device.transmitter();
+                    target_devices.insert(path.clone(), event_tx.clone());
+                    self.target_devices.insert(path.clone(), event_tx.clone());
+                    device.listen_on_dbus(path).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed to run target dualsense device: {:?}", e);
+                        }
+                        log::debug!("Target dualsense device closed");
                     });
                 }
                 TargetDeviceType::XBox360(_) => todo!(),
