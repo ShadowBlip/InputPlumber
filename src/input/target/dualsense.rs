@@ -1232,17 +1232,8 @@ impl HidRawDevice {
 
         log::debug!("Got output report with ID: {report_id}");
 
-        // Invalid data length: got 48, expected 63
-        //if data.len() != expected_report_size {
-        //    let err = format!(
-        //        "Invalid data length for output report: got {}, expected {}",
-        //        data.len(),
-        //        expected_report_size
-        //    );
-        //    return Err(err.into());
-        //}
-
-        // TODO: Implement forwarding output data back to source devices
+        // TODO: Implement forwarding output data back to source devices to
+        // control LEDs, rumble, etc.
 
         Ok(())
     }
