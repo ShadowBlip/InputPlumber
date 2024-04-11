@@ -32,7 +32,7 @@ use crate::{
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
-        composite_device,
+        composite_device::Command,
         event::{native::NativeEvent, value::InputValue},
     },
 };
@@ -126,7 +126,7 @@ pub struct DualSenseDevice {
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
     state: PackedInputDataReport,
-    _composite_tx: Option<broadcast::Sender<composite_device::Command>>,
+    composite_tx: Option<broadcast::Sender<Command>>,
     hardware: DualSenseHardware,
 }
 
@@ -139,7 +139,7 @@ impl DualSenseDevice {
             tx,
             rx,
             state: PackedInputDataReport::Usb(USBPackedInputDataReport::new()),
-            _composite_tx: None,
+            composite_tx: None,
             hardware,
         }
     }
@@ -147,6 +147,12 @@ impl DualSenseDevice {
     /// Returns a transmitter channel that can be used to send events to this device
     pub fn transmitter(&self) -> mpsc::Sender<TargetCommand> {
         self.tx.clone()
+    }
+
+    /// Configures the device to send output events to the given composite device
+    /// channel.
+    pub fn set_composite_device(&mut self, tx: broadcast::Sender<Command>) {
+        self.composite_tx = Some(tx);
     }
 
     /// Creates a new instance of the dbus device interface on DBus.
@@ -175,6 +181,9 @@ impl DualSenseDevice {
         log::debug!("Started listening for events to send");
         while let Some(command) = self.rx.recv().await {
             match command {
+                TargetCommand::SetCompositeDevice(tx) => {
+                    self.set_composite_device(tx.clone());
+                }
                 TargetCommand::WriteEvent(event) => {
                     // Update internal state
                     self.update_state(event);
