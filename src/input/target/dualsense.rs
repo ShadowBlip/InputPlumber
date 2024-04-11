@@ -1,3 +1,7 @@
+//! Emulates a Sony DualSense gamepad as a target input device.
+//! The DualSense implementation is based on the great work done by NeroReflex
+//! and the ROGueENEMY project:
+//! https://github.com/NeroReflex/ROGueENEMY/
 use std::{cmp::Ordering, error::Error, fs::File, thread, time};
 
 use packed_struct::prelude::*;
