@@ -109,7 +109,7 @@ impl IIODevice {
         };
 
         // BMI Driver
-        if glob_match("{i2c-BMI*,display_gyro}", name.as_str()) {
+        if glob_match("{i2c-BMI*,display_gyro,bmi*-imu}", name.as_str()) {
             log::info!("Detected BMI IMU: {name}");
             let tx = self.composite_tx.clone();
             let driver = bmi_imu::IMU::new(self.info.clone(), tx, self.get_id());
