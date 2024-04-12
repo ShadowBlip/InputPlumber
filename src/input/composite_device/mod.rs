@@ -69,6 +69,8 @@ pub enum Command {
     GetProfileName(mpsc::Sender<String>),
     LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
     WriteEvent(NativeEvent),
+    HandleEvent(NativeEvent),
+    RemoveRecentEvent(Capability),
     Stop,
 }
 
@@ -275,6 +277,11 @@ pub struct CompositeDevice {
     /// List of currently "pressed" actions used to translate multiple input
     /// sequences into a single input event.
     translatable_active_inputs: Vec<Capability>,
+    /// List of translated events that were emitted less than 8ms ago. This
+    /// is required to support "on release" style buttons on some devices where
+    /// a button "up" event will fire immediately after a "down" event upon
+    /// physical release of the button.
+    translated_recent_events: HashSet<Capability>,
     /// Keep track of translated events we've emitted so we can send
     /// release events
     emitted_mappings: HashMap<String, CapabilityMapping>,
@@ -332,6 +339,7 @@ impl CompositeDevice {
             device_profile_config_map: HashMap::new(),
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
+            translated_recent_events: HashSet::new(),
             emitted_mappings: HashMap::new(),
             dbus_path: None,
             intercept_mode: InterceptMode::None,
@@ -509,6 +517,14 @@ impl CompositeDevice {
                     if let Err(e) = self.write_event(event).await {
                         log::error!("Failed to write event: {:?}", e);
                     }
+                }
+                Command::HandleEvent(event) => {
+                    if let Err(e) = self.handle_event(event).await {
+                        log::error!("Failed to write event: {:?}", e);
+                    }
+                }
+                Command::RemoveRecentEvent(cap) => {
+                    self.translated_recent_events.remove(&cap);
                 }
                 Command::Stop => {
                     log::debug!("Stopping CompositeDevice");
@@ -1039,7 +1055,9 @@ impl CompositeDevice {
             return Ok(());
         }
 
-        // Keep a list of events to emit
+        // Keep a list of events to emit. The reason for this is some mapped
+        // capabilities may use one or more of the same source capability and
+        // they would release at the same time.
         let mut emit_queue = Vec::new();
 
         // Loop over each mapping and try to match source events
@@ -1103,8 +1121,38 @@ impl CompositeDevice {
             }
         }
 
-        // Emit the translated events
+        // Emit the translated events. If this translated event has been emitted
+        // very recently, delay sending subsequent events of the same type.
+        let sleep_time = Duration::from_millis(4);
         for event in emit_queue {
+            // Check to see if the event is in recently translated.
+            // If it is, spawn a task to delay emit the event.
+            let cap = event.as_capability();
+            if self.translated_recent_events.contains(&cap) {
+                log::debug!("Event emitted too quickly. Delaying emission.");
+                let tx = self.tx.clone();
+                tokio::task::spawn(async move {
+                    tokio::time::sleep(sleep_time).await;
+                    if let Err(e) = tx.send(Command::HandleEvent(event)) {
+                        log::error!("Failed to send delayed event command: {:?}", e);
+                    }
+                });
+
+                continue;
+            }
+
+            // Add the event to our list of recently device translated events
+            self.translated_recent_events.insert(event.as_capability());
+
+            // Spawn a task to remove the event from recent translated
+            let tx = self.tx.clone();
+            tokio::task::spawn(async move {
+                tokio::time::sleep(sleep_time).await;
+                if let Err(e) = tx.send(Command::RemoveRecentEvent(cap)) {
+                    log::error!("Failed to send remove recent event command: {:?}", e);
+                }
+            });
+
             log::trace!("Emitting event: {:?}", event);
             self.handle_event(event).await?;
         }
