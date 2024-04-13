@@ -314,10 +314,11 @@ pub struct CompositeDevice {
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
     target_dbus_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
     /// Set of available Force Feedback effect IDs that are not in use
+    /// TODO: Just use the keys from ff_effect_id_source_map to determine next id
     ff_effect_ids: BTreeSet<i16>,
     /// Source devices use their own IDs for uploaded force feedback effects.
     /// This mapping maps the composite device effect ids to source device effect ids.
-    /// E.g. {3: {"evdev://event0": 6}}
+    /// E.g. {3: {"evdev://event0": 6, "evdev://event1": 2}}
     ff_effect_id_source_map: HashMap<i16, HashMap<String, i16>>,
 }
 

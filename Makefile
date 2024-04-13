@@ -9,6 +9,7 @@ CACHE_DIR := .cache
 
 # Build variables
 BUILD_TYPE ?= release
+LOG_LEVEL ?= debug
 
 # Docker image variables
 IMAGE_NAME ?= inputplumber-builder
