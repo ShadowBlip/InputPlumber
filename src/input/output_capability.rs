@@ -2,7 +2,10 @@
 /// is capable of handling. E.g. Force Feedback, LED control, etc.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum OutputCapability {
+    NotImplemented,
     ForceFeedback,
+    ForceFeedbackUpload,
+    ForceFeedbackErase,
     #[allow(clippy::upper_case_acronyms)]
     LED(LED),
 }

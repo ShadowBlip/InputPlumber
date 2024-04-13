@@ -7,7 +7,10 @@ use std::{
     time::Duration,
 };
 
-use evdev::{AbsoluteAxisCode, Device, EventType, FFEffect, InputEvent};
+use evdev::{
+    AbsInfo, AbsoluteAxisCode, Device, EventType, FFEffect, FFEffectData, FFEffectKind, FFReplay,
+    FFTrigger, InputEvent,
+};
 use nix::fcntl::{FcntlArg, OFlag};
 use tokio::{
     sync::{
@@ -21,6 +24,7 @@ use zbus_macros::dbus_interface;
 
 use crate::{
     constants::BUS_PREFIX,
+    drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
         capability::Capability,
         composite_device::Command,
@@ -113,6 +117,7 @@ pub struct EventDevice {
     tx: mpsc::Sender<SourceCommand>,
     rx: mpsc::Receiver<SourceCommand>,
     ff_effects: HashMap<i16, FFEffect>,
+    ff_effects_dualsense: Option<i16>,
 }
 
 impl EventDevice {
@@ -124,6 +129,7 @@ impl EventDevice {
             tx,
             rx,
             ff_effects: HashMap::new(),
+            ff_effects_dualsense: None,
         }
     }
 
@@ -155,87 +161,155 @@ impl EventDevice {
 
         // Loop to read events from the device and commands over the channel
         log::debug!("Reading events from {}", path);
-        'main: loop {
+        let mut interval = tokio::time::interval(POLL_RATE);
+        loop {
+            // Sleep for the given polling interval
+            interval.tick().await;
+
+            // Receive commands/output events
+            if let Err(e) = self.receive_commands(&mut device) {
+                log::debug!("Error receiving commands: {:?}", e);
+                break;
+            }
+
             // Read events from the device
-            let events = {
-                let result = device.fetch_events();
-                match result {
-                    Ok(events) => events.collect(),
-                    Err(err) => match err.kind() {
-                        // Do nothing if this would block
-                        std::io::ErrorKind::WouldBlock => vec![],
-                        _ => {
-                            log::trace!("Failed to fetch events: {:?}", err);
-                            let msg = format!("Failed to fetch events: {:?}", err);
-                            drop(err);
-                            return Err(msg.into());
-                        }
-                    },
+            let events = match self.poll(&mut device) {
+                Ok(events) => events,
+                Err(err) => {
+                    log::error!("Failed to poll event device: {:?}", err);
+                    break;
                 }
             };
 
-            for event in events {
-                log::trace!("Received event: {:?}", event);
-                // If this is an ABS event, get the min/max info for this type of
-                // event so we can normalize the value.
-                let abs_info = if event.event_type() == EventType::ABSOLUTE {
-                    axes_info.get(&AbsoluteAxisCode(event.code()))
-                } else {
-                    None
-                };
-
-                // Convert the event into an [EvdevEvent] and optionally include
-                // the axis information with min/max values
-                let mut evdev_event: EvdevEvent = event.into();
-                if let Some(info) = abs_info {
-                    evdev_event.set_abs_info(*info);
-                }
-
-                // Send the event to the composite device
-                let event = Event::Evdev(evdev_event);
-                self.composite_tx
-                    .send(Command::ProcessEvent(self.get_id(), event))?;
+            // Process events from the device
+            if let Err(err) = self.process_events(events, &axes_info) {
+                log::error!("Failed to process events: {:?}", err);
+                break;
             }
-
-            // Read commands sent to this device from the channel until it is
-            // empty.
-            loop {
-                match self.rx.try_recv() {
-                    Ok(cmd) => match cmd {
-                        SourceCommand::UploadEffect(data, composite_dev) => {
-                            self.upload_ff_effect(&mut device, data, composite_dev);
-                        }
-                        SourceCommand::EraseEffect(id, composite_dev) => {
-                            self.erase_ff_effect(id, composite_dev);
-                        }
-                        SourceCommand::WriteEvent(event) => {
-                            log::debug!("Received output event: {:?}", event);
-                            if let OutputEvent::Evdev(input_event) = event {
-                                if let Err(e) = device.send_events(&[input_event]) {
-                                    log::error!("Failed to write output event: {:?}", e);
-                                    break 'main;
-                                }
-                            }
-                        }
-                        SourceCommand::Stop => break 'main,
-                    },
-                    Err(e) => match e {
-                        TryRecvError::Empty => break,
-                        TryRecvError::Disconnected => {
-                            log::debug!("Receive channel disconnected");
-                            break 'main;
-                        }
-                    },
-                };
-            }
-
-            // Sleep for the polling time
-            sleep(POLL_RATE).await;
         }
 
         log::debug!("Stopped reading device events");
 
         Ok(())
+    }
+
+    /// Polls the evdev device for input events
+    fn poll(&self, device: &mut Device) -> Result<Vec<InputEvent>, Box<dyn Error>> {
+        let result = device.fetch_events();
+        match result {
+            Ok(events) => Ok(events.collect()),
+            Err(err) => match err.kind() {
+                // Do nothing if this would block
+                std::io::ErrorKind::WouldBlock => Ok(vec![]),
+                _ => {
+                    log::trace!("Failed to fetch events: {:?}", err);
+                    let msg = format!("Failed to fetch events: {:?}", err);
+                    Err(msg.into())
+                }
+            },
+        }
+    }
+
+    /// Process incoming events and send them to the composite device.
+    fn process_events(
+        &self,
+        events: Vec<InputEvent>,
+        axes_info: &HashMap<AbsoluteAxisCode, AbsInfo>,
+    ) -> Result<(), Box<dyn Error>> {
+        for event in events {
+            log::trace!("Received event: {:?}", event);
+            // If this is an ABS event, get the min/max info for this type of
+            // event so we can normalize the value.
+            let abs_info = if event.event_type() == EventType::ABSOLUTE {
+                axes_info.get(&AbsoluteAxisCode(event.code()))
+            } else {
+                None
+            };
+
+            // Convert the event into an [EvdevEvent] and optionally include
+            // the axis information with min/max values
+            let mut evdev_event: EvdevEvent = event.into();
+            if let Some(info) = abs_info {
+                evdev_event.set_abs_info(*info);
+            }
+
+            // Send the event to the composite device
+            let event = Event::Evdev(evdev_event);
+            self.composite_tx
+                .send(Command::ProcessEvent(self.get_id(), event))?;
+        }
+
+        Ok(())
+    }
+
+    /// Read commands sent to this device from the channel until it is
+    /// empty.
+    fn receive_commands(&mut self, device: &mut Device) -> Result<(), Box<dyn Error>> {
+        const MAX_COMMANDS: u8 = 64;
+        let mut commands_processed = 0;
+        loop {
+            match self.rx.try_recv() {
+                Ok(cmd) => match cmd {
+                    SourceCommand::UploadEffect(data, composite_dev) => {
+                        self.upload_ff_effect(device, data, composite_dev);
+                    }
+                    SourceCommand::EraseEffect(id, composite_dev) => {
+                        self.erase_ff_effect(id, composite_dev);
+                    }
+                    SourceCommand::WriteEvent(event) => {
+                        log::trace!("Received output event: {:?}", event);
+
+                        // Only process output events if FF is supported
+                        let force_feedback = device.supported_ff();
+                        if force_feedback.is_none() {
+                            log::trace!("Device does not support FF events");
+                            continue;
+                        }
+                        if let Some(ff) = force_feedback {
+                            if ff.iter().count() == 0 {
+                                log::trace!("Device has no FF support");
+                                continue;
+                            }
+                        }
+
+                        match event {
+                            OutputEvent::Evdev(input_event) => {
+                                if let Err(e) = device.send_events(&[input_event]) {
+                                    log::error!("Failed to write output event: {:?}", e);
+                                }
+                            }
+                            OutputEvent::DualSense(report) => {
+                                log::debug!("Received DualSense output report");
+                                if report.use_rumble_not_haptics
+                                    || report.enable_improved_rumble_emulation
+                                {
+                                    if let Err(e) = self.process_dualsense_ff(device, report) {
+                                        log::error!(
+                                            "Failed to process dualsense output report: {:?}",
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                            OutputEvent::Uinput(_) => (),
+                        }
+                    }
+                    SourceCommand::Stop => return Err("Device stopped".into()),
+                },
+                Err(e) => match e {
+                    TryRecvError::Empty => return Ok(()),
+                    TryRecvError::Disconnected => {
+                        log::debug!("Receive channel disconnected");
+                        return Err("Receive channel disconnected".into());
+                    }
+                },
+            };
+
+            commands_processed += 1;
+            if commands_processed >= MAX_COMMANDS {
+                return Ok(());
+            }
+        }
     }
 
     /// Upload the given effect data to the device and send the result to
@@ -275,6 +349,71 @@ impl EventDevice {
         if let Err(err) = composite_dev.send(Ok(())) {
             log::error!("Failed to send erase result: {:?}", err);
         }
+    }
+
+    /// Process dualsense force feedback output reports
+    fn process_dualsense_ff(
+        &mut self,
+        device: &mut Device,
+        report: SetStatePackedOutputData,
+    ) -> Result<(), Box<dyn Error>> {
+        // If no effect was uploaded to handle DualSense force feedback, upload one.
+        if self.ff_effects_dualsense.is_none() {
+            let effect_data = FFEffectData {
+                direction: 0,
+                trigger: FFTrigger {
+                    button: 0,
+                    interval: 0,
+                },
+                replay: FFReplay {
+                    length: 50,
+                    delay: 0,
+                },
+                kind: FFEffectKind::Rumble {
+                    strong_magnitude: 32768,
+                    weak_magnitude: 0,
+                },
+            };
+            log::debug!("Uploading FF effect data");
+            let effect = device.upload_ff_effect(effect_data)?;
+            let id = effect.id() as i16;
+            self.ff_effects.insert(id, effect);
+            self.ff_effects_dualsense = Some(id);
+        }
+
+        let effect_id = self.ff_effects_dualsense.unwrap();
+        let effect = self.ff_effects.get_mut(&effect_id).unwrap();
+
+        // Stop playing the effect if values are set to zero
+        if report.rumble_emulation_left == 0 && report.rumble_emulation_right == 0 {
+            log::trace!("Stopping FF effect");
+            effect.stop()?;
+            return Ok(());
+        }
+
+        // Set the values of the effect and play it
+        let effect_data = FFEffectData {
+            direction: 0,
+            trigger: FFTrigger {
+                button: 0,
+                interval: 0,
+            },
+            replay: FFReplay {
+                length: 60000,
+                delay: 0,
+            },
+            kind: FFEffectKind::Rumble {
+                // DualSense values are u8, so scale them to be from u16::MIN-u16::MAX
+                strong_magnitude: report.rumble_emulation_left as u16 * 256,
+                weak_magnitude: report.rumble_emulation_right as u16 * 256,
+            },
+        };
+        log::trace!("Updating effect data");
+        effect.update(effect_data)?;
+        log::trace!("Playing effect with data: {:?}", effect_data);
+        effect.play(1)?;
+
+        Ok(())
     }
 
     /// Returns a unique identifier for the source device.

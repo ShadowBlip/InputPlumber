@@ -1,3 +1,6 @@
+//! Structures derived from the great work of the community of the Game Controller
+//! Collective Wiki.
+//! Source: https://controllers.fandom.com/wiki/Sony_DualSense
 use packed_struct::prelude::*;
 
 use super::driver::*;
@@ -55,7 +58,6 @@ pub struct TouchData {
     pub timestamp: u8,
 }
 
-// Source: https://controllers.fandom.com/wiki/Sony_DualSense#HID_Report_0x01_Input_USB
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "64")]
 pub struct USBPackedInputDataReport {
@@ -327,21 +329,15 @@ pub struct BluetoothPackedInputDataReport {
 
     // byte 5
     #[packed_field(bits = "40")]
-    pub down: bool, // Directional buttons
+    pub triangle: bool, // Button cluster, x, ◯, □, ∆
     #[packed_field(bits = "41")]
-    pub left: bool,
-    #[packed_field(bits = "42")]
-    pub right: bool,
-    #[packed_field(bits = "43")]
-    pub up: bool,
-    #[packed_field(bits = "44")]
-    pub square: bool, // Button cluster, x, ◯, □, ∆
-    #[packed_field(bits = "45")]
-    pub cross: bool,
-    #[packed_field(bits = "46")]
     pub circle: bool,
-    #[packed_field(bits = "47")]
-    pub triangle: bool,
+    #[packed_field(bits = "42")]
+    pub cross: bool,
+    #[packed_field(bits = "43")]
+    pub square: bool,
+    #[packed_field(bits = "44..=47", ty = "enum")]
+    pub dpad: Direction, // Directional buttons
 
     // byte 6
     #[packed_field(bits = "48")]
@@ -388,10 +384,7 @@ impl BluetoothPackedInputDataReport {
             l2_trigger: 0,
             r2_trigger: 0,
             counter: [0, 0, 0, 0, 0, 0],
-            down: false,
-            left: false,
-            right: false,
-            up: false,
+            dpad: Direction::None,
             square: false,
             cross: false,
             circle: false,
@@ -608,8 +601,20 @@ pub struct SetStatePackedOutputData {
 }
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "48")]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "63")]
 pub struct UsbPackedOutputReport {
+    // byte 0
+    #[packed_field(bytes = "0")]
+    pub report_id: u8, // Report ID (always 0x02)
+
+    // byte 1-47
+    #[packed_field(bytes = "1..=47")]
+    pub state: SetStatePackedOutputData,
+}
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "48")]
+pub struct UsbPackedOutputReportShort {
     // byte 0
     #[packed_field(bytes = "0")]
     pub report_id: u8, // Report ID (always 0x02)

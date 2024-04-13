@@ -2,7 +2,7 @@
 //! The DualSense implementation is based on the great work done by NeroReflex
 //! and the ROGueENEMY project:
 //! https://github.com/NeroReflex/ROGueENEMY/
-use std::{cmp::Ordering, error::Error, fs::File, thread, time};
+use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
 
 use packed_struct::prelude::*;
 use tokio::sync::{
@@ -18,13 +18,14 @@ use crate::{
         driver::{
             DS5_ACC_RES_PER_G, DS5_EDGE_NAME, DS5_EDGE_PID, DS5_EDGE_VERSION, DS5_EDGE_VID,
             DS5_NAME, DS5_PID, DS5_VERSION, DS5_VID, FEATURE_REPORT_CALIBRATION,
-            FEATURE_REPORT_FIRMWARE_INFO, FEATURE_REPORT_PAIRING_INFO, OUTPUT_REPORT_BT_SIZE,
+            FEATURE_REPORT_FIRMWARE_INFO, FEATURE_REPORT_PAIRING_INFO, OUTPUT_REPORT_BT,
+            OUTPUT_REPORT_BT_SIZE, OUTPUT_REPORT_USB, OUTPUT_REPORT_USB_SHORT_SIZE,
             OUTPUT_REPORT_USB_SIZE, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
             TRIGGER_MAX,
         },
         hid_report::{
             BluetoothPackedInputDataReport, Direction, PackedInputDataReport,
-            USBPackedInputDataReport,
+            USBPackedInputDataReport, UsbPackedOutputReport, UsbPackedOutputReportShort,
         },
         report_descriptor::{
             DS_BT_DESCRIPTOR, DS_EDGE_BT_DESCRIPTOR, DS_EDGE_USB_DESCRIPTOR, DS_USB_DESCRIPTOR,
@@ -34,6 +35,7 @@ use crate::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         composite_device::Command,
         event::{native::NativeEvent, value::InputValue},
+        output_event,
     },
 };
 
@@ -172,30 +174,37 @@ impl DualSenseDevice {
     /// Creates and runs the target device
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Creating virtual dualsense controller");
-        let device = self.create_virtual_device()?;
-        log::debug!("Spawning device thread for virtual controller");
-        let device_tx = self.spawn_device_thread(device)?;
+        let mut device = self.create_virtual_device()?;
 
-        // Listen for send events from source devices as dispatch those events
-        // to the device thread.
-        log::debug!("Started listening for events to send");
-        while let Some(command) = self.rx.recv().await {
-            match command {
-                TargetCommand::SetCompositeDevice(tx) => {
-                    self.set_composite_device(tx.clone());
-                }
-                TargetCommand::WriteEvent(event) => {
-                    // Update internal state
-                    self.update_state(event);
+        // Start the main run loop
+        log::debug!("Starting run loop");
+        let duration = Duration::from_millis(POLL_INTERVAL_MS);
+        let mut interval = tokio::time::interval(duration);
+        loop {
+            // Sleep for the given polling interval
+            interval.tick().await;
 
-                    // Send the state to the virtual device
-                    device_tx.send(self.state).await?;
-                }
-                TargetCommand::Stop => break,
-            };
+            // Receive commands/events and update local state
+            if let Err(e) = self.receive_commands().await {
+                log::debug!("Error receiving commands: {:?}", e);
+                break;
+            }
+
+            // Poll the HIDRaw device
+            if let Err(e) = self.poll(&mut device) {
+                log::debug!("Error polling UHID device: {:?}", e);
+                break;
+            }
+
+            // Write the state to the device
+            if let Err(e) = self.write_state(&mut device) {
+                log::debug!("Error writing state to device: {:?}", e);
+                break;
+            }
         }
 
         log::debug!("Stopped listening for events");
+        device.destroy()?;
 
         Ok(())
     }
@@ -249,37 +258,427 @@ impl DualSenseDevice {
         Ok(device)
     }
 
-    /// Spawn the device thread to handle reading and writing from/to the virtual
-    /// hidraw device. Returns the sender side of the channel so input events
-    /// from source devices can be sent to the device for processing.
-    fn spawn_device_thread(
-        &self,
-        device: UHIDDevice<File>,
-    ) -> Result<mpsc::Sender<PackedInputDataReport>, Box<dyn Error>> {
-        log::debug!("Creating virtual dualsense controller");
-        let (device_tx, device_rx) = mpsc::channel::<PackedInputDataReport>(BUFFER_SIZE);
-        let hw_config = self.hardware;
+    /// Read commands and events sent to this device
+    async fn receive_commands(&mut self) -> Result<(), Box<dyn Error>> {
+        // Read commands sent to this device from the channel until it is
+        // empty.
+        loop {
+            match self.rx.try_recv() {
+                Ok(cmd) => {
+                    match cmd {
+                        TargetCommand::SetCompositeDevice(tx) => {
+                            log::trace!("Recieved command to set composite device");
+                            self.set_composite_device(tx.clone());
+                        }
+                        TargetCommand::WriteEvent(event) => {
+                            log::trace!("Recieved event to write: {:?}", event);
+                            // Update internal state
+                            self.update_state(event);
+                        }
+                        TargetCommand::Stop => return Err("Device stopped".into()),
+                    }
+                }
+                Err(e) => match e {
+                    TryRecvError::Empty => break,
+                    TryRecvError::Disconnected => {
+                        return Err("Receive channel disconnected".into());
+                    }
+                },
+            };
+        }
 
-        // Spawn the device in its own blocking thread
-        tokio::task::spawn_blocking(move || {
-            let mut hidraw_device = HidRawDevice::new(device, hw_config, device_rx);
-            loop {
-                if let Err(e) = hidraw_device.poll() {
-                    log::warn!("Failed polling hidraw device: {:?}", e);
-                    break;
+        Ok(())
+    }
+
+    /// Handle reading from the device and processing input events from source
+    /// devices over the event channel
+    /// https://www.kernel.org/doc/html/latest/hid/uhid.html#read
+    fn poll(&mut self, device: &mut UHIDDevice<File>) -> Result<(), Box<dyn Error>> {
+        let result = device.read();
+        match result {
+            Ok(event) => {
+                match event {
+                    // This is sent when the HID device is started. Consider this as an answer to
+                    // UHID_CREATE. This is always the first event that is sent.
+                    OutputEvent::Start { dev_flags: _ } => {
+                        log::debug!("Start event received");
+                    }
+                    // This is sent when the HID device is stopped. Consider this as an answer to
+                    // UHID_DESTROY.
+                    OutputEvent::Stop => {
+                        log::debug!("Stop event received");
+                        return Err("HID device was destroyed".into());
+                    }
+                    // This is sent when the HID device is opened. That is, the data that the HID
+                    // device provides is read by some other process. You may ignore this event but
+                    // it is useful for power-management. As long as you haven't received this event
+                    // there is actually no other process that reads your data so there is no need to
+                    // send UHID_INPUT events to the kernel.
+                    OutputEvent::Open => {
+                        log::debug!("Open event received");
+                    }
+                    // This is sent when there are no more processes which read the HID data. It is
+                    // the counterpart of UHID_OPEN and you may as well ignore this event.
+                    OutputEvent::Close => {
+                        log::debug!("Close event received");
+                    }
+                    // This is sent if the HID device driver wants to send raw data to the I/O
+                    // device. You should read the payload and forward it to the device.
+                    OutputEvent::Output { data } => {
+                        log::trace!("Got output data: {:?}", data);
+                        let result = self.handle_output(data);
+                        if let Err(e) = result {
+                            let err = format!("Failed process output event: {:?}", e);
+                            return Err(err.into());
+                        }
+                    }
+                    // This event is sent if the kernel driver wants to perform a GET_REPORT request
+                    // on the control channel as described in the HID specs. The report-type and
+                    // report-number are available in the payload.
+                    // The kernel serializes GET_REPORT requests so there will never be two in
+                    // parallel. However, if you fail to respond with a UHID_GET_REPORT_REPLY, the
+                    // request might silently time out.
+                    // Once you read a GET_REPORT request, you shall forward it to the HID device and
+                    // remember the "id" field in the payload. Once your HID device responds to the
+                    // GET_REPORT (or if it fails), you must send a UHID_GET_REPORT_REPLY to the
+                    // kernel with the exact same "id" as in the request. If the request already
+                    // timed out, the kernel will ignore the response silently. The "id" field is
+                    // never re-used, so conflicts cannot happen.
+                    OutputEvent::GetReport {
+                        id,
+                        report_number,
+                        report_type,
+                    } => {
+                        log::trace!(
+                            "Received GetReport event: id: {id}, num: {report_number}, type: {:?}",
+                            report_type
+                        );
+                        let result = self.handle_get_report(device, id, report_number, report_type);
+                        if let Err(e) = result {
+                            let err = format!("Failed to process GetReport event: {:?}", e);
+                            return Err(err.into());
+                        }
+                    }
+                    // This is the SET_REPORT equivalent of UHID_GET_REPORT. On receipt, you shall
+                    // send a SET_REPORT request to your HID device. Once it replies, you must tell
+                    // the kernel about it via UHID_SET_REPORT_REPLY.
+                    // The same restrictions as for UHID_GET_REPORT apply.
+                    OutputEvent::SetReport {
+                        id,
+                        report_number,
+                        report_type,
+                        data,
+                    } => {
+                        log::trace!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
+                    }
+                };
+            }
+            Err(err) => match err {
+                StreamError::Io(_e) => (),
+                StreamError::UnknownEventType(e) => {
+                    log::debug!("Unknown event type: {:?}", e);
+                }
+            },
+        };
+
+        Ok(())
+    }
+
+    /// Handle [OutputEvent::Output] events from the HIDRAW device. These are
+    /// events which should be forwarded back to source devices.
+    fn handle_output(&mut self, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
+        // Validate the output report size
+        let _expected_report_size = match self.hardware.bus_type {
+            BusType::Bluetooth => OUTPUT_REPORT_BT_SIZE,
+            BusType::Usb => OUTPUT_REPORT_USB_SIZE,
+        };
+
+        // The first byte should be the report id
+        let Some(report_id) = data.first() else {
+            log::warn!("Received empty output report.");
+            return Ok(());
+        };
+
+        log::debug!("Got output report with ID: {report_id}");
+
+        match *report_id {
+            OUTPUT_REPORT_USB => {
+                log::debug!("Received USB output report with length: {}", data.len());
+                let state = match data.len() {
+                    OUTPUT_REPORT_USB_SIZE => {
+                        let buf: [u8; OUTPUT_REPORT_USB_SIZE] = data.try_into().unwrap();
+                        let report = UsbPackedOutputReport::unpack(&buf)?;
+                        report.state
+                    }
+                    OUTPUT_REPORT_USB_SHORT_SIZE => {
+                        let buf: [u8; OUTPUT_REPORT_USB_SHORT_SIZE] = data.try_into().unwrap();
+                        let report = UsbPackedOutputReportShort::unpack(&buf)?;
+
+                        // NOTE: Hack for supporting Steam Input rumble
+                        let mut state = report.state;
+                        if !state.allow_audio_control
+                            && !state.allow_mic_volume
+                            && !state.allow_speaker_volume
+                            && !state.allow_headphone_volume
+                            && !state.allow_left_trigger_ffb
+                            && !state.allow_right_trigger_ffb
+                            && !state.use_rumble_not_haptics
+                            && !state.enable_rumble_emulation
+                        {
+                            state.use_rumble_not_haptics = true;
+                        }
+                        state
+                    }
+                    _ => {
+                        log::warn!("Failed to unpack output report. Expected size {OUTPUT_REPORT_USB_SIZE} or {OUTPUT_REPORT_USB_SHORT_SIZE}, got {}.", data.len());
+                        return Ok(());
+                    }
+                };
+
+                log::debug!("{}", state);
+
+                // Send the output report to the composite device so it can
+                // be processed by source devices.
+                let Some(tx) = self.composite_tx.as_ref() else {
+                    log::warn!("No composite device to handle output reports");
+                    return Ok(());
+                };
+
+                let event = output_event::OutputEvent::DualSense(state);
+                let cmd = Command::ProcessOutputEvent(event);
+                tx.send(cmd)?;
+            }
+            OUTPUT_REPORT_BT => {
+                log::debug!(
+                    "Received Bluetooth output report with length: {}",
+                    data.len()
+                );
+                //
+            }
+            _ => {
+                log::debug!("Unknown output report: {report_id}");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle [OutputEvent::GetReport] events from the HIDRAW device
+    fn handle_get_report(
+        &mut self,
+        device: &mut UHIDDevice<File>,
+        id: u32,
+        report_number: u8,
+        _report_type: uhid_virt::ReportType,
+    ) -> Result<(), Box<dyn Error>> {
+        // Handle report pairing requests
+        let data = match report_number {
+            // Pairing information report
+            FEATURE_REPORT_PAIRING_INFO => {
+                log::debug!("Got report pairing report request");
+                // TODO: Can we define this somewhere as a const?
+                let data = vec![
+                    FEATURE_REPORT_PAIRING_INFO,
+                    self.hardware.mac_addr[0],
+                    self.hardware.mac_addr[1],
+                    self.hardware.mac_addr[2],
+                    self.hardware.mac_addr[3],
+                    self.hardware.mac_addr[4],
+                    self.hardware.mac_addr[5],
+                    0x08,
+                    0x25,
+                    0x00,
+                    0x1e,
+                    0x00,
+                    0xee,
+                    0x74,
+                    0xd0,
+                    0xbc,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ];
+
+                // If this is a bluetooth gamepad, include the crc
+                if self.hardware.bus_type == BusType::Bluetooth {
+                    // TODO: Handle bluetooth CRC32
                 }
 
-                let duration = time::Duration::from_millis(POLL_INTERVAL_MS);
-                thread::sleep(duration);
+                data
             }
+            // Firmware information report
+            FEATURE_REPORT_FIRMWARE_INFO => {
+                log::debug!("Got report firmware info request");
+                // TODO: Can we define this somewhere as a const?
+                let data = vec![
+                    FEATURE_REPORT_FIRMWARE_INFO,
+                    0x4a,
+                    0x75,
+                    0x6e,
+                    0x20,
+                    0x31,
+                    0x39,
+                    0x20,
+                    0x32,
+                    0x30,
+                    0x32,
+                    0x33,
+                    0x31,
+                    0x34,
+                    0x3a,
+                    0x34,
+                    0x37,
+                    0x3a,
+                    0x33,
+                    0x34,
+                    0x03,
+                    0x00,
+                    0x44,
+                    0x00,
+                    0x08,
+                    0x02,
+                    0x00,
+                    0x01,
+                    0x36,
+                    0x00,
+                    0x00,
+                    0x01,
+                    0xc1,
+                    0xc8,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x54,
+                    0x01,
+                    0x00,
+                    0x00,
+                    0x14,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0b,
+                    0x00,
+                    0x01,
+                    0x00,
+                    0x06,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ];
 
-            log::debug!("Destroying HID device");
-            if let Err(e) = hidraw_device.destroy() {
-                log::error!("Failed to destroy device: {:?}", e);
+                // If this is a bluetooth gamepad, include the crc
+                if self.hardware.bus_type == BusType::Bluetooth {
+                    // TODO: Handle bluetooth CRC32
+                }
+
+                data
             }
-        });
+            // Calibration report
+            FEATURE_REPORT_CALIBRATION => {
+                log::debug!("Got report request for calibration");
+                // TODO: Can we define this somewhere as a const?
+                let data = vec![
+                    FEATURE_REPORT_CALIBRATION,
+                    0xff,
+                    0xfc,
+                    0xff,
+                    0xfe,
+                    0xff,
+                    0x83,
+                    0x22,
+                    0x78,
+                    0xdd,
+                    0x92,
+                    0x22,
+                    0x5f,
+                    0xdd,
+                    0x95,
+                    0x22,
+                    0x6d,
+                    0xdd,
+                    0x1c,
+                    0x02,
+                    0x1c,
+                    0x02,
+                    0xf2,
+                    0x1f,
+                    0xed,
+                    0xdf,
+                    0xe3,
+                    0x20,
+                    0xda,
+                    0xe0,
+                    0xee,
+                    0x1f,
+                    0xdf,
+                    0xdf,
+                    0x0b,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ];
 
-        Ok(device_tx)
+                // If this is a bluetooth gamepad, include the crc
+                if self.hardware.bus_type == BusType::Bluetooth {
+                    // TODO: Handle bluetooth CRC32
+                }
+
+                data
+            }
+            _ => {
+                let err = format!("Unknown get report request with report number: {report_number}");
+                return Err(err.into());
+            }
+        };
+
+        // Write the report reply to the HIDRAW device
+        if let Err(e) = device.write_get_report_reply(id, 0, data) {
+            log::warn!("Failed to write get report reply: {:?}", e);
+            return Err(e.to_string().into());
+        }
+
+        Ok(())
+    }
+
+    /// Write the current device state to the device
+    fn write_state(&self, device: &mut UHIDDevice<File>) -> Result<(), Box<dyn Error>> {
+        match self.state {
+            PackedInputDataReport::Usb(state) => {
+                let data = state.pack()?;
+
+                // Write the state to the virtual HID
+                if let Err(e) = device.write(&data) {
+                    let err = format!("Failed to write input data report: {:?}", e);
+                    return Err(err.into());
+                }
+            }
+            PackedInputDataReport::Bluetooth(state) => {
+                let data = state.pack()?;
+
+                // Write the state to the virtual HID
+                if let Err(e) = device.write(&data) {
+                    let err = format!("Failed to write input data report: {:?}", e);
+                    return Err(err.into());
+                }
+            }
+        };
+
+        Ok(())
     }
 
     /// Update the internal controller state when events are emitted.
@@ -387,9 +786,53 @@ impl DualSenseDevice {
                                 }
                             }
                         },
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.up = event.pressed()
-                        }
+                        PackedInputDataReport::Bluetooth(ref mut state) => match state.dpad {
+                            Direction::North => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::None
+                                }
+                            }
+                            Direction::NorthEast => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::East
+                                }
+                            }
+                            Direction::East => {
+                                if event.pressed() {
+                                    state.dpad = Direction::NorthEast
+                                }
+                            }
+                            Direction::SouthEast => {
+                                if event.pressed() {
+                                    state.dpad = Direction::NorthEast
+                                }
+                            }
+                            Direction::South => {
+                                if event.pressed() {
+                                    state.dpad = Direction::North
+                                }
+                            }
+                            Direction::SouthWest => {
+                                if event.pressed() {
+                                    state.dpad = Direction::NorthWest
+                                }
+                            }
+                            Direction::West => {
+                                if event.pressed() {
+                                    state.dpad = Direction::NorthWest
+                                }
+                            }
+                            Direction::NorthWest => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::West
+                                }
+                            }
+                            Direction::None => {
+                                if event.pressed() {
+                                    state.dpad = Direction::North
+                                }
+                            }
+                        },
                     },
                     GamepadButton::DPadDown => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => match state.dpad {
@@ -439,9 +882,53 @@ impl DualSenseDevice {
                                 }
                             }
                         },
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.down = event.pressed()
-                        }
+                        PackedInputDataReport::Bluetooth(ref mut state) => match state.dpad {
+                            Direction::North => {
+                                if event.pressed() {
+                                    state.dpad = Direction::South
+                                }
+                            }
+                            Direction::NorthEast => {
+                                if event.pressed() {
+                                    state.dpad = Direction::SouthEast
+                                }
+                            }
+                            Direction::East => {
+                                if event.pressed() {
+                                    state.dpad = Direction::SouthEast
+                                }
+                            }
+                            Direction::SouthEast => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::East
+                                }
+                            }
+                            Direction::South => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::None
+                                }
+                            }
+                            Direction::SouthWest => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::West
+                                }
+                            }
+                            Direction::West => {
+                                if event.pressed() {
+                                    state.dpad = Direction::SouthWest
+                                }
+                            }
+                            Direction::NorthWest => {
+                                if event.pressed() {
+                                    state.dpad = Direction::SouthWest
+                                }
+                            }
+                            Direction::None => {
+                                if event.pressed() {
+                                    state.dpad = Direction::South
+                                }
+                            }
+                        },
                     },
                     GamepadButton::DPadLeft => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => match state.dpad {
@@ -491,9 +978,53 @@ impl DualSenseDevice {
                                 }
                             }
                         },
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.left = event.pressed()
-                        }
+                        PackedInputDataReport::Bluetooth(ref mut state) => match state.dpad {
+                            Direction::North => {
+                                if event.pressed() {
+                                    state.dpad = Direction::NorthWest
+                                }
+                            }
+                            Direction::NorthEast => {
+                                if event.pressed() {
+                                    state.dpad = Direction::NorthWest
+                                }
+                            }
+                            Direction::East => {
+                                if event.pressed() {
+                                    state.dpad = Direction::West
+                                }
+                            }
+                            Direction::SouthEast => {
+                                if event.pressed() {
+                                    state.dpad = Direction::SouthWest
+                                }
+                            }
+                            Direction::South => {
+                                if event.pressed() {
+                                    state.dpad = Direction::SouthWest
+                                }
+                            }
+                            Direction::SouthWest => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::South
+                                }
+                            }
+                            Direction::West => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::None
+                                }
+                            }
+                            Direction::NorthWest => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::North
+                                }
+                            }
+                            Direction::None => {
+                                if event.pressed() {
+                                    state.dpad = Direction::West
+                                }
+                            }
+                        },
                     },
                     GamepadButton::DPadRight => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => match state.dpad {
@@ -543,9 +1074,53 @@ impl DualSenseDevice {
                                 }
                             }
                         },
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.right = event.pressed()
-                        }
+                        PackedInputDataReport::Bluetooth(ref mut state) => match state.dpad {
+                            Direction::North => {
+                                if event.pressed() {
+                                    state.dpad = Direction::NorthEast
+                                }
+                            }
+                            Direction::NorthEast => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::North
+                                }
+                            }
+                            Direction::East => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::None
+                                }
+                            }
+                            Direction::SouthEast => {
+                                if !event.pressed() {
+                                    state.dpad = Direction::South
+                                }
+                            }
+                            Direction::South => {
+                                if event.pressed() {
+                                    state.dpad = Direction::SouthEast
+                                }
+                            }
+                            Direction::SouthWest => {
+                                if event.pressed() {
+                                    state.dpad = Direction::SouthEast
+                                }
+                            }
+                            Direction::West => {
+                                if event.pressed() {
+                                    state.dpad = Direction::East
+                                }
+                            }
+                            Direction::NorthWest => {
+                                if event.pressed() {
+                                    state.dpad = Direction::NorthEast
+                                }
+                            }
+                            Direction::None => {
+                                if event.pressed() {
+                                    state.dpad = Direction::East
+                                }
+                            }
+                        },
                     },
                     GamepadButton::LeftBumper => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => state.l1 = event.pressed(),
@@ -702,8 +1277,15 @@ impl DualSenseDevice {
                                             }
                                         }
                                         PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            state.left = true;
-                                            state.right = false;
+                                            match state.dpad {
+                                                Direction::North => {
+                                                    state.dpad = Direction::NorthWest
+                                                }
+                                                Direction::South => {
+                                                    state.dpad = Direction::SouthWest
+                                                }
+                                                _ => state.dpad = Direction::West,
+                                            }
                                         }
                                     },
                                     Ordering::Equal => match self.state {
@@ -727,8 +1309,23 @@ impl DualSenseDevice {
                                             }
                                         }
                                         PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            state.left = false;
-                                            state.right = false;
+                                            match state.dpad {
+                                                Direction::NorthWest => {
+                                                    state.dpad = Direction::North
+                                                }
+                                                Direction::SouthWest => {
+                                                    state.dpad = Direction::South
+                                                }
+                                                Direction::NorthEast => {
+                                                    state.dpad = Direction::North
+                                                }
+                                                Direction::SouthEast => {
+                                                    state.dpad = Direction::South
+                                                }
+                                                Direction::East => state.dpad = Direction::None,
+                                                Direction::West => state.dpad = Direction::None,
+                                                _ => (),
+                                            }
                                         }
                                     },
                                     Ordering::Greater => match self.state {
@@ -744,8 +1341,15 @@ impl DualSenseDevice {
                                             }
                                         }
                                         PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            state.right = true;
-                                            state.left = false;
+                                            match state.dpad {
+                                                Direction::North => {
+                                                    state.dpad = Direction::NorthEast
+                                                }
+                                                Direction::South => {
+                                                    state.dpad = Direction::SouthEast
+                                                }
+                                                _ => state.dpad = Direction::East,
+                                            }
                                         }
                                     },
                                 }
@@ -766,8 +1370,15 @@ impl DualSenseDevice {
                                             }
                                         }
                                         PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            state.up = true;
-                                            state.down = false;
+                                            match state.dpad {
+                                                Direction::East => {
+                                                    state.dpad = Direction::NorthEast
+                                                }
+                                                Direction::West => {
+                                                    state.dpad = Direction::NorthWest
+                                                }
+                                                _ => state.dpad = Direction::North,
+                                            }
                                         }
                                     },
                                     Ordering::Equal => match self.state {
@@ -791,8 +1402,23 @@ impl DualSenseDevice {
                                             }
                                         }
                                         PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            state.down = false;
-                                            state.up = false;
+                                            match state.dpad {
+                                                Direction::NorthWest => {
+                                                    state.dpad = Direction::West
+                                                }
+                                                Direction::SouthWest => {
+                                                    state.dpad = Direction::West
+                                                }
+                                                Direction::NorthEast => {
+                                                    state.dpad = Direction::East
+                                                }
+                                                Direction::SouthEast => {
+                                                    state.dpad = Direction::East
+                                                }
+                                                Direction::North => state.dpad = Direction::None,
+                                                Direction::South => state.dpad = Direction::None,
+                                                _ => (),
+                                            }
                                         }
                                     },
                                     Ordering::Greater => match self.state {
@@ -808,8 +1434,15 @@ impl DualSenseDevice {
                                             }
                                         }
                                         PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            state.down = true;
-                                            state.up = false;
+                                            match state.dpad {
+                                                Direction::East => {
+                                                    state.dpad = Direction::SouthEast
+                                                }
+                                                Direction::West => {
+                                                    state.dpad = Direction::SouthWest
+                                                }
+                                                _ => state.dpad = Direction::South,
+                                            }
                                         }
                                     },
                                 }
@@ -841,8 +1474,15 @@ impl DualSenseDevice {
                                                 }
                                             }
                                             PackedInputDataReport::Bluetooth(ref mut state) => {
-                                                state.up = true;
-                                                state.down = false;
+                                                match state.dpad {
+                                                    Direction::East => {
+                                                        state.dpad = Direction::NorthEast
+                                                    }
+                                                    Direction::West => {
+                                                        state.dpad = Direction::NorthWest
+                                                    }
+                                                    _ => state.dpad = Direction::North,
+                                                }
                                             }
                                         },
                                         Ordering::Equal => match self.state {
@@ -870,8 +1510,27 @@ impl DualSenseDevice {
                                                 }
                                             }
                                             PackedInputDataReport::Bluetooth(ref mut state) => {
-                                                state.down = false;
-                                                state.up = false;
+                                                match state.dpad {
+                                                    Direction::NorthWest => {
+                                                        state.dpad = Direction::West
+                                                    }
+                                                    Direction::SouthWest => {
+                                                        state.dpad = Direction::West
+                                                    }
+                                                    Direction::NorthEast => {
+                                                        state.dpad = Direction::East
+                                                    }
+                                                    Direction::SouthEast => {
+                                                        state.dpad = Direction::East
+                                                    }
+                                                    Direction::North => {
+                                                        state.dpad = Direction::None
+                                                    }
+                                                    Direction::South => {
+                                                        state.dpad = Direction::None
+                                                    }
+                                                    _ => (),
+                                                }
                                             }
                                         },
                                         Ordering::Greater => match self.state {
@@ -887,8 +1546,15 @@ impl DualSenseDevice {
                                                 }
                                             }
                                             PackedInputDataReport::Bluetooth(ref mut state) => {
-                                                state.down = true;
-                                                state.up = false;
+                                                match state.dpad {
+                                                    Direction::East => {
+                                                        state.dpad = Direction::SouthEast
+                                                    }
+                                                    Direction::West => {
+                                                        state.dpad = Direction::SouthWest
+                                                    }
+                                                    _ => state.dpad = Direction::South,
+                                                }
                                             }
                                         },
                                     }
@@ -915,8 +1581,15 @@ impl DualSenseDevice {
                                                 }
                                             }
                                             PackedInputDataReport::Bluetooth(ref mut state) => {
-                                                state.left = true;
-                                                state.right = false;
+                                                match state.dpad {
+                                                    Direction::North => {
+                                                        state.dpad = Direction::NorthWest
+                                                    }
+                                                    Direction::South => {
+                                                        state.dpad = Direction::SouthWest
+                                                    }
+                                                    _ => state.dpad = Direction::West,
+                                                }
                                             }
                                         },
                                         Ordering::Equal => match self.state {
@@ -940,8 +1613,23 @@ impl DualSenseDevice {
                                                 }
                                             }
                                             PackedInputDataReport::Bluetooth(ref mut state) => {
-                                                state.left = false;
-                                                state.right = false;
+                                                match state.dpad {
+                                                    Direction::NorthWest => {
+                                                        state.dpad = Direction::North
+                                                    }
+                                                    Direction::SouthWest => {
+                                                        state.dpad = Direction::South
+                                                    }
+                                                    Direction::NorthEast => {
+                                                        state.dpad = Direction::North
+                                                    }
+                                                    Direction::SouthEast => {
+                                                        state.dpad = Direction::South
+                                                    }
+                                                    Direction::East => state.dpad = Direction::None,
+                                                    Direction::West => state.dpad = Direction::None,
+                                                    _ => (),
+                                                }
                                             }
                                         },
                                         Ordering::Greater => match self.state {
@@ -957,8 +1645,15 @@ impl DualSenseDevice {
                                                 }
                                             }
                                             PackedInputDataReport::Bluetooth(ref mut state) => {
-                                                state.right = true;
-                                                state.left = false;
+                                                match state.dpad {
+                                                    Direction::North => {
+                                                        state.dpad = Direction::NorthEast
+                                                    }
+                                                    Direction::South => {
+                                                        state.dpad = Direction::SouthEast
+                                                    }
+                                                    _ => state.dpad = Direction::East,
+                                                }
                                             }
                                         },
                                     }
@@ -1067,384 +1762,6 @@ impl DualSenseDevice {
             Capability::Keyboard(_) => (),
             Capability::DBus(_) => (),
         };
-    }
-}
-
-/// Structure for running the underlying HIDRAW device with uhid
-struct HidRawDevice {
-    device: UHIDDevice<File>,
-    state: PackedInputDataReport,
-    config: DualSenseHardware,
-    event_rx: mpsc::Receiver<PackedInputDataReport>,
-}
-
-impl HidRawDevice {
-    fn new(
-        device: UHIDDevice<File>,
-        config: DualSenseHardware,
-        event_rx: mpsc::Receiver<PackedInputDataReport>,
-    ) -> Self {
-        let state = match config.bus_type {
-            BusType::Bluetooth => {
-                PackedInputDataReport::Bluetooth(BluetoothPackedInputDataReport::new())
-            }
-            BusType::Usb => PackedInputDataReport::Usb(USBPackedInputDataReport::new()),
-        };
-
-        Self {
-            device,
-            state,
-            config,
-            event_rx,
-        }
-    }
-
-    /// Handle reading from the device and processing input events from source
-    /// devices over the event channel
-    /// https://www.kernel.org/doc/html/latest/hid/uhid.html#read
-    fn poll(&mut self) -> Result<(), Box<dyn Error>> {
-        let result = self.device.read();
-        match result {
-            Ok(event) => {
-                match event {
-                    // This is sent when the HID device is started. Consider this as an answer to
-                    // UHID_CREATE. This is always the first event that is sent.
-                    OutputEvent::Start { dev_flags: _ } => {
-                        log::debug!("Start event received");
-                    }
-                    // This is sent when the HID device is stopped. Consider this as an answer to
-                    // UHID_DESTROY.
-                    OutputEvent::Stop => {
-                        log::debug!("Stop event received");
-                        return Err("HID device was destroyed".into());
-                    }
-                    // This is sent when the HID device is opened. That is, the data that the HID
-                    // device provides is read by some other process. You may ignore this event but
-                    // it is useful for power-management. As long as you haven't received this event
-                    // there is actually no other process that reads your data so there is no need to
-                    // send UHID_INPUT events to the kernel.
-                    OutputEvent::Open => {
-                        log::debug!("Open event received");
-                    }
-                    // This is sent when there are no more processes which read the HID data. It is
-                    // the counterpart of UHID_OPEN and you may as well ignore this event.
-                    OutputEvent::Close => {
-                        log::debug!("Close event received");
-                    }
-                    // This is sent if the HID device driver wants to send raw data to the I/O
-                    // device. You should read the payload and forward it to the device.
-                    OutputEvent::Output { data } => {
-                        log::trace!("Got output data: {:?}", data);
-                        let result = self.handle_output(data);
-                        if let Err(e) = result {
-                            let err = format!("Failed process output event: {:?}", e);
-                            return Err(err.into());
-                        }
-                    }
-                    // This event is sent if the kernel driver wants to perform a GET_REPORT request
-                    // on the control channel as described in the HID specs. The report-type and
-                    // report-number are available in the payload.
-                    // The kernel serializes GET_REPORT requests so there will never be two in
-                    // parallel. However, if you fail to respond with a UHID_GET_REPORT_REPLY, the
-                    // request might silently time out.
-                    // Once you read a GET_REPORT request, you shall forward it to the HID device and
-                    // remember the "id" field in the payload. Once your HID device responds to the
-                    // GET_REPORT (or if it fails), you must send a UHID_GET_REPORT_REPLY to the
-                    // kernel with the exact same "id" as in the request. If the request already
-                    // timed out, the kernel will ignore the response silently. The "id" field is
-                    // never re-used, so conflicts cannot happen.
-                    OutputEvent::GetReport {
-                        id,
-                        report_number,
-                        report_type,
-                    } => {
-                        log::trace!(
-                            "Received GetReport event: id: {id}, num: {report_number}, type: {:?}",
-                            report_type
-                        );
-                        let result = self.handle_get_report(id, report_number, report_type);
-                        if let Err(e) = result {
-                            let err = format!("Failed to process GetReport event: {:?}", e);
-                            return Err(err.into());
-                        }
-                    }
-                    // This is the SET_REPORT equivalent of UHID_GET_REPORT. On receipt, you shall
-                    // send a SET_REPORT request to your HID device. Once it replies, you must tell
-                    // the kernel about it via UHID_SET_REPORT_REPLY.
-                    // The same restrictions as for UHID_GET_REPORT apply.
-                    OutputEvent::SetReport {
-                        id,
-                        report_number,
-                        report_type,
-                        data,
-                    } => {
-                        log::trace!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
-                    }
-                };
-            }
-            Err(err) => match err {
-                StreamError::Io(_e) => (),
-                StreamError::UnknownEventType(e) => {
-                    log::debug!("Unknown event type: {:?}", e);
-                }
-            },
-        };
-
-        // Try to receive input events from the channel until it is empty
-        loop {
-            match self.event_rx.try_recv() {
-                Ok(new_state) => {
-                    self.state = new_state;
-                }
-                Err(e) => match e {
-                    TryRecvError::Empty => break,
-                    TryRecvError::Disconnected => return Err("Disconnected".into()),
-                },
-            };
-        }
-
-        // Pack the state into a binary array
-        match self.state {
-            PackedInputDataReport::Usb(state) => {
-                let data = state.pack()?;
-
-                // Write the state to the virtual HID
-                if let Err(e) = self.device.write(&data) {
-                    let err = format!("Failed to write input data report: {:?}", e);
-                    return Err(err.into());
-                }
-            }
-            PackedInputDataReport::Bluetooth(state) => {
-                let data = state.pack()?;
-
-                // Write the state to the virtual HID
-                if let Err(e) = self.device.write(&data) {
-                    let err = format!("Failed to write input data report: {:?}", e);
-                    return Err(err.into());
-                }
-            }
-        };
-
-        Ok(())
-    }
-
-    /// Handle [OutputEvent::Output] events from the HIDRAW device. These are
-    /// events which should be forwarded back to source devices.
-    fn handle_output(&mut self, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
-        // Validate the output report size
-        let _expected_report_size = match self.config.bus_type {
-            BusType::Bluetooth => OUTPUT_REPORT_BT_SIZE,
-            BusType::Usb => OUTPUT_REPORT_USB_SIZE,
-        };
-
-        // The first byte should be the report id
-        let Some(report_id) = data.first() else {
-            log::warn!("Received empty output report.");
-            return Ok(());
-        };
-
-        log::debug!("Got output report with ID: {report_id}");
-
-        // TODO: Implement forwarding output data back to source devices to
-        // control LEDs, rumble, etc.
-
-        Ok(())
-    }
-
-    /// Handle [OutputEvent::GetReport] events from the HIDRAW device
-    fn handle_get_report(
-        &mut self,
-        id: u32,
-        report_number: u8,
-        _report_type: uhid_virt::ReportType,
-    ) -> Result<(), Box<dyn Error>> {
-        // Handle report pairing requests
-        let data = match report_number {
-            // Pairing information report
-            FEATURE_REPORT_PAIRING_INFO => {
-                log::debug!("Got report pairing report request");
-                // TODO: Can we define this somewhere as a const?
-                let data = vec![
-                    FEATURE_REPORT_PAIRING_INFO,
-                    self.config.mac_addr[0],
-                    self.config.mac_addr[1],
-                    self.config.mac_addr[2],
-                    self.config.mac_addr[3],
-                    self.config.mac_addr[4],
-                    self.config.mac_addr[5],
-                    0x08,
-                    0x25,
-                    0x00,
-                    0x1e,
-                    0x00,
-                    0xee,
-                    0x74,
-                    0xd0,
-                    0xbc,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                ];
-
-                // If this is a bluetooth gamepad, include the crc
-                if self.config.bus_type == BusType::Bluetooth {
-                    // TODO: Handle bluetooth CRC32
-                }
-
-                data
-            }
-            // Firmware information report
-            FEATURE_REPORT_FIRMWARE_INFO => {
-                log::debug!("Got report firmware info request");
-                // TODO: Can we define this somewhere as a const?
-                let data = vec![
-                    FEATURE_REPORT_FIRMWARE_INFO,
-                    0x4a,
-                    0x75,
-                    0x6e,
-                    0x20,
-                    0x31,
-                    0x39,
-                    0x20,
-                    0x32,
-                    0x30,
-                    0x32,
-                    0x33,
-                    0x31,
-                    0x34,
-                    0x3a,
-                    0x34,
-                    0x37,
-                    0x3a,
-                    0x33,
-                    0x34,
-                    0x03,
-                    0x00,
-                    0x44,
-                    0x00,
-                    0x08,
-                    0x02,
-                    0x00,
-                    0x01,
-                    0x36,
-                    0x00,
-                    0x00,
-                    0x01,
-                    0xc1,
-                    0xc8,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x54,
-                    0x01,
-                    0x00,
-                    0x00,
-                    0x14,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x0b,
-                    0x00,
-                    0x01,
-                    0x00,
-                    0x06,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                ];
-
-                // If this is a bluetooth gamepad, include the crc
-                if self.config.bus_type == BusType::Bluetooth {
-                    // TODO: Handle bluetooth CRC32
-                }
-
-                data
-            }
-            // Calibration report
-            FEATURE_REPORT_CALIBRATION => {
-                log::debug!("Got report request for calibration");
-                // TODO: Can we define this somewhere as a const?
-                let data = vec![
-                    FEATURE_REPORT_CALIBRATION,
-                    0xff,
-                    0xfc,
-                    0xff,
-                    0xfe,
-                    0xff,
-                    0x83,
-                    0x22,
-                    0x78,
-                    0xdd,
-                    0x92,
-                    0x22,
-                    0x5f,
-                    0xdd,
-                    0x95,
-                    0x22,
-                    0x6d,
-                    0xdd,
-                    0x1c,
-                    0x02,
-                    0x1c,
-                    0x02,
-                    0xf2,
-                    0x1f,
-                    0xed,
-                    0xdf,
-                    0xe3,
-                    0x20,
-                    0xda,
-                    0xe0,
-                    0xee,
-                    0x1f,
-                    0xdf,
-                    0xdf,
-                    0x0b,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                ];
-
-                // If this is a bluetooth gamepad, include the crc
-                if self.config.bus_type == BusType::Bluetooth {
-                    // TODO: Handle bluetooth CRC32
-                }
-
-                data
-            }
-            _ => {
-                let err = format!("Unknown get report request with report number: {report_number}");
-                return Err(err.into());
-            }
-        };
-
-        // Write the report reply to the HIDRAW device
-        if let Err(e) = self.device.write_get_report_reply(id, 0, data) {
-            log::warn!("Failed to write get report reply: {:?}", e);
-            return Err(e.to_string().into());
-        }
-
-        Ok(())
-    }
-
-    /// Destroy the underlying HIDRAW device
-    fn destroy(&mut self) -> Result<usize, std::io::Error> {
-        self.device.destroy()
     }
 }
 

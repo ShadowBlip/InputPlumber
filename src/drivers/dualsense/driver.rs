@@ -22,6 +22,7 @@ pub const INPUT_REPORT_BT: u8 = 0x31;
 pub const INPUT_REPORT_BT_SIZE: usize = 78;
 pub const OUTPUT_REPORT_USB: u8 = 0x02;
 pub const OUTPUT_REPORT_USB_SIZE: usize = 63;
+pub const OUTPUT_REPORT_USB_SHORT_SIZE: usize = 48;
 pub const OUTPUT_REPORT_BT: u8 = 0x31;
 pub const OUTPUT_REPORT_BT_SIZE: usize = 78;
 
