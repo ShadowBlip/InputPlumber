@@ -653,7 +653,7 @@ impl CompositeDevice {
 
                 // If the source device is a hidraw device (i.e. /dev/hidraw0),
                 // then start listening for inputs from that device.
-                SourceDevice::HIDRawDevice(device) => {
+                SourceDevice::HIDRawDevice(mut device) => {
                     let device_id = device.get_id();
                     let source_tx = device.transmitter();
                     self.source_devices.insert(device_id.clone(), source_tx);

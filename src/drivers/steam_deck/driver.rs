@@ -1,15 +1,18 @@
-use std::{error::Error, ffi::CString};
+use std::{error::Error, ffi::CString, fs};
 
 use crate::drivers::steam_deck::hid_report::PackedInputDataReport;
 use hidapi::HidDevice;
-use packed_struct::{types::SizedInteger, PackedStruct};
+use packed_struct::{
+    types::{Integer, SizedInteger},
+    PackedStruct,
+};
 
 use super::{
     event::{
         AccelerometerEvent, AccelerometerInput, AxisEvent, AxisInput, BinaryInput, ButtonEvent,
         Event, TriggerEvent, TriggerInput,
     },
-    hid_report::{PackedMappingsReport, ReportType},
+    hid_report::{PackedHapticPulseReport, PackedMappingsReport, PackedRumbleReport, ReportType},
 };
 
 /// Vendor ID
@@ -62,6 +65,29 @@ impl Driver {
         let events = self.handle_input_report(buf)?;
 
         Ok(events)
+    }
+
+    /// Rumble the gamepad
+    pub fn haptic_rumble(
+        &mut self,
+        intensity: u16,
+        left_speed: u16,
+        right_speed: u16,
+        left_gain: u8,
+        right_gain: u8,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let mut report = PackedRumbleReport::new();
+        report.intensity = Integer::from_primitive(intensity);
+        report.left_speed = Integer::from_primitive(left_speed);
+        report.right_speed = Integer::from_primitive(right_speed);
+        report.left_gain = left_gain;
+        report.right_gain = right_gain;
+
+        // Write the report to the device
+        let buf = report.pack()?;
+        let _bytes_written = self.device.write(&buf)?;
+
+        Ok(())
     }
 
     /// Set lizard mode, which will automatically try to emulate mouse/keyboard

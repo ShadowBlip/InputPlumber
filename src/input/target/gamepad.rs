@@ -143,7 +143,7 @@ impl GenericGamepad {
                     GenericGamepad::spawn_ff_thread(ff_device, tx);
                 }
                 TargetCommand::WriteEvent(event) => {
-                    log::debug!("Got event to emit: {:?}", event);
+                    log::trace!("Got event to emit: {:?}", event);
                     let evdev_events = self.translate_event(event, axes_map.clone());
                     if let Ok(mut dev) = device.lock() {
                         dev.emit(evdev_events.as_slice())?;

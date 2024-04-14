@@ -1,4 +1,5 @@
-//! Reference: https://gitlab.com/open-sd/opensd/-/blob/main/src/opensdd/drivers/gamepad/hid_reports.hpp
+//! Source: https://gitlab.com/open-sd/opensd/-/blob/main/src/opensdd/drivers/gamepad/hid_reports.hpp
+//! Source: https://github.com/torvalds/linux/blob/master/drivers/hid/hid-steam.c
 #![allow(warnings)]
 use packed_struct::prelude::*;
 
@@ -49,10 +50,11 @@ pub enum ReportType {
     GetRegisterDefault = 0x8c,
     SetMode = 0x8d,
     DefaultMouse = 0x8e,
-    ForceFeedback = 0x8f,
+    TriggerHapticPulse = 0x8f,
     RequestCommStatus = 0xb4,
     GetSerial = 0xae,
-    HapticPulse = 0xea,
+    TriggerHapticCommand = 0xea,
+    TriggerRumbleCommand = 0xeb,
 }
 
 pub enum Register {
@@ -375,21 +377,94 @@ impl Default for PackedInputDataReport {
     }
 }
 
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+pub enum Pad {
+    Left = 0,
+    Right = 1,
+    Both = 2,
+}
+
+/*
+ * Send a haptic pulse to the trackpads
+ * Duration and interval are measured in microseconds, count is the number
+ * of pulses to send for duration time with interval microseconds between them
+ * and gain is measured in decibels, ranging from -24 to +6
+ */
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0")]
-pub struct PackedFeedbackReport {
+pub struct PackedHapticPulseReport {
     #[packed_field(bytes = "0")]
     pub report_id: u8,
     #[packed_field(bytes = "1")]
     pub report_size: u8,
-    #[packed_field(bytes = "2")]
-    pub side: u8,
+    #[packed_field(bytes = "2", ty = "enum")]
+    pub side: Pad,
     #[packed_field(bytes = "3..=4", endian = "lsb")]
     pub amplitude: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "5..=6", endian = "lsb")]
     pub period: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "7..=8", endian = "lsb")]
     pub count: Integer<u16, packed_bits::Bits<16>>,
+}
+
+impl PackedHapticPulseReport {
+    pub fn new() -> Self {
+        Self {
+            report_id: ReportType::TriggerHapticPulse as u8,
+            report_size: 9,
+            side: Pad::Both,
+            amplitude: Integer::from_primitive(0),
+            period: Integer::from_primitive(0),
+            count: Integer::from_primitive(0),
+        }
+    }
+}
+
+impl Default for PackedHapticPulseReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0")]
+pub struct PackedRumbleReport {
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+    #[packed_field(bytes = "1")]
+    pub report_size: u8,
+    #[packed_field(bytes = "3..=4", endian = "lsb")]
+    pub intensity: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "5..=6", endian = "lsb")]
+    pub left_speed: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "7..=8", endian = "lsb")]
+    pub right_speed: Integer<u16, packed_bits::Bits<16>>,
+    /// Max gain: 135
+    #[packed_field(bytes = "9")]
+    pub left_gain: u8,
+    /// Max gain: 135
+    #[packed_field(bytes = "10")]
+    pub right_gain: u8,
+}
+
+impl PackedRumbleReport {
+    pub fn new() -> Self {
+        Self {
+            report_id: ReportType::TriggerRumbleCommand as u8,
+            report_size: 9,
+            intensity: Integer::from_primitive(1),
+            left_speed: Integer::from_primitive(0),
+            right_speed: Integer::from_primitive(0),
+            left_gain: 130,
+            right_gain: 130,
+        }
+    }
+}
+
+impl Default for PackedRumbleReport {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
