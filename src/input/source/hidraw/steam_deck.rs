@@ -1,31 +1,50 @@
 //! The Deck implementation has been largly based off of the OpenSD project:
 //! https://gitlab.com/open-sd/opensd/
-use std::{error::Error, thread, time};
+use std::{
+    collections::HashMap,
+    error::Error,
+    thread,
+    time::{self, Duration},
+};
 
+use evdev::{FFEffectData, FFEffectKind};
 use hidapi::DeviceInfo;
-use tokio::sync::broadcast;
+use tokio::sync::{
+    broadcast,
+    mpsc::{self, error::TryRecvError},
+};
 
 use crate::{
-    drivers::steam_deck::{
-        self,
-        driver::{Driver, ACCEL_SCALE},
-        hid_report::LIZARD_SLEEP_SEC,
+    drivers::{
+        dualsense::hid_report::SetStatePackedOutputData,
+        steam_deck::{
+            self,
+            driver::{Driver, ACCEL_SCALE},
+            hid_report::LIZARD_SLEEP_SEC,
+        },
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         composite_device::Command,
         event::{native::NativeEvent, value::InputValue, Event},
+        output_event::OutputEvent,
+        source::SourceCommand,
     },
 };
 
+/// Vendor ID
 pub const VID: u16 = 0x28de;
+/// Product ID
 pub const PID: u16 = 0x1205;
+/// How long to sleep before polling for events.
+const POLL_RATE: Duration = Duration::from_micros(250);
 
 /// Steam Deck Controller implementation of HIDRaw interface
 #[derive(Debug)]
 pub struct DeckController {
     info: DeviceInfo,
     composite_tx: broadcast::Sender<Command>,
+    rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
 }
 
@@ -33,45 +52,24 @@ impl DeckController {
     pub fn new(
         info: DeviceInfo,
         composite_tx: broadcast::Sender<Command>,
+        rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
             info,
             composite_tx,
+            rx: Some(rx),
             device_id,
         }
     }
 
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting Steam Deck Controller driver");
-        let path = self.info.path().to_string_lossy().to_string();
+        let rx = self.rx.take().unwrap();
         let tx = self.composite_tx.clone();
-
-        // Spawn a blocking task to read the events
+        let path = self.info.path().to_string_lossy().to_string();
         let device_path = path.clone();
         let device_id = self.device_id.clone();
-        let task =
-            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut driver = Driver::new(device_path.clone())?;
-                loop {
-                    let events = driver.poll()?;
-                    let native_events = translate_events(events);
-                    for event in native_events {
-                        // Don't send un-implemented events
-                        if matches!(event.as_capability(), Capability::NotImplemented) {
-                            continue;
-                        }
-                        tx.send(Command::ProcessEvent(
-                            device_id.clone(),
-                            Event::Native(event),
-                        ))?;
-                    }
-
-                    // Polling interval is about 4ms so we can sleep a little
-                    let duration = time::Duration::from_micros(250);
-                    thread::sleep(duration);
-                }
-            });
 
         // Spawn a blocking task to handle lizard mode
         let lizard_task =
@@ -87,6 +85,38 @@ impl DeckController {
                 }
             });
 
+        // Spawn a blocking task to read the events
+        let task =
+            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+                let mut output_handler = DeckOutput::new(rx);
+                let mut driver = Driver::new(device_path.clone())?;
+                loop {
+                    let events = driver.poll()?;
+                    let native_events = translate_events(events);
+                    for event in native_events {
+                        // Don't send un-implemented events
+                        if matches!(event.as_capability(), Capability::NotImplemented) {
+                            continue;
+                        }
+                        tx.send(Command::ProcessEvent(
+                            device_id.clone(),
+                            Event::Native(event),
+                        ))?;
+                    }
+
+                    // Receive commands/output events
+                    if let Err(e) = output_handler.receive_commands(&mut driver) {
+                        log::debug!("Error receiving commands: {:?}", e);
+                        break;
+                    }
+
+                    // Polling interval is about 4ms so we can sleep a little
+                    thread::sleep(POLL_RATE);
+                }
+
+                Ok(())
+            });
+
         // Wait for the task to finish
         if let Err(e) = task.await? {
             return Err(e.to_string().into());
@@ -96,6 +126,245 @@ impl DeckController {
         }
 
         log::debug!("Steam Deck Controller driver stopped");
+
+        Ok(())
+    }
+}
+
+/// Manages handling output events and source device commands
+#[derive(Debug)]
+struct DeckOutput {
+    rx: mpsc::Receiver<SourceCommand>,
+    ff_evdev_effects: HashMap<i16, FFEffectData>,
+}
+
+impl DeckOutput {
+    pub fn new(rx: mpsc::Receiver<SourceCommand>) -> Self {
+        Self {
+            rx,
+            ff_evdev_effects: HashMap::new(),
+        }
+    }
+
+    /// Read commands sent to this device from the channel until it is
+    /// empty.
+    fn receive_commands(&mut self, driver: &mut Driver) -> Result<(), Box<dyn Error>> {
+        const MAX_COMMANDS: u8 = 64;
+        let mut commands_processed = 0;
+        loop {
+            match self.rx.try_recv() {
+                Ok(cmd) => match cmd {
+                    SourceCommand::UploadEffect(data, composite_dev) => {
+                        self.upload_ff_effect(data, composite_dev);
+                    }
+                    SourceCommand::EraseEffect(id, composite_dev) => {
+                        self.erase_ff_effect(id, composite_dev);
+                    }
+                    SourceCommand::WriteEvent(event) => {
+                        log::trace!("Received output event: {:?}", event);
+                        match event {
+                            OutputEvent::Evdev(input_event) => {
+                                if let Err(e) = self.process_evdev_ff(driver, input_event) {
+                                    log::error!("Failed to write output event: {:?}", e);
+                                }
+                            }
+                            OutputEvent::DualSense(report) => {
+                                log::debug!("Received DualSense output report");
+                                if report.use_rumble_not_haptics
+                                    || report.enable_improved_rumble_emulation
+                                {
+                                    if let Err(e) = self.process_dualsense_ff(driver, report) {
+                                        log::error!(
+                                            "Failed to process dualsense output report: {:?}",
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                            OutputEvent::Uinput(_) => (),
+                        }
+                    }
+                    SourceCommand::Stop => return Err("Device stopped".into()),
+                },
+                Err(e) => match e {
+                    TryRecvError::Empty => return Ok(()),
+                    TryRecvError::Disconnected => {
+                        log::debug!("Receive channel disconnected");
+                        return Err("Receive channel disconnected".into());
+                    }
+                },
+            };
+
+            commands_processed += 1;
+            if commands_processed >= MAX_COMMANDS {
+                return Ok(());
+            }
+        }
+    }
+
+    /// Returns the next available evdev effect id
+    fn next_ff_effect_id(&self) -> i16 {
+        const MAX: i16 = 2096;
+        let mut i = 0;
+        loop {
+            if !self.ff_evdev_effects.contains_key(&i) {
+                return i;
+            }
+            i += 1;
+            if i > MAX {
+                return -1;
+            }
+        }
+    }
+
+    /// Upload the given effect data to the device and send the result to
+    /// the composite device.
+    fn upload_ff_effect(
+        &mut self,
+        data: evdev::FFEffectData,
+        composite_dev: std::sync::mpsc::Sender<Result<i16, Box<dyn Error + Send + Sync>>>,
+    ) {
+        log::debug!("Uploading FF effect data");
+        let id = self.next_ff_effect_id();
+        if id == -1 {
+            if let Err(e) = composite_dev.send(Err("Maximum FF effects uploaded".into())) {
+                log::error!("Failed to send upload result: {:?}", e);
+            }
+            return;
+        }
+
+        self.ff_evdev_effects.insert(id, data);
+        if let Err(e) = composite_dev.send(Ok(id)) {
+            log::error!("Failed to send upload result: {:?}", e);
+        }
+    }
+
+    /// Erase the effect from the device with the given effect id and send the
+    /// result to the composite device.
+    fn erase_ff_effect(
+        &mut self,
+        id: i16,
+        composite_dev: std::sync::mpsc::Sender<Result<(), Box<dyn Error + Send + Sync>>>,
+    ) {
+        log::debug!("Erasing FF effect data");
+        self.ff_evdev_effects.remove(&id);
+        if let Err(err) = composite_dev.send(Ok(())) {
+            log::error!("Failed to send erase result: {:?}", err);
+        }
+    }
+
+    /// Process evdev force feedback events. Evdev events will send events with
+    /// the effect id set in the 'code' field.
+    fn process_evdev_ff(
+        &self,
+        device: &mut Driver,
+        input_event: evdev::InputEvent,
+    ) -> Result<(), Box<dyn Error>> {
+        // Get the code (effect id) and value of the event
+        let (code, value) =
+            if let evdev::EventSummary::ForceFeedback(_, code, value) = input_event.destructure() {
+                (code, value)
+            } else {
+                log::debug!("Unhandled evdev output event: {:?}", input_event);
+                return Ok(());
+            };
+
+        // Find the effect data for this event
+        let effect_id = code.0 as i16;
+        let Some(effect_data) = self.ff_evdev_effects.get(&effect_id) else {
+            log::warn!("No effect id found: {}", code.0);
+            return Ok(());
+        };
+
+        // The value determines if the effect should be playing or not.
+        if value == 0 {
+            log::trace!("Stopping haptic rumble");
+            if let Err(e) = device.haptic_rumble(0, 0, 0, 0, 0) {
+                log::debug!("Failed to stop haptic rumble: {:?}", e);
+                return Ok(());
+            }
+            return Ok(());
+        }
+
+        // Perform the rumble based on the effect
+        // TODO: handle effect duration, etc.
+        match effect_data.kind {
+            FFEffectKind::Damper => (),
+            FFEffectKind::Inertia => (),
+            FFEffectKind::Constant {
+                level: _,
+                envelope: _,
+            } => (),
+            FFEffectKind::Ramp {
+                start_level: _,
+                end_level: _,
+                envelope: _,
+            } => (),
+            FFEffectKind::Periodic {
+                waveform: _,
+                period: _,
+                magnitude: _,
+                offset: _,
+                phase: _,
+                envelope: _,
+            } => (),
+            FFEffectKind::Spring { condition: _ } => (),
+            FFEffectKind::Friction { condition: _ } => (),
+            FFEffectKind::Rumble {
+                strong_magnitude,
+                weak_magnitude,
+            } => {
+                // Set rumble values based on the effect data
+                let intensity = 0;
+                let left_speed = strong_magnitude;
+                let right_speed = weak_magnitude;
+                let mut left_gain = 130;
+                let mut right_gain = 130;
+                if left_speed == 0 {
+                    left_gain = 0;
+                }
+                if right_speed == 0 {
+                    right_gain = 0;
+                }
+
+                // Do rumble
+                if let Err(e) =
+                    device.haptic_rumble(intensity, left_speed, right_speed, left_gain, right_gain)
+                {
+                    let err = format!("Failed to do haptic rumble: {:?}", e);
+                    return Err(err.into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Process dualsense force feedback output reports
+    fn process_dualsense_ff(
+        &mut self,
+        driver: &mut Driver,
+        report: SetStatePackedOutputData,
+    ) -> Result<(), Box<dyn Error>> {
+        // Set the rumble values based on the DualSense output report
+        let intensity = 0;
+        let left_speed = report.rumble_emulation_left as u16 * 256;
+        let right_speed = report.rumble_emulation_right as u16 * 256;
+        let mut left_gain = 130;
+        let mut right_gain = 130;
+        if left_speed == 0 {
+            left_gain = 0;
+        }
+        if right_speed == 0 {
+            right_gain = 0;
+        }
+
+        if let Err(e) =
+            driver.haptic_rumble(intensity, left_speed, right_speed, left_gain, right_gain)
+        {
+            let err = format!("Failed to do haptic rumble: {:?}", e);
+            return Err(err.into());
+        }
 
         Ok(())
     }

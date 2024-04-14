@@ -96,7 +96,7 @@ pub struct HIDRawDevice {
     info: DeviceInfo,
     composite_tx: broadcast::Sender<Command>,
     tx: mpsc::Sender<SourceCommand>,
-    rx: mpsc::Receiver<SourceCommand>,
+    rx: Option<mpsc::Receiver<SourceCommand>>,
 }
 
 impl HIDRawDevice {
@@ -106,7 +106,7 @@ impl HIDRawDevice {
             info,
             composite_tx,
             tx,
-            rx,
+            rx: Some(rx),
         }
     }
 
@@ -117,12 +117,14 @@ impl HIDRawDevice {
 
     /// Run the source device handler. HIDRaw devices require device-specific
     /// implementations. If one does not exist, an error will be returned.
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         // Run the appropriate HIDRaw driver
         if self.info.vendor_id() == steam_deck::VID && self.info.product_id() == steam_deck::PID {
             log::info!("Detected Steam Deck");
             let tx = self.composite_tx.clone();
-            let driver = steam_deck::DeckController::new(self.info.clone(), tx, self.get_id());
+            let rx = self.rx.take().unwrap();
+            let mut driver =
+                steam_deck::DeckController::new(self.info.clone(), tx, rx, self.get_id());
             driver.run().await?;
         } else if self.info.vendor_id() == drivers::lego::driver::VID
             && (self.info.product_id() == drivers::lego::driver::PID

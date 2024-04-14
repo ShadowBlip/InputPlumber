@@ -140,7 +140,7 @@ dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/release/$(NAME)
 
 .PHONY: dist-ext
 dist-ext: dist/$(NAME).raw ## Create a systemd-sysext extension archive
-dist/$(NAME).raw: dist/$(NAME).tar.gz
+dist/$(NAME).raw: dist/$(NAME).tar.gz $(CACHE_DIR)/libiio $(CACHE_DIR)/libserialport
 	@echo "Building redistributable systemd extension"
 	mkdir -p dist
 	rm -rf dist/$(NAME).raw $(CACHE_DIR)/$(NAME).raw
@@ -151,21 +151,9 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz
 	echo VERSION_ID=$(SYSEXT_VERSION_ID) >> $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
 
 	# Install libserialport in the extension for libiio compatibility in SteamOS
-	rm -rf $(CACHE_DIR)/libserialport*
-	wget https://archlinux.org/packages/extra/x86_64/libserialport/download/ \
-	  -O $(CACHE_DIR)/libserialport.tar.zst
-	zstd -d $(CACHE_DIR)/libserialport.tar.zst
-	mkdir -p $(CACHE_DIR)/libserialport
-	tar xvf $(CACHE_DIR)/libserialport.tar -C $(CACHE_DIR)/libserialport
 	cp -r $(CACHE_DIR)/libserialport/usr/lib/libserialport* $(CACHE_DIR)/$(NAME)/usr/lib
 	
 	@# Install libiio in the extension for SteamOS compatibility
-	rm -rf $(CACHE_DIR)/libiio*
-	wget https://archlinux.org/packages/extra/x86_64/libiio/download/ \
-		-O $(CACHE_DIR)/libiio.tar.zst
-	zstd -d $(CACHE_DIR)/libiio.tar.zst
-	mkdir -p $(CACHE_DIR)/libiio
-	tar xvf $(CACHE_DIR)/libiio.tar -C $(CACHE_DIR)/libiio
 	cp -r $(CACHE_DIR)/libiio/usr/lib/libiio* $(CACHE_DIR)/$(NAME)/usr/lib
 
 	@# Build the extension archive
@@ -173,6 +161,22 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz
 	rm -rf $(CACHE_DIR)/$(NAME)
 	mv $(CACHE_DIR)/$(NAME).raw $@
 	cd dist && sha256sum $(NAME).raw > $(NAME).raw.sha256.txt
+
+$(CACHE_DIR)/libiio:
+	rm -rf $(CACHE_DIR)/libiio*
+	wget https://archlinux.org/packages/extra/x86_64/libiio/download/ \
+		-O $(CACHE_DIR)/libiio.tar.zst
+	zstd -d $(CACHE_DIR)/libiio.tar.zst
+	mkdir -p $(CACHE_DIR)/libiio
+	tar xvf $(CACHE_DIR)/libiio.tar -C $(CACHE_DIR)/libiio
+
+$(CACHE_DIR)/libserialport:
+	rm -rf $(CACHE_DIR)/libserialport*
+	wget https://archlinux.org/packages/extra/x86_64/libserialport/download/ \
+	  -O $(CACHE_DIR)/libserialport.tar.zst
+	zstd -d $(CACHE_DIR)/libserialport.tar.zst
+	mkdir -p $(CACHE_DIR)/libserialport
+	tar xvf $(CACHE_DIR)/libserialport.tar -C $(CACHE_DIR)/libserialport
 
 .PHONY: dbus-xml
 dbus-xml: ## Generate DBus XML spec from running InputPlumber
