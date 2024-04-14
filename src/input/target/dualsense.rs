@@ -307,7 +307,6 @@ impl DualSenseDevice {
                     // UHID_DESTROY.
                     OutputEvent::Stop => {
                         log::debug!("Stop event received");
-                        return Err("HID device was destroyed".into());
                     }
                     // This is sent when the HID device is opened. That is, the data that the HID
                     // device provides is read by some other process. You may ignore this event but
@@ -435,7 +434,7 @@ impl DualSenseDevice {
                     }
                 };
 
-                log::debug!("{}", state);
+                log::trace!("{}", state);
 
                 // Send the output report to the composite device so it can
                 // be processed by source devices.
