@@ -4,7 +4,8 @@ use std::{error::Error, f64::consts::PI, thread};
 use tokio::sync::broadcast;
 
 use crate::{
-    drivers::bmi_imu::{self, driver::Driver},
+    config,
+    drivers::bmi_imu::{self, driver::Driver, info::MountMatrix},
     iio::device::Device,
     input::{
         capability::{Capability, Gamepad},
@@ -18,14 +19,21 @@ use crate::{
 #[allow(clippy::upper_case_acronyms)]
 pub struct IMU {
     info: Device,
+    config: Option<config::IIO>,
     composite_tx: broadcast::Sender<Command>,
     device_id: String,
 }
 
 impl IMU {
-    pub fn new(info: Device, composite_tx: broadcast::Sender<Command>, device_id: String) -> Self {
+    pub fn new(
+        info: Device,
+        config: Option<config::IIO>,
+        composite_tx: broadcast::Sender<Command>,
+        device_id: String,
+    ) -> Self {
         Self {
             info,
+            config,
             composite_tx,
             device_id,
         }
@@ -40,11 +48,27 @@ impl IMU {
         let device_id = self.device_id.clone();
         let tx = self.composite_tx.clone();
 
+        // Override the mount matrix if one is defined in the config
+        let mount_matrix = if let Some(config) = self.config.as_ref() {
+            if let Some(matrix_config) = config.mount_matrix.as_ref() {
+                let matrix = MountMatrix {
+                    x: (matrix_config.x[0], matrix_config.x[1], matrix_config.x[2]),
+                    y: (matrix_config.y[0], matrix_config.y[1], matrix_config.y[2]),
+                    z: (matrix_config.z[0], matrix_config.z[1], matrix_config.z[2]),
+                };
+                Some(matrix)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Spawn a blocking task with the given poll rate to poll the IMU for
         // data.
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let driver = Driver::new(id, name)?;
+                let driver = Driver::new(id, name, mount_matrix)?;
                 loop {
                     let events = driver.poll()?;
                     let native_events = translate_events(events);

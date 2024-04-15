@@ -19,7 +19,11 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub fn new(id: String, name: String) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        id: String,
+        name: String,
+        matrix: Option<MountMatrix>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         log::debug!("Creating BMI IMU driver instance for {name}");
 
         // Create an IIO local context used to query for devices
@@ -34,7 +38,10 @@ impl Driver {
         // Try finding the mount matrix to determine how sensors were mounted inside
         // the device.
         // https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/mount-matrix.txt
-        let mount_matrix = if let Some(mount) = device.find_channel("mount", false) {
+        let mount_matrix = if let Some(matrix) = matrix {
+            // Use the provided mount matrix if it is defined
+            matrix
+        } else if let Some(mount) = device.find_channel("mount", false) {
             // Read from the matrix
             let matrix_str = mount.attr_read_str("matrix")?;
             log::debug!("Found mount matrix: {matrix_str}");

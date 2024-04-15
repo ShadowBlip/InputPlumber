@@ -225,9 +225,51 @@
         },
         "name": {
           "type": "string"
+        },
+        "mount_matrix": {
+          "$ref": "#/definitions/MountMatrix"
         }
       },
       "title": "IIO"
+    },
+    "MountMatrix": {
+      "type": "object",
+      "description": "Custom mount matrix to use to define how sensors are physically mounted",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "description": "Matrix for x value",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        },
+        "y": {
+          "description": "Matrix for y value",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        },
+        "z": {
+          "description": "Matrix for z value",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
     }
   }
 }

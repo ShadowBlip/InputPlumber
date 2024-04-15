@@ -1368,8 +1368,16 @@ impl CompositeDevice {
                 };
             }
             SourceDeviceInfo::IIODeviceInfo(info) => {
+                // Get any defined config for the IIO device
+                let config =
+                    if let Some(device_config) = self.config.get_matching_device(&device_info) {
+                        device_config.iio
+                    } else {
+                        None
+                    };
+
                 log::debug!("Adding source device: {:?}", info);
-                let device = source::iio::IIODevice::new(info, self.tx.clone());
+                let device = source::iio::IIODevice::new(info, config, self.tx.clone());
 
                 // Get the capabilities of the source device.
                 let capabilities = device.get_capabilities()?;

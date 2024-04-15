@@ -287,6 +287,16 @@ pub struct Hidraw {
 pub struct IIO {
     pub id: Option<String>,
     pub name: Option<String>,
+    pub mount_matrix: Option<MountMatrix>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct MountMatrix {
+    pub x: [f64; 3],
+    pub y: [f64; 3],
+    pub z: [f64; 3],
 }
 
 /// Defines a combined device
