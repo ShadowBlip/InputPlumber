@@ -8,6 +8,7 @@ use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::{
+    config,
     constants::BUS_PREFIX,
     iio::device::Device,
     input::{capability::Capability, composite_device::Command},
@@ -62,16 +63,22 @@ pub fn get_dbus_path(id: String) -> String {
 #[derive(Debug)]
 pub struct IIODevice {
     info: Device,
+    config: Option<config::IIO>,
     composite_tx: broadcast::Sender<Command>,
     tx: mpsc::Sender<SourceCommand>,
     rx: mpsc::Receiver<SourceCommand>,
 }
 
 impl IIODevice {
-    pub fn new(info: Device, composite_tx: broadcast::Sender<Command>) -> Self {
+    pub fn new(
+        info: Device,
+        config: Option<config::IIO>,
+        composite_tx: broadcast::Sender<Command>,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
             info,
+            config,
             composite_tx,
             tx,
             rx,
@@ -112,7 +119,8 @@ impl IIODevice {
         if glob_match("{i2c-BMI*,display_gyro,bmi*-imu}", name.as_str()) {
             log::info!("Detected BMI IMU: {name}");
             let tx = self.composite_tx.clone();
-            let driver = bmi_imu::IMU::new(self.info.clone(), tx, self.get_id());
+            let driver =
+                bmi_imu::IMU::new(self.info.clone(), self.config.clone(), tx, self.get_id());
             driver.run().await?;
         } else {
             return Err(format!("Unsupported IIO device: {name}").into());
