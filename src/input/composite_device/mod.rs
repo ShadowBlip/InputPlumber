@@ -745,7 +745,24 @@ impl CompositeDevice {
         // Handle any output events that need to upload FF effect data
         if let OutputEvent::Uinput(uinput) = event.borrow() {
             match uinput {
-                UinputOutputEvent::FFUpload(data, target_dev) => {
+                UinputOutputEvent::FFUpload(id, data, target_dev) => {
+                    // If this effect was already uploaded, just return the id
+                    // back to the target device and inform all source devices
+                    // to update the effect with the given data.
+                    if let Some(source_effect_ids) = self.ff_effect_id_source_map.get(id) {
+                        for (source_id, source_effect_id) in source_effect_ids.iter() {
+                            let Some(source) = self.source_devices.get(source_id) else {
+                                continue;
+                            };
+                            log::debug!("Updating effect {source_effect_id} from {source_id}");
+                            source
+                                .send(SourceCommand::UpdateEffect(*source_effect_id, *data))
+                                .await?;
+                        }
+                        target_dev.send(Some(*id))?;
+                        return Ok(());
+                    }
+
                     // Upload the effect data to the source devices
                     let mut source_effect_ids = HashMap::new();
                     for (source_id, source) in self.source_devices.iter() {

@@ -37,7 +37,7 @@ impl OutputEvent {
                 evdev::EventSummary::Other(_, _, _) => OutputCapability::NotImplemented,
             },
             OutputEvent::Uinput(uinput) => match uinput {
-                UinputOutputEvent::FFUpload(_, _) => OutputCapability::ForceFeedbackUpload,
+                UinputOutputEvent::FFUpload(_, _, _) => OutputCapability::ForceFeedbackUpload,
                 UinputOutputEvent::FFErase(_) => OutputCapability::ForceFeedbackErase,
             },
             OutputEvent::DualSense(report) => {
@@ -55,7 +55,7 @@ impl OutputEvent {
 pub enum UinputOutputEvent {
     /// Effect data to upload to a source device and a channel to send back
     /// the effect ID.
-    FFUpload(FFEffectData, Sender<Option<i16>>),
+    FFUpload(i16, FFEffectData, Sender<Option<i16>>),
     /// Effect id to erase
     FFErase(u32),
 }

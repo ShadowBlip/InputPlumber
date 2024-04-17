@@ -25,6 +25,7 @@ pub enum SourceCommand {
         FFEffectData,
         Sender<Result<i16, Box<dyn Error + Send + Sync>>>,
     ),
+    UpdateEffect(i16, FFEffectData),
     EraseEffect(i16, Sender<Result<(), Box<dyn Error + Send + Sync>>>),
     Stop,
 }

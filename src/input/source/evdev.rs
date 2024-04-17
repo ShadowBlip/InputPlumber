@@ -253,6 +253,9 @@ impl EventDevice {
                     SourceCommand::UploadEffect(data, composite_dev) => {
                         self.upload_ff_effect(device, data, composite_dev);
                     }
+                    SourceCommand::UpdateEffect(effect_id, data) => {
+                        self.update_ff_effect(effect_id, data);
+                    }
                     SourceCommand::EraseEffect(id, composite_dev) => {
                         self.erase_ff_effect(id, composite_dev);
                     }
@@ -334,6 +337,19 @@ impl EventDevice {
         };
         if let Err(err) = res {
             log::error!("Failed to send upload result: {:?}", err);
+        }
+    }
+
+    /// Update the given effect with the given effect data.
+    fn update_ff_effect(&mut self, effect_id: i16, data: FFEffectData) {
+        log::debug!("Update FF effect {effect_id}");
+        let Some(effect) = self.ff_effects.get_mut(&effect_id) else {
+            log::warn!("Unable to find existing FF effect with id {effect_id}");
+            return;
+        };
+
+        if let Err(e) = effect.update(data) {
+            log::warn!("Failed to update effect with id {effect_id}: {:?}", e);
         }
     }
 
