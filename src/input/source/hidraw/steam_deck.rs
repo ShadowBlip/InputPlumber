@@ -157,6 +157,9 @@ impl DeckOutput {
                     SourceCommand::UploadEffect(data, composite_dev) => {
                         self.upload_ff_effect(data, composite_dev);
                     }
+                    SourceCommand::UpdateEffect(id, data) => {
+                        self.update_ff_effect(id, data);
+                    }
                     SourceCommand::EraseEffect(id, composite_dev) => {
                         self.erase_ff_effect(id, composite_dev);
                     }
@@ -237,6 +240,12 @@ impl DeckOutput {
         if let Err(e) = composite_dev.send(Ok(id)) {
             log::error!("Failed to send upload result: {:?}", e);
         }
+    }
+
+    /// Update the effect with the given id using the given effect data.
+    fn update_ff_effect(&mut self, id: i16, data: FFEffectData) {
+        log::debug!("Updating FF effect data with id {id}");
+        self.ff_evdev_effects.insert(id, data);
     }
 
     /// Erase the effect from the device with the given effect id and send the

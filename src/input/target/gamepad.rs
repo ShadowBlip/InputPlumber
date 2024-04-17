@@ -327,14 +327,18 @@ impl GenericGamepad {
                         .lock()
                         .map_err(|e| e.to_string())?
                         .process_ff_upload(event)?;
+                    let effect_id = event.effect_id();
 
-                    log::debug!("Upload effect: {:?}", event.effect());
+                    log::debug!("Upload effect: {:?} with id {}", event.effect(), effect_id);
 
                     // Send the effect data to be uploaded to the device and wait
                     // for an effect ID to be generated.
                     let (tx, rx) = std::sync::mpsc::channel::<Option<i16>>();
-                    let upload =
-                        OutputEvent::Uinput(UinputOutputEvent::FFUpload(event.effect(), tx));
+                    let upload = OutputEvent::Uinput(UinputOutputEvent::FFUpload(
+                        effect_id,
+                        event.effect(),
+                        tx,
+                    ));
                     if let Err(e) = composite_dev.send(Command::ProcessOutputEvent(upload)) {
                         event.set_retval(-1);
                         return Err(e.into());
