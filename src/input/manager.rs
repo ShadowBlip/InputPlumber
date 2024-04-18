@@ -1087,105 +1087,108 @@ impl Manager {
         let (watcher_tx, mut watcher_rx) = mpsc::channel(BUFFER_SIZE);
 
         // Start watcher thread to listen for hidraw device changes
-        let tx = watcher_tx.clone();
-        tokio::task::spawn_blocking(move || {
-            log::debug!("Started watcher thread");
-            watcher::watch(DEV_PATH.into(), tx)
-        });
+        if std::path::Path::new(DEV_PATH).exists() {
+            let tx = watcher_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                log::debug!("Started watcher thread");
+                watcher::watch(DEV_PATH.into(), tx)
+            });
+            log::debug!("Performing initial input device discovery");
+            // Perform an initial hidraw device discovery
+            let paths = std::fs::read_dir(DEV_PATH)?;
+            for entry in paths {
+                if let Err(e) = entry {
+                    log::warn!("Unable to read from directory: {:?}", e);
+                    continue;
+                }
+                let path = entry.unwrap().file_name();
+                let path = path.into_string().ok();
+                let Some(path) = path else {
+                    continue;
+                };
+                if !path.starts_with("hidraw") {
+                    continue;
+                }
+                log::debug!("Discovered hidraw device: {:?}", path);
+                let result = watcher_tx
+                    .send(watcher::WatchEvent::Create {
+                        name: path,
+                        base_path: DEV_PATH.into(),
+                    })
+                    .await;
+                if let Err(e) = result {
+                    log::error!("Unable to send command: {:?}", e);
+                }
+            }
+        }
 
         // Start watcher thread to listen for event device changes
-        let tx = watcher_tx.clone();
-        tokio::task::spawn_blocking(move || {
-            log::debug!("Started watcher thread");
-            watcher::watch(INPUT_PATH.into(), tx)
-        });
+        if std::path::Path::new(INPUT_PATH).exists() {
+            let tx = watcher_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                log::debug!("Started watcher thread");
+                watcher::watch(INPUT_PATH.into(), tx)
+            });
+            // Perform an initial event device discovery
+            let paths = std::fs::read_dir(INPUT_PATH)?;
+            for entry in paths {
+                if let Err(e) = entry {
+                    log::warn!("Unable to read from directory: {:?}", e);
+                    continue;
+                }
+                let path = entry.unwrap().file_name();
+                let path = path.into_string().ok();
+                let Some(path) = path else {
+                    continue;
+                };
+                if !path.starts_with("event") {
+                    continue;
+                }
+                log::debug!("Discovered event device: {:?}", path);
+                let result = watcher_tx
+                    .send(watcher::WatchEvent::Create {
+                        name: path,
+                        base_path: INPUT_PATH.into(),
+                    })
+                    .await;
+                if let Err(e) = result {
+                    log::error!("Unable to send command: {:?}", e);
+                }
+            }
+        }
 
         // Start watcher thread to listen for iio device changes
-        let tx = watcher_tx.clone();
-        tokio::task::spawn_blocking(move || {
-            log::debug!("Started watcher thread");
-            watcher::watch(IIO_PATH.into(), tx)
-        });
+        if std::path::Path::new(IIO_PATH).exists() {
+            let tx = watcher_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                log::debug!("Started watcher thread");
+                watcher::watch(IIO_PATH.into(), tx)
+            });
 
-        log::debug!("Performing initial input device discovery");
-        // Perform an initial hidraw device discovery
-        let paths = std::fs::read_dir(DEV_PATH)?;
-        for entry in paths {
-            if let Err(e) = entry {
-                log::warn!("Unable to read from directory: {:?}", e);
-                continue;
-            }
-            let path = entry.unwrap().file_name();
-            let path = path.into_string().ok();
-            let Some(path) = path else {
-                continue;
-            };
-            if !path.starts_with("hidraw") {
-                continue;
-            }
-            log::debug!("Discovered hidraw device: {:?}", path);
-            let result = watcher_tx
-                .send(watcher::WatchEvent::Create {
-                    name: path,
-                    base_path: DEV_PATH.into(),
-                })
-                .await;
-            if let Err(e) = result {
-                log::error!("Unable to send command: {:?}", e);
+            // Perform an initial iio device discovery
+            let paths = std::fs::read_dir(IIO_PATH)?;
+            for entry in paths {
+                if let Err(e) = entry {
+                    log::warn!("Unable to read from directory: {:?}", e);
+                    continue;
+                }
+                let path = entry.unwrap().file_name();
+                let path = path.into_string().ok();
+                let Some(path) = path else {
+                    continue;
+                };
+                log::debug!("Discovered iio device: {:?}", path);
+                let result = watcher_tx
+                    .send(watcher::WatchEvent::Create {
+                        name: path,
+                        base_path: IIO_PATH.into(),
+                    })
+                    .await;
+                if let Err(e) = result {
+                    log::error!("Unable to send command: {:?}", e);
+                }
             }
         }
-
-        // Perform an initial event device discovery
-        let paths = std::fs::read_dir(INPUT_PATH)?;
-        for entry in paths {
-            if let Err(e) = entry {
-                log::warn!("Unable to read from directory: {:?}", e);
-                continue;
-            }
-            let path = entry.unwrap().file_name();
-            let path = path.into_string().ok();
-            let Some(path) = path else {
-                continue;
-            };
-            if !path.starts_with("event") {
-                continue;
-            }
-            log::debug!("Discovered event device: {:?}", path);
-            let result = watcher_tx
-                .send(watcher::WatchEvent::Create {
-                    name: path,
-                    base_path: INPUT_PATH.into(),
-                })
-                .await;
-            if let Err(e) = result {
-                log::error!("Unable to send command: {:?}", e);
-            }
-        }
-
-        // Perform an initial iio device discovery
-        let paths = std::fs::read_dir(IIO_PATH)?;
-        for entry in paths {
-            if let Err(e) = entry {
-                log::warn!("Unable to read from directory: {:?}", e);
-                continue;
-            }
-            let path = entry.unwrap().file_name();
-            let path = path.into_string().ok();
-            let Some(path) = path else {
-                continue;
-            };
-            log::debug!("Discovered iio device: {:?}", path);
-            let result = watcher_tx
-                .send(watcher::WatchEvent::Create {
-                    name: path,
-                    base_path: IIO_PATH.into(),
-                })
-                .await;
-            if let Err(e) = result {
-                log::error!("Unable to send command: {:?}", e);
-            }
-        }
-
         log::debug!("Initial input device discovery complete");
 
         // Start a task to dispatch filesystem watch events to the `run()` loop

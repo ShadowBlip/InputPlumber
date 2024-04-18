@@ -13,10 +13,16 @@ pub enum WatchEvent {
 pub fn watch(path: String, tx: Sender<WatchEvent>) {
     let mut inotify = Inotify::init().expect("Failed to initialize inotify");
 
-    inotify
+    if let Err(e) = inotify
         .watches()
         .add(path.clone(), WatchMask::CREATE | WatchMask::DELETE)
-        .expect("Failed to add inotify watch");
+    {
+        log::error!(
+            "Unable to add inotify wather for path: {path}. Got error {:?}",
+            e
+        );
+        return;
+    }
 
     // Listen for watch events
     let mut buffer = [0u8; 4096];
