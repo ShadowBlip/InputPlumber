@@ -39,10 +39,26 @@ impl FromStr for Capability {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+        let parts: Vec<&str> = s.split(":").collect();
+        let Some((part, parts)) = parts.split_first() else {
+            return Err(());
+        };
+        match *part {
             "None" => Ok(Capability::None),
             "NotImplemented" => Ok(Capability::NotImplemented),
             "Sync" => Ok(Capability::Sync),
+            "Gamepad" => Ok(Capability::Gamepad(Gamepad::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "Keyboard" => Ok(Capability::Keyboard(Keyboard::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "Mouse" => Ok(Capability::Mouse(Mouse::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "DBus" => Ok(Capability::DBus(Action::from_str(
+                parts.join(":").as_str(),
+            )?)),
             _ => Err(()),
         }
     }
@@ -173,6 +189,30 @@ impl fmt::Display for Gamepad {
     }
 }
 
+impl FromStr for Gamepad {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(":").collect();
+        let Some((part, parts)) = parts.split_first() else {
+            return Err(());
+        };
+        match *part {
+            "Button" => Ok(Gamepad::Button(GamepadButton::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "Axis" => Ok(Gamepad::Axis(GamepadAxis::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "Trigger" => Ok(Gamepad::Trigger(GamepadTrigger::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "Accelerometer" => Ok(Gamepad::Accelerometer),
+            "Gyro" => Ok(Gamepad::Gyro),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Mouse {
     /// Represents (x, y) relative mouse motion
@@ -186,6 +226,24 @@ impl fmt::Display for Mouse {
         match self {
             Mouse::Motion => write!(f, "Motion"),
             Mouse::Button(_) => write!(f, "Button"),
+        }
+    }
+}
+
+impl FromStr for Mouse {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(":").collect();
+        let Some((part, parts)) = parts.split_first() else {
+            return Err(());
+        };
+        match *part {
+            "Motion" => Ok(Mouse::Motion),
+            "Button" => Ok(Mouse::Button(MouseButton::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            _ => Err(()),
         }
     }
 }
