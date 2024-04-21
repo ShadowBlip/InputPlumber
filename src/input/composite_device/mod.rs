@@ -2,6 +2,7 @@ use std::{
     borrow::Borrow,
     collections::{BTreeSet, HashMap, HashSet},
     error::Error,
+    str::FromStr,
 };
 
 use evdev::InputEvent;
@@ -10,7 +11,11 @@ use tokio::{
     task::JoinSet,
     time::Duration,
 };
-use zbus::{fdo, Connection};
+use zbus::{
+    fdo,
+    zvariant::{self, Value},
+    Connection,
+};
 use zbus_macros::dbus_interface;
 
 use crate::{
@@ -128,6 +133,65 @@ impl DBusInterface {
                 e
             )));
         }
+
+        Ok(())
+    }
+
+    /// Directly write to the composite device's target devices with the given event
+    fn direct_write(&self, event: String, value: zvariant::Value) -> fdo::Result<()> {
+        let cap = Capability::from_str(event.as_str()).map_err(|_| {
+            fdo::Error::Failed(format!(
+                "Failed to parse event string {event} into capability."
+            ))
+        })?;
+
+        let val = match value {
+            zvariant::Value::Bool(v) => InputValue::Bool(v),
+            zvariant::Value::F64(v) => InputValue::Float(v),
+            zvariant::Value::Array(v) => match v.len() {
+                2 => {
+                    let x_val = v.first().unwrap();
+                    let y_val: &Value = v.get(1).unwrap().unwrap();
+                    let x = f64::try_from(x_val).map_err(|_| {
+                        fdo::Error::Failed("Failed to parse x value into float.".to_string())
+                    })?;
+                    let y = f64::try_from(y_val).map_err(|_| {
+                        fdo::Error::Failed("Failed to parse y value into float.".to_string())
+                    })?;
+                    InputValue::Vector2 {
+                        x: Some(x),
+                        y: Some(y),
+                    }
+                }
+                3 => {
+                    let x_val = v.first().unwrap();
+                    let y_val: &Value = v.get(1).unwrap().unwrap();
+                    let z_val: &Value = v.get(2).unwrap().unwrap();
+                    let x = f64::try_from(x_val).map_err(|_| {
+                        fdo::Error::Failed("Failed to parse x value into float.".to_string())
+                    })?;
+                    let y = f64::try_from(y_val).map_err(|_| {
+                        fdo::Error::Failed("Failed to parse y value into float.".to_string())
+                    })?;
+                    let z = f64::try_from(z_val).map_err(|_| {
+                        fdo::Error::Failed("Failed to parse z value into float.".to_string())
+                    })?;
+                    InputValue::Vector3 {
+                        x: Some(x),
+                        y: Some(y),
+                        z: Some(z),
+                    }
+                }
+                _ => InputValue::None,
+            },
+            _ => InputValue::None,
+        };
+
+        let event = NativeEvent::new(cap, val);
+
+        self.tx
+            .send(Command::WriteEvent(event))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
     }
