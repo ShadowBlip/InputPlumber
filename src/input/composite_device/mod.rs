@@ -74,6 +74,7 @@ pub enum Command {
     GetProfileName(mpsc::Sender<String>),
     LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
     WriteEvent(NativeEvent),
+    DirectWriteEvent(NativeEvent),
     HandleEvent(NativeEvent),
     RemoveRecentEvent(Capability),
     Stop,
@@ -190,7 +191,7 @@ impl DBusInterface {
         let event = NativeEvent::new(cap, val);
 
         self.tx
-            .send(Command::WriteEvent(event))
+            .send(Command::DirectWriteEvent(event))
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
@@ -580,6 +581,11 @@ impl CompositeDevice {
                 }
                 Command::WriteEvent(event) => {
                     if let Err(e) = self.write_event(event).await {
+                        log::error!("Failed to write event: {:?}", e);
+                    }
+                }
+                Command::DirectWriteEvent(event) => {
+                    if let Err(e) = self.direct_write_event(event).await {
                         log::error!("Failed to write event: {:?}", e);
                     }
                 }
@@ -1068,6 +1074,43 @@ impl CompositeDevice {
         for (_, target) in &self.target_devices {
             target.send(event.clone()).await?;
         }
+        Ok(())
+    }
+
+    /// Handles writing events that come from the dbus direct_write interface
+    async fn direct_write_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+        // Check to see if the event is in recently translated.
+        // If it is, spawn a task to delay emit the event.
+        let sleep_time = Duration::from_millis(4);
+        let cap = event.as_capability();
+        if self.translated_recent_events.contains(&cap) {
+            log::debug!("Event emitted too quickly. Delaying emission.");
+            let tx = self.tx.clone();
+            tokio::task::spawn(async move {
+                tokio::time::sleep(sleep_time).await;
+                if let Err(e) = tx.send(Command::WriteEvent(event)) {
+                    log::error!("Failed to send delayed event command: {:?}", e);
+                }
+            });
+
+            return Ok(());
+        }
+
+        // Add the event to our list of recently device translated events
+        self.translated_recent_events.insert(event.as_capability());
+
+        // Spawn a task to remove the event from recent translated
+        let tx = self.tx.clone();
+        tokio::task::spawn(async move {
+            tokio::time::sleep(sleep_time).await;
+            if let Err(e) = tx.send(Command::RemoveRecentEvent(cap)) {
+                log::error!("Failed to send remove recent event command: {:?}", e);
+            }
+        });
+
+        log::trace!("Emitting event: {:?}", event);
+        self.write_event(event).await?;
+
         Ok(())
     }
 
