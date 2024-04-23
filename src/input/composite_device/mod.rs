@@ -74,7 +74,8 @@ pub enum Command {
     GetProfileName(mpsc::Sender<String>),
     LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
     WriteEvent(NativeEvent),
-    DirectWriteEvent(NativeEvent),
+    WriteChordEvent(Vec<NativeEvent>),
+    WriteSendEvent(NativeEvent),
     HandleEvent(NativeEvent),
     RemoveRecentEvent(Capability),
     Stop,
@@ -139,7 +140,7 @@ impl DBusInterface {
     }
 
     /// Directly write to the composite device's target devices with the given event
-    fn direct_write(&self, event: String, value: zvariant::Value) -> fdo::Result<()> {
+    fn send_event(&self, event: String, value: zvariant::Value) -> fdo::Result<()> {
         let cap = Capability::from_str(event.as_str()).map_err(|_| {
             fdo::Error::Failed(format!(
                 "Failed to parse event string {event} into capability."
@@ -191,7 +192,51 @@ impl DBusInterface {
         let event = NativeEvent::new(cap, val);
 
         self.tx
-            .send(Command::DirectWriteEvent(event))
+            .send(Command::WriteSendEvent(event))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Directly write to the composite device's target devices with the given button event list
+    fn send_button_chord(&self, mut events: Vec<String>) -> fdo::Result<()> {
+        // Store built native events to send in a command to the CompositeDevice
+        let mut chord: Vec<NativeEvent> = Vec::new();
+
+        // Iterate in the given order for press events
+        for event_str in events.clone() {
+            // Validate the event is valid and create a NativeEvent
+            if event_str.contains("Button") || event_str.starts_with("Keyboard") {
+                let cap = Capability::from_str(event_str.as_str()).map_err(|_| {
+                    fdo::Error::Failed(format!(
+                        "Failed to parse event string {event_str} into capability."
+                    ))
+                })?;
+                let val = InputValue::Bool(true);
+                let event = NativeEvent::new(cap, val);
+                chord.push(event);
+            } else {
+                return Err(fdo::Error::Failed(format!(
+                    "The event '{event_str}' is not a Button capability."
+                )));
+            };
+        }
+        // Reverse the order for up events
+        events = events.into_iter().rev().collect();
+        for event_str in events {
+            // Create a NativeEvent
+            let cap = Capability::from_str(event_str.as_str()).map_err(|_| {
+                fdo::Error::Failed(format!(
+                    "Failed to parse event string {event_str} into capability."
+                ))
+            })?;
+            let val = InputValue::Bool(false);
+            let event = NativeEvent::new(cap, val);
+            chord.push(event);
+        }
+
+        self.tx
+            .send(Command::WriteChordEvent(chord))
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
@@ -584,8 +629,13 @@ impl CompositeDevice {
                         log::error!("Failed to write event: {:?}", e);
                     }
                 }
-                Command::DirectWriteEvent(event) => {
-                    if let Err(e) = self.direct_write_event(event).await {
+                Command::WriteChordEvent(events) => {
+                    if let Err(e) = self.write_chord_events(events).await {
+                        log::error!("Failed to write event: {:?}", e);
+                    }
+                }
+                Command::WriteSendEvent(event) => {
+                    if let Err(e) = self.write_send_event(event).await {
                         log::error!("Failed to write event: {:?}", e);
                     }
                 }
@@ -1077,8 +1127,8 @@ impl CompositeDevice {
         Ok(())
     }
 
-    /// Handles writing events that come from the dbus direct_write interface
-    async fn direct_write_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+    /// Handles writing events that come from the dbus send_event interface
+    async fn write_send_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
         // Check to see if the event is in recently translated.
         // If it is, spawn a task to delay emit the event.
         let sleep_time = Duration::from_millis(4);
@@ -1111,6 +1161,25 @@ impl CompositeDevice {
         log::trace!("Emitting event: {:?}", event);
         self.write_event(event).await?;
 
+        Ok(())
+    }
+
+    // Handles writing chord events that come fron the dbus send_button_chord interface
+    async fn write_chord_events(&self, events: Vec<NativeEvent>) -> Result<(), Box<dyn Error>> {
+        // Track the delay for chord events.
+        let mut sleep_time = 0;
+
+        for event in events {
+            let tx = self.tx.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(sleep_time)).await;
+                if let Err(e) = tx.send(Command::WriteEvent(event)) {
+                    log::error!("Failed to send chord event command: {:?}", e);
+                }
+            });
+            // Increment the sleep time.
+            sleep_time += 80;
+        }
         Ok(())
     }
 
