@@ -78,6 +78,7 @@ pub enum Command {
     WriteSendEvent(NativeEvent),
     HandleEvent(NativeEvent),
     RemoveRecentEvent(Capability),
+    SetInterceptActivation(Vec<Capability>, Capability),
     Stop,
 }
 
@@ -237,6 +238,46 @@ impl DBusInterface {
 
         self.tx
             .send(Command::WriteChordEvent(chord))
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        Ok(())
+    }
+
+    fn set_intercept_activation(
+        &self,
+        activation_events: Vec<String>,
+        target_event: String,
+    ) -> fdo::Result<()> {
+        let mut activation_caps: Vec<Capability> = Vec::new();
+
+        // Iterate in the given order for press events
+        for event_str in activation_events {
+            // Validate the event is valid and create a NativeEvent
+            if event_str.contains("Button") || event_str.starts_with("Keyboard") {
+                let cap = Capability::from_str(event_str.as_str()).map_err(|_| {
+                    fdo::Error::Failed(format!(
+                        "Failed to parse event string {event_str} into capability."
+                    ))
+                })?;
+                activation_caps.push(cap);
+            } else {
+                return Err(fdo::Error::Failed(format!(
+                    "The event '{event_str}' is not a Button capability."
+                )));
+            };
+        }
+        let mut target_cap: Capability = Capability::None;
+        if target_event.contains("Button") || target_event.starts_with("Keyboard") {
+            let cap = Capability::from_str(target_event.as_str()).map_err(|_| {
+                fdo::Error::Failed(format!(
+                    "Failed to parse event string {target_event} into capability."
+                ))
+            })?;
+            target_cap = cap
+        }
+
+        self.tx
+            .send(Command::SetInterceptActivation(activation_caps, target_cap))
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
@@ -430,6 +471,12 @@ pub struct CompositeDevice {
     /// This mapping maps the composite device effect ids to source device effect ids.
     /// E.g. {3: {"evdev://event0": 6, "evdev://event1": 2}}
     ff_effect_id_source_map: HashMap<i16, HashMap<String, i16>>,
+    /// List of intercept mode activation Capabilities
+    intercept_activation_caps: Vec<Capability>,
+    /// Capability to send when intercept mode is activated for the first time.
+    intercept_mode_target_cap: Capability,
+    /// List of currently active events that could trigger intercept mode.
+    intercept_active_inputs: Vec<Capability>,
 }
 
 impl CompositeDevice {
@@ -466,6 +513,11 @@ impl CompositeDevice {
             target_dbus_devices: HashMap::new(),
             ff_effect_ids: (0..64).collect(),
             ff_effect_id_source_map: HashMap::new(),
+            intercept_activation_caps: vec![Capability::Gamepad(Gamepad::Button(
+                GamepadButton::Guide,
+            ))],
+            intercept_mode_target_cap: Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+            intercept_active_inputs: Vec::new(),
         };
 
         // Load the capability map if one was defined
@@ -646,6 +698,9 @@ impl CompositeDevice {
                 }
                 Command::RemoveRecentEvent(cap) => {
                     self.translated_recent_events.remove(&cap);
+                }
+                Command::SetInterceptActivation(activation_caps, target_cap) => {
+                    self.set_intercept_activation(activation_caps, target_cap)
                 }
                 Command::Stop => {
                     log::debug!("Stopping CompositeDevice");
@@ -1050,13 +1105,78 @@ impl CompositeDevice {
             // Process the event depending on the intercept mode
             let mode = self.intercept_mode.clone();
             let cap = event.as_capability();
-            if matches!(mode, InterceptMode::Pass)
-                && cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
+            // Check if we have met the criteria for InterceptMode:Always
+            if matches!(mode, InterceptMode::Pass) && self.intercept_activation_caps.contains(&cap)
             {
-                // Set the intercept mode while the button is pressed
-                if event.pressed() {
-                    log::debug!("Intercepted guide button press");
-                    self.set_intercept_mode(InterceptMode::Always);
+                log::debug!("Found matching intercept event: {:?}", cap);
+                // TODO: This assumes the list is unique. Switch to HashSet
+                if is_pressed {
+                    log::debug!("It is a DOWN event!");
+                    if self.should_hold_intercept_input(&cap) {
+                        if !self.intercept_active_inputs.contains(&cap) {
+                            self.intercept_active_inputs.push(cap.clone());
+
+                            if self.intercept_active_inputs.len()
+                                == self.intercept_activation_caps.len()
+                            {
+                                log::debug!("The length of events matches what are pressed.");
+                                if self.intercept_active_inputs == self.intercept_activation_caps {
+                                    log::debug!("Found activation chord!");
+                                    self.set_intercept_mode(InterceptMode::Always);
+                                    let event = NativeEvent::new(
+                                        self.intercept_mode_target_cap.clone(),
+                                        InputValue::Bool(true),
+                                    );
+                                    let event2 = NativeEvent::new(
+                                        self.intercept_mode_target_cap.clone(),
+                                        InputValue::Bool(false),
+                                    );
+                                    let chord: Vec<NativeEvent> = vec![event, event2];
+                                    self.write_chord_events(chord).await?;
+                                    self.intercept_active_inputs.clear();
+                                } else {
+                                    log::debug!(
+                                    "The events do not match what we want. Sending queued events."
+                                );
+                                    let mut chord: Vec<NativeEvent> = Vec::new();
+                                    for c in self.intercept_active_inputs.clone() {
+                                        let event = NativeEvent::new(c, InputValue::Bool(true));
+                                        chord.push(event)
+                                    }
+                                    for c in self.intercept_active_inputs.clone().into_iter().rev()
+                                    {
+                                        let event = NativeEvent::new(c, InputValue::Bool(false));
+                                        chord.push(event)
+                                    }
+                                    self.write_chord_events(chord).await?;
+                                    self.intercept_active_inputs.clear();
+                                }
+                            };
+
+                            log::debug!("Exit loop.");
+
+                            return Ok(());
+                        } else {
+                            log::debug!("The event is already in the list. Boo!");
+                            return Ok(());
+                        };
+                    }
+                } else {
+                    log::debug!("It is an UP event!");
+                    // We didn't match this
+                    if self.intercept_active_inputs.contains(&cap) {
+                        let index = self
+                            .intercept_active_inputs
+                            .iter()
+                            .position(|r| r == &cap)
+                            .unwrap();
+                        self.intercept_active_inputs.remove(index);
+                        let event = NativeEvent::new(cap.clone(), InputValue::Bool(true));
+                        let event2 = NativeEvent::new(cap, InputValue::Bool(false));
+                        let chord: Vec<NativeEvent> = vec![event, event2];
+                        self.write_chord_events(chord).await?;
+                        continue;
+                    }
                 }
             }
 
@@ -1081,6 +1201,19 @@ impl CompositeDevice {
         Ok(())
     }
 
+    fn should_hold_intercept_input(&self, cap: &Capability) -> bool {
+        let Some(first_cap) = self.intercept_activation_caps.first() else {
+            return false;
+        };
+        if self.intercept_active_inputs.is_empty() && cap == first_cap {
+            return true;
+        }
+        if !self.intercept_active_inputs.is_empty() {
+            return true;
+        }
+        false
+    }
+
     /// Writes the given event to the appropriate target device.
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
         let cap = event.as_capability();
@@ -1098,18 +1231,6 @@ impl CompositeDevice {
         // If the device is in intercept mode, only send events to DBus
         // target devices.
         if matches!(self.intercept_mode, InterceptMode::Always) {
-            let event = TargetCommand::WriteEvent(event);
-            #[allow(clippy::for_kv_map)]
-            for (_, target) in &self.target_dbus_devices {
-                target.send(event.clone()).await?;
-            }
-            return Ok(());
-        }
-
-        // When intercept mode is enabled, send ALL Guide button events over DBus
-        if matches!(self.intercept_mode, InterceptMode::Pass)
-            && cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
-        {
             let event = TargetCommand::WriteEvent(event);
             #[allow(clippy::for_kv_map)]
             for (_, target) in &self.target_dbus_devices {
@@ -1640,5 +1761,14 @@ impl CompositeDevice {
 
         log::debug!("Successfully loaded device profile: {}", profile.name);
         Ok(())
+    }
+
+    fn set_intercept_activation(
+        &mut self,
+        activation_caps: Vec<Capability>,
+        target_cap: Capability,
+    ) {
+        self.intercept_activation_caps = activation_caps;
+        self.intercept_mode_target_cap = target_cap;
     }
 }
