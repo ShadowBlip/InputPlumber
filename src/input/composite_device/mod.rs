@@ -1101,7 +1101,7 @@ impl CompositeDevice {
             }
         }
 
-        for event in events {
+        for mut event in events {
             // Process the event depending on the intercept mode
             let mode = self.intercept_mode.clone();
             let cap = event.as_capability();
@@ -1123,17 +1123,23 @@ impl CompositeDevice {
                                 if self.intercept_active_inputs == self.intercept_activation_caps {
                                     log::debug!("Found activation chord!");
                                     self.set_intercept_mode(InterceptMode::Always);
-                                    let event = NativeEvent::new(
+                                    event = NativeEvent::new(
                                         self.intercept_mode_target_cap.clone(),
                                         InputValue::Bool(true),
                                     );
-                                    let event2 = NativeEvent::new(
-                                        self.intercept_mode_target_cap.clone(),
-                                        InputValue::Bool(false),
-                                    );
-                                    let chord: Vec<NativeEvent> = vec![event, event2];
-                                    self.write_chord_events(chord).await?;
                                     self.intercept_active_inputs.clear();
+                                    // Only handle events manually if the event is different than
+                                    // this target capability. Otherwise we can let the loop handle
+                                    // it normally.
+                                    if cap != self.intercept_mode_target_cap {
+                                        let event2 = NativeEvent::new(
+                                            self.intercept_mode_target_cap.clone(),
+                                            InputValue::Bool(false),
+                                        );
+                                        let chord: Vec<NativeEvent> = vec![event, event2];
+                                        self.write_chord_events(chord).await?;
+                                        return Ok(());
+                                    }
                                 } else {
                                     log::debug!(
                                     "The events do not match what we want. Sending queued events."
@@ -1150,12 +1156,9 @@ impl CompositeDevice {
                                     }
                                     self.write_chord_events(chord).await?;
                                     self.intercept_active_inputs.clear();
+                                    return Ok(());
                                 }
                             };
-
-                            log::debug!("Exit loop.");
-
-                            return Ok(());
                         } else {
                             log::debug!("The event is already in the list. Boo!");
                             return Ok(());
@@ -1221,6 +1224,7 @@ impl CompositeDevice {
         // If this event implements the DBus capability, send the event to DBus devices
         if matches!(cap, Capability::DBus(_)) {
             let event = TargetCommand::WriteEvent(event);
+            log::trace!("Emit dbus event: {:?}", event);
             #[allow(clippy::for_kv_map)]
             for (_, target) in &self.target_dbus_devices {
                 target.send(event.clone()).await?;
@@ -1232,6 +1236,7 @@ impl CompositeDevice {
         // target devices.
         if matches!(self.intercept_mode, InterceptMode::Always) {
             let event = TargetCommand::WriteEvent(event);
+            log::trace!("Emit intercepted event: {:?}", event);
             #[allow(clippy::for_kv_map)]
             for (_, target) in &self.target_dbus_devices {
                 target.send(event.clone()).await?;
@@ -1241,6 +1246,7 @@ impl CompositeDevice {
 
         // TODO: Only write the event to devices that are capabile of handling it
         let event = TargetCommand::WriteEvent(event);
+        log::trace!("Emit passed event: {:?}", event);
         #[allow(clippy::for_kv_map)]
         for (_, target) in &self.target_devices {
             target.send(event.clone()).await?;
@@ -1292,6 +1298,7 @@ impl CompositeDevice {
 
         for event in events {
             let tx = self.tx.clone();
+            log::debug!("Send event {:?} at sleep time {sleep_time}", event);
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(sleep_time)).await;
                 if let Err(e) = tx.send(Command::WriteEvent(event)) {
