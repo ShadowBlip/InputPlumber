@@ -10,6 +10,7 @@ pub enum Action {
     None,
     Guide,
     Quick,
+    Quick2,
     Context,
     Option,
     Select,
@@ -28,6 +29,9 @@ pub enum Action {
     R3,
     VolumeUp,
     VolumeDown,
+    VolumeMute,
+    Keyboard,
+    Screenshot,
 }
 
 impl Action {
@@ -36,6 +40,7 @@ impl Action {
             Action::None => "none",
             Action::Guide => "ui_guide",
             Action::Quick => "ui_quick",
+            Action::Quick2 => "ui_quick2",
             Action::Context => "ui_context",
             Action::Option => "ui_option",
             Action::Select => "ui_select",
@@ -54,6 +59,9 @@ impl Action {
             Action::R3 => "ui_r3",
             Action::VolumeUp => "ui_volume_up",
             Action::VolumeDown => "ui_volume_down",
+            Action::VolumeMute => "ui_volume_mute",
+            Action::Keyboard => "ui_osk",
+            Action::Screenshot => "ui_screenshot",
         }
     }
 
@@ -70,6 +78,7 @@ impl FromStr for Action {
             "none" => Ok(Action::None),
             "ui_guide" => Ok(Action::Guide),
             "ui_quick" => Ok(Action::Quick),
+            "ui_quick2" => Ok(Action::Quick2),
             "ui_context" => Ok(Action::Context),
             "ui_option" => Ok(Action::Option),
             "ui_select" => Ok(Action::Select),
@@ -88,6 +97,9 @@ impl FromStr for Action {
             "ui_r3" => Ok(Action::R3),
             "ui_volume_up" => Ok(Action::VolumeUp),
             "ui_volume_down" => Ok(Action::VolumeDown),
+            "ui_volume_mute" => Ok(Action::VolumeMute),
+            "ui_osk" => Ok(Action::Keyboard),
+            "ui_screenshot" => Ok(Action::Screenshot),
             _ => Err(()),
         }
     }
@@ -151,9 +163,9 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 GamepadButton::Select => vec![Action::Select],
                 GamepadButton::Guide => vec![Action::Guide],
                 GamepadButton::QuickAccess => vec![Action::Quick],
-                GamepadButton::QuickAccess2 => vec![Action::None],
-                GamepadButton::Keyboard => vec![Action::None],
-                GamepadButton::Screenshot => vec![Action::None],
+                GamepadButton::QuickAccess2 => vec![Action::Quick2],
+                GamepadButton::Keyboard => vec![Action::Keyboard],
+                GamepadButton::Screenshot => vec![Action::Screenshot],
                 GamepadButton::DPadUp => vec![Action::Up],
                 GamepadButton::DPadDown => vec![Action::Down],
                 GamepadButton::DPadLeft => vec![Action::Left],
@@ -326,7 +338,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Keyboard::KeyPageDown => vec![Action::None],
             Keyboard::KeyInsert => vec![Action::None],
             Keyboard::KeyDelete => vec![Action::None],
-            Keyboard::KeyMute => vec![Action::None],
+            Keyboard::KeyMute => vec![Action::VolumeMute],
             Keyboard::KeyVolumeDown => vec![Action::VolumeUp],
             Keyboard::KeyVolumeUp => vec![Action::VolumeDown],
             Keyboard::KeyPower => vec![Action::None],
