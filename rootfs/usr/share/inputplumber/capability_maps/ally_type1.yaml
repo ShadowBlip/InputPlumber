@@ -13,20 +13,6 @@ id: aly1
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  #- name: Select
-  #  source_events:
-  #    - gamepad:
-  #        button: Select
-  #  target_event:
-  #    gamepad:
-  #      button: Guide
-  #- name: Start
-  #  source_events:
-  #    - gamepad:
-  #        button: Start
-  #  target_event:
-  #    gamepad:
-  #      button: QuickAccess
   - name: Control Center (Short)
     source_events:
       - keyboard: KeyF16
@@ -40,7 +26,7 @@ mapping:
       - keyboard: KeyDelete
     target_event:
       gamepad:
-        button: Guide # TODO: Add a more specific button
+        button: Keyboard
   - name: Armory Crate (Short)
     source_events:
       - keyboard: KeyProg1
