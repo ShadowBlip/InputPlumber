@@ -66,7 +66,7 @@ pub struct IIODevice {
     config: Option<config::IIO>,
     composite_tx: broadcast::Sender<Command>,
     tx: mpsc::Sender<SourceCommand>,
-    rx: mpsc::Receiver<SourceCommand>,
+    rx: Option<mpsc::Receiver<SourceCommand>>,
 }
 
 impl IIODevice {
@@ -81,7 +81,7 @@ impl IIODevice {
             config,
             composite_tx,
             tx,
-            rx,
+            rx: Some(rx),
         }
     }
 
@@ -109,7 +109,7 @@ impl IIODevice {
     }
 
     /// Run the source IIO device
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         // Run the appropriate IIO driver
         let Some(name) = self.info.name.clone() else {
             return Err("Unable to determine IIO driver because no name was found".into());
@@ -119,8 +119,14 @@ impl IIODevice {
         if glob_match("{i2c-BMI*,display_gyro,bmi*-imu}", name.as_str()) {
             log::info!("Detected BMI IMU: {name}");
             let tx = self.composite_tx.clone();
-            let driver =
-                bmi_imu::IMU::new(self.info.clone(), self.config.clone(), tx, self.get_id());
+            let rx = self.rx.take().unwrap();
+            let mut driver = bmi_imu::IMU::new(
+                self.info.clone(),
+                self.config.clone(),
+                tx,
+                rx,
+                self.get_id(),
+            );
             driver.run().await?;
         } else {
             return Err(format!("Unsupported IIO device: {name}").into());
