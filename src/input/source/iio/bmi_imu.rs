@@ -1,7 +1,10 @@
 use core::time;
 use std::{error::Error, f64::consts::PI, thread};
 
-use tokio::sync::broadcast;
+use tokio::sync::{
+    broadcast,
+    mpsc::{self, error::TryRecvError},
+};
 
 use crate::{
     config,
@@ -11,6 +14,7 @@ use crate::{
         capability::{Capability, Gamepad},
         composite_device::Command,
         event::{native::NativeEvent, value::InputValue, Event},
+        source::SourceCommand,
     },
 };
 
@@ -21,6 +25,7 @@ pub struct IMU {
     info: Device,
     config: Option<config::IIO>,
     composite_tx: broadcast::Sender<Command>,
+    rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
 }
 
@@ -29,17 +34,19 @@ impl IMU {
         info: Device,
         config: Option<config::IIO>,
         composite_tx: broadcast::Sender<Command>,
+        rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
             info,
             config,
             composite_tx,
+            rx: Some(rx),
             device_id,
         }
     }
 
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting BMI IMU driver");
 
         // Get the device id and name for the driver
@@ -47,6 +54,7 @@ impl IMU {
         let name = self.info.name.clone().unwrap_or_default();
         let device_id = self.device_id.clone();
         let tx = self.composite_tx.clone();
+        let mut rx = self.rx.take().unwrap();
 
         // Override the mount matrix if one is defined in the config
         let mount_matrix = if let Some(config) = self.config.as_ref() {
@@ -70,9 +78,11 @@ impl IMU {
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
                 let driver = Driver::new(id, name, mount_matrix)?;
                 loop {
+                    receive_commands(&mut rx)?;
                     let events = driver.poll()?;
                     let native_events = translate_events(events);
                     for event in native_events {
+                        log::trace!("Sending event to CompositeDevice: {:?}", event);
                         // Don't send un-implemented events
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
@@ -91,6 +101,7 @@ impl IMU {
 
         // Wait for the task to finish
         if let Err(e) = task.await? {
+            log::error!("Error running BMI Driver: {:?}", e);
             return Err(e.to_string().into());
         }
 
@@ -126,6 +137,35 @@ fn translate_event(event: bmi_imu::event::Event) -> NativeEvent {
                 z: Some(data.z * (180.0 / PI)),
             };
             NativeEvent::new(cap, value)
+        }
+    }
+}
+
+/// Read commands sent to this device from the channel until it is
+/// empty.
+fn receive_commands(
+    rx: &mut mpsc::Receiver<SourceCommand>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    const MAX_COMMANDS: u8 = 64;
+    let mut commands_processed = 0;
+    loop {
+        match rx.try_recv() {
+            Ok(cmd) => match cmd {
+                SourceCommand::Stop => return Err("Device stopped".into()),
+                _ => {}
+            },
+            Err(e) => match e {
+                TryRecvError::Empty => return Ok(()),
+                TryRecvError::Disconnected => {
+                    log::debug!("Receive channel disconnected");
+                    return Err("Receive channel disconnected".into());
+                }
+            },
+        };
+
+        commands_processed += 1;
+        if commands_processed >= MAX_COMMANDS {
+            return Ok(());
         }
     }
 }

@@ -542,7 +542,7 @@ impl CompositeDevice {
         // Loop and listen for command events
         log::debug!("CompositeDevice started");
         while let Ok(cmd) = self.rx.recv().await {
-            //log::debug!("Received command: {:?}", cmd);
+            log::trace!("Received command: {:?}", cmd);
             match cmd {
                 Command::ProcessEvent(device_id, event) => {
                     if let Err(e) = self.process_event(device_id, event).await {
@@ -791,7 +791,7 @@ impl CompositeDevice {
 
                 // If the source device is an iio device (i.e. /sys/bus/iio/devices/iio:device0),
                 // then start listening for inputs from that device.
-                SourceDevice::IIODevice(device) => {
+                SourceDevice::IIODevice(mut device) => {
                     let device_id = device.get_id();
                     let source_tx = device.transmitter();
                     self.source_devices.insert(device_id.clone(), source_tx);
@@ -823,7 +823,7 @@ impl CompositeDevice {
             log::trace!("Blocking event! {:?}", raw_event);
             return Ok(());
         }
-        log::trace!("Received event: {:?} from {device_id}", raw_event);
+        //log::trace!("Received event: {:?} from {device_id}", raw_event);
 
         // Convert the event into a NativeEvent
         let event: NativeEvent = match raw_event {
@@ -833,7 +833,7 @@ impl CompositeDevice {
             Event::DBus(_) => todo!(),
         };
         let cap = event.as_capability();
-        log::trace!("Event capability: {:?}", cap);
+        //log::trace!("Event capability: {:?}", cap);
 
         // Only send valid events to the target device(s)
         if cap == Capability::NotImplemented {
@@ -860,7 +860,7 @@ impl CompositeDevice {
 
     /// Process a single output event from a target device.
     async fn process_output_event(&mut self, event: OutputEvent) -> Result<(), Box<dyn Error>> {
-        log::trace!("Received output event: {:?}", event);
+        //log::trace!("Received output event: {:?}", event);
 
         // Handle any output events that need to upload FF effect data
         if let OutputEvent::Uinput(uinput) = event.borrow() {
@@ -888,7 +888,10 @@ impl CompositeDevice {
                     for (source_id, source) in self.source_devices.iter() {
                         log::debug!("Uploading effect to {source_id}");
                         let (tx, rx) = std::sync::mpsc::channel();
-                        source.send(SourceCommand::UploadEffect(*data, tx)).await?;
+                        match source.try_send(SourceCommand::UploadEffect(*data, tx)) {
+                            Ok(_) => {}
+                            Err(e) => log::error!("Error sending UploadEffect: {:?}", e),
+                        };
 
                         // Wait for the result of the upload
                         match rx.recv_timeout(Duration::from_secs(1)) {
@@ -1007,14 +1010,26 @@ impl CompositeDevice {
 
                     // Write the FF event to the source device
                     let event = SourceCommand::WriteEvent(output_event);
-                    source.send(event).await?;
+                    match source.try_send(event) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            log::error!("Failed to send Output event to {}. {:?}", source_id, e)
+                        }
+                    };
                     continue;
                 }
             }
 
             let event = SourceCommand::WriteEvent(event.clone());
-            source.send(event.clone()).await?;
+            match source.try_send(event) {
+                Ok(_) => {}
+                Err(e) => {
+                    log::error!("Failed to send Output event to {}. {:?}", source_id, e)
+                }
+            };
         }
+
+        //log::trace!("Finished processing output events.");
 
         Ok(())
     }
@@ -1158,7 +1173,7 @@ impl CompositeDevice {
             }
         });
 
-        log::trace!("Emitting event: {:?}", event);
+        //log::trace!("Emitting event: {:?}", event);
         self.write_event(event).await?;
 
         Ok(())
