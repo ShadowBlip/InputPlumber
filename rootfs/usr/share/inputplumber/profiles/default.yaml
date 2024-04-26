@@ -51,3 +51,21 @@ mapping:
     target_events:
       - gamepad:
           button: RightStick
+  - name: Keyboard
+    source_event:
+      gamepad:
+        button: Keyboard
+    target_events:
+      - gamepad:
+          button: Guide
+      - gamepad:
+          button: North
+  - name: QuickAccess2
+    source_event:
+      gamepad:
+        button: QuickAccess2
+    target_events:
+      - gamepad:
+          button: Guide
+      - gamepad:
+          button: East
