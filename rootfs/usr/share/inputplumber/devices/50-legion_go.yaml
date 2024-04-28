@@ -68,6 +68,12 @@ source_devices:
       vendor_id: "17ef"
       product_id: "6185"
       name: "Legion-Controller 1-D6 Mouse"
+  - group: imu
+    iio:
+      name: accel_3d
+  - group: imu
+    iio:
+      name: gyro_3d
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
