@@ -25,12 +25,15 @@ source_devices:
       phys_path: usb-0000:73:00.3-4.1/input0
   - group: keyboard
     evdev:
-      name:   Mouse for Windows
+      name: Mouse for Windows
       phys_path: usb-0000:73:00.3-4.2/input0
+  - group: imu
+    iio:
+      name: i2c-BMI0160:00
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - gamepad
+  - ds5-edge
   - mouse
   - keyboard
 

@@ -1,4 +1,4 @@
-pub mod bmi_imu;
+pub mod iio_imu;
 
 use std::error::Error;
 
@@ -115,12 +115,15 @@ impl IIODevice {
             return Err("Unable to determine IIO driver because no name was found".into());
         };
 
-        // BMI Driver
-        if glob_match("{i2c-BMI*,accel-display,bmi*-imu}", name.as_str()) {
-            log::info!("Detected BMI IMU: {name}");
+        // IIO IMU Driver
+        if glob_match(
+            "{i2c-BMI*,accel-display,bmi*-imu,gyro_3d,accel_3d}",
+            name.as_str(),
+        ) {
+            log::info!("Detected IMU: {name}");
             let tx = self.composite_tx.clone();
             let rx = self.rx.take().unwrap();
-            let mut driver = bmi_imu::IMU::new(
+            let mut driver = iio_imu::IMU::new(
                 self.info.clone(),
                 self.config.clone(),
                 tx,

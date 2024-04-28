@@ -8,7 +8,7 @@ use tokio::sync::{
 
 use crate::{
     config,
-    drivers::bmi_imu::{self, driver::Driver, info::MountMatrix},
+    drivers::iio_imu::{self, driver::Driver, info::MountMatrix},
     iio::device::Device,
     input::{
         capability::{Capability, Gamepad},
@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-/// BMI IMU implementation of IIO interface
+/// IIO IMU implementation of IIO interface
 #[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
 pub struct IMU {
@@ -47,7 +47,7 @@ impl IMU {
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting BMI IMU driver");
+        log::debug!("Starting IIO IMU driver");
 
         // Get the device id and name for the driver
         let id = self.info.id.clone().unwrap_or_default();
@@ -101,25 +101,25 @@ impl IMU {
 
         // Wait for the task to finish
         if let Err(e) = task.await? {
-            log::error!("Error running BMI Driver: {:?}", e);
+            log::error!("Error running IIO Driver: {:?}", e);
             return Err(e.to_string().into());
         }
 
-        log::debug!("BMI IMU driver stopped");
+        log::debug!("IIO IMU driver stopped");
 
         Ok(())
     }
 }
 
 /// Translate the given driver events into native events
-fn translate_events(events: Vec<bmi_imu::event::Event>) -> Vec<NativeEvent> {
+fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {
     events.into_iter().map(translate_event).collect()
 }
 
 /// Translate the given driver event into a native event
-fn translate_event(event: bmi_imu::event::Event) -> NativeEvent {
+fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
     match event {
-        bmi_imu::event::Event::Accelerometer(data) => {
+        iio_imu::event::Event::Accelerometer(data) => {
             let cap = Capability::Gamepad(Gamepad::Accelerometer);
             let value = InputValue::Vector3 {
                 x: Some(data.x),
@@ -128,7 +128,7 @@ fn translate_event(event: bmi_imu::event::Event) -> NativeEvent {
             };
             NativeEvent::new(cap, value)
         }
-        bmi_imu::event::Event::Gyro(data) => {
+        iio_imu::event::Event::Gyro(data) => {
             // Translate gyro values into the expected units of degrees per sec
             let cap = Capability::Gamepad(Gamepad::Gyro);
             let value = InputValue::Vector3 {

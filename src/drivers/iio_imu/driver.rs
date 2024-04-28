@@ -2,14 +2,14 @@ use std::{collections::HashMap, error::Error};
 
 use industrial_io::{Channel, ChannelType, Device};
 
-use crate::drivers::bmi_imu::info::MountMatrix;
+use crate::drivers::iio_imu::info::MountMatrix;
 
 use super::{
     event::{AxisData, Event},
     info::AxisInfo,
 };
 
-/// Driver for reading BMI IMU data
+/// Driver for reading IIO IMU data
 pub struct Driver {
     mount_matrix: MountMatrix,
     accel: HashMap<String, Channel>,
@@ -24,7 +24,7 @@ impl Driver {
         name: String,
         matrix: Option<MountMatrix>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        log::debug!("Creating BMI IMU driver instance for {name}");
+        log::debug!("Creating IIO IMU driver instance for {name}");
 
         // Create an IIO local context used to query for devices
         let ctx = industrial_io::context::Context::new()?;
