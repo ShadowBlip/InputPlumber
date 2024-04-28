@@ -6,17 +6,16 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: AYANEO AIR Plus
+name: AYANEO Slide
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: SLIDE 
+      product_name: SLIDE
       sys_vendor: AYANEO
-  
-  
+
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
@@ -28,10 +27,13 @@ source_devices:
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
+  - group: imu
+    iio:
+      name: i2c-BMI0160:00
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - gamepad
+  - ds5
   - mouse
   - keyboard
 

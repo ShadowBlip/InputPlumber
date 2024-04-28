@@ -18,13 +18,7 @@ matches:
   - dmi_data:
       product_name: GEEK 1S
       sys_vendor: AYANEO
-  - dmi_data:
-      product_name: AIR 1S
-      sys_vendor: AYANEO
-  - dmi_data:
-      product_name: AIR 1S Limited
-      sys_vendor: AYANEO
-  
+
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
@@ -36,10 +30,13 @@ source_devices:
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
+  - group: imu
+    iio:
+      name: i2c-BMI0160:00
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - gamepad
+  - ds5
   - mouse
   - keyboard
 
