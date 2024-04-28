@@ -6,7 +6,7 @@ pub mod device_test;
 
 pub mod device;
 
-use std::{error::Error, fs};
+use std::{error::Error, fs, path::Path};
 
 use tokio::process::Command;
 
@@ -20,11 +20,18 @@ pub async fn hide_device(path: String) -> Result<(), Box<dyn Error>> {
     let device = get_device(path.clone()).await?;
     let name = device.name.clone();
     let Some(parent) = device.get_parent() else {
-        return Err("Unable to determine parent for device".into())
+        return Err("Unable to determine parent for device".into());
     };
     let subsystem = device.subsystem.clone();
     let Some(match_rule) = device.get_match_rule() else {
-        return Err("Unable to create match rule for device".into())
+        return Err("Unable to create match rule for device".into());
+    };
+
+    // Find the chmod command to use for hiding
+    let chmod_cmd = if Path::new("/bin/chmod").exists() {
+        "/bin/chmod"
+    } else {
+        "/usr/bin/chmod"
     };
 
     // Create a udev rule to hide the device
@@ -34,7 +41,7 @@ pub async fn hide_device(path: String) -> Result<(), Box<dyn Error>> {
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
-KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="/bin/chmod 000 {path}"
+KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 {path}"
 LABEL="inputplumber_end"
 "#
     );
@@ -56,7 +63,7 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
     let device = get_device(path.clone()).await?;
     let name = device.name.clone();
     let Some(parent) = device.get_parent() else {
-        return Err("Unable to determine parent for device".into())
+        return Err("Unable to determine parent for device".into());
     };
     let rule_path = format!("{RULES_PREFIX}/96-inputplumber-hide-{name}.rules");
     fs::remove_file(rule_path)?;
