@@ -117,7 +117,7 @@ impl IIODevice {
 
         // IIO IMU Driver
         if glob_match(
-            "{i2c-BMI*,display_gyro,bmi*-imu,gyro_3d,accel_3d}",
+            "{i2c-BMI*,accel-display,bmi*-imu,gyro_3d,accel_3d}",
             name.as_str(),
         ) {
             log::info!("Detected IMU: {name}");
