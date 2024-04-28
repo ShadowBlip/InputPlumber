@@ -1152,7 +1152,7 @@ impl CompositeDevice {
             }
         }
 
-        for mut event in events {
+        for event in events {
             let cap = event.as_capability();
 
             // Track what is currently active so we can ignore extra events.
@@ -1161,96 +1161,48 @@ impl CompositeDevice {
                 | Capability::NotImplemented
                 | Capability::Sync
                 | Capability::DBus(_) => {}
-                Capability::Gamepad(_) | Capability::Mouse(_) | Capability::Keyboard(_) => {
+                Capability::Keyboard(_) => {
                     if !self.set_active_events(&cap, is_pressed) {
                         continue;
                     }
-                }
-            }
-            // Process the event depending on the intercept mode
-            // Check if we have met the criteria for InterceptMode:Always
-            if intercept && self.intercept_activation_caps.contains(&cap) {
-                log::debug!("Found matching intercept event: {:?}", cap);
-                // TODO: This assumes the list is unique. Switch to HashSet
-                if is_pressed && self.should_hold_intercept_input(&cap) {
-                    // Stop here if this is a repeat event.
-                    if self.intercept_active_inputs.contains(&cap) {
-                        log::debug!("The event is already in the list. Skipping.");
-                        continue;
-                    };
-                    self.intercept_active_inputs.push(cap.clone());
-
-                    if self.intercept_active_inputs.len() != self.intercept_activation_caps.len() {
-                        log::debug!("More events needed to activate intercept mode.");
+                    if !self
+                        .check_intercept_keys(&event, is_pressed, intercept)
+                        .await?
+                    {
                         continue;
                     }
-                    log::debug!("We have enough events to evaluate intercept mode.");
-                    // Clean up the active inputs list.
-                    for c in self.intercept_activation_caps.clone() {
-                        if self.active_inputs.contains(&c) {
-                            log::trace!("Removed inactive capability: {c:?}");
-                            let index = self.active_inputs.iter().position(|r| r == &c).unwrap();
-                            self.active_inputs.remove(index);
+                }
+                Capability::Gamepad(ref t) => match t {
+                    Gamepad::Button(_) => {
+                        if !self.set_active_events(&cap, is_pressed) {
+                            continue;
+                        }
+                        if !self
+                            .check_intercept_keys(&event, is_pressed, intercept)
+                            .await?
+                        {
+                            continue;
                         }
                     }
-                    if self.intercept_active_inputs == self.intercept_activation_caps {
-                        log::debug!("Found activation chord!");
-                        self.set_intercept_mode(InterceptMode::Always);
-                        event = NativeEvent::new(
-                            self.intercept_mode_target_cap.clone(),
-                            InputValue::Bool(true),
-                        );
-                        self.intercept_active_inputs.clear();
-                        // Generate a new chord
-                        let event2 = NativeEvent::new(
-                            self.intercept_mode_target_cap.clone(),
-                            InputValue::Bool(false),
-                        );
-                        let chord: Vec<NativeEvent> = vec![event, event2];
-                        log::trace!("Release new chord: {chord:?}");
-                        self.write_chord_events(chord).await?;
-                        continue;
+                    Gamepad::Axis(_)
+                    | Gamepad::Trigger(_)
+                    | Gamepad::Accelerometer
+                    | Gamepad::Gyro => {}
+                },
+                Capability::Mouse(ref t) => match t {
+                    Mouse::Motion => {}
+                    Mouse::Button(_) => {
+                        if !self.set_active_events(&cap, is_pressed) {
+                            continue;
+                        }
+                        if !self
+                            .check_intercept_keys(&event, is_pressed, intercept)
+                            .await?
+                        {
+                            continue;
+                        }
                     }
-                } else if !is_pressed {
-                    log::debug!("It is an UP event!");
-                    // We didn't match this
-                    if self.intercept_active_inputs.contains(&cap) {
-                        let index = self
-                            .intercept_active_inputs
-                            .iter()
-                            .position(|r| r == &cap)
-                            .unwrap();
-                        self.intercept_active_inputs.remove(index);
-                        let event = NativeEvent::new(cap.clone(), InputValue::Bool(true));
-                        let event2 = NativeEvent::new(cap, InputValue::Bool(false));
-                        let chord: Vec<NativeEvent> = vec![event, event2];
-                        self.write_chord_events(chord).await?;
-                        continue;
-                    }
-                }
-                log::trace!("Keep processing event: {event:?}");
-            } else if !self.intercept_active_inputs.is_empty() {
-                // Handle chords with partial matches.
-                log::debug!("This event is not what we're looking for.");
-                self.intercept_active_inputs.push(cap);
-                let mut chord: Vec<NativeEvent> = Vec::new();
-                for c in self.intercept_active_inputs.clone() {
-                    let event = NativeEvent::new(c.clone(), InputValue::Bool(true));
-                    chord.push(event);
-                    if self.active_inputs.contains(&c) {
-                        log::trace!("Removed inactive capability: {c:?}");
-                        let index = self.active_inputs.iter().position(|r| r == &c).unwrap();
-                        self.active_inputs.remove(index);
-                    }
-                }
-                for c in self.intercept_active_inputs.clone().into_iter().rev() {
-                    let event = NativeEvent::new(c, InputValue::Bool(false));
-                    chord.push(event)
-                }
-                log::trace!("Release new chord: {chord:?}");
-                self.write_chord_events(chord).await?;
-                self.intercept_active_inputs.clear();
-                continue;
+                },
             }
 
             // if this is a chord with no matches to the intercept_active_inputs, add a keypress
@@ -1878,5 +1830,101 @@ impl CompositeDevice {
             self.active_inputs.remove(index);
         }
         true
+    }
+
+    async fn check_intercept_keys(
+        &mut self,
+        event: &NativeEvent,
+        is_pressed: bool,
+        intercept: bool,
+    ) -> Result<bool, Box<dyn Error>> {
+        let cap = event.as_capability();
+        // Process the event depending on the intercept mode
+        // Check if we have met the criteria for InterceptMode:Always
+        if intercept && self.intercept_activation_caps.contains(&cap) {
+            log::debug!("Found matching intercept event: {:?}", cap);
+            // TODO: This assumes the list is unique. Switch to HashSet
+            if is_pressed && self.should_hold_intercept_input(&cap) {
+                // Stop here if this is a repeat event.
+                if self.intercept_active_inputs.contains(&cap) {
+                    log::debug!("The event is already in the list. Skipping.");
+                    return Ok(false);
+                };
+                self.intercept_active_inputs.push(cap.clone());
+
+                if self.intercept_active_inputs.len() != self.intercept_activation_caps.len() {
+                    log::debug!("More events needed to activate intercept mode.");
+                    return Ok(false);
+                }
+                log::debug!("We have enough events to evaluate intercept mode.");
+                // Clean up the active inputs list.
+                for c in self.intercept_activation_caps.clone() {
+                    if self.active_inputs.contains(&c) {
+                        log::trace!("Removed inactive capability: {c:?}");
+                        let index = self.active_inputs.iter().position(|r| r == &c).unwrap();
+                        self.active_inputs.remove(index);
+                    }
+                }
+                if self.intercept_active_inputs == self.intercept_activation_caps {
+                    log::debug!("Found activation chord!");
+                    self.set_intercept_mode(InterceptMode::Always);
+                    let event = NativeEvent::new(
+                        self.intercept_mode_target_cap.clone(),
+                        InputValue::Bool(true),
+                    );
+                    self.intercept_active_inputs.clear();
+                    // Generate a new chord
+                    let event2 = NativeEvent::new(
+                        self.intercept_mode_target_cap.clone(),
+                        InputValue::Bool(false),
+                    );
+                    let chord: Vec<NativeEvent> = vec![event, event2];
+                    log::trace!("Release new chord: {chord:?}");
+                    self.write_chord_events(chord).await?;
+                    return Ok(false);
+                }
+            } else if !is_pressed {
+                log::debug!("It is an UP event!");
+                // We didn't match this
+                if self.intercept_active_inputs.contains(&cap) {
+                    let index = self
+                        .intercept_active_inputs
+                        .iter()
+                        .position(|r| r == &cap)
+                        .unwrap();
+                    self.intercept_active_inputs.remove(index);
+                    let event = NativeEvent::new(cap.clone(), InputValue::Bool(true));
+                    let event2 = NativeEvent::new(cap, InputValue::Bool(false));
+                    let chord: Vec<NativeEvent> = vec![event, event2];
+                    self.write_chord_events(chord).await?;
+                    return Ok(false);
+                }
+            }
+            log::trace!("Keep processing event: {event:?}");
+        } else if !self.intercept_active_inputs.is_empty() {
+            // Handle chords with partial matches.
+            log::debug!("This event is not what we're looking for.");
+            self.intercept_active_inputs.push(cap);
+            let mut chord: Vec<NativeEvent> = Vec::new();
+            for c in self.intercept_active_inputs.clone() {
+                let event = NativeEvent::new(c.clone(), InputValue::Bool(true));
+                chord.push(event);
+                if self.active_inputs.contains(&c) {
+                    log::trace!("Removed inactive capability: {c:?}");
+                    let index = self.active_inputs.iter().position(|r| r == &c).unwrap();
+                    self.active_inputs.remove(index);
+                }
+            }
+            for c in self.intercept_active_inputs.clone().into_iter().rev() {
+                let event = NativeEvent::new(c, InputValue::Bool(false));
+                chord.push(event)
+            }
+            log::trace!("Release new chord: {chord:?}");
+            self.write_chord_events(chord).await?;
+            self.intercept_active_inputs.clear();
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 }

@@ -1252,24 +1252,23 @@ impl Manager {
                             log::warn!("Unable to read from directory: {:?}", e);
                             continue;
                         }
-                        log::debug!("Found path: {entry:?}");
                         let path = entry.unwrap().file_name();
                         let path = path.into_string().ok();
                         let Some(path) = path else {
                             continue;
                         };
-                        log::debug!("Discovered iio device: {:?}", path);
                         if !discovered_paths.contains(&path) {
+                            log::debug!("Discovered iio device: {:?}", path);
+                            discovered_paths.push(path.clone());
                             let result = tx
                                 .send(WatchEvent::Create {
-                                    name: path.clone(),
+                                    name: path,
                                     base_path: IIO_PATH.into(),
                                 })
                                 .await;
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
-                            discovered_paths.push(path)
                         }
                     }
                     tokio::time::sleep(Duration::from_secs(1)).await;
