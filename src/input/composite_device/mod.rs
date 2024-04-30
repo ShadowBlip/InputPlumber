@@ -40,7 +40,7 @@ use crate::{
 use super::{manager::ManagerCommand, output_event::OutputEvent, source::SourceCommand};
 
 /// Size of the command channel buffer for processing input events and commands.
-const BUFFER_SIZE: usize = 8192;
+const BUFFER_SIZE: usize = 16384;
 
 /// The [InterceptMode] defines whether or not inputs should be routed over
 /// DBus instead of to the target devices. This can be used by overlays to
@@ -1270,6 +1270,7 @@ impl CompositeDevice {
             // Track what is currently active so we can ignore extra events.
             match cap {
                 Capability::None
+                | Capability::Touchpad(_)
                 | Capability::NotImplemented
                 | Capability::Sync
                 | Capability::DBus(_) => {}

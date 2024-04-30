@@ -1,4 +1,9 @@
-use std::{error::Error, ffi::CString, u8, vec};
+use std::{
+    error::Error,
+    ffi::CString,
+    time::{Duration, Instant},
+    u8, vec,
+};
 
 use hidapi::HidDevice;
 use packed_struct::{types::SizedInteger, PackedStruct};
@@ -15,52 +20,52 @@ use super::{
     },
 };
 
+// Hardware ID's
 pub const VID: u16 = 0x17ef;
 pub const PID: u16 = 0x6182;
 pub const PID2: u16 = 0x6185;
-
+// Hardware limits
+pub const DINPUT_LEFT_DATA: u8 = 0x07;
+pub const DINPUT_RIGHT_DATA: u8 = 0x08;
+pub const KEYBOARD_TOUCH_DATA: u8 = 0x01;
+pub const MOUSE_FPS_DATA: u8 = 0x02;
+pub const XINPUT_DATA: u8 = 0x04;
+// Input report sizes
 const DINPUT_PACKET_SIZE: usize = 13;
 const XINPUT_PACKET_SIZE: usize = 60;
 const KEYBOARD_PACKET_SIZE: usize = 15;
 const MOUSE_PACKET_SIZE: usize = 7;
 const TOUCHPAD_PACKET_SIZE: usize = 20;
-const HID_TIMEOUT: i32 = 5000;
-
-pub const DINPUT_LEFT_DATA: u8 = 0x07;
-pub const DINPUT_RIGHT_DATA: u8 = 0x08;
-pub const KEYBOARD_TOUCH_DATA: u8 = 0x01;
-pub const MOUSE_FPS_DATA: u8 = 0x02;
-//pub const MOUSE_DATA: u8 = 0x09;
-pub const XINPUT_DATA: u8 = 0x04;
-
+const HID_TIMEOUT: i32 = 10;
 // Input report axis ranges
-// TODO: actual mouse range
-// TODO: ACCEL Left/Right X/Y, Z?
-//pub const GYRO_X_MAX: f64 = 255.0;
-//pub const GYRO_X_MIN: f64 = 0.0;
-//pub const GYRO_Y_MAX: f64 = 255.0;
-//pub const GYRO_Y_MIN: f64 = 0.0;
 pub const MOUSE_WHEEL_MAX: f64 = 120.0;
-//pub const MOUSE_WHEEL_MIN: f64 = -120.0;
 pub const PAD_X_MAX: f64 = 1024.0;
-pub const PAD_X_MIN: f64 = 0.0;
 pub const PAD_Y_MAX: f64 = 1024.0;
-pub const PAD_Y_MIN: f64 = 0.0;
 pub const STICK_X_MAX: f64 = 255.0;
 pub const STICK_X_MIN: f64 = 0.0;
 pub const STICK_Y_MAX: f64 = 255.0;
 pub const STICK_Y_MIN: f64 = 0.0;
 pub const TRIGG_MAX: f64 = 255.0;
-//pub const TRIGG_MIN: f64 = 0.0;
 
 pub struct Driver {
+    /// State for the left detachable controller when in dinput mode
     dinputl_state: Option<DInputDataLeftReport>,
+    /// State for the right detachable controller when in dinput mode
     dinputr_state: Option<DInputDataRightReport>,
+    /// State for the vitrual keyboard device on the left controller in FPS mode
     keyboard_state: Option<KeyboardDataReport>,
+    /// State for the mouse device
     mouse_state: Option<MouseDataReport>,
+    /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport>,
+    /// State for the internal gamepad  controller
     xinput_state: Option<XInputDataReport>,
+    /// HIDRAW device instance
     device: HidDevice,
+    /// Timestamp of the last touch event.
+    last_touch: Instant,
+    /// Whether or not we are detecting a touch event currently.
+    is_touching: bool,
 }
 
 impl Driver {
@@ -82,6 +87,8 @@ impl Driver {
             keyboard_state: None,
             mouse_state: None,
             touchpad_state: None,
+            last_touch: Instant::now(),
+            is_touching: false,
         })
     }
 
@@ -96,15 +103,15 @@ impl Driver {
         //log::trace!("Got Report ID: {report_id}");
         //log::trace!("Got Report Size: {bytes_read}");
 
-        match report_id {
+        let mut events = match report_id {
             DINPUT_LEFT_DATA => {
                 if bytes_read != DINPUT_PACKET_SIZE {
                     return Err("Invalid packet size for Direct Input Data.".into());
                 }
                 // Handle the incoming input report
                 let sized_buf = slice.try_into()?;
-                let events = self.handle_dinputl_report(sized_buf)?;
-                Ok(events)
+
+                self.handle_dinputl_report(sized_buf)?
             }
 
             DINPUT_RIGHT_DATA => {
@@ -113,8 +120,8 @@ impl Driver {
                 }
                 // Handle the incoming input report
                 let sized_buf = slice.try_into()?;
-                let events = self.handle_dinputr_report(sized_buf)?;
-                Ok(events)
+
+                self.handle_dinputr_report(sized_buf)?
             }
 
             KEYBOARD_TOUCH_DATA => {
@@ -125,13 +132,13 @@ impl Driver {
                     }
                     // Handle the incoming input report
                     let sized_buf = slice.try_into()?;
-                    let events = self.handle_touchinput_report(sized_buf)?;
-                    Ok(events)
+
+                    self.handle_touchinput_report(sized_buf)?
                 } else {
                     // Handle the incoming input report
                     let sized_buf = slice.try_into()?;
-                    let events = self.handle_keyboard_report(sized_buf)?;
-                    Ok(events)
+
+                    self.handle_keyboard_report(sized_buf)?
                 }
             }
 
@@ -141,8 +148,8 @@ impl Driver {
                 }
                 // Handle the incoming input report
                 let sized_buf = slice.try_into()?;
-                let events = self.handle_mouseinput_report(sized_buf)?;
-                Ok(events)
+
+                self.handle_mouseinput_report(sized_buf)?
             }
 
             XINPUT_DATA => {
@@ -151,15 +158,22 @@ impl Driver {
                 }
                 // Handle the incoming input report
                 let sized_buf = slice.try_into()?;
-                let events = self.handle_xinput_report(sized_buf)?;
-                Ok(events)
+
+                self.handle_xinput_report(sized_buf)?
             }
             _ => {
                 //log::trace!("Invalid Report ID.");
                 let events = vec![];
-                Ok(events)
+                events
             }
+        };
+
+        if self.is_touching && (self.last_touch.elapsed() > Duration::from_millis(4)) {
+            let event: Event = self.release_touch();
+            events.push(event);
         }
+
+        Ok(events)
     }
     /// Unpacks the buffer into a [DInputDataReport] structure and updates
     /// the internal dinput_state
@@ -346,11 +360,9 @@ impl Driver {
                 })));
             }
             if state.mouse_click != old_state.mouse_click {
-                events.push(Event::MouseButton(MouseButtonEvent::MouseClick(
-                    BinaryInput {
-                        pressed: state.mouse_click,
-                    },
-                )));
+                events.push(Event::MouseButton(MouseButtonEvent::Left(BinaryInput {
+                    pressed: state.mouse_click,
+                })));
             }
             if state.m2 != old_state.m2 {
                 events.push(Event::MouseButton(MouseButtonEvent::M2(BinaryInput {
@@ -412,14 +424,29 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_touch(&self, _old_state: Option<TouchpadDataReport>) -> Vec<Event> {
-        let events = Vec::new();
-        let Some(_) = self.touchpad_state else {
+    fn translate_touch(&mut self, old_state: Option<TouchpadDataReport>) -> Vec<Event> {
+        let mut events = Vec::new();
+        let Some(state) = self.touchpad_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        //if let Some(_) = old_state {}
+        let Some(_) = old_state else {
+            return events;
+        };
+        //// Axis events
+        if !self.is_touching {
+            self.is_touching = true;
+            log::trace!("Started TOUCH event");
+        }
+        events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
+            index: 0,
+            is_touching: true,
+            x: state.touch_x_0,
+            y: state.touch_y_0,
+        })));
+
+        self.last_touch = Instant::now();
         events
     }
 
@@ -594,13 +621,6 @@ impl Driver {
                 })));
             }
 
-            // Axis events
-            if state.touch_x_0 != old_state.touch_x_0 || state.touch_y_0 != old_state.touch_y_0 {
-                events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
-                    x: state.touch_x_0,
-                    y: state.touch_y_0,
-                })));
-            }
             if state.l_stick_x != old_state.l_stick_x || state.l_stick_y != old_state.l_stick_y {
                 events.push(Event::Axis(AxisEvent::LStick(JoyAxisInput {
                     x: state.l_stick_x,
@@ -689,5 +709,16 @@ impl Driver {
         };
 
         events
+    }
+
+    fn release_touch(&mut self) -> Event {
+        log::trace!("Released TOUCH event.");
+        self.is_touching = false;
+        Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
+            index: 0,
+            is_touching: false,
+            x: 0,
+            y: 0,
+        }))
     }
 }

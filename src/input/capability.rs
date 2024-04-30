@@ -19,6 +19,7 @@ pub enum Capability {
     Gamepad(Gamepad),
     Mouse(Mouse),
     Keyboard(Keyboard),
+    Touchpad(Touchpad),
 }
 
 impl fmt::Display for Capability {
@@ -31,6 +32,7 @@ impl fmt::Display for Capability {
             Capability::Mouse(_) => write!(f, "Mouse"),
             Capability::Keyboard(_) => write!(f, "Keyboard"),
             Capability::DBus(_) => write!(f, "DBus"),
+            Capability::Touchpad(_) => write!(f, "Touchpad"),
         }
     }
 }
@@ -354,10 +356,6 @@ pub enum GamepadButton {
     LeftStick,
     /// Touch sensor for left stick
     LeftStickTouch,
-    /// Touch binary sensor for the left touchpad
-    LeftTouchpadTouch,
-    /// Press binary sensor for the left touchpad
-    LeftTouchpadPress,
     /// Right shoulder button, Sony R1, Xbox RB
     RightBumper,
     /// Right top button on AyaNeo devices, inboard of right bumper
@@ -374,10 +372,6 @@ pub enum GamepadButton {
     RightStick,
     /// Touch binary sensor for right stick
     RightStickTouch,
-    /// Touch binary sensor for the right touchpad
-    RightTouchpadTouch,
-    /// Press binary sensor for the right touchpad
-    RightTouchpadPress,
 }
 
 impl fmt::Display for GamepadButton {
@@ -406,8 +400,6 @@ impl fmt::Display for GamepadButton {
             GamepadButton::LeftPaddle3 => write!(f, "LeftPaddle3"),
             GamepadButton::LeftStick => write!(f, "LeftStick"),
             GamepadButton::LeftStickTouch => write!(f, "LeftStickTouch"),
-            GamepadButton::LeftTouchpadTouch => write!(f, "LeftTouchpadTouch"),
-            GamepadButton::LeftTouchpadPress => write!(f, "LeftTouchpadPress"),
             GamepadButton::RightBumper => write!(f, "RightBumper"),
             GamepadButton::RightTop => write!(f, "RightTop"),
             GamepadButton::RightTrigger => write!(f, "RightTrigger"),
@@ -416,8 +408,6 @@ impl fmt::Display for GamepadButton {
             GamepadButton::RightPaddle3 => write!(f, "RightPaddle3"),
             GamepadButton::RightStick => write!(f, "RightStick"),
             GamepadButton::RightStickTouch => write!(f, "RightStickTouch"),
-            GamepadButton::RightTouchpadTouch => write!(f, "RightTouchpadTouch"),
-            GamepadButton::RightTouchpadPress => write!(f, "RightTouchpadPress"),
         }
     }
 }
@@ -450,8 +440,6 @@ impl FromStr for GamepadButton {
             "LeftPaddle3" => Ok(GamepadButton::LeftPaddle3),
             "LeftStick" => Ok(GamepadButton::LeftStick),
             "LeftStickTouch" => Ok(GamepadButton::LeftStickTouch),
-            "LeftTouchpadTouch" => Ok(GamepadButton::LeftTouchpadTouch),
-            "LeftTouchpadPress" => Ok(GamepadButton::LeftTouchpadPress),
             "RightBumper" => Ok(GamepadButton::RightBumper),
             "RightTop" => Ok(GamepadButton::RightTop),
             "RightTrigger" => Ok(GamepadButton::RightTrigger),
@@ -460,8 +448,6 @@ impl FromStr for GamepadButton {
             "RightPaddle3" => Ok(GamepadButton::RightPaddle3),
             "RightStick" => Ok(GamepadButton::RightStick),
             "RightStickTouch" => Ok(GamepadButton::RightStickTouch),
-            "RightTouchpadTouch" => Ok(GamepadButton::RightTouchpadTouch),
-            "RightTouchpadPress" => Ok(GamepadButton::RightTouchpadPress),
             _ => Err(()),
         }
     }
@@ -1044,6 +1030,104 @@ impl FromStr for Keyboard {
             "KeyF23" => Ok(Keyboard::KeyF23),
             "KeyF24" => Ok(Keyboard::KeyF24),
             "KeyProg1" => Ok(Keyboard::KeyProg1),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Touchpad {
+    LeftPad(Touch),
+    RightPad(Touch),
+    CenterPad(Touch),
+}
+
+impl fmt::Display for Touchpad {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Touchpad::LeftPad(_) => write!(f, "LeftPad"),
+            Touchpad::RightPad(_) => write!(f, "RightPad"),
+            Touchpad::CenterPad(_) => write!(f, "CenterPad"),
+        }
+    }
+}
+
+impl FromStr for Touchpad {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        let Some((part, parts)) = parts.split_first() else {
+            return Err(());
+        };
+        match *part {
+            "LeftPad" => Ok(Touchpad::LeftPad(Touch::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "RightPad" => Ok(Touchpad::RightPad(Touch::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "CenterPad" => Ok(Touchpad::CenterPad(Touch::from_str(
+                parts.join(":").as_str(),
+            )?)),
+
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Touch {
+    Motion,
+    Button(TouchButton),
+}
+
+impl fmt::Display for Touch {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Touch::Motion => write!(f, "Motion"),
+            Touch::Button(_) => write!(f, "Button"),
+        }
+    }
+}
+
+impl FromStr for Touch {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        let Some((part, parts)) = parts.split_first() else {
+            return Err(());
+        };
+        match *part {
+            "Motion" => Ok(Touch::Motion),
+            "Button" => Ok(Touch::Button(TouchButton::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum TouchButton {
+    Touch,
+    Press,
+}
+
+impl fmt::Display for TouchButton {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TouchButton::Touch => write!(f, "Touch"),
+            TouchButton::Press => write!(f, "Press"),
+        }
+    }
+}
+
+impl FromStr for TouchButton {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Touch" => Ok(TouchButton::Touch),
+            "Press" => Ok(TouchButton::Press),
             _ => Err(()),
         }
     }

@@ -16,7 +16,9 @@ use crate::{
         report_descriptor::CONTROLLER_DESCRIPTOR,
     },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton},
+        capability::{
+            Capability, Gamepad, GamepadAxis, GamepadButton, Touch, TouchButton, Touchpad,
+        },
         composite_device,
         event::{native::NativeEvent, value::InputValue},
         source::hidraw::steam_deck::CAPABILITIES,
@@ -270,16 +272,12 @@ impl SteamDeckDevice {
                     GamepadButton::LeftPaddle2 => self.state.l5 = event.pressed(),
                     GamepadButton::LeftStick => self.state.l3 = event.pressed(),
                     GamepadButton::LeftStickTouch => self.state.l_stick_touch = event.pressed(),
-                    GamepadButton::LeftTouchpadTouch => self.state.l_pad_touch = event.pressed(),
-                    GamepadButton::LeftTouchpadPress => self.state.l_pad_press = event.pressed(),
                     GamepadButton::RightBumper => self.state.r1 = event.pressed(),
                     GamepadButton::RightTrigger => self.state.r2 = event.pressed(),
                     GamepadButton::RightPaddle1 => self.state.r4 = event.pressed(),
                     GamepadButton::RightPaddle2 => self.state.r5 = event.pressed(),
                     GamepadButton::RightStick => self.state.r3 = event.pressed(),
                     GamepadButton::RightStickTouch => self.state.r_stick_touch = event.pressed(),
-                    GamepadButton::RightTouchpadTouch => self.state.r_pad_touch = event.pressed(),
-                    GamepadButton::RightTouchpadPress => self.state.r_pad_press = event.pressed(),
                     GamepadButton::LeftPaddle3 => (),
                     GamepadButton::RightPaddle3 => (),
                     _ => (),
@@ -300,6 +298,12 @@ impl SteamDeckDevice {
                             }
                         }
                         InputValue::Vector3 { x, y, z } => (),
+                        InputValue::Touch {
+                            index,
+                            is_touching: pressed,
+                            x,
+                            y,
+                        } => todo!(),
                     },
                     GamepadAxis::RightStick => match value {
                         InputValue::None => (),
@@ -316,6 +320,12 @@ impl SteamDeckDevice {
                             }
                         }
                         InputValue::Vector3 { x, y, z } => (),
+                        InputValue::Touch {
+                            index,
+                            is_touching: pressed,
+                            x,
+                            y,
+                        } => (),
                     },
                     GamepadAxis::Hat1 => match value {
                         InputValue::None => (),
@@ -357,7 +367,13 @@ impl SteamDeckDevice {
                                 }
                             }
                         }
-                        InputValue::Vector3 { x, y, z } => (),
+                        InputValue::Vector3 { x: _, y: _, z: _ } => (),
+                        InputValue::Touch {
+                            index: _,
+                            is_touching: _,
+                            x: _,
+                            y: _,
+                        } => (),
                     },
                     GamepadAxis::Hat2 => (),
                     GamepadAxis::Hat3 => (),
@@ -369,6 +385,68 @@ impl SteamDeckDevice {
             },
             Capability::Mouse(_) => (),
             Capability::Keyboard(_) => (),
+            Capability::Touchpad(touch) => match touch {
+                Touchpad::LeftPad(touch_event) => match touch_event {
+                    Touch::Motion => match value {
+                        InputValue::None => (),
+                        InputValue::Bool(_) => (),
+                        InputValue::Float(_) => (),
+                        InputValue::Vector2 { x: _, y: _ } => (),
+                        InputValue::Vector3 { x: _, y: _, z: _ } => (),
+                        InputValue::Touch {
+                            index: _,
+                            is_touching: _,
+                            x,
+                            y,
+                        } => {
+                            if let Some(x) = x {
+                                let value = denormalize_unsigned_value(x, 1.0);
+                                let value = value as i16;
+                                self.state.l_pad_x = Integer::from_primitive(value);
+                            };
+                            if let Some(y) = y {
+                                let value = denormalize_unsigned_value(y, 1.0);
+                                let value = value as i16;
+                                self.state.l_pad_y = Integer::from_primitive(value);
+                            };
+                        }
+                    },
+                    Touch::Button(button) => match button {
+                        TouchButton::Touch => self.state.l_pad_touch = event.pressed(),
+                        TouchButton::Press => self.state.l_pad_press = event.pressed(),
+                    },
+                },
+                Touchpad::RightPad(touch_event) => match touch_event {
+                    Touch::Motion => match value {
+                        InputValue::None => (),
+                        InputValue::Bool(_) => (),
+                        InputValue::Float(_) => (),
+                        InputValue::Vector2 { x: _, y: _ } => (),
+                        InputValue::Vector3 { x: _, y: _, z: _ } => (),
+                        InputValue::Touch {
+                            index: _,
+                            is_touching: _,
+                            x,
+                            y,
+                        } => {
+                            if let Some(x) = x {
+                                let value = denormalize_signed_value(x, 0.0, 1.0);
+                                self.state.r_pad_x = Integer::from_primitive(value);
+                            };
+                            if let Some(y) = y {
+                                let value = denormalize_signed_value(y, 0.0, 1.0);
+                                self.state.r_pad_y = Integer::from_primitive(value);
+                            };
+                        }
+                    },
+                    Touch::Button(button) => match button {
+                        TouchButton::Touch => self.state.r_pad_touch = event.pressed(),
+                        TouchButton::Press => self.state.r_pad_press = event.pressed(),
+                    },
+                },
+                // Treat center pad as a right pad
+                Touchpad::CenterPad(_) => (),
+            },
         };
     }
 }

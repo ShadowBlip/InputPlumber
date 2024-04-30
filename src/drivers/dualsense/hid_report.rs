@@ -38,16 +38,31 @@ pub enum PowerState {
 #[packed_struct(bit_numbering = "msb0", size_bytes = "4")]
 pub struct TouchFingerData {
     // byte 0
+    // Set to 127 when touching and 128 when not.
     #[packed_field(bytes = "0")]
-    pub contact: u8,
+    pub context: u8,
+    // byte 1
     #[packed_field(bytes = "1")]
-    pub x_low: u8,
+    pub x_lo: u8,
+    // byte 2
     #[packed_field(bits = "16..=19")]
-    pub x_high: Integer<u8, packed_bits::Bits<4>>,
+    pub y_lo: Integer<u8, packed_bits::Bits<4>>,
     #[packed_field(bits = "20..=23")]
-    pub y_low: Integer<u8, packed_bits::Bits<4>>,
+    pub x_hi: Integer<u8, packed_bits::Bits<4>>,
+    // byte 3
     #[packed_field(bytes = "3")]
-    pub y_high: u8,
+    pub y_hi: u8,
+}
+
+impl TouchFingerData {
+    pub fn set_x(&mut self, x_raw: u16) {
+        self.x_lo = (x_raw & 0x00FF) as u8;
+        self.x_hi = Integer::from_primitive((x_raw & 0x0F00).rotate_right(8) as u8);
+    }
+    pub fn set_y(&mut self, y_raw: u16) {
+        self.y_lo = Integer::from_primitive((y_raw & 0x000F) as u8);
+        self.y_hi = (y_raw & 0x0FF0).rotate_right(4) as u8;
+    }
 }
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
@@ -264,18 +279,18 @@ impl USBPackedInputDataReport {
             touch_data: TouchData {
                 touch_finger_data: [
                     TouchFingerData {
-                        contact: 0,
-                        x_low: 0,
-                        x_high: Integer::from_primitive(0),
-                        y_low: Integer::from_primitive(0),
-                        y_high: 0,
+                        context: 128,
+                        x_lo: 0,
+                        y_lo: Integer::from_primitive(0),
+                        x_hi: Integer::from_primitive(0),
+                        y_hi: 0,
                     },
                     TouchFingerData {
-                        contact: 0,
-                        x_low: 0,
-                        x_high: Integer::from_primitive(0),
-                        y_low: Integer::from_primitive(0),
-                        y_high: 0,
+                        context: 128,
+                        x_lo: 0,
+                        y_lo: Integer::from_primitive(0),
+                        x_hi: Integer::from_primitive(0),
+                        y_hi: 0,
                     },
                 ],
                 timestamp: 0,
