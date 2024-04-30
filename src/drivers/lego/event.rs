@@ -18,8 +18,16 @@ pub struct BinaryInput {
 /// Axis input contain (x, y) coordinates
 #[derive(Clone, Debug)]
 pub struct TouchAxisInput {
+    pub index: u8,
+    pub is_touching: bool,
     pub x: u16,
     pub y: u16,
+}
+
+/// TouchAxisID tracks the sequential count of touch inputs
+#[derive(Clone, Debug)]
+pub struct TouchAxisID {
+    pub value: u32,
 }
 
 /// Axis input contain (x, y) coordinates
@@ -126,7 +134,7 @@ pub enum MouseButtonEvent {
     /// M3 on the back of the right controller
     M3(BinaryInput),
     /// Mouse wheel click on the back of the right controller
-    MouseClick(BinaryInput),
+    Left(BinaryInput),
 }
 
 /// Axis events are events that have (x, y) values

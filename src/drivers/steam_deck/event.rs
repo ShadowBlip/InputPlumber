@@ -81,11 +81,20 @@ pub struct AxisInput {
     pub y: i16,
 }
 
+/// Axis input contain (x, y) coordinates
+#[derive(Clone, Debug)]
+pub struct TouchAxisInput {
+    pub index: u8,
+    pub is_touching: bool,
+    pub x: i16,
+    pub y: i16,
+}
+
 /// Axis events are events that have (x, y) values
 #[derive(Clone, Debug)]
 pub enum AxisEvent {
-    LPad(AxisInput),
-    RPad(AxisInput),
+    LPad(TouchAxisInput),
+    RPad(TouchAxisInput),
     LStick(AxisInput),
     RStick(AxisInput),
 }

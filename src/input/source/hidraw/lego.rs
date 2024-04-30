@@ -1,7 +1,7 @@
 use std::{error::Error, thread, time};
 
 use hidapi::DeviceInfo;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 
 use crate::{
     drivers::lego::{
@@ -11,6 +11,7 @@ use crate::{
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse, MouseButton,
+            Touch, Touchpad,
         },
         composite_device::Command,
         event::{native::NativeEvent, value::InputValue, Event},
@@ -104,17 +105,25 @@ fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
 fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
     match event {
         event::AxisEvent::Touchpad(value) => {
-            let min = driver::PAD_X_MIN;
             let max = driver::PAD_X_MAX;
-            let x = normalize_signed_value(value.x as f64, min, max);
-            let x = Some(x);
+            let x = normalize_unsigned_value(value.x as f64, max);
 
-            let min = driver::PAD_Y_MAX; // uses inverted Y-axis
-            let max = driver::PAD_Y_MIN;
-            let y = normalize_signed_value(value.y as f64, min, max);
-            let y = Some(-y); // Y-Axis is inverted
+            let max = driver::PAD_Y_MAX;
+            let y = normalize_unsigned_value(value.y as f64, max);
 
-            InputValue::Vector2 { x, y }
+            // If this is an UP event, don't override the position of X/Y
+            let (x, y) = if !value.is_touching {
+                (None, None)
+            } else {
+                (Some(x), Some(y))
+            };
+
+            InputValue::Touch {
+                index: value.index,
+                is_touching: value.is_touching,
+                x,
+                y,
+            }
         }
         event::AxisEvent::LStick(value) => {
             let min = driver::STICK_X_MIN;
@@ -153,8 +162,8 @@ fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
     }
 }
 
-/// Normalize the trigger value to something between 0.0 and 1.0 based on the Deck's
-/// maximum axis ranges.
+/// Normalize the trigger value to something between 0.0 and 1.0 based on the
+/// Legion Go's maximum axis ranges.
 fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
     match event {
         event::TriggerEvent::ATriggerL(value) => {
@@ -172,7 +181,7 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
     }
 }
 
-/// Translate the given Steam Deck events into native events
+/// Translate the given Legion Go events into native events
 fn translate_events(events: Vec<event::Event>) -> Vec<NativeEvent> {
     events.into_iter().map(translate_event).collect()
 }
@@ -278,30 +287,11 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 InputValue::Bool(value.pressed),
             ),
         },
-        /*
-        lego::event::Event::Accelerometer(accel) => match accel {
-            lego::event::AccelerometerEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::NotImplemented,
-                InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
-                },
-            ),
-            lego::event::AccelerometerEvent::Attitude(value) => NativeEvent::new(
-                Capability::NotImplemented,
-                InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
-                },
-            ),
-        },
-        */
         event::Event::Axis(axis) => match axis.clone() {
-            event::AxisEvent::Touchpad(_) => {
-                NativeEvent::new(Capability::Mouse(Mouse::Motion), normalize_axis_value(axis))
-            }
+            event::AxisEvent::Touchpad(_) => NativeEvent::new(
+                Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
+                normalize_axis_value(axis),
+            ),
             event::AxisEvent::LStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
                 normalize_axis_value(axis),
@@ -344,7 +334,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 Capability::Mouse(Mouse::Button(MouseButton::Side)),
                 InputValue::Bool(value.pressed),
             ),
-            event::MouseButtonEvent::MouseClick(value) => NativeEvent::new(
+            event::MouseButtonEvent::Left(value) => NativeEvent::new(
                 Capability::Mouse(Mouse::Button(MouseButton::Middle)),
                 InputValue::Bool(value.pressed),
             ),
@@ -356,37 +346,38 @@ fn translate_event(event: event::Event) -> NativeEvent {
 
 /// List of all capabilities that the Legion Go driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
+    Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
+    Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3)),
-    Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
-    Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-    Capability::Mouse(Mouse::Motion),
-    Capability::Mouse(Mouse::Button(MouseButton::Left)),
-    Capability::Mouse(Mouse::Button(MouseButton::Right)),
-    Capability::Mouse(Mouse::Button(MouseButton::Middle)),
     Capability::Mouse(Mouse::Button(MouseButton::Extra)),
+    Capability::Mouse(Mouse::Button(MouseButton::Left)),
+    Capability::Mouse(Mouse::Button(MouseButton::Middle)),
+    Capability::Mouse(Mouse::Button(MouseButton::Right)),
     Capability::Mouse(Mouse::Button(MouseButton::Side)),
+    Capability::Mouse(Mouse::Motion),
+    Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];

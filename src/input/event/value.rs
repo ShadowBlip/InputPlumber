@@ -1,6 +1,6 @@
 use crate::{
     config::CapabilityConfig,
-    input::capability::{Capability, Gamepad, Mouse},
+    input::capability::{Capability, Gamepad, Mouse, Touchpad},
 };
 
 /// Possible errors while doing input value translation
@@ -32,6 +32,12 @@ pub enum InputValue {
         y: Option<f64>,
         z: Option<f64>,
     },
+    Touch {
+        index: u8,
+        is_touching: bool,
+        x: Option<f64>,
+        y: Option<f64>,
+    },
 }
 
 impl InputValue {
@@ -43,6 +49,12 @@ impl InputValue {
             InputValue::Float(value) => *value != 0.0,
             InputValue::Vector2 { x: _, y: _ } => true,
             InputValue::Vector3 { x: _, y: _, z: _ } => true,
+            InputValue::Touch {
+                index: _,
+                is_touching: pressed,
+                x: _,
+                y: _,
+            } => *pressed,
         }
     }
 
@@ -101,6 +113,12 @@ impl InputValue {
                             },
                             // Gamepad Button -> Keyboard
                             Capability::Keyboard(_) => Ok(self.clone()),
+                            // Gamepad Button -> Touchpad
+                            Capability::Touchpad(touch) => match touch {
+                                Touchpad::LeftPad(_) => Err(TranslationError::NotImplemented),
+                                Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
+                                Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
+                            },
                         }
                     }
                     // Axis -> ...
@@ -137,6 +155,12 @@ impl InputValue {
                             },
                             // Axis -> Keyboard
                             Capability::Keyboard(_) => self.translate_axis_to_button(source_config),
+                            // Axis -> Touchpad
+                            Capability::Touchpad(touch) => match touch {
+                                Touchpad::LeftPad(_) => Err(TranslationError::NotImplemented),
+                                Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
+                                Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
+                            },
                         }
                     }
                     // Trigger -> ...
@@ -171,6 +195,12 @@ impl InputValue {
                         },
                         // Trigger -> Keyboard
                         Capability::Keyboard(_) => self.translate_trigger_to_button(source_config),
+                        // Trigger -> Touchpad
+                        Capability::Touchpad(touch) => match touch {
+                            Touchpad::LeftPad(_) => Err(TranslationError::NotImplemented),
+                            Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
+                            Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
+                        },
                     },
                     // Accelerometer -> ...
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
@@ -182,6 +212,8 @@ impl InputValue {
             Capability::Mouse(_) => Err(TranslationError::NotImplemented),
             // Keyboard -> ...
             Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
+            // Touchpad -> ...
+            Capability::Touchpad(_) => Err(TranslationError::NotImplemented),
         }
     }
 

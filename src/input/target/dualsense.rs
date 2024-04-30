@@ -2,7 +2,14 @@
 //! The DualSense implementation is based on the great work done by NeroReflex
 //! and the ROGueENEMY project:
 //! https://github.com/NeroReflex/ROGueENEMY/
-use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
+use std::{
+    cmp::Ordering,
+    error::Error,
+    fmt::Debug,
+    fs::File,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+    usize,
+};
 
 use packed_struct::prelude::*;
 use tokio::sync::mpsc::{self, error::TryRecvError};
@@ -14,22 +21,25 @@ use crate::{
     drivers::dualsense::{
         driver::{
             DS5_ACC_RES_PER_G, DS5_EDGE_NAME, DS5_EDGE_PID, DS5_EDGE_VERSION, DS5_EDGE_VID,
-            DS5_NAME, DS5_PID, DS5_VERSION, DS5_VID, FEATURE_REPORT_CALIBRATION,
-            FEATURE_REPORT_FIRMWARE_INFO, FEATURE_REPORT_PAIRING_INFO, OUTPUT_REPORT_BT,
-            OUTPUT_REPORT_BT_SIZE, OUTPUT_REPORT_USB, OUTPUT_REPORT_USB_SHORT_SIZE,
-            OUTPUT_REPORT_USB_SIZE, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
-            TRIGGER_MAX,
+            DS5_NAME, DS5_PID, DS5_TOUCHPAD_HEIGHT, DS5_TOUCHPAD_WIDTH, DS5_VERSION, DS5_VID,
+            FEATURE_REPORT_CALIBRATION, FEATURE_REPORT_FIRMWARE_INFO, FEATURE_REPORT_PAIRING_INFO,
+            OUTPUT_REPORT_BT, OUTPUT_REPORT_BT_SIZE, OUTPUT_REPORT_USB,
+            OUTPUT_REPORT_USB_SHORT_SIZE, OUTPUT_REPORT_USB_SIZE, STICK_X_MAX, STICK_X_MIN,
+            STICK_Y_MAX, STICK_Y_MIN, TRIGGER_MAX,
         },
         hid_report::{
-            BluetoothPackedInputDataReport, Direction, PackedInputDataReport,
-            USBPackedInputDataReport, UsbPackedOutputReport, UsbPackedOutputReportShort,
+            Direction, PackedInputDataReport, USBPackedInputDataReport, UsbPackedOutputReport,
+            UsbPackedOutputReportShort,
         },
         report_descriptor::{
             DS_BT_DESCRIPTOR, DS_EDGE_BT_DESCRIPTOR, DS_EDGE_USB_DESCRIPTOR, DS_USB_DESCRIPTOR,
         },
     },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        capability::{
+            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
+            Touchpad,
+        },
         composite_device::Command,
         event::{native::NativeEvent, value::InputValue},
         output_event,
@@ -1164,15 +1174,6 @@ impl DualSenseDevice {
                         }
                     },
                     GamepadButton::LeftStickTouch => (),
-                    GamepadButton::LeftTouchpadTouch => (),
-                    GamepadButton::LeftTouchpadPress => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => {
-                            state.touchpad = event.pressed()
-                        }
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.touchpad = event.pressed()
-                        }
-                    },
                     GamepadButton::RightBumper => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => state.r1 = event.pressed(),
                         PackedInputDataReport::Bluetooth(ref mut state) => {
@@ -1204,15 +1205,6 @@ impl DualSenseDevice {
                         }
                     },
                     GamepadButton::RightStickTouch => (),
-                    GamepadButton::RightTouchpadTouch => (),
-                    GamepadButton::RightTouchpadPress => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => {
-                            state.touchpad = event.pressed()
-                        }
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.touchpad = event.pressed()
-                        }
-                    },
                     GamepadButton::LeftPaddle3 => (),
                     GamepadButton::RightPaddle3 => (),
                     _ => (),
@@ -1769,6 +1761,79 @@ impl DualSenseDevice {
                     }
                 }
             },
+            Capability::Touchpad(touch) => {
+                match touch {
+                    Touchpad::CenterPad(touch_event) => {
+                        match touch_event {
+                            Touch::Motion => {
+                                if let InputValue::Touch {
+                                    index,
+                                    is_touching,
+                                    x,
+                                    y,
+                                } = value
+                                {
+                                    let idx = index as usize;
+                                    // TouchData has an array size of 2, ignore more than 2 touch events.
+                                    if idx > 1 {
+                                        return;
+                                    }
+                                    match self.state {
+                                        PackedInputDataReport::Usb(ref mut state) => {
+                                            if let Some(x) = x {
+                                                state.touch_data.touch_finger_data[idx].set_x(
+                                                    denormalize_touch_value(x, DS5_TOUCHPAD_WIDTH),
+                                                );
+                                            }
+                                            if let Some(y) = y {
+                                                state.touch_data.touch_finger_data[idx].set_y(
+                                                    denormalize_touch_value(y, DS5_TOUCHPAD_HEIGHT),
+                                                );
+                                            }
+
+                                            if is_touching {
+                                                state.touch_data.touch_finger_data[idx].context =
+                                                    127;
+                                            } else {
+                                                state.touch_data.touch_finger_data[idx].context =
+                                                    128;
+                                            }
+
+                                            let timestamp = SystemTime::now()
+                                                .duration_since(UNIX_EPOCH)
+                                                .unwrap()
+                                                .as_micros()
+                                                as u8;
+                                            state.touch_data.timestamp = timestamp;
+
+                                            log::trace!(
+                                                "Got new state: {}",
+                                                state.touch_data.touch_finger_data[0]
+                                            );
+                                        }
+                                        PackedInputDataReport::Bluetooth(_) => (),
+                                    }
+                                }
+                            }
+                            Touch::Button(button) => match button {
+                                TouchButton::Touch => (),
+                                TouchButton::Press => match self.state {
+                                    PackedInputDataReport::Usb(ref mut state) => {
+                                        state.touchpad = event.pressed()
+                                    }
+                                    PackedInputDataReport::Bluetooth(ref mut state) => {
+                                        state.touchpad = event.pressed()
+                                    }
+                                },
+                            },
+                        }
+                    }
+                    // Not supported
+                    Touchpad::RightPad(_) => {}
+
+                    Touchpad::LeftPad(_) => {}
+                }
+            }
             Capability::Mouse(_) => (),
             Capability::Keyboard(_) => (),
             Capability::DBus(_) => (),
@@ -1828,6 +1893,12 @@ fn denormalize_signed_value(normal_value: f64, min: f64, max: f64) -> u8 {
 /// the maximum axis range.
 fn denormalize_unsigned_value(normal_value: f64, max: f64) -> u8 {
     (normal_value * max).round() as u8
+}
+
+/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
+/// the maximum axis range.
+fn denormalize_touch_value(normal_value: f64, max: f64) -> u16 {
+    (normal_value * max).round() as u16
 }
 
 /// De-normalizes the given value in meters per second into a real value that
