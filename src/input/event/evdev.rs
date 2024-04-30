@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
-use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, RelativeAxisCode};
+use evdev::{
+    AbsInfo, AbsoluteAxisCode, AbsoluteAxisEvent, EventType, InputEvent, KeyCode, RelativeAxisCode,
+};
 
 use crate::input::capability::{
     Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard, Mouse, MouseButton,
+    Touch, TouchButton, Touchpad,
 };
 
 use super::{native::NativeEvent, value::InputValue};
@@ -606,14 +609,10 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 GamepadButton::LeftPaddle1 => vec![],
                 GamepadButton::LeftPaddle2 => vec![],
                 GamepadButton::LeftStickTouch => vec![],
-                GamepadButton::LeftTouchpadTouch => vec![],
-                GamepadButton::LeftTouchpadPress => vec![],
                 GamepadButton::RightTrigger => vec![KeyCode::BTN_TR2.0],
                 GamepadButton::RightPaddle1 => vec![],
                 GamepadButton::RightPaddle2 => vec![],
                 GamepadButton::RightStickTouch => vec![],
-                GamepadButton::RightTouchpadTouch => vec![],
-                GamepadButton::RightTouchpadPress => vec![],
                 GamepadButton::LeftPaddle3 => vec![],
                 GamepadButton::RightPaddle3 => vec![],
             },
@@ -829,6 +828,38 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
             Keyboard::KeyF24 => vec![KeyCode::KEY_F24.0],
             Keyboard::KeyProg1 => vec![KeyCode::KEY_PROG1.0],
         },
+        Capability::Touchpad(touch) => match touch {
+            Touchpad::LeftPad(action) => match action {
+                Touch::Motion => vec![
+                    AbsoluteAxisCode::ABS_MT_POSITION_X.0,
+                    AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
+                ],
+                Touch::Button(button) => match button {
+                    TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
+                    TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
+                },
+            },
+            Touchpad::RightPad(action) => match action {
+                Touch::Motion => vec![
+                    AbsoluteAxisCode::ABS_MT_POSITION_X.0,
+                    AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
+                ],
+                Touch::Button(button) => match button {
+                    TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
+                    TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
+                },
+            },
+            Touchpad::CenterPad(action) => match action {
+                Touch::Motion => vec![
+                    AbsoluteAxisCode::ABS_MT_POSITION_X.0,
+                    AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
+                ],
+                Touch::Button(button) => match button {
+                    TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
+                    TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
+                },
+            },
+        },
     }
 }
 
@@ -894,6 +925,12 @@ fn input_event_from_value(
             }
         }
         InputValue::Vector3 { x: _, y: _, z: _ } => todo!(),
+        InputValue::Touch {
+            index,
+            is_touching: pressed,
+            x,
+            y,
+        } => todo!(),
     };
     value?;
 

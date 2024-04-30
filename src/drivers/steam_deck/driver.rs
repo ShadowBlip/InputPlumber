@@ -1,4 +1,4 @@
-use std::{error::Error, ffi::CString, fs};
+use std::{error::Error, ffi::CString};
 
 use crate::drivers::steam_deck::hid_report::PackedInputDataReport;
 use hidapi::HidDevice;
@@ -10,9 +10,9 @@ use packed_struct::{
 use super::{
     event::{
         AccelerometerEvent, AccelerometerInput, AxisEvent, AxisInput, BinaryInput, ButtonEvent,
-        Event, TriggerEvent, TriggerInput,
+        Event, TouchAxisInput, TriggerEvent, TriggerInput,
     },
-    hid_report::{PackedHapticPulseReport, PackedMappingsReport, PackedRumbleReport, ReportType},
+    hid_report::{PackedMappingsReport, PackedRumbleReport, ReportType},
 };
 
 /// Vendor ID
@@ -305,13 +305,17 @@ impl Driver {
 
             // Axis events
             if state.l_pad_x != old_state.l_pad_x || state.l_pad_y != old_state.l_pad_y {
-                events.push(Event::Axis(AxisEvent::LPad(AxisInput {
+                events.push(Event::Axis(AxisEvent::LPad(TouchAxisInput {
+                    index: 0, // TODO: Something else
+                    is_touching: state.l_pad_touch,
                     x: state.l_pad_x.to_primitive(),
                     y: state.l_pad_y.to_primitive(),
                 })));
             }
             if state.r_pad_x != old_state.r_pad_x || state.r_pad_y != old_state.r_pad_y {
-                events.push(Event::Axis(AxisEvent::RPad(AxisInput {
+                events.push(Event::Axis(AxisEvent::RPad(TouchAxisInput {
+                    index: 0,
+                    is_touching: state.r_pad_touch,
                     x: state.r_pad_x.to_primitive(),
                     y: state.r_pad_y.to_primitive(),
                 })));

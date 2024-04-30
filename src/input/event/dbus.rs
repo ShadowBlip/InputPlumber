@@ -177,8 +177,6 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 GamepadButton::LeftPaddle2 => vec![Action::None],
                 GamepadButton::LeftStick => vec![Action::L3],
                 GamepadButton::LeftStickTouch => vec![Action::None],
-                GamepadButton::LeftTouchpadTouch => vec![Action::None],
-                GamepadButton::LeftTouchpadPress => vec![Action::None],
                 GamepadButton::RightBumper => vec![Action::R1],
                 GamepadButton::RightTop => vec![Action::None],
                 GamepadButton::RightTrigger => vec![Action::R2],
@@ -186,8 +184,6 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 GamepadButton::RightPaddle2 => vec![Action::None],
                 GamepadButton::RightStick => vec![Action::R3],
                 GamepadButton::RightStickTouch => vec![Action::None],
-                GamepadButton::RightTouchpadTouch => vec![Action::None],
-                GamepadButton::RightTouchpadPress => vec![Action::None],
                 GamepadButton::LeftPaddle3 => vec![Action::None],
                 GamepadButton::RightPaddle3 => vec![Action::None],
             },
@@ -391,6 +387,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Keyboard::KeyF24 => vec![Action::None],
             Keyboard::KeyProg1 => vec![Action::None],
         },
+        Capability::Touchpad(_) => vec![Action::None],
     }
 }
 
@@ -418,6 +415,12 @@ fn dbus_event_from_value(action: Action, input_value: InputValue) -> Option<DBus
             _ => None,
         },
         InputValue::Vector3 { x, y, z } => None,
+        InputValue::Touch {
+            index,
+            is_touching: pressed,
+            x,
+            y,
+        } => None,
     };
     value?;
 

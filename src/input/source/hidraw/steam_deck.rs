@@ -9,10 +9,7 @@ use std::{
 
 use evdev::{FFEffectData, FFEffectKind};
 use hidapi::DeviceInfo;
-use tokio::sync::{
-    broadcast,
-    mpsc::{self, error::TryRecvError},
-};
+use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
     drivers::{
@@ -24,7 +21,10 @@ use crate::{
         },
     },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        capability::{
+            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
+            Touchpad,
+        },
         composite_device::Command,
         event::{native::NativeEvent, value::InputValue, Event},
         output_event::OutputEvent,
@@ -417,7 +417,12 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
-            InputValue::Vector2 { x, y }
+            InputValue::Touch {
+                index: value.index as u8,
+                is_touching: value.is_touching,
+                x,
+                y,
+            }
         }
         steam_deck::event::AxisEvent::RPad(value) => {
             let min = steam_deck::hid_report::PAD_X_MIN;
@@ -430,7 +435,12 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
-            InputValue::Vector2 { x, y }
+            InputValue::Touch {
+                index: value.index as u8,
+                is_touching: value.is_touching,
+                x,
+                y,
+            }
         }
         steam_deck::event::AxisEvent::LStick(value) => {
             let min = steam_deck::hid_report::STICK_X_MIN;
@@ -590,19 +600,19 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::RPadTouch(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightTouchpadTouch)),
+                Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Touch))),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::LPadTouch(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTouchpadTouch)),
+                Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Touch))),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::RPadPress(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightTouchpadPress)),
+                Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::LPadPress(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTouchpadPress)),
+                Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
                 InputValue::Bool(value.pressed),
             ),
             steam_deck::event::ButtonEvent::RStickTouch(value) => NativeEvent::new(
@@ -633,12 +643,14 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
             ),
         },
         steam_deck::event::Event::Axis(axis) => match axis.clone() {
-            steam_deck::event::AxisEvent::LPad(_) => {
-                NativeEvent::new(Capability::NotImplemented, normalize_axis_value(axis))
-            }
-            steam_deck::event::AxisEvent::RPad(_) => {
-                NativeEvent::new(Capability::NotImplemented, normalize_axis_value(axis))
-            }
+            steam_deck::event::AxisEvent::LPad(_) => NativeEvent::new(
+                Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
+                normalize_axis_value(axis),
+            ),
+            steam_deck::event::AxisEvent::RPad(_) => NativeEvent::new(
+                Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
+                normalize_axis_value(axis),
+            ),
             steam_deck::event::AxisEvent::LStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
                 normalize_axis_value(axis),
@@ -675,38 +687,40 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
 
 /// List of all capabilities that the Steam Deck driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightTouchpadTouch)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTouchpadTouch)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightTouchpadPress)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTouchpadPress)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch)),
+    Capability::Gamepad(Gamepad::Accelerometer),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
+    Capability::Gamepad(Gamepad::Gyro),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-    Capability::Gamepad(Gamepad::Accelerometer),
-    Capability::Gamepad(Gamepad::Gyro),
+    Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
+    Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Touch))),
+    Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
+    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
+    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Touch))),
+    Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];
