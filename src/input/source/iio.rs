@@ -64,7 +64,7 @@ pub fn get_dbus_path(id: String) -> String {
 pub struct IIODevice {
     info: Device,
     config: Option<config::IIO>,
-    composite_tx: broadcast::Sender<Command>,
+    composite_tx: mpsc::Sender<Command>,
     tx: mpsc::Sender<SourceCommand>,
     rx: Option<mpsc::Receiver<SourceCommand>>,
 }
@@ -73,7 +73,7 @@ impl IIODevice {
     pub fn new(
         info: Device,
         config: Option<config::IIO>,
-        composite_tx: broadcast::Sender<Command>,
+        composite_tx: mpsc::Sender<Command>,
     ) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {

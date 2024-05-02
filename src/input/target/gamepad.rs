@@ -15,13 +15,7 @@ use evdev::{
     KeyCode, SynchronizationCode, SynchronizationEvent, UInputCode, UinputAbsSetup,
 };
 use nix::fcntl::{FcntlArg, OFlag};
-use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{self, error::TryRecvError},
-    },
-    time::Duration,
-};
+use tokio::{sync::mpsc, time::Duration};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
@@ -64,7 +58,7 @@ pub struct GenericGamepad {
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
-    composite_tx: Option<broadcast::Sender<Command>>,
+    composite_tx: Option<mpsc::Sender<Command>>,
 }
 
 impl GenericGamepad {
@@ -102,7 +96,7 @@ impl GenericGamepad {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: broadcast::Sender<Command>) {
+    pub fn set_composite_device(&mut self, tx: mpsc::Sender<Command>) {
         self.composite_tx = Some(tx);
     }
 
@@ -275,7 +269,7 @@ impl GenericGamepad {
     }
 
     /// Spawns the force-feedback handler thread
-    fn spawn_ff_thread(ff_device: Arc<Mutex<VirtualDevice>>, tx: broadcast::Sender<Command>) {
+    fn spawn_ff_thread(ff_device: Arc<Mutex<VirtualDevice>>, tx: mpsc::Sender<Command>) {
         tokio::task::spawn_blocking(move || {
             loop {
                 // Check to see if the main input thread still has a reference
@@ -301,7 +295,7 @@ impl GenericGamepad {
     /// Process force feedback events from the given device
     fn process_ff(
         device: &Arc<Mutex<VirtualDevice>>,
-        composite_dev: &broadcast::Sender<Command>,
+        composite_dev: &mpsc::Sender<Command>,
     ) -> Result<(), Box<dyn Error>> {
         // Listen for events (Force Feedback Events)
         let events = match device.lock() {
@@ -351,7 +345,8 @@ impl GenericGamepad {
                         event.effect(),
                         tx,
                     ));
-                    if let Err(e) = composite_dev.send(Command::ProcessOutputEvent(upload)) {
+                    if let Err(e) = composite_dev.blocking_send(Command::ProcessOutputEvent(upload))
+                    {
                         event.set_retval(-1);
                         return Err(e.into());
                     }
@@ -383,17 +378,19 @@ impl GenericGamepad {
                     log::debug!("Erase effect: {:?}", event.effect_id());
 
                     let erase = OutputEvent::Uinput(UinputOutputEvent::FFErase(event.effect_id()));
-                    composite_dev.send(Command::ProcessOutputEvent(erase))?;
+                    composite_dev.blocking_send(Command::ProcessOutputEvent(erase))?;
                 }
                 EventSummary::ForceFeedback(.., effect_id, STOPPED) => {
                     log::debug!("Stopped effect ID: {}", effect_id.0);
                     log::debug!("Stopping event: {:?}", event);
-                    composite_dev.send(Command::ProcessOutputEvent(OutputEvent::Evdev(event)))?;
+                    composite_dev
+                        .blocking_send(Command::ProcessOutputEvent(OutputEvent::Evdev(event)))?;
                 }
                 EventSummary::ForceFeedback(.., effect_id, PLAYING) => {
                     log::debug!("Playing effect ID: {}", effect_id.0);
                     log::debug!("Playing event: {:?}", event);
-                    composite_dev.send(Command::ProcessOutputEvent(OutputEvent::Evdev(event)))?;
+                    composite_dev
+                        .blocking_send(Command::ProcessOutputEvent(OutputEvent::Evdev(event)))?;
                 }
                 _ => {
                     log::debug!("Unhandled event: {:?}", event);

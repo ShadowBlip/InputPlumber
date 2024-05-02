@@ -1,7 +1,7 @@
 use std::{error::Error, thread, time};
 
 use hidapi::DeviceInfo;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::{
     drivers::lego::{
@@ -21,16 +21,12 @@ use crate::{
 #[derive(Debug)]
 pub struct LegionController {
     info: DeviceInfo,
-    composite_tx: broadcast::Sender<Command>,
+    composite_tx: mpsc::Sender<Command>,
     device_id: String,
 }
 
 impl LegionController {
-    pub fn new(
-        info: DeviceInfo,
-        composite_tx: broadcast::Sender<Command>,
-        device_id: String,
-    ) -> Self {
+    pub fn new(info: DeviceInfo, composite_tx: mpsc::Sender<Command>, device_id: String) -> Self {
         Self {
             info,
             composite_tx,
@@ -57,7 +53,7 @@ impl LegionController {
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
                         }
-                        tx.send(Command::ProcessEvent(
+                        tx.blocking_send(Command::ProcessEvent(
                             device_id.clone(),
                             Event::Native(event),
                         ))?;

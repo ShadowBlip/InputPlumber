@@ -37,7 +37,6 @@ use crate::procfs;
 use crate::watcher;
 use crate::watcher::WatchEvent;
 
-use super::composite_device::Handle;
 use super::target::TargetCommand;
 
 const DEV_PATH: &str = "/dev";
@@ -237,7 +236,7 @@ pub struct Manager {
     source_devices_used: HashMap<String, String>,
     /// Mapping of DBus path to its corresponding [CompositeDevice] handle
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <Handle>}
-    composite_devices: HashMap<String, composite_device::Handle>,
+    composite_devices: HashMap<String, mpsc::Sender<composite_device::Command>>,
     /// Mapping of all source devices used by composite devices with the CompositeDevice path as
     /// the key for the hashmap.
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<SourceDevice>}
@@ -396,8 +395,8 @@ impl Manager {
                     let mut targets = HashMap::new();
                     targets.insert(target_path.clone(), target.clone());
                     if let Err(e) = device
-                        .tx
                         .send(composite_device::Command::AttachTargetDevices(targets))
+                        .await
                     {
                         log::error!("Failed to send attach command: {e:?}");
                     }
@@ -694,7 +693,7 @@ impl Manager {
         device.listen_on_dbus(path.clone()).await?;
 
         // Get a handle to the device
-        let handle = device.handle();
+        let handle = device.transmitter();
 
         // Keep track of target devices that this composite device is using
         let mut target_device_paths = Vec::new();
@@ -829,6 +828,7 @@ impl Manager {
                                             log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
                                             break 'start;
                                         }
+                                    // Default to being unique
                                     } else {
                                         log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
                                         break 'start;
@@ -845,7 +845,8 @@ impl Manager {
                                 );
                                 continue;
                             }
-                            self.add_event_device_to_composite_device(&info, handle.unwrap())?;
+                            self.add_event_device_to_composite_device(&info, handle.unwrap())
+                                .await?;
                             self.source_devices_used
                                 .insert(id.clone(), composite_device.clone());
                             let composite_id = composite_device.clone();
@@ -901,7 +902,8 @@ impl Manager {
                                 );
                                 continue;
                             }
-                            self.add_hidraw_device_to_composite_device(&info, handle.unwrap())?;
+                            self.add_hidraw_device_to_composite_device(&info, handle.unwrap())
+                                .await?;
                             self.source_devices_used
                                 .insert(id.clone(), composite_device.clone());
                             let composite_id = composite_device.clone();
@@ -956,7 +958,8 @@ impl Manager {
                                 );
                                 continue;
                             }
-                            self.add_iio_device_to_composite_device(&info, handle.unwrap())?;
+                            self.add_iio_device_to_composite_device(&info, handle.unwrap())
+                                .await?;
                             self.source_devices_used
                                 .insert(id.clone(), composite_device.clone());
                             let composite_id = composite_device.clone();
@@ -1100,22 +1103,27 @@ impl Manager {
         };
 
         handle
-            .tx
-            .send(composite_device::Command::SourceDeviceRemoved(id.clone()))?;
+            .send(composite_device::Command::SourceDeviceRemoved(id.clone()))
+            .await?;
 
-        let Some(sources) = self.composite_device_sources.get_mut(composite_device_path) else {
-            return Err(format!("CompostiteDevice {} not found", composite_device_path).into());
-        };
         let Some(device) = self.source_devices.get(&id) else {
             return Err(format!("Device {} not found in source devices", id).into());
         };
 
+        let Some(sources) = self.composite_device_sources.get_mut(composite_device_path) else {
+            return Err(format!("CompostiteDevice {} not found", composite_device_path).into());
+        };
+
         let idx = sources.iter().position(|item| item == device);
         if idx.is_none() {
+            self.source_devices.remove(&id);
             return Err(format!("Device {} not found in composite device sources", id).into());
         }
         sources.remove(idx.unwrap());
         self.source_devices.remove(&id);
+        self.source_device_dbus_paths.remove(&id);
+        self.source_devices_used.remove(&id);
+
         Ok(())
     }
 
@@ -1166,9 +1174,6 @@ impl Manager {
 
         // Remove the device from our hashmap
         let id = format!("evdev://{}", handler);
-        self.source_device_dbus_paths.remove(&id);
-        self.source_devices_used.remove(&id);
-
         // Remove the DBus interface
         let path = source::evdev::get_dbus_path(handler);
         let path = ObjectPath::from_string_unchecked(path.clone());
@@ -1224,9 +1229,6 @@ impl Manager {
         self.tx
             .send(ManagerCommand::SourceDeviceRemoved { id: id.clone() })?;
 
-        self.source_device_dbus_paths.remove(&id);
-        self.source_devices_used.remove(&id);
-
         Ok(())
     }
 
@@ -1270,10 +1272,6 @@ impl Manager {
         // Signal that a source device was removed
         self.tx
             .send(ManagerCommand::SourceDeviceRemoved { id: id.clone() })?;
-
-        self.source_device_dbus_paths.remove(&id);
-        self.source_devices_used.remove(&id);
-
         Ok(())
     }
 
@@ -1626,47 +1624,47 @@ impl Manager {
 
     /// Send a signal using the given composite device handle that a new source
     /// device should be started.
-    fn add_event_device_to_composite_device(
+    async fn add_event_device_to_composite_device(
         &self,
         device_info: &procfs::device::Device,
-        handle: &Handle,
+        tx: &mpsc::Sender<composite_device::Command>,
     ) -> Result<(), Box<dyn Error>> {
-        let tx = &handle.tx;
         let device_info = device_info.clone();
         tx.send(composite_device::Command::SourceDeviceAdded(
             SourceDeviceInfo::EvdevDeviceInfo(device_info),
-        ))?;
+        ))
+        .await?;
         Ok(())
     }
 
     /// Send a signal using the given composite device handle that a new source
     /// device should be started.
-    fn add_hidraw_device_to_composite_device(
+    async fn add_hidraw_device_to_composite_device(
         &self,
         device_info: &hidapi::DeviceInfo,
-        handle: &Handle,
+        tx: &mpsc::Sender<composite_device::Command>,
     ) -> Result<(), Box<dyn Error>> {
-        let tx = &handle.tx;
         let device_info = device_info.clone();
         tx.send(composite_device::Command::SourceDeviceAdded(
             SourceDeviceInfo::HIDRawDeviceInfo(device_info),
-        ))?;
+        ))
+        .await?;
 
         Ok(())
     }
 
     /// Send a signal using the given composite device handle that a new source
     /// device should be started.
-    fn add_iio_device_to_composite_device(
+    async fn add_iio_device_to_composite_device(
         &self,
         info: &iio::device::Device,
-        handle: &Handle,
+        tx: &mpsc::Sender<composite_device::Command>,
     ) -> Result<(), Box<dyn Error>> {
-        let tx = &handle.tx;
         let device_info = info.clone();
         tx.send(composite_device::Command::SourceDeviceAdded(
             SourceDeviceInfo::IIODeviceInfo(device_info),
-        ))?;
+        ))
+        .await?;
 
         Ok(())
     }
