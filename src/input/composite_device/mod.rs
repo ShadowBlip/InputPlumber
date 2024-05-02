@@ -119,6 +119,14 @@ impl DBusInterface {
         Ok(profile_name)
     }
 
+    /// Stop the composite device and all target devices
+    async fn stop(&self) -> fdo::Result<()> {
+        self.tx
+            .send(Command::Stop)
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        Ok(())
+    }
+
     /// Load the device profile from the given path
     async fn load_profile_path(&self, path: String) -> fdo::Result<()> {
         let (sender, mut receiver) = mpsc::channel::<Result<(), String>>(1);
@@ -746,13 +754,15 @@ impl CompositeDevice {
 
         // Stop all target devices
         log::debug!("Stopping target devices");
-        #[allow(clippy::for_kv_map)]
-        for (_, target) in &self.target_devices {
-            target.send(TargetCommand::Stop).await?;
+        for (path, target) in &self.target_devices {
+            if let Err(e) = target.send(TargetCommand::Stop).await {
+                log::error!("Failed to stop target device {path}: {e:?}");
+            }
         }
-        #[allow(clippy::for_kv_map)]
-        for (_, target) in &self.target_dbus_devices {
-            target.send(TargetCommand::Stop).await?;
+        for (path, target) in &self.target_dbus_devices {
+            if let Err(e) = target.send(TargetCommand::Stop).await {
+                log::error!("Failed to stop dbus device {path}: {e:?}");
+            }
         }
 
         // Unhide all source devices
@@ -764,6 +774,13 @@ impl CompositeDevice {
             log::debug!("Un-hiding device: {}", source_path);
             if let Err(e) = unhide_device(source_path.clone()).await {
                 log::debug!("Unable to unhide device {source_path}: {:?}", e);
+            }
+        }
+
+        // Send stop command to all source devices
+        for (path, source) in &self.source_devices {
+            if let Err(e) = source.send(SourceCommand::Stop).await {
+                log::debug!("Failed to stop source device {path}: {e:?}");
             }
         }
 
