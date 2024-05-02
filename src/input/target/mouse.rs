@@ -6,10 +6,7 @@ use evdev::{
     SynchronizationCode, SynchronizationEvent,
 };
 use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{self, error::TryRecvError},
-    },
+    sync::mpsc::{self, error::TryRecvError},
     time::Instant,
 };
 use zbus::{fdo, Connection};
@@ -56,7 +53,7 @@ pub struct MouseDevice {
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
-    composite_tx: Option<broadcast::Sender<composite_device::Command>>,
+    composite_tx: Option<mpsc::Sender<composite_device::Command>>,
 }
 
 impl MouseDevice {
@@ -83,7 +80,7 @@ impl MouseDevice {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: broadcast::Sender<composite_device::Command>) {
+    pub fn set_composite_device(&mut self, tx: mpsc::Sender<composite_device::Command>) {
         self.composite_tx = Some(tx);
     }
 

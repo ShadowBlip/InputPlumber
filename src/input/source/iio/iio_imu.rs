@@ -1,10 +1,7 @@
 use core::time;
 use std::{error::Error, f64::consts::PI, thread};
 
-use tokio::sync::{
-    broadcast,
-    mpsc::{self, error::TryRecvError},
-};
+use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
     config,
@@ -24,7 +21,7 @@ use crate::{
 pub struct IMU {
     info: Device,
     config: Option<config::IIO>,
-    composite_tx: broadcast::Sender<Command>,
+    composite_tx: mpsc::Sender<Command>,
     rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
 }
@@ -33,7 +30,7 @@ impl IMU {
     pub fn new(
         info: Device,
         config: Option<config::IIO>,
-        composite_tx: broadcast::Sender<Command>,
+        composite_tx: mpsc::Sender<Command>,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
@@ -87,7 +84,7 @@ impl IMU {
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
                         }
-                        tx.send(Command::ProcessEvent(
+                        tx.blocking_send(Command::ProcessEvent(
                             device_id.clone(),
                             Event::Native(event),
                         ))?;

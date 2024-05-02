@@ -43,7 +43,7 @@ const POLL_RATE: Duration = Duration::from_micros(250);
 #[derive(Debug)]
 pub struct DeckController {
     info: DeviceInfo,
-    composite_tx: broadcast::Sender<Command>,
+    composite_tx: mpsc::Sender<Command>,
     rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
 }
@@ -51,7 +51,7 @@ pub struct DeckController {
 impl DeckController {
     pub fn new(
         info: DeviceInfo,
-        composite_tx: broadcast::Sender<Command>,
+        composite_tx: mpsc::Sender<Command>,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
@@ -98,7 +98,7 @@ impl DeckController {
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
                         }
-                        tx.send(Command::ProcessEvent(
+                        tx.blocking_send(Command::ProcessEvent(
                             device_id.clone(),
                             Event::Native(event),
                         ))?;

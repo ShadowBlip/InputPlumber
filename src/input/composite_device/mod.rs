@@ -88,11 +88,11 @@ pub enum Command {
 /// a [CompositeDevice]. It works by sending command messages to a channel that the
 /// [CompositeDevice] is listening on.
 pub struct DBusInterface {
-    tx: broadcast::Sender<Command>,
+    tx: mpsc::Sender<Command>,
 }
 
 impl DBusInterface {
-    fn new(tx: broadcast::Sender<Command>) -> DBusInterface {
+    fn new(tx: mpsc::Sender<Command>) -> DBusInterface {
         DBusInterface { tx }
     }
 }
@@ -111,6 +111,7 @@ impl DBusInterface {
         let (sender, mut receiver) = mpsc::channel::<String>(1);
         self.tx
             .send(Command::GetProfileName(sender))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(profile_name) = receiver.recv().await else {
             return Ok("".to_string());
@@ -123,6 +124,7 @@ impl DBusInterface {
     async fn stop(&self) -> fdo::Result<()> {
         self.tx
             .send(Command::Stop)
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         Ok(())
     }
@@ -132,6 +134,7 @@ impl DBusInterface {
         let (sender, mut receiver) = mpsc::channel::<Result<(), String>>(1);
         self.tx
             .send(Command::LoadProfilePath(path, sender))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         let Some(result) = receiver.recv().await else {
@@ -157,6 +160,7 @@ impl DBusInterface {
     async fn set_target_devices(&self, target_device_types: Vec<String>) -> fdo::Result<()> {
         self.tx
             .send(Command::SetTargetDevices(target_device_types))
+            .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         Ok(())
     }
@@ -214,14 +218,14 @@ impl DBusInterface {
         let event = NativeEvent::new(cap, val);
 
         self.tx
-            .send(Command::WriteSendEvent(event))
+            .blocking_send(Command::WriteSendEvent(event))
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
     }
 
     /// Directly write to the composite device's target devices with the given button event list
-    fn send_button_chord(&self, mut events: Vec<String>) -> fdo::Result<()> {
+    async fn send_button_chord(&self, mut events: Vec<String>) -> fdo::Result<()> {
         // Store built native events to send in a command to the CompositeDevice
         let mut chord: Vec<NativeEvent> = Vec::new();
 
@@ -259,12 +263,13 @@ impl DBusInterface {
 
         self.tx
             .send(Command::WriteChordEvent(chord))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
     }
 
-    fn set_intercept_activation(
+    async fn set_intercept_activation(
         &self,
         activation_events: Vec<String>,
         target_event: String,
@@ -299,6 +304,7 @@ impl DBusInterface {
 
         self.tx
             .send(Command::SetInterceptActivation(activation_caps, target_cap))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
@@ -310,6 +316,7 @@ impl DBusInterface {
         let (sender, mut receiver) = mpsc::channel::<HashSet<Capability>>(1);
         self.tx
             .send(Command::GetCapabilities(sender))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(capabilities) = receiver.recv().await else {
             return Ok(Vec::new());
@@ -344,6 +351,7 @@ impl DBusInterface {
         let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
         self.tx
             .send(Command::GetSourceDevicePaths(sender))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(paths) = receiver.recv().await else {
             return Ok(Vec::new());
@@ -358,6 +366,7 @@ impl DBusInterface {
         let (sender, mut receiver) = mpsc::channel::<InterceptMode>(1);
         self.tx
             .send(Command::GetInterceptMode(sender))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(mode) = receiver.recv().await else {
             return Ok(0);
@@ -380,6 +389,7 @@ impl DBusInterface {
         };
         self.tx
             .send(Command::SetInterceptMode(mode))
+            .await
             .map_err(|err| zbus::Error::Failure(err.to_string()))?;
         Ok(())
     }
@@ -390,6 +400,7 @@ impl DBusInterface {
         let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
         self.tx
             .send(Command::GetTargetDevicePaths(sender))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(paths) = receiver.recv().await else {
             return Ok(Vec::new());
@@ -404,25 +415,13 @@ impl DBusInterface {
         let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
         self.tx
             .send(Command::GetDBusDevicePaths(sender))
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(paths) = receiver.recv().await else {
             return Ok(Vec::new());
         };
 
         Ok(paths)
-    }
-}
-
-/// Defines a handle to a [CompositeDevice] for communication
-#[derive(Debug)]
-pub struct Handle {
-    pub tx: broadcast::Sender<Command>,
-    pub rx: broadcast::Receiver<Command>,
-}
-
-impl Handle {
-    pub fn new(tx: broadcast::Sender<Command>, rx: broadcast::Receiver<Command>) -> Self {
-        Self { tx, rx }
     }
 }
 
@@ -464,9 +463,9 @@ pub struct CompositeDevice {
     /// Mode defining how inputs should be routed
     intercept_mode: InterceptMode,
     /// Transmit channel for sending commands to this composite device
-    tx: broadcast::Sender<Command>,
+    tx: mpsc::Sender<Command>,
     /// Receiver channel for listening for commands
-    rx: broadcast::Receiver<Command>,
+    rx: mpsc::Receiver<Command>,
     /// Map of source device id to their respective transmitter channel.
     /// E.g. {"evdev://event0": <Sender>}
     source_devices: HashMap<String, mpsc::Sender<SourceCommand>>,
@@ -514,7 +513,7 @@ impl CompositeDevice {
         capability_map: Option<CapabilityMap>,
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating CompositeDevice with config: {}", config.name);
-        let (tx, rx) = broadcast::channel(BUFFER_SIZE);
+        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         let mut device = Self {
             conn,
             manager,
@@ -622,7 +621,11 @@ impl CompositeDevice {
 
         // Loop and listen for command events
         log::debug!("CompositeDevice started");
-        while let Ok(cmd) = self.rx.recv().await {
+        loop {
+            let Some(cmd) = self.rx.recv().await else {
+                log::error!("Error while receiving command. Channel closed.");
+                break;
+            };
             log::trace!("Received command: {:?}", cmd);
             match cmd {
                 Command::ProcessEvent(device_id, event) => {
@@ -677,6 +680,10 @@ impl CompositeDevice {
                         log::error!("Failed to remove source device: {:?}", e);
                     }
                     if self.source_devices_used.is_empty() {
+                        log::debug!(
+                            "No source devices remain. Stopping CompositeDevice {:?}",
+                            self.dbus_path
+                        );
                         break;
                     }
                 }
@@ -686,6 +693,10 @@ impl CompositeDevice {
                         log::error!("Failed to remove source device: {:?}", e);
                     }
                     if self.source_devices_used.is_empty() {
+                        log::debug!(
+                            "No source devices remain. Stopping CompositeDevice {:?}",
+                            self.dbus_path
+                        );
                         break;
                     }
                 }
@@ -742,7 +753,10 @@ impl CompositeDevice {
                     self.set_intercept_activation(activation_caps, target_cap)
                 }
                 Command::Stop => {
-                    log::debug!("Stopping CompositeDevice");
+                    log::debug!(
+                        "Got STOP signal. Stopping CompositeDevice: {:?}",
+                        self.dbus_path
+                    );
                     break;
                 }
             }
@@ -798,24 +812,10 @@ impl CompositeDevice {
         Ok(())
     }
 
-    /// Return a [Handle] to the [CompositeDevice] to communicate with
-    pub fn handle(&self) -> Handle {
-        let rx = self.subscribe();
-        let tx = self.transmitter();
-
-        Handle::new(tx, rx)
-    }
-
     /// Return a [Command] transmitter to communitcate with the device while it
     /// is running
-    pub fn transmitter(&self) -> broadcast::Sender<Command> {
+    pub fn transmitter(&self) -> mpsc::Sender<Command> {
         self.tx.clone()
-    }
-
-    /// Return a [Command] receiver to listen for signals while the device
-    /// is running
-    pub fn subscribe(&self) -> broadcast::Receiver<Command> {
-        self.tx.subscribe()
     }
 
     /// Returns an array of all source devices ids being used by this device.
@@ -868,7 +868,7 @@ impl CompositeDevice {
                             log::error!("Failed running event device: {:?}", e);
                         }
                         log::debug!("Event device closed");
-                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
+                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)).await {
                             log::error!("Failed to send device stop command: {:?}", e);
                         }
                     });
@@ -886,7 +886,7 @@ impl CompositeDevice {
                             log::error!("Failed running hidraw device: {:?}", e);
                         }
                         log::debug!("HIDRaw device closed");
-                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
+                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)).await {
                             log::error!("Failed to send device stop command: {:?}", e);
                         }
                     });
@@ -904,7 +904,7 @@ impl CompositeDevice {
                             log::error!("Failed running iio device: {:?}", e);
                         }
                         log::debug!("IIO device closed");
-                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)) {
+                        if let Err(e) = tx.send(Command::SourceDeviceStopped(device_id)).await {
                             log::error!("Failed to send device stop command: {:?}", e);
                         }
                     });
@@ -1257,7 +1257,7 @@ impl CompositeDevice {
                 let tx = self.tx.clone();
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_millis(sleep_time)).await;
-                    if let Err(e) = tx.send(Command::WriteEvent(event)) {
+                    if let Err(e) = tx.send(Command::WriteEvent(event)).await {
                         log::error!("Failed to send chord event command: {:?}", e);
                     }
                 });
@@ -1341,7 +1341,7 @@ impl CompositeDevice {
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
                 tokio::time::sleep(sleep_time).await;
-                if let Err(e) = tx.send(Command::WriteEvent(event)) {
+                if let Err(e) = tx.send(Command::WriteEvent(event)).await {
                     log::error!("Failed to send delayed event command: {:?}", e);
                 }
             });
@@ -1356,7 +1356,7 @@ impl CompositeDevice {
         let tx = self.tx.clone();
         tokio::task::spawn(async move {
             tokio::time::sleep(sleep_time).await;
-            if let Err(e) = tx.send(Command::RemoveRecentEvent(cap)) {
+            if let Err(e) = tx.send(Command::RemoveRecentEvent(cap)).await {
                 log::error!("Failed to send remove recent event command: {:?}", e);
             }
         });
@@ -1377,7 +1377,7 @@ impl CompositeDevice {
             log::debug!("Send event {:?} at sleep time {sleep_time}", event);
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(sleep_time)).await;
-                if let Err(e) = tx.send(Command::WriteEvent(event)) {
+                if let Err(e) = tx.send(Command::WriteEvent(event)).await {
                     log::error!("Failed to send chord event command: {:?}", e);
                 }
             });
@@ -1531,7 +1531,7 @@ impl CompositeDevice {
                 let tx = self.tx.clone();
                 tokio::task::spawn(async move {
                     tokio::time::sleep(sleep_time).await;
-                    if let Err(e) = tx.send(Command::HandleEvent(event)) {
+                    if let Err(e) = tx.send(Command::HandleEvent(event)).await {
                         log::error!("Failed to send delayed event command: {:?}", e);
                     }
                 });
@@ -1546,7 +1546,7 @@ impl CompositeDevice {
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
                 tokio::time::sleep(sleep_time).await;
-                if let Err(e) = tx.send(Command::RemoveRecentEvent(cap)) {
+                if let Err(e) = tx.send(Command::RemoveRecentEvent(cap)).await {
                     log::error!("Failed to send remove recent event command: {:?}", e);
                 }
             });
@@ -1851,7 +1851,10 @@ impl CompositeDevice {
 
         // Set the target devices to use if it is defined in the profile
         if let Some(target_devices) = profile.target_devices {
-            if let Err(e) = self.tx.send(Command::SetTargetDevices(target_devices)) {
+            if let Err(e) = self
+                .tx
+                .blocking_send(Command::SetTargetDevices(target_devices))
+            {
                 log::error!("Failed to send set target devices: {e:?}");
             }
         }
