@@ -85,8 +85,8 @@ pub enum Command {
 }
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
-/// a [Manager]. It works by sending command messages to a channel that the
-/// [Manager] is listening on.
+/// a [CompositeDevice]. It works by sending command messages to a channel that the
+/// [CompositeDevice] is listening on.
 pub struct DBusInterface {
     tx: broadcast::Sender<Command>,
 }
@@ -142,7 +142,10 @@ impl DBusInterface {
         Ok(())
     }
 
-    /// Set the target input devices the composite device should emulate.
+    /// Set the target input device types the composite device should emulate,
+    /// such as ["gamepad", "mouse", "keyboard"]. This method will stop all
+    /// current virtual devices for the composite device and create and attach
+    /// new target devices.
     async fn set_target_devices(&self, target_device_types: Vec<String>) -> fdo::Result<()> {
         self.tx
             .send(Command::SetTargetDevices(target_device_types))
@@ -1627,6 +1630,10 @@ impl CompositeDevice {
     ) -> Result<(), Box<dyn Error>> {
         self.add_source_device(device_info)?;
         self.run_source_devices().await?;
+
+        // Signal to DBus that source devices have changed
+        self.signal_sources_changed().await;
+
         log::debug!(
             "Finished adding source device. All sources: {:?}",
             self.source_devices_used
@@ -1662,6 +1669,9 @@ impl CompositeDevice {
             };
             self.source_devices_blocked.remove(&id);
         }
+
+        // Signal to DBus that source devices have changed
+        self.signal_sources_changed().await;
 
         log::debug!(
             "Current source device paths: {:?}",
@@ -2012,6 +2022,9 @@ impl CompositeDevice {
             }
         }
 
+        // Signal change in target devices to DBus
+        self.signal_targets_changed().await;
+
         Ok(())
     }
 
@@ -2029,9 +2042,85 @@ impl CompositeDevice {
                     format!("Failed to set composite device for target device: {:?}", e).into(),
                 );
             }
+            log::debug!(
+                "Attached device {path} to {:?}",
+                self.dbus_path.as_ref().unwrap_or(&"".to_string())
+            );
             self.target_devices.insert(path, target);
         }
+        self.signal_targets_changed().await;
 
         Ok(())
+    }
+
+    /// Emit a DBus signal when target devices change
+    async fn signal_targets_changed(&self) {
+        let Some(dbus_path) = self.dbus_path.clone() else {
+            log::error!("No DBus path for composite device exists to emit signal!");
+            return;
+        };
+        let conn = self.conn.clone();
+
+        tokio::task::spawn(async move {
+            // Get the object instance at the given path so we can send DBus signal
+            // updates
+            let iface_ref = match conn
+                .object_server()
+                .interface::<_, DBusInterface>(dbus_path.clone())
+                .await
+            {
+                Ok(iface) => iface,
+                Err(e) => {
+                    log::error!(
+                        "Failed to get DBus interface for composite device to signal: {e:?}"
+                    );
+                    return;
+                }
+            };
+            // Emit the target devices changed signal
+            let iface = iface_ref.get().await;
+            if let Err(e) = iface
+                .target_devices_changed(iface_ref.signal_context())
+                .await
+            {
+                log::error!("Failed to send target devices changed signal: {e:?}");
+            }
+        });
+    }
+
+    /// Emit a DBus signal when source devices change
+    async fn signal_sources_changed(&self) {
+        let Some(dbus_path) = self.dbus_path.clone() else {
+            log::error!("No DBus path for composite device exists to emit signal!");
+            return;
+        };
+        let conn = self.conn.clone();
+
+        tokio::task::spawn(async move {
+            // Get the object instance at the given path so we can send DBus signal
+            // updates
+            let iface_ref = match conn
+                .object_server()
+                .interface::<_, DBusInterface>(dbus_path.clone())
+                .await
+            {
+                Ok(iface) => iface,
+                Err(e) => {
+                    log::error!(
+                        "Failed to get DBus interface for composite device to signal: {e:?}"
+                    );
+                    return;
+                }
+            };
+
+            // Emit the target devices changed signal
+            let iface = iface_ref.get().await;
+            if let Err(e) = iface
+                .source_device_paths_changed(iface_ref.signal_context())
+                .await
+            {
+                log::error!("Failed to send source devices changed signal: {e:?}");
+            }
+        });
     }
 }

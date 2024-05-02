@@ -173,6 +173,33 @@ impl DBusInterface {
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         Ok(())
     }
+
+    /// Attach the given target device to the given composite device
+    async fn attach_target_device(
+        &self,
+        target_path: String,
+        composite_path: String,
+    ) -> fdo::Result<()> {
+        let (sender, mut receiver) = mpsc::channel(1);
+        self.tx
+            .send(ManagerCommand::AttachTargetDevice {
+                target_path: target_path.clone(),
+                composite_path: composite_path.clone(),
+                sender,
+            })
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+
+        // Read the response from the manager
+        let Some(response) = receiver.recv().await else {
+            return Err(fdo::Error::Failed("No response from manager".to_string()));
+        };
+        if let Err(e) = response {
+            let err = format!("Failed to attach target device {target_path} to composite device {composite_path}: {e:?}");
+            return Err(fdo::Error::Failed(err));
+        }
+
+        Ok(())
+    }
 }
 
 /// Manages input devices
@@ -345,28 +372,27 @@ impl Manager {
                     sender,
                 } => {
                     let Some(target) = self.target_devices.get(&target_path) else {
-                        if let Err(e) = sender
-                            .send(Err(ManagerError::AttachTargetDeviceFailed(
-                                "Failed to find target device".into(),
-                            )))
-                            .await
-                        {
+                        let err = ManagerError::AttachTargetDeviceFailed(
+                            "Failed to find target device".into(),
+                        );
+                        log::error!("{err}");
+                        if let Err(e) = sender.send(Err(err)).await {
                             log::error!("Failed to send response: {e:?}");
                         }
                         continue;
                     };
                     let Some(device) = self.composite_devices.get(&composite_path) else {
-                        if let Err(e) = sender
-                            .send(Err(ManagerError::AttachTargetDeviceFailed(
-                                "Failed to find composite device".into(),
-                            )))
-                            .await
-                        {
+                        let err = ManagerError::AttachTargetDeviceFailed(
+                            "Failed to find composite device".into(),
+                        );
+                        log::error!("{err}");
+                        if let Err(e) = sender.send(Err(err)).await {
                             log::error!("Failed to send response: {e:?}");
                         }
                         continue;
                     };
 
+                    // Send the attach command to the composite device
                     let mut targets = HashMap::new();
                     targets.insert(target_path.clone(), target.clone());
                     if let Err(e) = device
@@ -374,6 +400,10 @@ impl Manager {
                         .send(composite_device::Command::AttachTargetDevices(targets))
                     {
                         log::error!("Failed to send attach command: {e:?}");
+                    }
+
+                    if let Err(e) = sender.send(Ok(())).await {
+                        log::error!("Failed to send response: {e:?}");
                     }
                 }
                 ManagerCommand::StopTargetDevice { path } => {
