@@ -8,6 +8,12 @@ kind: DeviceProfile
 # Name of the device profile
 name: Default
 
+# Target input device(s) to emulate. If unset, the target devices from the device profile will be used.
+#target_devices:
+#  - gamepad
+#  - mouse
+#  - keyboard
+
 # Profile mappings
 mapping:
   - name: QuickAccess

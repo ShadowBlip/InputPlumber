@@ -37,7 +37,7 @@ use crate::{
     udev::{hide_device, unhide_device},
 };
 
-use super::{output_event::OutputEvent, source::SourceCommand};
+use super::{manager::ManagerCommand, output_event::OutputEvent, source::SourceCommand};
 
 /// Size of the command channel buffer for processing input events and commands.
 const BUFFER_SIZE: usize = 2048;
@@ -71,6 +71,8 @@ pub enum Command {
     SourceDeviceAdded(SourceDeviceInfo),
     SourceDeviceStopped(String),
     SourceDeviceRemoved(String),
+    SetTargetDevices(Vec<String>),
+    AttachTargetDevices(HashMap<String, mpsc::Sender<TargetCommand>>),
     GetProfileName(mpsc::Sender<String>),
     LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
     WriteEvent(NativeEvent),
@@ -137,6 +139,14 @@ impl DBusInterface {
             )));
         }
 
+        Ok(())
+    }
+
+    /// Set the target input devices the composite device should emulate.
+    async fn set_target_devices(&self, target_device_types: Vec<String>) -> fdo::Result<()> {
+        self.tx
+            .send(Command::SetTargetDevices(target_device_types))
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         Ok(())
     }
 
@@ -411,6 +421,8 @@ impl Handle {
 pub struct CompositeDevice {
     /// Connection to DBus
     conn: Connection,
+    /// Transmit channel to communicate with the input manager
+    manager: broadcast::Sender<ManagerCommand>,
     /// Configuration for the CompositeDevice
     config: CompositeDeviceConfig,
     /// Capabilities describe all input capabilities from all source devices
@@ -485,6 +497,7 @@ pub struct CompositeDevice {
 impl CompositeDevice {
     pub fn new(
         conn: Connection,
+        manager: broadcast::Sender<ManagerCommand>,
         config: CompositeDeviceConfig,
         device_info: SourceDeviceInfo,
         capability_map: Option<CapabilityMap>,
@@ -493,6 +506,7 @@ impl CompositeDevice {
         let (tx, rx) = broadcast::channel(BUFFER_SIZE);
         let mut device = Self {
             conn,
+            manager,
             config,
             capabilities: HashSet::new(),
             capability_map,
@@ -662,6 +676,16 @@ impl CompositeDevice {
                     }
                     if self.source_devices_used.is_empty() {
                         break;
+                    }
+                }
+                Command::SetTargetDevices(target_types) => {
+                    if let Err(e) = self.set_target_devices(target_types).await {
+                        log::error!("Failed to set target devices: {e:?}");
+                    }
+                }
+                Command::AttachTargetDevices(targets) => {
+                    if let Err(e) = self.attach_target_devices(targets).await {
+                        log::error!("Failed to attach target devices: {e:?}");
                     }
                 }
                 Command::GetProfileName(sender) => {
@@ -1798,6 +1822,13 @@ impl CompositeDevice {
             config_map.push(mapping.clone());
         }
 
+        // Set the target devices to use if it is defined in the profile
+        if let Some(target_devices) = profile.target_devices {
+            if let Err(e) = self.tx.send(Command::SetTargetDevices(target_devices)) {
+                log::error!("Failed to send set target devices: {e:?}");
+            }
+        }
+
         log::debug!("Successfully loaded device profile: {}", profile.name);
         Ok(())
     }
@@ -1926,5 +1957,81 @@ impl CompositeDevice {
         }
 
         Ok(true)
+    }
+
+    /// Set the given target devices on the composite device. This will create
+    /// new target devices, attach them to this device, and stop/remove any
+    /// existing devices.
+    async fn set_target_devices(
+        &mut self,
+        device_types: Vec<String>,
+    ) -> Result<(), Box<dyn Error>> {
+        let targets_to_stop = self.target_devices.clone();
+        let Some(composite_path) = self.dbus_path.clone() else {
+            return Err("No composite device DBus path found".into());
+        };
+
+        // Create target devices using the input manager
+        for kind in device_types {
+            let (sender, mut receiver) = mpsc::channel(1);
+            self.manager
+                .send(ManagerCommand::CreateTargetDevice { kind, sender })?;
+            let Some(response) = receiver.recv().await else {
+                continue;
+            };
+            let target_path = match response {
+                Ok(path) => path,
+                Err(e) => {
+                    let err = format!("Failed to create target: {e:?}");
+                    log::error!("{err}");
+                    continue;
+                }
+            };
+
+            // Attach the target device
+            let (sender, mut receiver) = mpsc::channel(1);
+            self.manager.send(ManagerCommand::AttachTargetDevice {
+                target_path,
+                composite_path: composite_path.clone(),
+                sender,
+            })?;
+            let Some(response) = receiver.recv().await else {
+                continue;
+            };
+            if let Err(e) = response {
+                log::error!("Failed to attach target device: {e:?}");
+            }
+        }
+
+        // Stop all old target devices
+        for (path, target) in targets_to_stop.into_iter() {
+            log::debug!("Stopping old target device: {path}");
+            self.target_devices.remove(&path);
+            if let Err(e) = target.send(TargetCommand::Stop).await {
+                log::error!("Failed to stop old target device: {e:?}");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Attach the given target devices to the composite device
+    async fn attach_target_devices(
+        &mut self,
+        targets: HashMap<String, mpsc::Sender<TargetCommand>>,
+    ) -> Result<(), Box<dyn Error>> {
+        // Keep track of all target devices
+        for (path, target) in targets.into_iter() {
+            log::debug!("Attaching target device: {path}");
+            let cmd = TargetCommand::SetCompositeDevice(self.tx.clone());
+            if let Err(e) = target.send(cmd).await {
+                return Err(
+                    format!("Failed to set composite device for target device: {:?}", e).into(),
+                );
+            }
+            self.target_devices.insert(path, target);
+        }
+
+        Ok(())
     }
 }
