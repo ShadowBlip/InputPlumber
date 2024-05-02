@@ -206,6 +206,15 @@ impl DualSenseDevice {
         log::debug!("Stopped listening for events");
         device.destroy()?;
 
+        // Remove the DBus interface
+        if let Some(path) = self.dbus_path.clone() {
+            log::debug!("Removing DBus interface for {path}");
+            self.conn
+                .object_server()
+                .remove::<DBusInterface, String>(path)
+                .await?;
+        }
+
         Ok(())
     }
 
