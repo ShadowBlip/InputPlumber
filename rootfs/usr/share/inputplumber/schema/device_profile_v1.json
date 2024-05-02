@@ -21,6 +21,26 @@
           "type": "string",
           "description": "Optional description of the device profile"
         },
+        "target_devices": {
+          "description": "Target input device(s) to emulate. If unset, the target devices from the device profile will be used.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "mouse",
+              "keyboard",
+              "gamepad",
+              "xb360",
+              "deck",
+              "ds5",
+              "ds5-usb",
+              "ds5-bt",
+              "ds5-edge",
+              "ds5-edge-usb",
+              "ds5-edge-bt"
+            ]
+          }
+        },
         "mapping": {
           "type": "array",
           "description": "List of input mappings to translate when this profile is loaded",
