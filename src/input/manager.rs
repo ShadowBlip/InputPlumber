@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fs;
 use std::time::Duration;
 
+use thiserror::Error;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use zbus::fdo;
@@ -44,20 +45,62 @@ const INPUT_PATH: &str = "/dev/input";
 const IIO_PATH: &str = "/sys/bus/iio/devices";
 const BUFFER_SIZE: usize = 1024;
 
+#[derive(Error, Debug)]
+pub enum ManagerError {
+    #[error("failed to create target device")]
+    CreateTargetDeviceFailed(String),
+    #[error("failed to attach target device")]
+    AttachTargetDeviceFailed(String),
+}
+
 /// Manager commands define all the different ways to interact with [Manager]
 /// over a channel. These commands are processed in an asyncronous thread and
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
-pub enum Command {
-    SourceDeviceAdded { id: String, info: SourceDeviceInfo },
-    SourceDeviceRemoved { id: String },
-    EventDeviceAdded { name: String },
-    EventDeviceRemoved { name: String },
-    HIDRawAdded { name: String },
-    HIDRawRemoved { name: String },
-    IIODeviceAdded { name: String },
-    IIODeviceRemoved { name: String },
-    CreateCompositeDevice { config: CompositeDeviceConfig },
+pub enum ManagerCommand {
+    SourceDeviceAdded {
+        id: String,
+        info: SourceDeviceInfo,
+    },
+    SourceDeviceRemoved {
+        id: String,
+    },
+    EventDeviceAdded {
+        name: String,
+    },
+    EventDeviceRemoved {
+        name: String,
+    },
+    HIDRawAdded {
+        name: String,
+    },
+    HIDRawRemoved {
+        name: String,
+    },
+    IIODeviceAdded {
+        name: String,
+    },
+    IIODeviceRemoved {
+        name: String,
+    },
+    CreateCompositeDevice {
+        config: CompositeDeviceConfig,
+    },
+    CreateTargetDevice {
+        kind: String,
+        sender: mpsc::Sender<Result<String, ManagerError>>,
+    },
+    StopTargetDevice {
+        path: String,
+    },
+    AttachTargetDevice {
+        target_path: String,
+        composite_path: String,
+        sender: mpsc::Sender<Result<(), ManagerError>>,
+    },
+    TargetDeviceStopped {
+        path: String,
+    },
     CompositeDeviceStopped(String),
 }
 
@@ -73,11 +116,11 @@ pub enum SourceDeviceInfo {
 /// a [Manager]. It works by sending command messages to a channel that the
 /// [Manager] is listening on.
 struct DBusInterface {
-    tx: broadcast::Sender<Command>,
+    tx: broadcast::Sender<ManagerCommand>,
 }
 
 impl DBusInterface {
-    fn new(tx: broadcast::Sender<Command>) -> DBusInterface {
+    fn new(tx: broadcast::Sender<ManagerCommand>) -> DBusInterface {
         DBusInterface { tx }
     }
 }
@@ -95,9 +138,40 @@ impl DBusInterface {
         let device = CompositeDeviceConfig::from_yaml_file(config_path)
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         self.tx
-            .send(Command::CreateCompositeDevice { config: device })
+            .send(ManagerCommand::CreateCompositeDevice { config: device })
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         Ok("".to_string())
+    }
+
+    /// Create a target device of the given type. Returns the DBus path to
+    /// the created target device.
+    async fn create_target_device(&self, kind: String) -> fdo::Result<String> {
+        let (sender, mut receiver) = mpsc::channel(1);
+        self.tx
+            .send(ManagerCommand::CreateTargetDevice { kind, sender })
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+
+        // Read the response from the manager
+        let Some(response) = receiver.recv().await else {
+            return Err(fdo::Error::Failed("No response from manager".to_string()));
+        };
+        let device_path = match response {
+            Ok(path) => path,
+            Err(e) => {
+                let err = format!("Failed to create target device: {e:?}");
+                return Err(fdo::Error::Failed(err));
+            }
+        };
+
+        Ok(device_path)
+    }
+
+    /// Stop the given target device
+    async fn stop_target_device(&self, path: String) -> fdo::Result<()> {
+        self.tx
+            .send(ManagerCommand::StopTargetDevice { path })
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        Ok(())
     }
 }
 
@@ -121,10 +195,10 @@ pub struct Manager {
     /// The transmit side of the [rx] channel used to send [Command] messages.
     /// This can be cloned to allow child objects to communicate up to the
     /// manager.
-    tx: broadcast::Sender<Command>,
+    tx: broadcast::Sender<ManagerCommand>,
     /// The receive side of the channel used to listen for [Command] messages
     /// from other objects.
-    rx: broadcast::Receiver<Command>,
+    rx: broadcast::Receiver<ManagerCommand>,
     /// Mapping of source devices to their SourceDevice objects.
     /// E.g. {"evdev://event0": <SourceDevice>}
     source_devices: HashMap<String, SourceDevice>,
@@ -190,55 +264,130 @@ impl Manager {
         while let Ok(cmd) = self.rx.recv().await {
             log::debug!("Received command: {:?}", cmd);
             match cmd {
-                Command::EventDeviceAdded { name } => {
+                ManagerCommand::EventDeviceAdded { name } => {
                     if let Err(e) = self.on_event_device_added(name).await {
                         log::error!("Error adding event device: {:?}", e);
                     }
                 }
-                Command::EventDeviceRemoved { name } => {
+                ManagerCommand::EventDeviceRemoved { name } => {
                     if let Err(e) = self.on_event_device_removed(name).await {
                         log::error!("Error removing event device: {:?}", e);
                     }
                 }
-                Command::HIDRawAdded { name } => {
+                ManagerCommand::HIDRawAdded { name } => {
                     if let Err(e) = self.on_hidraw_added(name).await {
                         log::error!("Error adding hidraw device: {:?}", e);
                     }
                 }
-                Command::HIDRawRemoved { name } => {
+                ManagerCommand::HIDRawRemoved { name } => {
                     if let Err(e) = self.on_hidraw_removed(name).await {
                         log::error!("Error removing hidraw device: {:?}", e);
                     }
                 }
-                Command::IIODeviceAdded { name } => {
+                ManagerCommand::IIODeviceAdded { name } => {
                     if let Err(e) = self.on_iio_added(name).await {
                         log::error!("Error adding iio device: {:?}", e);
                     }
                 }
-                Command::IIODeviceRemoved { name } => {
+                ManagerCommand::IIODeviceRemoved { name } => {
                     if let Err(e) = self.on_iio_removed(name).await {
                         log::error!("Error removing iio device: {:?}", e);
                     }
                 }
-                Command::CreateCompositeDevice { config } => {
+                ManagerCommand::CreateCompositeDevice { config } => {
                     if let Err(e) = self.create_composite_device(config).await {
                         log::error!("Error creating composite device: {:?}", e);
                     }
                 }
-                Command::SourceDeviceAdded { id, info } => {
+                ManagerCommand::SourceDeviceAdded { id, info } => {
                     if let Err(e) = self.on_source_device_added(id, info).await {
                         log::error!("Error handling added source device: {:?}", e);
                     }
                 }
-                Command::SourceDeviceRemoved { id } => {
+                ManagerCommand::SourceDeviceRemoved { id } => {
                     if let Err(e) = self.on_source_device_removed(id).await {
                         log::error!("Error handling removed source device: {:?}", e);
                     }
                 }
-                Command::CompositeDeviceStopped(path) => {
+                ManagerCommand::CompositeDeviceStopped(path) => {
                     if let Err(e) = self.on_composite_device_stopped(path).await {
                         log::error!("Error handling stopped composite device: {:?}", e);
                     }
+                }
+                ManagerCommand::CreateTargetDevice { kind, sender } => {
+                    // Create the target device
+                    let device = match self.create_and_start_target_device(kind.as_str()).await {
+                        Ok(device) => device,
+                        Err(err) => {
+                            if let Err(e) = sender.send(Err(err)).await {
+                                log::error!("Failed to send response: {e:?}");
+                            }
+                            continue;
+                        }
+                    };
+
+                    // Get the DBus path to the target device
+                    let path = device.keys().next().cloned();
+                    let response = match path {
+                        Some(path) => Ok(path),
+                        None => Err(ManagerError::CreateTargetDeviceFailed(
+                            "Unable to find device path".to_string(),
+                        )),
+                    };
+
+                    if let Err(e) = sender.send(response).await {
+                        log::error!("Failed to send response: {e:?}");
+                    }
+                }
+                ManagerCommand::AttachTargetDevice {
+                    target_path,
+                    composite_path,
+                    sender,
+                } => {
+                    let Some(target) = self.target_devices.get(&target_path) else {
+                        if let Err(e) = sender
+                            .send(Err(ManagerError::AttachTargetDeviceFailed(
+                                "Failed to find target device".into(),
+                            )))
+                            .await
+                        {
+                            log::error!("Failed to send response: {e:?}");
+                        }
+                        continue;
+                    };
+                    let Some(device) = self.composite_devices.get(&composite_path) else {
+                        if let Err(e) = sender
+                            .send(Err(ManagerError::AttachTargetDeviceFailed(
+                                "Failed to find composite device".into(),
+                            )))
+                            .await
+                        {
+                            log::error!("Failed to send response: {e:?}");
+                        }
+                        continue;
+                    };
+
+                    let mut targets = HashMap::new();
+                    targets.insert(target_path.clone(), target.clone());
+                    if let Err(e) = device
+                        .tx
+                        .send(composite_device::Command::AttachTargetDevices(targets))
+                    {
+                        log::error!("Failed to send attach command: {e:?}");
+                    }
+                }
+                ManagerCommand::StopTargetDevice { path } => {
+                    let Some(target) = self.target_devices.get(&path) else {
+                        log::error!("Failed to find target device: {path}");
+                        continue;
+                    };
+                    if let Err(e) = target.send(TargetCommand::Stop).await {
+                        log::error!("Failed to send stop command to target device {path}: {e:?}");
+                    }
+                }
+                ManagerCommand::TargetDeviceStopped { path } => {
+                    log::debug!("Target device stopped: {path}");
+                    self.target_devices.remove(&path);
                 }
             }
         }
@@ -274,7 +423,13 @@ impl Manager {
         // Create a composite device to manage these devices
         log::info!("Found matching source devices: {:?}", config.name);
         let config = config.clone();
-        let device = CompositeDevice::new(self.dbus.clone(), config, device_info, capability_map)?;
+        let device = CompositeDevice::new(
+            self.dbus.clone(),
+            self.tx.clone(),
+            config,
+            device_info,
+            capability_map,
+        )?;
 
         // Check to see if there's already a CompositeDevice for
         // these source devices.
@@ -429,7 +584,50 @@ impl Manager {
             }
         }
 
+        // Spawn tasks to cleanup target devices
+        for (path, target) in target_devices.iter() {
+            let tx = self.tx.clone();
+            let path = path.clone();
+            let target = target.clone();
+            tokio::task::spawn(async move {
+                target.closed().await;
+                if let Err(e) = tx.send(ManagerCommand::TargetDeviceStopped { path }) {
+                    log::error!("Failed to target device stopped: {e:?}");
+                }
+            });
+        }
+
         Ok(target_devices)
+    }
+
+    /// Create and start the given type of target device and return a mapping
+    /// of the dbus path to the target device and sender to send messages to the
+    /// device.
+    async fn create_and_start_target_device(
+        &mut self,
+        kind: &str,
+    ) -> Result<HashMap<String, mpsc::Sender<TargetCommand>>, ManagerError> {
+        // Create the target device
+        let device = match self.create_target_device(kind).await {
+            Ok(device) => device,
+            Err(e) => {
+                let err = format!("Error creating target device: {e:?}");
+                log::error!("{err}");
+                return Err(ManagerError::CreateTargetDeviceFailed(err));
+            }
+        };
+
+        // Start the target device
+        let paths = match self.start_target_devices(vec![device]).await {
+            Ok(paths) => paths,
+            Err(e) => {
+                let err = format!("Error starting target device: {e:?}");
+                log::error!("{err}");
+                return Err(ManagerError::CreateTargetDeviceFailed(err));
+            }
+        };
+
+        Ok(paths)
     }
 
     /// Starts the given [CompositeDevice]
@@ -504,7 +702,7 @@ impl Manager {
                 log::error!("Error running device: {:?}", e);
             }
             log::debug!("Composite device stopped running: {:?}", dbus_path);
-            if let Err(e) = tx.send(Command::CompositeDeviceStopped(dbus_path)) {
+            if let Err(e) = tx.send(ManagerCommand::CompositeDeviceStopped(dbus_path)) {
                 log::error!("Error sending composite device stopped: {:?}", e);
             }
         });
@@ -920,7 +1118,7 @@ impl Manager {
 
         // Signal that a source device was added
         let id = format!("evdev://{}", handler);
-        self.tx.send(Command::SourceDeviceAdded {
+        self.tx.send(ManagerCommand::SourceDeviceAdded {
             id: id.clone(),
             info: SourceDeviceInfo::EvdevDeviceInfo(info),
         })?;
@@ -950,7 +1148,7 @@ impl Manager {
             .await?;
 
         // Signal that a source device was removed
-        self.tx.send(Command::SourceDeviceRemoved { id })?;
+        self.tx.send(ManagerCommand::SourceDeviceRemoved { id })?;
 
         Ok(())
     }
@@ -975,7 +1173,7 @@ impl Manager {
 
         // Signal that a source device was added
         let id = format!("hidraw://{}", name);
-        self.tx.send(Command::SourceDeviceAdded {
+        self.tx.send(ManagerCommand::SourceDeviceAdded {
             id: id.clone(),
             info: SourceDeviceInfo::HIDRawDeviceInfo(info),
         })?;
@@ -994,7 +1192,7 @@ impl Manager {
 
         // Signal that a source device was removed
         self.tx
-            .send(Command::SourceDeviceRemoved { id: id.clone() })?;
+            .send(ManagerCommand::SourceDeviceRemoved { id: id.clone() })?;
 
         self.source_device_dbus_paths.remove(&id);
         self.source_devices_used.remove(&id);
@@ -1022,7 +1220,7 @@ impl Manager {
 
         // Signal that a source device was added
         let id = format!("iio://{}", id);
-        self.tx.send(Command::SourceDeviceAdded {
+        self.tx.send(ManagerCommand::SourceDeviceAdded {
             id: id.clone(),
             info: SourceDeviceInfo::IIODeviceInfo(info),
         })?;
@@ -1041,7 +1239,7 @@ impl Manager {
 
         // Signal that a source device was removed
         self.tx
-            .send(Command::SourceDeviceRemoved { id: id.clone() })?;
+            .send(ManagerCommand::SourceDeviceRemoved { id: id.clone() })?;
 
         self.source_device_dbus_paths.remove(&id);
         self.source_devices_used.remove(&id);
@@ -1104,17 +1302,17 @@ impl Manager {
                     // Create events
                     WatchEvent::Create { name, base_path } => {
                         if base_path == INPUT_PATH && name.starts_with("event") {
-                            let result = cmd_tx.send(Command::EventDeviceAdded { name });
+                            let result = cmd_tx.send(ManagerCommand::EventDeviceAdded { name });
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
                         } else if name.starts_with("hidraw") {
-                            let result = cmd_tx.send(Command::HIDRawAdded { name });
+                            let result = cmd_tx.send(ManagerCommand::HIDRawAdded { name });
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
                         } else if base_path == IIO_PATH {
-                            let result = cmd_tx.send(Command::IIODeviceAdded { name });
+                            let result = cmd_tx.send(ManagerCommand::IIODeviceAdded { name });
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
@@ -1123,17 +1321,17 @@ impl Manager {
                     // Delete events
                     WatchEvent::Delete { name, base_path } => {
                         if base_path == INPUT_PATH && name.starts_with("event") {
-                            let result = cmd_tx.send(Command::EventDeviceRemoved { name });
+                            let result = cmd_tx.send(ManagerCommand::EventDeviceRemoved { name });
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
                         } else if name.starts_with("hidraw") {
-                            let result = cmd_tx.send(Command::HIDRawRemoved { name });
+                            let result = cmd_tx.send(ManagerCommand::HIDRawRemoved { name });
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
                         } else if base_path == IIO_PATH {
-                            let result = cmd_tx.send(Command::IIODeviceRemoved { name });
+                            let result = cmd_tx.send(ManagerCommand::IIODeviceRemoved { name });
                             if let Err(e) = result {
                                 log::error!("Unable to send command: {:?}", e);
                             }
