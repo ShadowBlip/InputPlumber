@@ -5,10 +5,7 @@
 use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
 
 use packed_struct::prelude::*;
-use tokio::sync::{
-    broadcast,
-    mpsc::{self, error::TryRecvError},
-};
+use tokio::sync::mpsc::{self, error::TryRecvError};
 use uhid_virt::{Bus, CreateParams, OutputEvent, StreamError, UHIDDevice};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
@@ -128,7 +125,7 @@ pub struct DualSenseDevice {
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
     state: PackedInputDataReport,
-    composite_tx: Option<broadcast::Sender<Command>>,
+    composite_tx: Option<mpsc::Sender<Command>>,
     hardware: DualSenseHardware,
 }
 
@@ -153,7 +150,7 @@ impl DualSenseDevice {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: broadcast::Sender<Command>) {
+    pub fn set_composite_device(&mut self, tx: mpsc::Sender<Command>) {
         self.composite_tx = Some(tx);
     }
 
@@ -191,7 +188,7 @@ impl DualSenseDevice {
             }
 
             // Poll the HIDRaw device
-            if let Err(e) = self.poll(&mut device) {
+            if let Err(e) = self.poll(&mut device).await {
                 log::debug!("Error polling UHID device: {:?}", e);
                 break;
             }
@@ -302,7 +299,7 @@ impl DualSenseDevice {
     /// Handle reading from the device and processing input events from source
     /// devices over the event channel
     /// https://www.kernel.org/doc/html/latest/hid/uhid.html#read
-    fn poll(&mut self, device: &mut UHIDDevice<File>) -> Result<(), Box<dyn Error>> {
+    async fn poll(&mut self, device: &mut UHIDDevice<File>) -> Result<(), Box<dyn Error>> {
         let result = device.read();
         match result {
             Ok(event) => {
@@ -334,7 +331,7 @@ impl DualSenseDevice {
                     // device. You should read the payload and forward it to the device.
                     OutputEvent::Output { data } => {
                         log::trace!("Got output data: {:?}", data);
-                        let result = self.handle_output(data);
+                        let result = self.handle_output(data).await;
                         if let Err(e) = result {
                             let err = format!("Failed process output event: {:?}", e);
                             return Err(err.into());
@@ -394,7 +391,7 @@ impl DualSenseDevice {
 
     /// Handle [OutputEvent::Output] events from the HIDRAW device. These are
     /// events which should be forwarded back to source devices.
-    fn handle_output(&mut self, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
+    async fn handle_output(&mut self, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
         // Validate the output report size
         let _expected_report_size = match self.hardware.bus_type {
             BusType::Bluetooth => OUTPUT_REPORT_BT_SIZE,
@@ -454,7 +451,7 @@ impl DualSenseDevice {
 
                 let event = output_event::OutputEvent::DualSense(state);
                 let cmd = Command::ProcessOutputEvent(event);
-                tx.send(cmd)?;
+                tx.send(cmd).await?;
             }
             OUTPUT_REPORT_BT => {
                 log::debug!(

@@ -4,10 +4,7 @@ use packed_struct::{
     types::{Integer, SizedInteger},
     PackedStruct,
 };
-use tokio::sync::{
-    broadcast,
-    mpsc::{self, error::TryRecvError},
-};
+use tokio::sync::mpsc::{self, error::TryRecvError};
 use uhid_virt::{Bus, CreateParams, OutputEvent, StreamError, UHIDDevice};
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
@@ -56,7 +53,7 @@ pub struct SteamDeckDevice {
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
     state: PackedInputDataReport,
-    composite_tx: Option<broadcast::Sender<composite_device::Command>>,
+    composite_tx: Option<mpsc::Sender<composite_device::Command>>,
 }
 
 impl SteamDeckDevice {
@@ -79,7 +76,7 @@ impl SteamDeckDevice {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: broadcast::Sender<composite_device::Command>) {
+    pub fn set_composite_device(&mut self, tx: mpsc::Sender<composite_device::Command>) {
         self.composite_tx = Some(tx);
     }
 

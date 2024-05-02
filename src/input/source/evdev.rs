@@ -113,7 +113,7 @@ impl DBusInterface {
 #[derive(Debug)]
 pub struct EventDevice {
     info: procfs::device::Device,
-    composite_tx: broadcast::Sender<Command>,
+    composite_tx: mpsc::Sender<Command>,
     tx: mpsc::Sender<SourceCommand>,
     rx: mpsc::Receiver<SourceCommand>,
     ff_effects: HashMap<i16, FFEffect>,
@@ -121,7 +121,7 @@ pub struct EventDevice {
 }
 
 impl EventDevice {
-    pub fn new(info: procfs::device::Device, composite_tx: broadcast::Sender<Command>) -> Self {
+    pub fn new(info: procfs::device::Device, composite_tx: mpsc::Sender<Command>) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
             info,
@@ -182,7 +182,7 @@ impl EventDevice {
             };
 
             // Process events from the device
-            if let Err(err) = self.process_events(events, &axes_info) {
+            if let Err(err) = self.process_events(events, &axes_info).await {
                 log::error!("Failed to process events: {:?}", err);
                 break;
             }
@@ -211,7 +211,7 @@ impl EventDevice {
     }
 
     /// Process incoming events and send them to the composite device.
-    fn process_events(
+    async fn process_events(
         &self,
         events: Vec<InputEvent>,
         axes_info: &HashMap<AbsoluteAxisCode, AbsInfo>,
@@ -236,7 +236,8 @@ impl EventDevice {
             // Send the event to the composite device
             let event = Event::Evdev(evdev_event);
             self.composite_tx
-                .send(Command::ProcessEvent(self.get_id(), event))?;
+                .send(Command::ProcessEvent(self.get_id(), event))
+                .await?;
         }
 
         Ok(())

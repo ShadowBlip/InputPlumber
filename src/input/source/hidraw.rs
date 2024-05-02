@@ -94,13 +94,13 @@ pub fn get_dbus_path(device_path: String) -> String {
 #[derive(Debug)]
 pub struct HIDRawDevice {
     info: DeviceInfo,
-    composite_tx: broadcast::Sender<Command>,
+    composite_tx: mpsc::Sender<Command>,
     tx: mpsc::Sender<SourceCommand>,
     rx: Option<mpsc::Receiver<SourceCommand>>,
 }
 
 impl HIDRawDevice {
-    pub fn new(info: DeviceInfo, composite_tx: broadcast::Sender<Command>) -> Self {
+    pub fn new(info: DeviceInfo, composite_tx: mpsc::Sender<Command>) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
             info,

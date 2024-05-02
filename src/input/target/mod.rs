@@ -1,4 +1,4 @@
-use tokio::sync::broadcast::Sender;
+use tokio::sync::mpsc::Sender;
 
 use super::{composite_device::Command, event::native::NativeEvent};
 
