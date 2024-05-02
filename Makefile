@@ -45,8 +45,8 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/bin/$(NAME)
 	install -D -m 644 rootfs/usr/share/dbus-1/system.d/$(DBUS_NAME).conf \
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
-	install -D -m 644 -t $(PREFIX)/usr/lib/systemd/system/ \
-		rootfs/lib/systemd/system/*
+	install -D -m 644 -t $(PREFIX)/lib/systemd/system/ \
+		rootfs/usr/lib/systemd/system/*
 	install -D -m 644 rootfs/usr/lib/udev/hwdb.d/59-inputplumber.hwdb \
 		$(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb
 	install -D -m 644 -t $(PREFIX)/share/$(NAME)/devices/ \
