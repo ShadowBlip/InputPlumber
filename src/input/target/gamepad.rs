@@ -156,11 +156,14 @@ impl GenericGamepad {
             }
         }
 
-        log::debug!("Stopping device");
+        log::debug!(
+            "Stopping device {}",
+            self.dbus_path.clone().unwrap_or_default()
+        );
 
         // Remove the DBus interface
         if let Some(path) = self.dbus_path.clone() {
-            log::debug!("Removing DBus interface");
+            log::debug!("Removing DBus interface for {path}");
             self.conn
                 .object_server()
                 .remove::<DBusInterface, String>(path)
@@ -275,6 +278,15 @@ impl GenericGamepad {
     fn spawn_ff_thread(ff_device: Arc<Mutex<VirtualDevice>>, tx: broadcast::Sender<Command>) {
         tokio::task::spawn_blocking(move || {
             loop {
+                // Check to see if the main input thread still has a reference
+                // to the virtual device. If it does not, it means the device
+                // has stopped.
+                let num_refs = Arc::strong_count(&ff_device);
+                if num_refs == 1 {
+                    log::debug!("Virtual device stopped. Stopping FF handler thread.");
+                    break;
+                }
+
                 // Read any events
                 if let Err(e) = GenericGamepad::process_ff(&ff_device, &tx) {
                     log::warn!("Error processing FF events: {:?}", e);
