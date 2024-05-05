@@ -1851,12 +1851,12 @@ impl CompositeDevice {
 
         // Set the target devices to use if it is defined in the profile
         if let Some(target_devices) = profile.target_devices {
-            if let Err(e) = self
-                .tx
-                .blocking_send(Command::SetTargetDevices(target_devices))
-            {
-                log::error!("Failed to send set target devices: {e:?}");
-            }
+            let tx = self.tx.clone();
+            tokio::task::spawn(async move {
+                if let Err(e) = tx.send(Command::SetTargetDevices(target_devices)).await {
+                    log::error!("Failed to send set target devices: {e:?}");
+                }
+            });
         }
 
         log::debug!("Successfully loaded device profile: {}", profile.name);
