@@ -20,7 +20,7 @@ use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::input::{
-    capability::Capability,
+    capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
     composite_device::Command,
     event::{evdev::EvdevEvent, native::NativeEvent},
     output_event::{OutputEvent, UinputOutputEvent},
@@ -71,17 +71,6 @@ impl GenericGamepad {
             rx,
             composite_tx: None,
         }
-    }
-
-    /// Returns all the native capabilities that the device can emit
-    pub fn _get_capabilities() -> Vec<Capability> {
-        use crate::input::capability::{Gamepad, GamepadButton};
-        vec![
-            Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-        ]
     }
 
     /// Returns the DBus path of this device
@@ -144,6 +133,12 @@ impl GenericGamepad {
                         dev.emit(&[
                             SynchronizationEvent::new(SynchronizationCode::SYN_REPORT, 0).into(),
                         ])?;
+                    }
+                }
+                TargetCommand::GetCapabilities(tx) => {
+                    let caps = self.get_capabilities();
+                    if let Err(e) = tx.send(caps).await {
+                        log::error!("Failed to send target capabilities: {e:?}");
                     }
                 }
                 TargetCommand::Stop => break,
@@ -399,5 +394,32 @@ impl GenericGamepad {
         }
 
         Ok(())
+    }
+
+    /// Returns capabilities of the target device
+    fn get_capabilities(&self) -> Vec<Capability> {
+        vec![
+            Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+        ]
     }
 }
