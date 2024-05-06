@@ -1,6 +1,6 @@
 use tokio::sync::mpsc::Sender;
 
-use super::{composite_device::Command, event::native::NativeEvent};
+use super::{capability::Capability, composite_device::Command, event::native::NativeEvent};
 
 pub mod dbus;
 pub mod dualsense;
@@ -29,5 +29,6 @@ pub enum TargetDeviceType {
 pub enum TargetCommand {
     WriteEvent(NativeEvent),
     SetCompositeDevice(Sender<Command>),
+    GetCapabilities(Sender<Vec<Capability>>),
     Stop,
 }

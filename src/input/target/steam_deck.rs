@@ -19,6 +19,7 @@ use crate::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton},
         composite_device,
         event::{native::NativeEvent, value::InputValue},
+        source::hidraw::steam_deck::CAPABILITIES,
     },
 };
 
@@ -208,6 +209,12 @@ impl SteamDeckDevice {
 
                     // Send the state to the device
                     device_tx.send(self.state).await?;
+                }
+                TargetCommand::GetCapabilities(tx) => {
+                    let caps = CAPABILITIES.to_vec();
+                    if let Err(e) = tx.send(caps).await {
+                        log::error!("Failed to send target capabilities: {e:?}");
+                    }
                 }
                 TargetCommand::Stop => break,
             };

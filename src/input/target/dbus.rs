@@ -5,6 +5,7 @@ use zbus::{fdo, Connection, SignalContext};
 use zbus_macros::dbus_interface;
 
 use crate::input::{
+    capability::Capability,
     composite_device,
     event::{
         dbus::{Action, DBusEvent},
@@ -123,6 +124,12 @@ impl DBusDevice {
                     let dbus_events = self.translate_event(event);
                     for dbus_event in dbus_events {
                         self.write_dbus_event(dbus_event).await?;
+                    }
+                }
+                TargetCommand::GetCapabilities(tx) => {
+                    let caps = self.get_capabilities();
+                    if let Err(e) = tx.send(caps).await {
+                        log::error!("Failed to send target capabilities: {e:?}");
                     }
                 }
                 TargetCommand::Stop => break,
@@ -244,5 +251,35 @@ impl DBusDevice {
         .await?;
 
         Ok(())
+    }
+
+    /// Returns capabilities of the target device
+    fn get_capabilities(&self) -> Vec<Capability> {
+        vec![
+            Capability::DBus(Action::Guide),
+            Capability::DBus(Action::Quick),
+            Capability::DBus(Action::Quick2),
+            Capability::DBus(Action::Context),
+            Capability::DBus(Action::Option),
+            Capability::DBus(Action::Select),
+            Capability::DBus(Action::Accept),
+            Capability::DBus(Action::Back),
+            Capability::DBus(Action::ActOn),
+            Capability::DBus(Action::Left),
+            Capability::DBus(Action::Right),
+            Capability::DBus(Action::Up),
+            Capability::DBus(Action::Down),
+            Capability::DBus(Action::L1),
+            Capability::DBus(Action::L2),
+            Capability::DBus(Action::L3),
+            Capability::DBus(Action::R1),
+            Capability::DBus(Action::R2),
+            Capability::DBus(Action::R3),
+            Capability::DBus(Action::VolumeUp),
+            Capability::DBus(Action::VolumeDown),
+            Capability::DBus(Action::VolumeMute),
+            Capability::DBus(Action::Keyboard),
+            Capability::DBus(Action::Screenshot),
+        ]
     }
 }

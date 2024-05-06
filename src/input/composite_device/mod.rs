@@ -60,9 +60,11 @@ pub enum InterceptMode {
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
 pub enum Command {
+    GetName(mpsc::Sender<String>),
     ProcessEvent(String, Event),
     ProcessOutputEvent(OutputEvent),
     GetCapabilities(mpsc::Sender<HashSet<Capability>>),
+    GetTargetCapabilities(mpsc::Sender<HashSet<Capability>>),
     SetInterceptMode(InterceptMode),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
@@ -102,7 +104,16 @@ impl DBusInterface {
     /// Name of the composite device
     #[dbus_interface(property)]
     async fn name(&self) -> fdo::Result<String> {
-        Ok("CompositeDevice".into())
+        let (sender, mut receiver) = mpsc::channel::<String>(1);
+        self.tx
+            .send(Command::GetName(sender))
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let Some(name) = receiver.recv().await else {
+            return Ok("".to_string());
+        };
+
+        Ok(name)
     }
 
     /// Name of the currently loaded profile
@@ -345,6 +356,41 @@ impl DBusInterface {
         Ok(capability_strings)
     }
 
+    /// List of capabilities that all target devices implement
+    #[dbus_interface(property)]
+    async fn target_capabilities(&self) -> fdo::Result<Vec<String>> {
+        let (sender, mut receiver) = mpsc::channel::<HashSet<Capability>>(1);
+        self.tx
+            .send(Command::GetTargetCapabilities(sender))
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let Some(capabilities) = receiver.recv().await else {
+            return Ok(Vec::new());
+        };
+
+        let mut capability_strings = Vec::new();
+        for cap in capabilities {
+            let str = match cap {
+                Capability::Gamepad(gamepad) => match gamepad {
+                    Gamepad::Button(button) => format!("Gamepad:Button:{}", button),
+                    Gamepad::Axis(axis) => format!("Gamepad:Axis:{}", axis),
+                    Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{}", trigger),
+                    Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
+                    Gamepad::Gyro => "Gamepad:Gyro".to_string(),
+                },
+                Capability::Mouse(mouse) => match mouse {
+                    Mouse::Motion => "Mouse:Motion".to_string(),
+                    Mouse::Button(button) => format!("Mouse:Button:{}", button),
+                },
+                Capability::Keyboard(key) => format!("Keyboard:{}", key),
+                _ => cap.to_string(),
+            };
+            capability_strings.push(str);
+        }
+
+        Ok(capability_strings)
+    }
+
     /// List of source devices that this composite device is processing inputs for
     #[dbus_interface(property)]
     async fn source_device_paths(&self) -> fdo::Result<Vec<String>> {
@@ -435,6 +481,8 @@ pub struct CompositeDevice {
     manager: broadcast::Sender<ManagerCommand>,
     /// Configuration for the CompositeDevice
     config: CompositeDeviceConfig,
+    /// Name of the [CompositeDeviceConfig] loaded for the device
+    name: String,
     /// Capabilities describe all input capabilities from all source devices
     capabilities: HashSet<Capability>,
     /// Capability mapping for the CompositeDevice
@@ -514,10 +562,12 @@ impl CompositeDevice {
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating CompositeDevice with config: {}", config.name);
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
+        let name = config.name.clone();
         let mut device = Self {
             conn,
             manager,
             config,
+            name,
             capabilities: HashSet::new(),
             capability_map,
             device_profile: None,
@@ -646,6 +696,18 @@ impl CompositeDevice {
                         log::error!("Failed to send capabilities: {:?}", e);
                     }
                 }
+                Command::GetTargetCapabilities(sender) => {
+                    let target_caps = match self.get_target_capabilities().await {
+                        Ok(caps) => caps,
+                        Err(e) => {
+                            log::error!("Failed to get target capabilities: {e:?}");
+                            continue;
+                        }
+                    };
+                    if let Err(e) = sender.send(target_caps).await {
+                        log::error!("Failed to send target capabilities: {:?}", e);
+                    }
+                }
                 Command::SetInterceptMode(mode) => self.set_intercept_mode(mode),
                 Command::GetInterceptMode(sender) => {
                     if let Err(e) = sender.send(self.intercept_mode.clone()).await {
@@ -708,6 +770,12 @@ impl CompositeDevice {
                 Command::AttachTargetDevices(targets) => {
                     if let Err(e) = self.attach_target_devices(targets).await {
                         log::error!("Failed to attach target devices: {e:?}");
+                    }
+                }
+                Command::GetName(sender) => {
+                    let name = self.name.clone();
+                    if let Err(e) = sender.send(name).await {
+                        log::error!("Failed to send device name: {:?}", e);
                     }
                 }
                 Command::GetProfileName(sender) => {
@@ -2046,6 +2114,39 @@ impl CompositeDevice {
         self.signal_targets_changed().await;
 
         Ok(())
+    }
+
+    // Get the capabilities of all target devices
+    async fn get_target_capabilities(&self) -> Result<HashSet<Capability>, Box<dyn Error>> {
+        let mut target_caps = HashSet::new();
+        for target in self.target_devices.values() {
+            let (tx, mut rx) = mpsc::channel(1);
+            let cmd = TargetCommand::GetCapabilities(tx);
+            if let Err(e) = target.send(cmd).await {
+                return Err(format!("Failed to get target capabilities: {e:?}").into());
+            }
+            let Some(caps) = rx.recv().await else {
+                return Err("Failed to receive target capabilities".into());
+            };
+            for cap in caps {
+                target_caps.insert(cap);
+            }
+        }
+        for target in self.target_dbus_devices.values() {
+            let (tx, mut rx) = mpsc::channel(1);
+            let cmd = TargetCommand::GetCapabilities(tx);
+            if let Err(e) = target.send(cmd).await {
+                return Err(format!("Failed to get target capabilities: {e:?}").into());
+            }
+            let Some(caps) = rx.recv().await else {
+                return Err("Failed to receive target capabilities".into());
+            };
+            for cap in caps {
+                target_caps.insert(cap);
+            }
+        }
+
+        Ok(target_caps)
     }
 
     /// Attach the given target devices to the composite device

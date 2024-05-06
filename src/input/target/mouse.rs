@@ -13,7 +13,7 @@ use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::input::{
-    capability::{Capability, Mouse},
+    capability::{Capability, Mouse, MouseButton},
     composite_device,
     event::{evdev::EvdevEvent, native::NativeEvent, value::InputValue},
 };
@@ -163,6 +163,12 @@ impl MouseDevice {
                     )
                     .into()])?;
                 }
+                TargetCommand::GetCapabilities(tx) => {
+                    let caps = self.get_capabilities();
+                    if let Err(e) = tx.send(caps).await {
+                        log::error!("Failed to send target capabilities: {e:?}");
+                    }
+                }
                 TargetCommand::Stop => break,
             };
         }
@@ -213,6 +219,19 @@ impl MouseDevice {
             .build()?;
 
         Ok(device)
+    }
+
+    fn get_capabilities(&self) -> Vec<Capability> {
+        vec![
+            Capability::Mouse(Mouse::Button(MouseButton::Left)),
+            Capability::Mouse(Mouse::Button(MouseButton::Right)),
+            Capability::Mouse(Mouse::Button(MouseButton::Middle)),
+            Capability::Mouse(Mouse::Button(MouseButton::Side)),
+            Capability::Mouse(Mouse::Button(MouseButton::Extra)),
+            Capability::Mouse(Mouse::Button(MouseButton::WheelUp)),
+            Capability::Mouse(Mouse::Button(MouseButton::WheelDown)),
+            Capability::Mouse(Mouse::Motion),
+        ]
     }
 }
 
