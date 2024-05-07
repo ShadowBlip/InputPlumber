@@ -12,6 +12,7 @@ use crate::udev::unhide_all;
 
 mod config;
 mod constants;
+mod dbus;
 mod dmi;
 mod drivers;
 mod iio;
