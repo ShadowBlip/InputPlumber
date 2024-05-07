@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../schema/composite_device_v1.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
 # Schema version number
 version: 1
 
