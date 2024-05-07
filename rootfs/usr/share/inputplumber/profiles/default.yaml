@@ -39,20 +39,6 @@ mapping:
     target_events:
       - gamepad:
           button: QuickAccess2
-  - name: LeftPaddle
-    source_event:
-      gamepad:
-        button: LeftPaddle1
-    target_events:
-      - gamepad:
-          button: LeftStick
-  - name: RightPaddle
-    source_event:
-      gamepad:
-        button: RightPaddle1
-    target_events:
-      - gamepad:
-          button: RightStick
   - name: Keyboard
     source_event:
       gamepad:
