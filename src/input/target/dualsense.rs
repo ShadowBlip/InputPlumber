@@ -18,6 +18,7 @@ use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::{
+    dbus::interface::target::gamepad::TargetGamepadInterface,
     drivers::dualsense::{
         driver::{
             DS5_ACC_RES_PER_G, DS5_EDGE_NAME, DS5_EDGE_PID, DS5_EDGE_VERSION, DS5_EDGE_VID,
@@ -96,36 +97,6 @@ impl Default for DualSenseHardware {
     }
 }
 
-/// The [DBusInterface] provides a DBus interface that can be exposed for managing
-/// a [DualSenseDevice].
-pub struct DBusInterface {
-    hardware: DualSenseHardware,
-}
-
-impl DBusInterface {
-    fn new(hardware: DualSenseHardware) -> DBusInterface {
-        DBusInterface { hardware }
-    }
-}
-
-#[dbus_interface(name = "org.shadowblip.Input.Gamepad")]
-impl DBusInterface {
-    /// Name of the DBus device
-    #[dbus_interface(property)]
-    async fn name(&self) -> fdo::Result<String> {
-        match self.hardware.model {
-            ModelType::Edge => match self.hardware.bus_type {
-                BusType::Bluetooth => Ok("DualSense Edge (bluetooth)".into()),
-                BusType::Usb => Ok("DualSense Edge".into()),
-            },
-            ModelType::Normal => match self.hardware.bus_type {
-                BusType::Bluetooth => Ok("DualSense (bluetooth)".into()),
-                BusType::Usb => Ok("DualSense".into()),
-            },
-        }
-    }
-}
-
 /// The [DualSenseDevice] is a target input device implementation that emulates
 /// a Playstation DualSense controller using uhid.
 #[derive(Debug)]
@@ -168,9 +139,20 @@ impl DualSenseDevice {
     pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         let conn = self.conn.clone();
         self.dbus_path = Some(path.clone());
-        let hw_config = self.hardware;
+
+        let name = match self.hardware.model {
+            ModelType::Edge => match self.hardware.bus_type {
+                BusType::Bluetooth => "DualSense Edge (bluetooth)".to_string(),
+                BusType::Usb => "DualSense Edge".to_string(),
+            },
+            ModelType::Normal => match self.hardware.bus_type {
+                BusType::Bluetooth => "DualSense (bluetooth)".to_string(),
+                BusType::Usb => "DualSense".to_string(),
+            },
+        };
+
         tokio::spawn(async move {
-            let iface = DBusInterface::new(hw_config);
+            let iface = TargetGamepadInterface::new(name);
             if let Err(e) = conn.object_server().at(path, iface).await {
                 log::error!("Failed to setup DBus interface for Gamepad device: {:?}", e);
             }
@@ -218,7 +200,7 @@ impl DualSenseDevice {
             log::debug!("Removing DBus interface for {path}");
             self.conn
                 .object_server()
-                .remove::<DBusInterface, String>(path)
+                .remove::<TargetGamepadInterface, String>(path)
                 .await?;
         }
 

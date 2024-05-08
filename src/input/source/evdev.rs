@@ -1,26 +1,11 @@
-use std::{
-    any::Any,
-    collections::HashMap,
-    error::Error,
-    os::fd::AsRawFd,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::HashMap, error::Error, os::fd::AsRawFd, time::Duration};
 
 use evdev::{
     AbsInfo, AbsoluteAxisCode, Device, EventType, FFEffect, FFEffectData, FFEffectKind, FFReplay,
     FFTrigger, InputEvent,
 };
 use nix::fcntl::{FcntlArg, OFlag};
-use tokio::{
-    sync::{
-        broadcast,
-        mpsc::{self, error::TryRecvError},
-    },
-    time::sleep,
-};
-use zbus::{fdo, Connection};
-use zbus_macros::dbus_interface;
+use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
     constants::BUS_PREFIX,
@@ -40,74 +25,6 @@ use super::SourceCommand;
 const BUFFER_SIZE: usize = 2048;
 /// How long to sleep before polling for events.
 const POLL_RATE: Duration = Duration::from_micros(1666);
-
-/// The [DBusInterface] provides a DBus interface that can be exposed for managing
-/// a [Manager]. It works by sending command messages to a channel that the
-/// [Manager] is listening on.
-pub struct DBusInterface {
-    handler: String,
-    info: procfs::device::Device,
-}
-
-impl DBusInterface {
-    pub fn new(handler: String, info: procfs::device::Device) -> DBusInterface {
-        DBusInterface { info, handler }
-    }
-
-    /// Creates a new instance of the source evdev interface on DBus. Returns
-    /// a structure with information about the source device.
-    pub async fn listen_on_dbus(
-        conn: Connection,
-        handler: String,
-        info: procfs::device::Device,
-    ) -> Result<(), Box<dyn Error>> {
-        let path = get_dbus_path(handler.clone());
-        let iface = DBusInterface::new(handler.clone(), info);
-        conn.object_server().at(path, iface).await?;
-        Ok(())
-    }
-}
-
-#[dbus_interface(name = "org.shadowblip.Input.Source.EventDevice")]
-impl DBusInterface {
-    #[dbus_interface(property)]
-    async fn name(&self) -> fdo::Result<String> {
-        Ok(self.info.name.clone())
-    }
-
-    #[dbus_interface(property)]
-    async fn handlers(&self) -> fdo::Result<Vec<String>> {
-        Ok(self.info.handlers.clone())
-    }
-
-    #[dbus_interface(property)]
-    async fn phys_path(&self) -> fdo::Result<String> {
-        Ok(self.info.phys_path.clone())
-    }
-
-    #[dbus_interface(property)]
-    async fn sysfs_path(&self) -> fdo::Result<String> {
-        Ok(self.info.sysfs_path.clone())
-    }
-
-    #[dbus_interface(property)]
-    async fn unique_id(&self) -> fdo::Result<String> {
-        Ok(self.info.unique_id.clone())
-    }
-
-    /// Returns the full path to the device handler (e.g. /dev/input/event3)
-    #[dbus_interface(property)]
-    pub fn device_path(&self) -> fdo::Result<String> {
-        let handlers = &self.info.handlers;
-        for handler in handlers {
-            if !handler.starts_with("event") {
-                continue;
-            }
-            return Ok(format!("/dev/input/{}", handler.clone()));
-        }
-        Ok("".into())
-    }
-}
 
 /// [EventDevice] represents an input device using the input subsystem.
 #[derive(Debug)]
