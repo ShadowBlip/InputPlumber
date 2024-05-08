@@ -16,14 +16,16 @@ use evdev::{
 };
 use nix::fcntl::{FcntlArg, OFlag};
 use tokio::{sync::mpsc, time::Duration};
-use zbus::{fdo, Connection};
-use zbus_macros::dbus_interface;
+use zbus::Connection;
 
-use crate::input::{
-    capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
-    composite_device::Command,
-    event::{evdev::EvdevEvent, native::NativeEvent},
-    output_event::{OutputEvent, UinputOutputEvent},
+use crate::{
+    dbus::interface::target::gamepad::TargetGamepadInterface,
+    input::{
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        composite_device::Command,
+        event::{evdev::EvdevEvent, native::NativeEvent},
+        output_event::{OutputEvent, UinputOutputEvent},
+    },
 };
 
 use super::TargetCommand;
@@ -32,25 +34,6 @@ use super::TargetCommand;
 const BUFFER_SIZE: usize = 2048;
 /// How long to sleep before polling for events.
 const POLL_RATE: Duration = Duration::from_micros(1666);
-
-/// The [DBusInterface] provides a DBus interface that can be exposed for managing
-/// a [GenericGamepad].
-pub struct DBusInterface {}
-
-impl DBusInterface {
-    fn new() -> DBusInterface {
-        DBusInterface {}
-    }
-}
-
-#[dbus_interface(name = "org.shadowblip.Input.Gamepad")]
-impl DBusInterface {
-    /// Name of the DBus device
-    #[dbus_interface(property)]
-    async fn name(&self) -> fdo::Result<String> {
-        Ok("Gamepad".into())
-    }
-}
 
 #[derive(Debug)]
 pub struct GenericGamepad {
@@ -94,7 +77,7 @@ impl GenericGamepad {
         let conn = self.conn.clone();
         self.dbus_path = Some(path.clone());
         tokio::spawn(async move {
-            let iface = DBusInterface::new();
+            let iface = TargetGamepadInterface::new("Gamepad".into());
             if let Err(e) = conn.object_server().at(path, iface).await {
                 log::error!("Failed to setup DBus interface for Gamepad device: {:?}", e);
             }
@@ -155,7 +138,7 @@ impl GenericGamepad {
             log::debug!("Removing DBus interface for {path}");
             self.conn
                 .object_server()
-                .remove::<DBusInterface, String>(path)
+                .remove::<TargetGamepadInterface, String>(path)
                 .await?;
         }
 

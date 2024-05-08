@@ -9,13 +9,15 @@ use tokio::{
     sync::mpsc::{self, error::TryRecvError},
     time::Instant,
 };
-use zbus::{fdo, Connection};
-use zbus_macros::dbus_interface;
+use zbus::Connection;
 
-use crate::input::{
-    capability::{Capability, Mouse, MouseButton},
-    composite_device,
-    event::{evdev::EvdevEvent, native::NativeEvent, value::InputValue},
+use crate::{
+    dbus::interface::target::mouse::TargetMouseInterface,
+    input::{
+        capability::{Capability, Mouse, MouseButton},
+        composite_device,
+        event::{evdev::EvdevEvent, native::NativeEvent, value::InputValue},
+    },
 };
 
 use super::TargetCommand;
@@ -25,26 +27,6 @@ const BUFFER_SIZE: usize = 2048;
 
 /// Poll rate that the virtual mouse uses to process translated mouse events
 const STATE_POLL_RATE: Duration = Duration::from_millis(16);
-
-/// The [DBusInterface] provides a DBus interface that can be exposed for managing
-/// a [MouseDevice]. It works by sending command messages to a channel that the
-/// [MouseDevice] is listening on.
-pub struct DBusInterface {}
-
-impl DBusInterface {
-    fn new() -> DBusInterface {
-        DBusInterface {}
-    }
-}
-
-#[dbus_interface(name = "org.shadowblip.Input.Mouse")]
-impl DBusInterface {
-    /// Name of the composite device
-    #[dbus_interface(property)]
-    async fn name(&self) -> fdo::Result<String> {
-        Ok("Mouse".into())
-    }
-}
 
 /// [MouseDevice] is a target virtual mouse that can be used to send mouse input
 #[derive(Debug)]
@@ -89,7 +71,7 @@ impl MouseDevice {
         let conn = self.conn.clone();
         self.dbus_path = Some(path.clone());
         tokio::spawn(async move {
-            let iface = DBusInterface::new();
+            let iface = TargetMouseInterface::new();
             if let Err(e) = conn.object_server().at(path, iface).await {
                 log::error!("Failed to setup DBus interface for device: {:?}", e);
             }
@@ -180,7 +162,7 @@ impl MouseDevice {
             log::debug!("Removing DBus interface");
             self.conn
                 .object_server()
-                .remove::<DBusInterface, String>(path)
+                .remove::<TargetMouseInterface, String>(path)
                 .await?;
         }
 

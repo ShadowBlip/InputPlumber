@@ -6,16 +6,18 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
-use zbus::fdo;
 use zbus::zvariant::ObjectPath;
 use zbus::Connection;
-use zbus_macros::dbus_interface;
 
 use crate::config::CapabilityMap;
 use crate::config::CompositeDeviceConfig;
 use crate::config::SourceDevice;
 use crate::constants::BUS_PREFIX;
 use crate::constants::BUS_TARGETS_PREFIX;
+use crate::dbus::interface::composite_device::CompositeDeviceInterface;
+use crate::dbus::interface::manager::ManagerInterface;
+use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
+use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
 use crate::dmi::data::DMIData;
 use crate::dmi::get_dmi_data;
 use crate::iio;
@@ -109,96 +111,6 @@ pub enum SourceDeviceInfo {
     EvdevDeviceInfo(procfs::device::Device),
     HIDRawDeviceInfo(hidapi::DeviceInfo),
     IIODeviceInfo(iio::device::Device),
-}
-
-/// The [DBusInterface] provides a DBus interface that can be exposed for managing
-/// a [Manager]. It works by sending command messages to a channel that the
-/// [Manager] is listening on.
-struct DBusInterface {
-    tx: broadcast::Sender<ManagerCommand>,
-}
-
-impl DBusInterface {
-    fn new(tx: broadcast::Sender<ManagerCommand>) -> DBusInterface {
-        DBusInterface { tx }
-    }
-}
-
-#[dbus_interface(name = "org.shadowblip.InputManager")]
-impl DBusInterface {
-    #[dbus_interface(property)]
-    async fn intercept_mode(&self) -> fdo::Result<String> {
-        Ok("InputPlumber".to_string())
-    }
-
-    /// Create a composite device using the give composite device config. The
-    /// path should be the absolute path to a composite device configuration file.
-    async fn create_composite_device(&self, config_path: String) -> fdo::Result<String> {
-        let device = CompositeDeviceConfig::from_yaml_file(config_path)
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        self.tx
-            .send(ManagerCommand::CreateCompositeDevice { config: device })
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        Ok("".to_string())
-    }
-
-    /// Create a target device of the given type. Returns the DBus path to
-    /// the created target device.
-    async fn create_target_device(&self, kind: String) -> fdo::Result<String> {
-        let (sender, mut receiver) = mpsc::channel(1);
-        self.tx
-            .send(ManagerCommand::CreateTargetDevice { kind, sender })
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-
-        // Read the response from the manager
-        let Some(response) = receiver.recv().await else {
-            return Err(fdo::Error::Failed("No response from manager".to_string()));
-        };
-        let device_path = match response {
-            Ok(path) => path,
-            Err(e) => {
-                let err = format!("Failed to create target device: {e:?}");
-                return Err(fdo::Error::Failed(err));
-            }
-        };
-
-        Ok(device_path)
-    }
-
-    /// Stop the given target device
-    async fn stop_target_device(&self, path: String) -> fdo::Result<()> {
-        self.tx
-            .send(ManagerCommand::StopTargetDevice { path })
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        Ok(())
-    }
-
-    /// Attach the given target device to the given composite device
-    async fn attach_target_device(
-        &self,
-        target_path: String,
-        composite_path: String,
-    ) -> fdo::Result<()> {
-        let (sender, mut receiver) = mpsc::channel(1);
-        self.tx
-            .send(ManagerCommand::AttachTargetDevice {
-                target_path: target_path.clone(),
-                composite_path: composite_path.clone(),
-                sender,
-            })
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-
-        // Read the response from the manager
-        let Some(response) = receiver.recv().await else {
-            return Err(fdo::Error::Failed("No response from manager".to_string()));
-        };
-        if let Err(e) = response {
-            let err = format!("Failed to attach target device {target_path} to composite device {composite_path}: {e:?}");
-            return Err(fdo::Error::Failed(err));
-        }
-
-        Ok(())
-    }
 }
 
 /// Manages input devices
@@ -757,7 +669,7 @@ impl Manager {
         let dbus_path = ObjectPath::from_string_unchecked(path.clone());
         self.dbus
             .object_server()
-            .remove::<composite_device::DBusInterface, ObjectPath>(dbus_path)
+            .remove::<CompositeDeviceInterface, ObjectPath>(dbus_path)
             .await?;
 
         // Find any source devices that were in use by the composite device
@@ -1147,7 +1059,7 @@ impl Manager {
         };
 
         // Create a DBus interface for the event device
-        source::evdev::DBusInterface::listen_on_dbus(
+        SourceEventDeviceInterface::listen_on_dbus(
             self.dbus.clone(),
             handler.clone(),
             info.clone(),
@@ -1179,7 +1091,7 @@ impl Manager {
         let path = ObjectPath::from_string_unchecked(path.clone());
         self.dbus
             .object_server()
-            .remove::<source::evdev::DBusInterface, ObjectPath>(path.clone())
+            .remove::<SourceEventDeviceInterface, ObjectPath>(path.clone())
             .await?;
 
         // Signal that a source device was removed
@@ -1204,7 +1116,7 @@ impl Manager {
         };
 
         // Create a DBus interface for the hidraw device
-        source::hidraw::DBusInterface::listen_on_dbus(self.dbus.clone(), info.clone()).await?;
+        SourceHIDRawInterface::listen_on_dbus(self.dbus.clone(), info.clone()).await?;
 
         // Signal that a source device was added
         let id = format!("hidraw://{}", name);
@@ -1616,7 +1528,7 @@ impl Manager {
 
     /// Creates a DBus object
     async fn listen_on_dbus(&self) -> Result<(), Box<dyn Error>> {
-        let iface = DBusInterface::new(self.tx.clone());
+        let iface = ManagerInterface::new(self.tx.clone());
         let manager_path = format!("{}/Manager", BUS_PREFIX);
         self.dbus.object_server().at(manager_path, iface).await?;
         Ok(())
