@@ -26,7 +26,7 @@ mapping:
       - keyboard: KeyDelete
     target_event:
       gamepad:
-        button: Keyboard
+        button: LeftPaddle2
   - name: Armory Crate (Short)
     source_events:
       - keyboard: KeyProg1
@@ -38,7 +38,7 @@ mapping:
       - keyboard: KeyF17
     target_event:
       gamepad:
-        button: QuickAccess2
+        button: RightPaddle2
   - name: Left Paddle
     source_events:
       - keyboard: KeyF14
