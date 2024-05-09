@@ -32,9 +32,9 @@ source_devices:
     iio:
       name: bmi323-imu
       mount_matrix:
-        x: [0, 0, -1]
-        y: [0, 1, 0]
-        z: [-1, 0, 0]
+        x: [-1, 0, 0]
+        y: [0, 0, -1]
+        z: [0, 1, 0]
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
