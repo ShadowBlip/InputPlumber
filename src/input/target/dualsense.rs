@@ -1139,13 +1139,13 @@ impl DualSenseDevice {
                     },
                     GamepadButton::LeftPaddle1 => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => {
-                            state.left_paddle = event.pressed()
+                            state.left_fn = event.pressed()
                         }
                         PackedInputDataReport::Bluetooth(_) => (),
                     },
                     GamepadButton::LeftPaddle2 => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => {
-                            state.left_fn = event.pressed()
+                            state.left_paddle = event.pressed()
                         }
                         PackedInputDataReport::Bluetooth(_) => (),
                     },
@@ -1170,13 +1170,13 @@ impl DualSenseDevice {
                     },
                     GamepadButton::RightPaddle1 => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => {
-                            state.right_paddle = event.pressed()
+                            state.right_fn = event.pressed()
                         }
                         PackedInputDataReport::Bluetooth(_) => (),
                     },
                     GamepadButton::RightPaddle2 => match self.state {
                         PackedInputDataReport::Usb(ref mut state) => {
-                            state.right_fn = event.pressed()
+                            state.right_paddle = event.pressed()
                         }
                         PackedInputDataReport::Bluetooth(_) => (),
                     },
@@ -1825,31 +1825,33 @@ impl DualSenseDevice {
     /// Returns capabilities of the target device
     fn get_capabilities(&self) -> Vec<Capability> {
         vec![
-            Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
+            Capability::Gamepad(Gamepad::Accelerometer),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
+            Capability::Gamepad(Gamepad::Gyro),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-            Capability::Gamepad(Gamepad::Accelerometer),
-            Capability::Gamepad(Gamepad::Gyro),
         ]
     }
 }
