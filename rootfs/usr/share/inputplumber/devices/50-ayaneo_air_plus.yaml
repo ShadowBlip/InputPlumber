@@ -30,6 +30,10 @@ matches:
 source_devices:
   - group: gamepad
     evdev:
+      name: Nintendo Co., Ltd. Pro Controller
+      phys_path: usb-0000:64:00.3-3/input0
+  - group: gamepad
+    evdev:
       name: Microsoft X-Box 360 pad
       phys_path: usb-0000:64:00.3-3/input0
   - group: gamepad
