@@ -12,7 +12,9 @@ use crate::{
     config::{
         CapabilityMap, CapabilityMapping, CompositeDeviceConfig, DeviceProfile, ProfileMapping,
     },
-    dbus::interface::composite_device::CompositeDeviceInterface,
+    dbus::interface::{
+        composite_device::CompositeDeviceInterface, source::iio_imu::SourceIioImuInterface,
+    },
     input::{
         capability::{Capability, Gamepad, GamepadButton, Mouse},
         event::{
@@ -546,6 +548,18 @@ impl CompositeDevice {
             let source_tx = source_device.transmitter();
             self.source_devices.insert(device_id.clone(), source_tx);
             let tx = self.tx.clone();
+
+            // Add the IIO IMU Dbus interface. We do this here because it needs the source
+            // device transmitter and this is the only place we can refrence it at the moment.
+            if let SourceDevice::IIODevice(ref device) = source_device {
+                SourceIioImuInterface::listen_on_dbus(
+                    self.conn.clone(),
+                    device.get_info(),
+                    device.transmitter(),
+                )
+                .await?;
+            }
+
             self.source_device_tasks.spawn(async move {
                 if let Err(e) = source_device.run().await {
                     log::error!("Failed running device: {:?}", e);
@@ -1278,6 +1292,7 @@ impl CompositeDevice {
 
     /// Executed whenever a source device is removed from this [CompositeDevice]
     async fn on_source_device_removed(&mut self, id: String) -> Result<(), Box<dyn Error>> {
+        // Handle evdev
         if id.starts_with("evdev://") {
             let name = id.strip_prefix("evdev://").unwrap();
             let path = format!("/dev/input/{}", name);
@@ -1291,9 +1306,24 @@ impl CompositeDevice {
             };
             self.source_devices_blocked.remove(&id);
         }
-        if id.starts_with("hidraw://") {
+        // Handle HIDRAW
+        else if id.starts_with("hidraw://") {
             let name = id.strip_prefix("hidraw://").unwrap();
             let path = format!("/dev/{}", name);
+
+            if let Some(idx) = self.source_device_paths.iter().position(|str| str == &path) {
+                self.source_device_paths.remove(idx);
+            };
+
+            if let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) {
+                self.source_devices_used.remove(idx);
+            };
+            self.source_devices_blocked.remove(&id);
+        }
+        // Handle IIO
+        else if id.starts_with("iio://") {
+            let name = id.strip_prefix("iio://").unwrap();
+            let path = format!("/sys/bus/iio/devices/{}", name);
 
             if let Some(idx) = self.source_device_paths.iter().position(|str| str == &path) {
                 self.source_device_paths.remove(idx);

@@ -188,6 +188,12 @@ impl DeckOutput {
                         }
                     }
                     SourceCommand::Stop => return Err("Device stopped".into()),
+                    SourceCommand::GetSampleRate(_, _) => (),
+                    SourceCommand::GetSampleRatesAvail(_, _) => (),
+                    SourceCommand::SetSampleRate(_, _, _) => (),
+                    SourceCommand::GetScale(_, _) => (),
+                    SourceCommand::GetScalesAvail(_, _) => (),
+                    SourceCommand::SetScale(_, _, _) => (),
                 },
                 Err(e) => match e {
                     TryRecvError::Empty => return Ok(()),

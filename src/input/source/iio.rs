@@ -94,6 +94,10 @@ impl IIODevice {
         Ok(vec![])
     }
 
+    pub fn get_info(&self) -> Device {
+        self.info.clone()
+    }
+
     /// Returns a unique identifier for the source device.
     pub fn get_id(&self) -> String {
         let name = self.info.id.clone().unwrap_or_default();

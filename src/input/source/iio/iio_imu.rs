@@ -1,6 +1,7 @@
 use core::time;
-use std::{error::Error, f64::consts::PI, thread};
+use std::{any::Any, error::Error, f64::consts::PI, thread};
 
+use nix::libc::ETIMEDOUT;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
@@ -73,9 +74,9 @@ impl IMU {
         // data.
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let driver = Driver::new(id, name, mount_matrix)?;
+                let mut driver = Driver::new(id, name, mount_matrix)?;
                 loop {
-                    receive_commands(&mut rx)?;
+                    receive_commands(&mut rx, &mut driver)?;
                     let events = driver.poll()?;
                     let native_events = translate_events(events);
                     for event in native_events {
@@ -89,10 +90,8 @@ impl IMU {
                             Event::Native(event),
                         ))?;
                     }
-
                     // Sleep between each poll iteration
-                    let duration = time::Duration::from_micros(250);
-                    thread::sleep(duration);
+                    thread::sleep(driver.sample_delay);
                 }
             });
 
@@ -127,11 +126,15 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
         }
         iio_imu::event::Event::Gyro(data) => {
             // Translate gyro values into the expected units of degrees per sec
+            // We apply a 12x scale so the lowest (default) value feels like natural 1:1 motion.
+            // Adjusting the scale will increase the granularity of the motion by slowing
+            // incrementing closer to 2:1 motion. From testing this is the highest scale we can
+            // apply before noise is amplified to the point the gyro cannot calibrate.
             let cap = Capability::Gamepad(Gamepad::Gyro);
             let value = InputValue::Vector3 {
-                x: Some(data.x * (180.0 / PI)),
-                y: Some(data.y * (180.0 / PI)),
-                z: Some(data.z * (180.0 / PI)),
+                x: Some(data.x * (180.0 / PI) * 12.0),
+                y: Some(data.y * (180.0 / PI) * 12.0),
+                z: Some(data.z * (180.0 / PI) * 12.0),
             };
             NativeEvent::new(cap, value)
         }
@@ -142,16 +145,79 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
 /// empty.
 fn receive_commands(
     rx: &mut mpsc::Receiver<SourceCommand>,
+    driver: &mut Driver,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     const MAX_COMMANDS: u8 = 64;
     let mut commands_processed = 0;
     loop {
         match rx.try_recv() {
-            Ok(cmd) => {
-                if let SourceCommand::Stop = cmd {
-                    return Err("Device stopped".into());
+            Ok(cmd) => match cmd {
+                SourceCommand::WriteEvent(_) => (),
+                SourceCommand::UploadEffect(_, _) => (),
+                SourceCommand::UpdateEffect(_, _) => (),
+                SourceCommand::EraseEffect(_, _) => (),
+                SourceCommand::GetSampleRate(kind, tx) => {
+                    let result = driver.get_sample_rate(kind.as_str());
+                    let send_result = match result {
+                        Ok(rate) => tx.send(Ok(rate)),
+                        Err(e) => tx.send(Err(e.to_string().into())),
+                    };
+                    if let Err(e) = send_result {
+                        log::error!("Failed to send GetSampleRate, {e:?}");
+                    }
                 }
-            }
+                SourceCommand::GetSampleRatesAvail(kind, tx) => {
+                    let result = driver.get_sample_rates_avail(kind.as_str());
+                    let send_result = match result {
+                        Ok(rate) => tx.send(Ok(rate)),
+                        Err(e) => tx.send(Err(e.to_string().into())),
+                    };
+                    if let Err(e) = send_result {
+                        log::error!("Failed to send GetSampleRatesAvail, {e:?}");
+                    }
+                }
+                SourceCommand::SetSampleRate(kind, sample_rate, tx) => {
+                    let result = driver.set_sample_rate(kind.as_str(), sample_rate);
+                    let send_result = match result {
+                        Ok(rate) => tx.send(Ok(rate)),
+                        Err(e) => tx.send(Err(e.to_string().into())),
+                    };
+                    if let Err(e) = send_result {
+                        log::error!("Failed to send SetSampleRate, {e:?}");
+                    }
+                }
+                SourceCommand::GetScale(kind, tx) => {
+                    let result = driver.get_scale(kind.as_str());
+                    let send_result = match result {
+                        Ok(rate) => tx.send(Ok(rate)),
+                        Err(e) => tx.send(Err(e.to_string().into())),
+                    };
+                    if let Err(e) = send_result {
+                        log::error!("Failed to send GetScale, {e:?}");
+                    }
+                }
+                SourceCommand::GetScalesAvail(kind, tx) => {
+                    let result = driver.get_scales_avail(kind.as_str());
+                    let send_result = match result {
+                        Ok(rate) => tx.send(Ok(rate)),
+                        Err(e) => tx.send(Err(e.to_string().into())),
+                    };
+                    if let Err(e) = send_result {
+                        log::error!("Failed to send GetScalesAvail, {e:?}");
+                    }
+                }
+                SourceCommand::SetScale(kind, scale, tx) => {
+                    let result = driver.set_scale(kind.as_str(), scale);
+                    let send_result = match result {
+                        Ok(rate) => tx.send(Ok(rate)),
+                        Err(e) => tx.send(Err(e.to_string().into())),
+                    };
+                    if let Err(e) = send_result {
+                        log::error!("Failed to send SetScale, {e:?}");
+                    }
+                }
+                SourceCommand::Stop => return Err("Device stopped".into()),
+            },
             Err(e) => match e {
                 TryRecvError::Empty => return Ok(()),
                 TryRecvError::Disconnected => {
