@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, time::Duration};
 
 use industrial_io::{Channel, ChannelType, Device};
 
@@ -16,6 +16,7 @@ pub struct Driver {
     accel_info: HashMap<String, AxisInfo>,
     gyro: HashMap<String, Channel>,
     gyro_info: HashMap<String, AxisInfo>,
+    pub sample_delay: Duration,
 }
 
 impl Driver {
@@ -54,22 +55,30 @@ impl Driver {
 
         // Find all accelerometer and gyro channels and insert them into a hashmap
         let (accel, accel_info) = get_channels_with_type(&device, ChannelType::Accel);
+        for attr in &accel_info {
+            log::debug!("Found accel_info: {:?}", attr);
+        }
         let (gyro, gyro_info) = get_channels_with_type(&device, ChannelType::AnglVel);
+        for attr in &gyro_info {
+            log::debug!("Found gyro_info: {:?}", attr);
+        }
 
         // Log device attributes
         for attr in device.attributes() {
-            log::debug!("Found device attribute: {:?}", attr)
+            log::trace!("Found device attribute: {:?}", attr)
         }
 
         // Log all found channels
         for channel in device.channels() {
-            log::debug!("Found channel: {:?} {:?}", channel.id(), channel.name());
-            log::debug!("  Is output: {}", channel.is_output());
-            log::debug!("  Is scan element: {}", channel.is_scan_element());
+            log::trace!("Found channel: {:?} {:?}", channel.id(), channel.name());
+            log::trace!("  Is output: {}", channel.is_output());
+            log::trace!("  Is scan element: {}", channel.is_scan_element());
             for attr in channel.attrs() {
-                log::debug!("  Found attribute: {:?}", attr);
+                log::trace!("  Found attribute: {:?}", attr);
             }
         }
+
+        // Calculate the initial sample delay
 
         Ok(Self {
             mount_matrix,
@@ -77,6 +86,7 @@ impl Driver {
             accel_info,
             gyro,
             gyro_info,
+            sample_delay: Duration::from_micros(2500), //400Hz
         })
     }
 
@@ -106,7 +116,7 @@ impl Driver {
             let Some(info) = self.accel_info.get(id) else {
                 continue;
             };
-            let data = channel.attr_read::<i64>("raw")?;
+            let data = channel.attr_read_int("raw")?;
 
             // processed_value = (raw + offset) * scale
             let value = (data + info.offset) as f64 * info.scale;
@@ -134,7 +144,7 @@ impl Driver {
             let Some(info) = self.gyro_info.get(id) else {
                 continue;
             };
-            let data = channel.attr_read::<i64>("raw")?;
+            let data = channel.attr_read_int("raw")?;
 
             // processed_value = (raw + offset) * scale
             let value = (data + info.offset) as f64 * info.scale;
@@ -177,6 +187,280 @@ impl Driver {
         value.y = mxy * x + myy * y + mzy * z;
         value.z = mxz * x + myz * y + mzz * z;
     }
+
+    /// Calculates the duration in seconds that this device should sleep for before polling for
+    /// events again. Uses the fastest frequency set between the currently set accelerometer and
+    /// gyroscope sample rates. Called automatically when the sample_rate is changed.
+    pub fn calculate_sample_delay(&self) -> Result<Duration, Box<dyn Error>> {
+        let accel_rate = self.get_sample_rate("accel").unwrap_or(1.0);
+        let gyro_rate = self.get_sample_rate("gyro").unwrap_or(1.0);
+        let sample_delay = 1.0 / accel_rate.max(gyro_rate);
+        log::debug!("Updated sample delay is: {sample_delay} seconds.");
+
+        Ok(Duration::from_secs_f64(sample_delay))
+    }
+
+    /// Returns the currently set sample rate from the X axis of the given input source, either
+    /// "accel" or "gyro".
+    pub fn get_sample_rate(&self, imu_type: &str) -> Result<f64, Box<dyn Error>> {
+        match imu_type {
+            "accel" => {
+                let Some(info) = self.accel_info.get("accel_x") else {
+                    return Err(format!("Unable to get sample rate for IMU type {imu_type}").into());
+                };
+
+                Ok(info.sample_rate)
+            }
+            "gyro" => {
+                let Some(info) = self.gyro_info.get("anglvel_x") else {
+                    return Err(format!("Unable to get sample rate for IMU type {imu_type}").into());
+                };
+                //log::debug!("sample rate found: {:?}", info.sample_rate);
+
+                Ok(info.sample_rate)
+            }
+            _ => Err(format!("{imu_type} is not a valid imu type.").into()),
+        }
+    }
+
+    /// Returns the available sample rates for the given input source, either "accel" or "gyro".
+    pub fn get_sample_rates_avail(&self, imu_type: &str) -> Result<Vec<f64>, Box<dyn Error>> {
+        match imu_type {
+            "accel" => {
+                let Some(info) = self.accel_info.get("accel_x") else {
+                    return Err(format!("Unable to get sample rate for IMU type {imu_type}").into());
+                };
+
+                Ok(info.sample_rates_avail.clone())
+            }
+            "gyro" => {
+                let Some(info) = self.gyro_info.get("anglvel_x") else {
+                    return Err(format!("Unable to get sample rate for IMU type {imu_type}").into());
+                };
+                //log::debug!("sample rates avail found: {:?}", info.sample_rates_avail);
+
+                Ok(info.sample_rates_avail.clone())
+            }
+            _ => Err(format!("{imu_type} is not a valid imu type.").into()),
+        }
+    }
+
+    /// Sets the given input source, either "accel" or "gyro", to the given rate. Returns an error
+    /// if the given sample rate is not in the list of valid sample rates.
+    pub fn set_sample_rate(&mut self, imu_type: &str, rate: f64) -> Result<(), Box<dyn Error>> {
+        match imu_type {
+            "accel" => {
+                for (id, channel) in &self.accel {
+                    let Some(info) = self.accel_info.get_mut(id) else {
+                        return Err(format!(
+                            "Unable to get channel info for {imu_type} channel {id}"
+                        )
+                        .into());
+                    };
+
+                    if !info.sample_rates_avail.contains(&rate) {
+                        return Err(format!(
+                            "Unable to set sample rate to {rate}, frequency not supported."
+                        )
+                        .into());
+                    }
+
+                    if info.sample_rate == rate {
+                        log::debug!("IMU {imu_type} Channel {channel:?} already set to {rate:?}. Nothing to do.");
+                        continue;
+                    };
+
+                    let result = channel.attr_write_float("sampling_frequency", rate);
+                    match result {
+                        Ok(_) => {
+                            log::debug!("IMU {imu_type} Channel {channel:?} set to {rate:?}.");
+                            info.sample_rate = rate;
+                        }
+
+                        Err(e) => {
+                            return Err(format!(
+                                "Unable to set sample rate for channel {id}, got error {e}"
+                            )
+                            .into())
+                        }
+                    }
+                }
+            }
+            "gyro" => {
+                for (id, channel) in &self.gyro {
+                    let Some(info) = self.gyro_info.get_mut(id) else {
+                        return Err(format!(
+                            "Unable to get channel info for {imu_type} channel {id}"
+                        )
+                        .into());
+                    };
+
+                    if !info.sample_rates_avail.contains(&rate) {
+                        return Err(format!(
+                            "Unable to set sample rate to {rate}, frequency not supported."
+                        )
+                        .into());
+                    }
+
+                    if info.sample_rate == rate {
+                        log::debug!("IMU {imu_type} Channel {channel:?} already set to {rate:?}. Nothing to do.");
+                        continue;
+                    };
+
+                    let result = channel.attr_write_float("sampling_frequency", rate);
+                    match result {
+                        Ok(_) => {
+                            log::debug!("IMU {imu_type} Channel {channel:?} set to {rate:?}.");
+                            info.sample_rate = rate;
+                        }
+
+                        Err(e) => {
+                            return Err(format!(
+                                "Unable to set sample rate for channel {id}, got error {e}"
+                            )
+                            .into())
+                        }
+                    }
+                }
+            }
+            _ => {
+                return Err(format!("{imu_type} is not a valid imu type.").into());
+            }
+        }
+        self.sample_delay = self.calculate_sample_delay()?;
+        Ok(())
+    }
+
+    /// Returns the currently set cale from the X axis of the given input source, either "accel" or "gyro".
+    pub fn get_scale(&self, imu_type: &str) -> Result<f64, Box<dyn Error>> {
+        match imu_type {
+            "accel" => {
+                let Some(info) = self.accel_info.get("accel_x") else {
+                    return Err(format!("Unable to get scale for IMU type {imu_type}.").into());
+                };
+
+                Ok(info.scale)
+            }
+            "gyro" => {
+                let Some(info) = self.gyro_info.get("anglvel_x") else {
+                    return Err(
+                        format!("Unable to get scale available for IMU type {imu_type}.").into(),
+                    );
+                };
+
+                Ok(info.scale)
+            }
+            _ => Err(format!("{imu_type} is not a valid imu type.").into()),
+        }
+    }
+
+    /// Returns the available scales for the given input source, either "accel" or "gyro".
+    pub fn get_scales_avail(&self, imu_type: &str) -> Result<Vec<f64>, Box<dyn Error>> {
+        match imu_type {
+            "accel" => {
+                let Some(info) = self.accel_info.get("accel_x") else {
+                    return Err(format!("Unable to scale for IMU type {imu_type}.").into());
+                };
+
+                Ok(info.scales_avail.clone())
+            }
+            "gyro" => {
+                let Some(info) = self.gyro_info.get("anglvel_x") else {
+                    return Err(
+                        format!("Unable to get scales available for IMU type {imu_type}.").into(),
+                    );
+                };
+
+                Ok(info.scales_avail.clone())
+            }
+            _ => Err(format!("{imu_type} is not a valid imu type.").into()),
+        }
+    }
+
+    /// Sets the given input source, either "accel" or "gyro", to the given scale. Returns an error
+    /// if the given scale is not in the list of valid sample rates.
+    pub fn set_scale(&mut self, imu_type: &str, scale: f64) -> Result<(), Box<dyn Error>> {
+        match imu_type {
+            "accel" => {
+                for (id, channel) in &self.accel {
+                    let Some(info) = self.accel_info.get_mut(id) else {
+                        return Err(format!(
+                            "Unable to get channel info for {imu_type} channel {id}."
+                        )
+                        .into());
+                    };
+
+                    if !info.scales_avail.contains(&scale) {
+                        return Err(format!(
+                            "Unable to set scale to {scale}, scale not supported."
+                        )
+                        .into());
+                    }
+
+                    if info.scale == scale {
+                        log::debug!("IMU {imu_type} Channel {channel:?} already set to {scale:?}. Nothing to do.");
+                        continue;
+                    };
+
+                    let result = channel.attr_write_float("scale", scale);
+                    match result {
+                        Ok(_) => {
+                            log::debug!("IMU {imu_type} Channel {channel:?} set to {scale:?}.");
+                            info.scale = scale;
+                        }
+
+                        Err(e) => {
+                            return Err(format!(
+                                "Unable to set scale rate for channel {id}, got error {e}"
+                            )
+                            .into())
+                        }
+                    }
+                }
+            }
+            "gyro" => {
+                for (id, channel) in &self.gyro {
+                    let Some(info) = self.gyro_info.get_mut(id) else {
+                        return Err(format!(
+                            "Unable to get channel info for {imu_type} channel {id}."
+                        )
+                        .into());
+                    };
+
+                    if !info.scales_avail.contains(&scale) {
+                        return Err(format!(
+                            "Unable to set scale to {scale}, scale not supported."
+                        )
+                        .into());
+                    };
+
+                    if info.scale == scale {
+                        log::debug!("IMU {imu_type} Channel {channel:?} already set to {scale:?}. Nothing to do.");
+                        continue;
+                    };
+
+                    let result = channel.attr_write_float("scale", scale);
+                    match result {
+                        Ok(_) => {
+                            log::debug!("IMU {imu_type} Channel {channel:?} set to {scale:?}.");
+                            info.scale = scale;
+                        }
+
+                        Err(e) => {
+                            return Err(format!(
+                                "Unable to set scale for channel {id}, got error {e}."
+                            )
+                            .into())
+                        }
+                    }
+                }
+            }
+            _ => {
+                return Err(format!("{imu_type} is not a valid imu type.").into());
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Returns all channels and channel information from the given device matching
@@ -197,18 +481,8 @@ fn get_channels_with_type(
             };
             log::debug!("Found channel: {id}");
 
-            // Get the scale of the axis to normalize values to meters per second or rads per
-            // second
-            let scale = match channel.attr_read::<f64>("scale") {
-                Ok(v) => v,
-                Err(e) => {
-                    log::warn!("Unable to read scale for channel {id}: {:?}", e);
-                    1.0
-                }
-            };
-
             // Get the offset of the axis
-            let offset = match channel.attr_read::<i64>("offset") {
+            let offset = match channel.attr_read_int("offset") {
                 Ok(v) => v,
                 Err(e) => {
                     log::debug!("Unable to read offset for channel {id}: {:?}", e);
@@ -216,7 +490,65 @@ fn get_channels_with_type(
                 }
             };
 
-            let info = AxisInfo { scale, offset };
+            // Get the sample rate of the axis
+            let sample_rate = match channel.attr_read_float("sampling_frequency") {
+                Ok(v) => v,
+                Err(e) => {
+                    log::warn!("Unable to read sample rate for channel {id}: {:?}", e);
+                    4.0
+                }
+            };
+
+            let sample_rates_avail = match channel.attr_read_str("sampling_frequency_available") {
+                Ok(v) => {
+                    let mut all_scales = Vec::new();
+                    for val in v.split_whitespace() {
+                        // convert the string into f64
+                        all_scales.push(val.parse::<f64>().unwrap());
+                    }
+                    all_scales
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Unable to read available sample rates for channel {id}: {:?}",
+                        e
+                    );
+                    vec![4.0]
+                }
+            };
+
+            // Get the scale of the axis to normalize values to meters per second or rads per
+            // second
+            let scale = match channel.attr_read_float("scale") {
+                Ok(v) => v,
+                Err(e) => {
+                    log::warn!("Unable to read scale for channel {id}: {:?}", e);
+                    1.0
+                }
+            };
+
+            let scales_avail = match channel.attr_read_str("scale_available") {
+                Ok(v) => {
+                    let mut all_scales = Vec::new();
+                    for val in v.split_whitespace() {
+                        // convert the string into f64
+                        all_scales.push(val.parse::<f64>().unwrap());
+                    }
+                    all_scales
+                }
+                Err(e) => {
+                    log::warn!("Unable to read available scales for channel {id}: {:?}", e);
+                    vec![1.0]
+                }
+            };
+
+            let info = AxisInfo {
+                offset,
+                sample_rate,
+                sample_rates_avail,
+                scale,
+                scales_avail,
+            };
             channel_info.insert(id.clone(), info);
             channels.insert(id, channel);
         });
