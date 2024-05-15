@@ -1,4 +1,4 @@
-use std::{error::Error, fmt};
+use std::{collections::HashSet, error::Error, fmt};
 
 /// The [MountMatrix] is used to define how sensors are oriented inside a device
 /// https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/mount-matrix.txt
@@ -74,8 +74,11 @@ impl fmt::Display for MountMatrix {
 ///   processed_value = (raw + offset) * scale
 #[derive(Clone, Debug)]
 pub struct AxisInfo {
-    pub scale: f64,
     pub offset: i64,
+    pub sample_rate: f64,
+    pub sample_rates_avail: Vec<f64>,
+    pub scale: f64,
+    pub scales_avail: Vec<f64>,
 }
 
 /// Scale and offset information for all axes

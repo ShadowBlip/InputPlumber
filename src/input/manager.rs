@@ -352,7 +352,7 @@ impl Manager {
         };
 
         // Create a composite device to manage these devices
-        log::info!("Found matching source devices: {:?}", config.name);
+        log::info!("Found matching source device for: {:?}", config.name);
         let config = config.clone();
         let device = CompositeDevice::new(
             self.dbus.clone(),
@@ -719,11 +719,11 @@ impl Manager {
             let Some(config) = self.used_configs.get(composite_device) else {
                 continue;
             };
-            log::debug!("Checking existing config {:?} for device", config.name);
+            log::trace!("Checking existing config {:?} for device", config.name);
             let source_devices = config.source_devices.clone();
             match device_info.clone() {
                 SourceDeviceInfo::EvdevDeviceInfo(info) => {
-                    log::debug!("Checking if existing composite device is missing event device");
+                    log::trace!("Checking if existing composite device is missing event device");
                     for source_device in source_devices {
                         if source_device.evdev.is_none() {
                             continue;
@@ -745,12 +745,12 @@ impl Manager {
                                     }
                                     if let Some(unique) = source_device.clone().unique {
                                         if unique {
-                                            log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                            log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
                                             break 'start;
                                         }
                                     // Default to being unique
                                     } else {
-                                        log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                        log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
                                         break 'start;
                                     }
                                 }
@@ -786,7 +786,7 @@ impl Manager {
                     }
                 }
                 SourceDeviceInfo::HIDRawDeviceInfo(info) => {
-                    log::debug!("Checking if existing composite device is missing hidraw device");
+                    log::trace!("Checking if existing composite device is missing hidraw device");
                     for source_device in source_devices {
                         if source_device.hidraw.is_none() {
                             continue;
@@ -809,11 +809,11 @@ impl Manager {
                                     }
                                     if let Some(unique) = source_device.clone().unique {
                                         if unique {
-                                            log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                            log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
                                             break 'start;
                                         }
                                     } else {
-                                        log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                        log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
                                         break 'start;
                                     }
                                 }
@@ -849,7 +849,7 @@ impl Manager {
                     }
                 }
                 SourceDeviceInfo::IIODeviceInfo(info) => {
-                    log::debug!("Checking if existing composite device is missing hidraw device");
+                    log::trace!("Checking if existing composite device is missing hidraw device");
                     for source_device in source_devices {
                         if source_device.iio.is_none() {
                             continue;
@@ -871,11 +871,11 @@ impl Manager {
                                     }
                                     if let Some(unique) = source_device.clone().unique {
                                         if unique {
-                                            log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                            log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
                                             break 'start;
                                         }
                                     } else {
-                                        log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
+                                        log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
                                         break 'start;
                                     }
                                 }
@@ -911,7 +911,7 @@ impl Manager {
                     }
                 }
             }
-            log::debug!("Device does not match existing device: {:?}", config.name);
+            log::trace!("Device does not match existing device: {:?}", config.name);
         }
         log::debug!("No existing composite device matches device.");
 
@@ -920,11 +920,11 @@ impl Manager {
         let configs = self.load_device_configs().await;
         log::debug!("Checking unused configs");
         for config in configs {
-            log::debug!("Checking config {:?} for device", config.name);
+            log::trace!("Checking config {:?} for device", config.name);
 
             // Check to see if this configuration matches the system
             if !config.has_valid_matches(self.dmi_data.clone()) {
-                log::debug!("Configuration does not match system");
+                log::trace!("Configuration does not match system");
                 continue;
             }
 
@@ -1039,7 +1039,7 @@ impl Manager {
                     }
                 }
             }
-            log::debug!("Device does not match config: {:?}", config.name);
+            log::trace!("Device does not match config: {:?}", config.name);
         }
         log::debug!("No unused configs found for device.");
 
@@ -1504,7 +1504,7 @@ impl Manager {
         for path in paths {
             let files = fs::read_dir(path);
             if files.is_err() {
-                log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
+                log::warn!("Failed to load directory {}: {}", path, files.unwrap_err());
                 continue;
             }
             let mut files: Vec<_> = files.unwrap().map(|r| r.unwrap()).collect();
@@ -1521,10 +1521,10 @@ impl Manager {
                 }
 
                 // Try to load the composite device profile
-                log::debug!("Found file: {}", file.path().display());
+                log::trace!("Found file: {}", file.path().display());
                 let mapping = CapabilityMap::from_yaml_file(file.path().display().to_string());
                 if mapping.is_err() {
-                    log::debug!(
+                    log::warn!(
                         "Failed to parse capability mapping: {}",
                         mapping.unwrap_err()
                     );
@@ -1552,10 +1552,10 @@ impl Manager {
 
             // Look for composite device profiles in all known locations
             for path in paths {
-                log::debug!("Checking {path} for composite device configs");
+                log::trace!("Checking {path} for composite device configs");
                 let files = fs::read_dir(path);
                 if files.is_err() {
-                    log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
+                    log::warn!("Failed to load directory {}: {}", path, files.unwrap_err());
                     continue;
                 }
                 let mut files: Vec<_> = files.unwrap().map(|r| r.unwrap()).collect();
@@ -1572,11 +1572,11 @@ impl Manager {
                     }
 
                     // Try to load the composite device profile
-                    log::debug!("Found file: {}", file.path().display());
+                    log::trace!("Found file: {}", file.path().display());
                     let device =
                         CompositeDeviceConfig::from_yaml_file(file.path().display().to_string());
                     if device.is_err() {
-                        log::debug!(
+                        log::warn!(
                             "Failed to parse composite device config: {}",
                             device.unwrap_err()
                         );

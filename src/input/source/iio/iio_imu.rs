@@ -89,9 +89,9 @@ impl IMU {
                             Event::Native(event),
                         ))?;
                     }
-
                     // Sleep between each poll iteration
-                    let duration = time::Duration::from_micros(250);
+                    let sample_delay = driver.sample_delay_micro().unwrap_or(250);
+                    let duration = time::Duration::from_micros(sample_delay);
                     thread::sleep(duration);
                 }
             });

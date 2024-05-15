@@ -74,6 +74,12 @@ pub enum Command {
     HandleEvent(NativeEvent),
     RemoveRecentEvent(Capability),
     SetInterceptActivation(Vec<Capability>, Capability),
+    GetAccelScale,
+    GetAccelScalesAvail,
+    SetAccelScale(f64),
+    GetGyroScale,
+    GetGyroScalesAvail,
+    SetGyroScale(f64),
     Stop,
 }
 
@@ -438,6 +444,12 @@ impl CompositeDevice {
                     Command::SetInterceptActivation(activation_caps, target_cap) => {
                         self.set_intercept_activation(activation_caps, target_cap)
                     }
+                    Command::GetAccelScale => todo!(),
+                    Command::GetAccelScalesAvail => todo!(),
+                    Command::SetAccelScale(_) => todo!(),
+                    Command::GetGyroScale => todo!(),
+                    Command::GetGyroScalesAvail => todo!(),
+                    Command::SetGyroScale(_) => todo!(),
                     Command::Stop => {
                         log::debug!(
                             "Got STOP signal. Stopping CompositeDevice: {:?}",
