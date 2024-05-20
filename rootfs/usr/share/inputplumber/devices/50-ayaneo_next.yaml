@@ -48,6 +48,10 @@ source_devices:
   - group: imu
     iio:
       name: i2c-BMI0160:00
+      mount_matrix:
+        x: [0, -1, 0]
+        y: [0, 0, -1]
+        z: [1, 0, 0]
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

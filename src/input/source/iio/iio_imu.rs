@@ -147,10 +147,11 @@ fn receive_commands(
     let mut commands_processed = 0;
     loop {
         match rx.try_recv() {
-            Ok(cmd) => match cmd {
-                SourceCommand::Stop => return Err("Device stopped".into()),
-                _ => {}
-            },
+            Ok(cmd) => {
+                if let SourceCommand::Stop = cmd {
+                    return Err("Device stopped".into());
+                }
+            }
             Err(e) => match e {
                 TryRecvError::Empty => return Ok(()),
                 TryRecvError::Disconnected => {
