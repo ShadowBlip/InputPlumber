@@ -261,6 +261,7 @@ pub struct SourceDevice {
     pub iio: Option<IIO>,
     pub unique: Option<bool>,
     pub blocked: Option<bool>,
+    pub ignore: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
