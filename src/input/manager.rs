@@ -735,6 +735,12 @@ impl Manager {
                                     if source != &source_device {
                                         continue;
                                     }
+                                    if let Some(ignored) = source_device.ignore {
+                                        if ignored {
+                                            log::debug!("Ignoring device {:?}, not adding to composite device: {}", source_device, composite_device);
+                                            continue;
+                                        }
+                                    }
                                     if let Some(unique) = source_device.clone().unique {
                                         if unique {
                                             log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
@@ -793,6 +799,12 @@ impl Manager {
                                     if source != &source_device {
                                         continue;
                                     }
+                                    if let Some(ignored) = source_device.ignore {
+                                        if ignored {
+                                            log::debug!("Ignoring device {:?}, not adding to composite device: {}", source_device, composite_device);
+                                            continue;
+                                        }
+                                    }
                                     if let Some(unique) = source_device.clone().unique {
                                         if unique {
                                             log::debug!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
@@ -848,6 +860,12 @@ impl Manager {
                                 for source in sources {
                                     if source != &source_device {
                                         continue;
+                                    }
+                                    if let Some(ignored) = source_device.ignore {
+                                        if ignored {
+                                            log::debug!("Ignoring device {:?}, not adding to composite device: {}", source_device, composite_device);
+                                            continue;
+                                        }
                                     }
                                     if let Some(unique) = source_device.clone().unique {
                                         if unique {
@@ -918,6 +936,15 @@ impl Manager {
                         // how to refrence source devices used by this config?
 
                         if config.has_matching_evdev(&info, &source_device.clone().evdev.unwrap()) {
+                            if let Some(ignored) = source_device.ignore {
+                                if ignored {
+                                    log::debug!(
+                                        "Ignoring matching event device: {:?}",
+                                        device_info
+                                    );
+                                    return Ok(());
+                                }
+                            }
                             log::info!("Found a matching event device, creating composite device");
                             let device = self
                                 .create_composite_device_from_config(&config, device_info.clone())
@@ -946,6 +973,15 @@ impl Manager {
                         }
                         if config.has_matching_hidraw(&info, &source_device.clone().hidraw.unwrap())
                         {
+                            if let Some(ignored) = source_device.ignore {
+                                if ignored {
+                                    log::debug!(
+                                        "Ignoring matching hidraw device: {:?}",
+                                        device_info
+                                    );
+                                    return Ok(());
+                                }
+                            }
                             log::info!("Found a matching hidraw device, creating composite device");
                             let device = self
                                 .create_composite_device_from_config(&config, device_info.clone())
@@ -973,6 +1009,12 @@ impl Manager {
                             continue;
                         }
                         if config.has_matching_iio(&info, &source_device.clone().iio.unwrap()) {
+                            if let Some(ignored) = source_device.ignore {
+                                if ignored {
+                                    log::debug!("Ignoring matching iio device: {:?}", device_info);
+                                    return Ok(());
+                                }
+                            }
                             log::info!("Found a matching iio device, creating composite device");
                             let device = self
                                 .create_composite_device_from_config(&config, device_info.clone())
