@@ -7,6 +7,7 @@ pub mod dualsense;
 pub mod gamepad;
 pub mod keyboard;
 pub mod mouse;
+pub mod source_copy;
 pub mod steam_deck;
 pub mod xb360;
 

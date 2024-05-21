@@ -1,8 +1,8 @@
 use std::{collections::HashMap, error::Error, os::fd::AsRawFd, time::Duration};
 
 use evdev::{
-    AbsInfo, AbsoluteAxisCode, Device, EventType, FFEffect, FFEffectData, FFEffectKind, FFReplay,
-    FFTrigger, InputEvent,
+    uinput::VirtualDeviceBuilder, AbsInfo, AbsoluteAxisCode, Device, EventType, FFEffect,
+    FFEffectData, FFEffectKind, FFReplay, FFTrigger, InputEvent, UinputAbsSetup,
 };
 use nix::fcntl::{FcntlArg, OFlag};
 use tokio::sync::mpsc::{self, error::TryRecvError};
@@ -15,6 +15,7 @@ use crate::{
         composite_device::Command,
         event::{evdev::EvdevEvent, Event},
         output_event::OutputEvent,
+        target::TargetDeviceType,
     },
     procfs,
 };
@@ -444,6 +445,69 @@ impl EventDevice {
         let capabilities = vec![];
 
         Ok(capabilities)
+    }
+
+    /// Clone the device into a target copy
+    pub fn as_target_clone(&self) -> Result<TargetDeviceType, Box<dyn Error>> {
+        // Open the device to get the evdev capabilities
+        let path = self.get_device_path();
+        log::debug!("Opening device at: {}", path);
+        let device = Device::open(path.clone())?;
+
+        // Build the new virtual device
+        let name = device.name().unwrap_or_default();
+        let input_id = device.input_id();
+        let phys_path = device.physical_path().unwrap_or_default();
+        let mut builder = VirtualDeviceBuilder::new()?
+            .name(name)
+            .input_id(input_id)
+            .with_phys(phys_path)?;
+
+        // Keys
+        if let Some(keys) = device.supported_keys() {
+            builder = builder.with_keys(keys)?;
+        }
+
+        // ABS
+        if device.supported_absolute_axes().is_some() {
+            for (code, absinfo) in device.get_absinfo()? {
+                let abs_setup = UinputAbsSetup::new(code, absinfo);
+                builder = builder.with_absolute_axis(&abs_setup)?;
+            }
+        }
+
+        // Switches
+        if let Some(switches) = device.supported_switches() {
+            builder = builder.with_switches(switches)?;
+        }
+
+        // LEDs
+        // NOTE: LEDs not supported in evdev library
+        //if let Some(leds) = device.supported_leds() {
+        //    builder = builder.with_leds(leds)?;
+        //}
+
+        // MSC
+        if let Some(msc) = device.misc_properties() {
+            builder = builder.with_msc(msc)?;
+        }
+
+        // FF
+        if let Some(ff) = device.supported_ff() {
+            builder = builder.with_ff(ff)?;
+            builder = builder.with_ff_effects_max(device.max_ff_effects() as u32);
+        }
+
+        // Sounds
+        // NOTE: Sounds not supported in evdev library
+        //if let Some(sounds) = device.supported_sounds() {
+        //    builder = builder.with_sounds(sounds);
+        //}
+
+        // Build the device
+        let virt_device = builder.build()?;
+
+        Err("Failed to clone".into())
     }
 }
 
