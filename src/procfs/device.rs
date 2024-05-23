@@ -48,6 +48,18 @@ impl Device {
             bitmaps: Vec::new(),
         }
     }
+
+    /// Returns true if this procfs device is virtual
+    pub fn is_virtual(&self) -> bool {
+        if !self.phys_path.is_empty() {
+            return false;
+        }
+
+        if self.sysfs_path.contains("/devices/virtual") {
+            return true;
+        }
+        false
+    }
 }
 
 /// Returns a list of sysfs input devices that are currently detected. This

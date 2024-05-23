@@ -99,12 +99,17 @@ impl DBusDevice {
     pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         let conn = self.conn.clone();
         self.dbus_path = Some(path.clone());
+
         tokio::spawn(async move {
+            log::debug!("Starting dbus interface: {path}");
             let iface = DBusInterface::new();
-            if let Err(e) = conn.object_server().at(path, iface).await {
-                log::error!("Failed to setup DBus interface for DBus device: {:?}", e);
+            if let Err(e) = conn.object_server().at(path.clone(), iface).await {
+                log::debug!("Failed to start dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Started dbus interface on {path}");
             }
         });
+
         Ok(())
     }
 
@@ -139,11 +144,20 @@ impl DBusDevice {
 
         // Remove the DBus interface
         if let Some(path) = self.dbus_path.clone() {
-            log::debug!("Removing DBus interface");
-            self.conn
-                .object_server()
-                .remove::<DBusInterface, String>(path)
-                .await?;
+            let conn = self.conn.clone();
+            let path = path.clone();
+            tokio::task::spawn(async move {
+                log::debug!("Stopping dbus interface for {path}");
+                let result = conn
+                    .object_server()
+                    .remove::<DBusInterface, String>(path.clone())
+                    .await;
+                if let Err(e) = result {
+                    log::error!("Failed to stop dbus interface {path}: {e:?}");
+                } else {
+                    log::debug!("Stopped dbus interface for {path}");
+                }
+            });
         }
 
         Ok(())
@@ -234,12 +248,12 @@ impl DBusDevice {
             return Err("No dbus path exists to send events to".into());
         };
 
+        let conn = self.conn.clone();
         // Get the object instance at the given path so we can send DBus signal
         // updates
-        let iface_ref = self
-            .conn
+        let iface_ref = conn
             .object_server()
-            .interface::<_, DBusInterface>(path)
+            .interface::<_, DBusInterface>(path.as_str())
             .await?;
 
         // Send the input event signal

@@ -21,7 +21,15 @@ impl SourceHIDRawInterface {
     pub async fn listen_on_dbus(conn: Connection, info: DeviceInfo) -> Result<(), Box<dyn Error>> {
         let path = get_dbus_path(info.path().to_string_lossy().to_string());
         let iface = SourceHIDRawInterface::new(info);
-        conn.object_server().at(path, iface).await?;
+        tokio::task::spawn(async move {
+            log::debug!("Starting dbus interface: {path}");
+            let result = conn.object_server().at(path.clone(), iface).await;
+            if let Err(e) = result {
+                log::debug!("Failed to start dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Started dbus interface: {path}");
+            }
+        });
         Ok(())
     }
 }

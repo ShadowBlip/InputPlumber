@@ -438,7 +438,7 @@ impl CompositeDeviceConfig {
     ) -> bool {
         //TODO: Check if the evdev has no proterties defined, that would always match.
 
-        if is_virtual(device) {
+        if device.is_virtual() {
             log::debug!("{} is virtual, skipping.", device.name);
             return false;
         }
@@ -575,16 +575,4 @@ impl CompositeDeviceConfig {
 
         Some(matches)
     }
-}
-
-/// Determines if a procfs device is virtual or real.
-fn is_virtual(device: &procfs::device::Device) -> bool {
-    if !device.phys_path.is_empty() {
-        return false;
-    }
-
-    if device.sysfs_path.contains("/devices/virtual") {
-        return true;
-    }
-    false
 }

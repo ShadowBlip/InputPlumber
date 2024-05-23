@@ -24,9 +24,20 @@ impl SourceEventDeviceInterface {
         handler: String,
         info: procfs::device::Device,
     ) -> Result<(), Box<dyn Error>> {
+        log::debug!("Starting to listen on dbus interface for {handler}");
         let path = get_dbus_path(handler.clone());
+        log::debug!("Got dbus path {path}");
         let iface = SourceEventDeviceInterface::new(handler.clone(), info);
-        conn.object_server().at(path, iface).await?;
+        log::debug!("Created interface for {handler}");
+        tokio::task::spawn(async move {
+            log::debug!("Starting dbus interface: {path}");
+            let result = conn.object_server().at(path.clone(), iface).await;
+            if let Err(e) = result {
+                log::debug!("Failed to start dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Started dbus interface: {path}");
+            }
+        });
         Ok(())
     }
 }
