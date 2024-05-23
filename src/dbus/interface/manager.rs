@@ -1,4 +1,6 @@
-use tokio::sync::{broadcast, mpsc};
+use std::time::Duration;
+
+use tokio::sync::mpsc;
 use zbus::fdo;
 use zbus_macros::interface;
 
@@ -8,11 +10,11 @@ use crate::{config::CompositeDeviceConfig, input::manager::ManagerCommand};
 /// a [Manager]. It works by sending command messages to a channel that the
 /// [Manager] is listening on.
 pub struct ManagerInterface {
-    tx: broadcast::Sender<ManagerCommand>,
+    tx: mpsc::Sender<ManagerCommand>,
 }
 
 impl ManagerInterface {
-    pub fn new(tx: broadcast::Sender<ManagerCommand>) -> ManagerInterface {
+    pub fn new(tx: mpsc::Sender<ManagerCommand>) -> ManagerInterface {
         ManagerInterface { tx }
     }
 }
@@ -30,7 +32,11 @@ impl ManagerInterface {
         let device = CompositeDeviceConfig::from_yaml_file(config_path)
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         self.tx
-            .send(ManagerCommand::CreateCompositeDevice { config: device })
+            .send_timeout(
+                ManagerCommand::CreateCompositeDevice { config: device },
+                Duration::from_millis(500),
+            )
+            .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         Ok("".to_string())
     }
@@ -40,7 +46,11 @@ impl ManagerInterface {
     async fn create_target_device(&self, kind: String) -> fdo::Result<String> {
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
-            .send(ManagerCommand::CreateTargetDevice { kind, sender })
+            .send_timeout(
+                ManagerCommand::CreateTargetDevice { kind, sender },
+                Duration::from_millis(500),
+            )
+            .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
         // Read the response from the manager
@@ -61,7 +71,11 @@ impl ManagerInterface {
     /// Stop the given target device
     async fn stop_target_device(&self, path: String) -> fdo::Result<()> {
         self.tx
-            .send(ManagerCommand::StopTargetDevice { path })
+            .send_timeout(
+                ManagerCommand::StopTargetDevice { path },
+                Duration::from_millis(500),
+            )
+            .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         Ok(())
     }
@@ -74,11 +88,15 @@ impl ManagerInterface {
     ) -> fdo::Result<()> {
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
-            .send(ManagerCommand::AttachTargetDevice {
-                target_path: target_path.clone(),
-                composite_path: composite_path.clone(),
-                sender,
-            })
+            .send_timeout(
+                ManagerCommand::AttachTargetDevice {
+                    target_path: target_path.clone(),
+                    composite_path: composite_path.clone(),
+                    sender,
+                },
+                Duration::from_millis(500),
+            )
+            .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
         // Read the response from the manager

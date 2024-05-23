@@ -36,6 +36,11 @@ pub struct Device {
 }
 
 impl Device {
+    /// Returns true if the given device is virtual
+    pub fn is_virtual(&self) -> bool {
+        self.path.starts_with("/devices/virtual")
+    }
+
     /// Returns the parent sysfs device path
     pub fn get_parent(&self) -> Option<String> {
         let path = format!("/sys{}/device", self.path.clone());
@@ -94,7 +99,7 @@ impl Device {
     pub fn get_vendor_id(&self) -> Option<String> {
         let path = format!("/sys{}/device/id/vendor", self.path.clone());
         let Some(id) = fs::read_to_string(path).ok() else {
-              return None;
+            return None;
         };
         Some(id.replace('\n', ""))
     }
@@ -104,7 +109,7 @@ impl Device {
     pub fn get_product_id(&self) -> Option<String> {
         let path = format!("/sys{}/device/id/product", self.path.clone());
         let Some(id) = fs::read_to_string(path).ok() else {
-              return None;
+            return None;
         };
         Some(id.replace('\n', ""))
     }

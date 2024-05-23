@@ -1,4 +1,4 @@
-use std::{collections::HashSet, str::FromStr};
+use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use tokio::sync::mpsc;
 use zbus::{
@@ -33,7 +33,7 @@ impl CompositeDeviceInterface {
     async fn name(&self) -> fdo::Result<String> {
         let (sender, mut receiver) = mpsc::channel::<String>(1);
         self.tx
-            .send(Command::GetName(sender))
+            .send_timeout(Command::GetName(sender), Duration::from_millis(500))
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(name) = receiver.recv().await else {
@@ -48,7 +48,7 @@ impl CompositeDeviceInterface {
     async fn profile_name(&self) -> fdo::Result<String> {
         let (sender, mut receiver) = mpsc::channel::<String>(1);
         self.tx
-            .send(Command::GetProfileName(sender))
+            .send_timeout(Command::GetProfileName(sender), Duration::from_millis(500))
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(profile_name) = receiver.recv().await else {
@@ -61,7 +61,7 @@ impl CompositeDeviceInterface {
     /// Stop the composite device and all target devices
     async fn stop(&self) -> fdo::Result<()> {
         self.tx
-            .send(Command::Stop)
+            .send_timeout(Command::Stop, Duration::from_millis(500))
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         Ok(())
@@ -71,7 +71,10 @@ impl CompositeDeviceInterface {
     async fn load_profile_path(&self, path: String) -> fdo::Result<()> {
         let (sender, mut receiver) = mpsc::channel::<Result<(), String>>(1);
         self.tx
-            .send(Command::LoadProfilePath(path, sender))
+            .send_timeout(
+                Command::LoadProfilePath(path, sender),
+                Duration::from_millis(500),
+            )
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
@@ -97,7 +100,10 @@ impl CompositeDeviceInterface {
     /// new target devices.
     async fn set_target_devices(&self, target_device_types: Vec<String>) -> fdo::Result<()> {
         self.tx
-            .send(Command::SetTargetDevices(target_device_types))
+            .send_timeout(
+                Command::SetTargetDevices(target_device_types),
+                Duration::from_millis(500),
+            )
             .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         Ok(())
@@ -200,7 +206,7 @@ impl CompositeDeviceInterface {
         }
 
         self.tx
-            .send(Command::WriteChordEvent(chord))
+            .send_timeout(Command::WriteChordEvent(chord), Duration::from_millis(500))
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
@@ -241,7 +247,10 @@ impl CompositeDeviceInterface {
         }
 
         self.tx
-            .send(Command::SetInterceptActivation(activation_caps, target_cap))
+            .send_timeout(
+                Command::SetInterceptActivation(activation_caps, target_cap),
+                Duration::from_millis(500),
+            )
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
@@ -253,7 +262,7 @@ impl CompositeDeviceInterface {
     async fn capabilities(&self) -> fdo::Result<Vec<String>> {
         let (sender, mut receiver) = mpsc::channel::<HashSet<Capability>>(1);
         self.tx
-            .send(Command::GetCapabilities(sender))
+            .send_timeout(Command::GetCapabilities(sender), Duration::from_millis(500))
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(capabilities) = receiver.recv().await else {
@@ -288,7 +297,10 @@ impl CompositeDeviceInterface {
     async fn target_capabilities(&self) -> fdo::Result<Vec<String>> {
         let (sender, mut receiver) = mpsc::channel::<HashSet<Capability>>(1);
         self.tx
-            .send(Command::GetTargetCapabilities(sender))
+            .send_timeout(
+                Command::GetTargetCapabilities(sender),
+                Duration::from_millis(500),
+            )
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(capabilities) = receiver.recv().await else {
@@ -323,7 +335,10 @@ impl CompositeDeviceInterface {
     async fn source_device_paths(&self) -> fdo::Result<Vec<String>> {
         let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
         self.tx
-            .send(Command::GetSourceDevicePaths(sender))
+            .send_timeout(
+                Command::GetSourceDevicePaths(sender),
+                Duration::from_millis(500),
+            )
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(paths) = receiver.recv().await else {
@@ -338,7 +353,10 @@ impl CompositeDeviceInterface {
     async fn intercept_mode(&self) -> fdo::Result<u32> {
         let (sender, mut receiver) = mpsc::channel::<InterceptMode>(1);
         self.tx
-            .send(Command::GetInterceptMode(sender))
+            .send_timeout(
+                Command::GetInterceptMode(sender),
+                Duration::from_millis(500),
+            )
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(mode) = receiver.recv().await else {
@@ -361,7 +379,7 @@ impl CompositeDeviceInterface {
             _ => InterceptMode::None,
         };
         self.tx
-            .send(Command::SetInterceptMode(mode))
+            .send_timeout(Command::SetInterceptMode(mode), Duration::from_millis(500))
             .await
             .map_err(|err| zbus::Error::Failure(err.to_string()))?;
         Ok(())
@@ -372,7 +390,10 @@ impl CompositeDeviceInterface {
     async fn target_devices(&self) -> fdo::Result<Vec<String>> {
         let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
         self.tx
-            .send(Command::GetTargetDevicePaths(sender))
+            .send_timeout(
+                Command::GetTargetDevicePaths(sender),
+                Duration::from_millis(500),
+            )
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(paths) = receiver.recv().await else {
@@ -387,7 +408,10 @@ impl CompositeDeviceInterface {
     async fn dbus_devices(&self) -> fdo::Result<Vec<String>> {
         let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
         self.tx
-            .send(Command::GetDBusDevicePaths(sender))
+            .send_timeout(
+                Command::GetDBusDevicePaths(sender),
+                Duration::from_millis(500),
+            )
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
         let Some(paths) = receiver.recv().await else {

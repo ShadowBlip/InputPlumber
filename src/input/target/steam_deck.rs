@@ -10,6 +10,7 @@ use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
 use crate::{
+    dbus::interface::target::gamepad::TargetGamepadInterface,
     drivers::steam_deck::{
         driver::{PID, VID},
         hid_report::{PackedInputDataReport, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN},
@@ -88,9 +89,12 @@ impl SteamDeckDevice {
         let conn = self.conn.clone();
         self.dbus_path = Some(path.clone());
         tokio::spawn(async move {
+            log::debug!("Starting dbus interface: {path}");
             let iface = DBusInterface::new();
-            if let Err(e) = conn.object_server().at(path, iface).await {
-                log::error!("Failed to setup DBus interface for Gamepad device: {:?}", e);
+            if let Err(e) = conn.object_server().at(path.clone(), iface).await {
+                log::debug!("Failed to start dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Started dbus interface on {path}");
             }
         });
         Ok(())
@@ -222,6 +226,24 @@ impl SteamDeckDevice {
             };
         }
         log::debug!("Stopped listening for events");
+
+        // Remove the DBus interface
+        if let Some(path) = self.dbus_path.clone() {
+            let conn = self.conn.clone();
+            let path = path.clone();
+            tokio::task::spawn(async move {
+                log::debug!("Stopping dbus interface for {path}");
+                let result = conn
+                    .object_server()
+                    .remove::<TargetGamepadInterface, String>(path.clone())
+                    .await;
+                if let Err(e) = result {
+                    log::error!("Failed to stop dbus interface {path}: {e:?}");
+                } else {
+                    log::debug!("Stopped dbus interface for {path}");
+                }
+            });
+        }
 
         Ok(())
     }

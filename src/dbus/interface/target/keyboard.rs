@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use tokio::sync::mpsc;
 use zbus::fdo;
 use zbus_macros::interface;
@@ -41,7 +43,7 @@ impl TargetKeyboardInterface {
 
         // Write the event to the virtual device
         self.command_tx
-            .send(TargetCommand::WriteEvent(event))
+            .send_timeout(TargetCommand::WriteEvent(event), Duration::from_millis(500))
             .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 
