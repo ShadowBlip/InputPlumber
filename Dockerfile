@@ -1,4 +1,4 @@
-FROM rust:1.75
+FROM rust:1.78
 
 RUN apt-get update && apt-get install -y \
   zstd \
