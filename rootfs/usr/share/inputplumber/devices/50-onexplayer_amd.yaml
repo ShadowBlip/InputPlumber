@@ -28,6 +28,10 @@ matches:
       product_name: ONEXPLAYER
       sys_vendor: ONE-NETBOOK
       cpu_vendor: AuthenticAMD Advanced Micro Devices, Inc.
+  - dmi_data:
+      product_name: ONE XPLAYER
+      sys_vendor: ONE-NETBOOK TECHNOLOGY CO., LTD.
+      cpu_vendor: AuthenticAMD
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
