@@ -1,5 +1,7 @@
 use std::fs;
 
+use procfs::{CpuInfo, Current};
+
 use self::data::DMIData;
 
 pub mod data;
@@ -43,6 +45,11 @@ pub fn get_dmi_data() -> DMIData {
         product_version,
         sys_vendor,
     }
+}
+
+/// Returns the CPU info from the system
+pub fn get_cpu_info() -> Result<CpuInfo, procfs::ProcError> {
+    CpuInfo::current()
 }
 
 /// Read the given DMI property
