@@ -327,8 +327,8 @@ impl DeckOutput {
                 let intensity = 0;
                 let left_speed = strong_magnitude;
                 let right_speed = weak_magnitude;
-                let mut left_gain = 130;
-                let mut right_gain = 130;
+                let mut left_gain = 0; // Max 130
+                let mut right_gain = 0;
                 if left_speed == 0 {
                     left_gain = 0;
                 }
@@ -359,8 +359,8 @@ impl DeckOutput {
         let intensity = 0;
         let left_speed = report.rumble_emulation_left as u16 * 256;
         let right_speed = report.rumble_emulation_right as u16 * 256;
-        let mut left_gain = 130;
-        let mut right_gain = 130;
+        let mut left_gain = 0; // Max 130
+        let mut right_gain = 0;
         if left_speed == 0 {
             left_gain = 0;
         }
