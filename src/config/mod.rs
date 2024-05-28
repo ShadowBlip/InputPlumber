@@ -1,5 +1,6 @@
 use std::io;
 
+use ::procfs::CpuInfo;
 use glob_match::glob_match;
 use hidapi::DeviceInfo;
 use serde::Deserialize;
@@ -486,12 +487,12 @@ impl CompositeDeviceConfig {
 
     /// Returns true if the configuration has a valid set of matches. This will
     /// return true if ANY match config matches. If this list is empty, it will return true.
-    pub fn has_valid_matches(&self, data: DMIData) -> bool {
-        self.get_valid_matches(data).is_some()
+    pub fn has_valid_matches(&self, data: &DMIData, cpu_info: &CpuInfo) -> bool {
+        self.get_valid_matches(data, cpu_info).is_some()
     }
 
     /// Returns matches that matched system data.
-    pub fn get_valid_matches(&self, data: DMIData) -> Option<Vec<Match>> {
+    pub fn get_valid_matches(&self, data: &DMIData, cpu_info: &CpuInfo) -> Option<Vec<Match>> {
         let mut matches: Vec<Match> = Vec::new();
 
         // If there are no match definitions, consider it a match
@@ -505,6 +506,16 @@ impl CompositeDeviceConfig {
             let mut has_matches = false;
 
             if let Some(dmi_config) = match_config.dmi_data {
+                if let Some(cpu_vendor) = dmi_config.cpu_vendor {
+                    if !glob_match(
+                        cpu_vendor.as_str(),
+                        cpu_info.vendor_id(0).unwrap_or_default(),
+                    ) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
                 if let Some(bios_release) = dmi_config.bios_release {
                     if !glob_match(bios_release.as_str(), data.bios_release.as_str()) {
                         continue;

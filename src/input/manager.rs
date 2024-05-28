@@ -1,8 +1,10 @@
+use core::panic;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::time::Duration;
 
+use ::procfs::CpuInfo;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use zbus::zvariant::ObjectPath;
@@ -18,6 +20,7 @@ use crate::dbus::interface::manager::ManagerInterface;
 use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
 use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
 use crate::dmi::data::DMIData;
+use crate::dmi::get_cpu_info;
 use crate::dmi::get_dmi_data;
 use crate::iio;
 use crate::input::composite_device;
@@ -123,6 +126,8 @@ pub struct Manager {
     dbus: Connection,
     /// System DMI data
     dmi_data: DMIData,
+    /// System CPU info
+    cpu_info: CpuInfo,
     /// The transmit side of the [rx] channel used to send [Command] messages.
     /// This can be cloned to allow child objects to communicate up to the
     /// manager.
@@ -166,9 +171,20 @@ impl Manager {
         let dmi_data = get_dmi_data();
         log::debug!("Got DMI data: {:?}", dmi_data);
 
+        log::debug!("Loading CPU info");
+        let cpu_info = match get_cpu_info() {
+            Ok(info) => info,
+            Err(e) => {
+                log::error!("Failed to get CPU info: {e:?}");
+                panic!("Unable to determine CPU info!");
+            }
+        };
+        log::debug!("Got CPU info: {cpu_info:?}");
+
         Manager {
             dbus: conn,
             dmi_data,
+            cpu_info,
             rx,
             tx,
             composite_devices: HashMap::new(),
@@ -923,7 +939,7 @@ impl Manager {
             log::trace!("Checking config {:?} for device", config.name);
 
             // Check to see if this configuration matches the system
-            if !config.has_valid_matches(self.dmi_data.clone()) {
+            if !config.has_valid_matches(&self.dmi_data, &self.cpu_info) {
                 log::trace!("Configuration does not match system");
                 continue;
             }
