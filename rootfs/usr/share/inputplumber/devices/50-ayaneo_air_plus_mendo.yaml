@@ -14,11 +14,7 @@ name: AYANEO AIR Plus
 matches:
   - dmi_data:
       product_name: AIR Plus
-      board_name: AB05-AMD
-      sys_vendor: AYANEO
-  - dmi_data:
-      product_name: AIR Plus
-      board_name: AB05-Intel
+      board_name: AB05-Mendocino
       sys_vendor: AYANEO
 
 # One or more source devices to combine into a single virtual device. The events
@@ -27,15 +23,11 @@ source_devices:
   - group: gamepad
     evdev:
       name: Nintendo Co., Ltd. Pro Controller
-      phys_path: usb-0000:64:00.3-3/input0
+      phys_path: usb-0000:05:00.0-1/input0
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:64:00.3-3/input0
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:00:14.0-6/input0
+      phys_path: usb-0000:05:00.0-1/input0
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
@@ -55,4 +47,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: aya5
+capability_map_id: aya4
