@@ -213,11 +213,6 @@
           "type": "integer"
         }
       },
-      "required": [
-        "interface_num",
-        "product_id",
-        "vendor_id"
-      ],
       "title": "Hidraw"
     },
     "IIO": {

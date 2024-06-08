@@ -24,12 +24,6 @@ pub struct TouchAxisInput {
     pub y: u16,
 }
 
-/// TouchAxisID tracks the sequential count of touch inputs
-#[derive(Clone, Debug)]
-pub struct TouchAxisID {
-    pub value: u32,
-}
-
 /// Axis input contain (x, y) coordinates
 #[derive(Clone, Debug)]
 pub struct MouseAxisInput {

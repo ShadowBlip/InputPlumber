@@ -19,6 +19,21 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  #- group: mouse # Touch Devices
+  #  unique: false
+  #  hidraw:
+  #    vendor_id: 0x0911
+  #    product_id: 0x5288
+  #- group: mouse
+  #  blocked: true
+  #  evdev:
+  #    name: OPI0001:00 0911:5288 Touchpad
+  #    phys_path: i2c-OPI0001:00
+  #- group: mouse
+  #  blocked: true
+  #  evdev:
+  #    name: OPI0002:00 0911:5288 Touchpad
+  #    phys_path: i2c-OPI0002:00
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
@@ -34,6 +49,10 @@ source_devices:
   - group: imu
     iio:
       name: i2c-BMI0260:00
+      mount_matrix:
+        x: [1, 0, 0]
+        y: [0, 0, -1]
+        z: [0, -1, 0]
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
