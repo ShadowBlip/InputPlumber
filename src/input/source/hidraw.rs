@@ -1,4 +1,5 @@
 pub mod lego;
+pub mod opineo;
 pub mod steam_deck;
 
 use std::error::Error;
@@ -17,6 +18,14 @@ use super::SourceCommand;
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
 
+/// List of available drivers
+enum DriverType {
+    Unknown,
+    SteamDeck,
+    LegionGo,
+    OrangePiNeo,
+}
+
 /// [HIDRawDevice] represents an input device using the input subsystem.
 #[derive(Debug)]
 pub struct HIDRawDevice {
@@ -29,6 +38,7 @@ pub struct HIDRawDevice {
 impl HIDRawDevice {
     pub fn new(info: DeviceInfo, composite_tx: mpsc::Sender<Command>) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
+        log::debug!("HIDRaw DeviceInfo: {info:?}");
         Self {
             info,
             composite_tx,
@@ -46,31 +56,35 @@ impl HIDRawDevice {
     /// implementations. If one does not exist, an error will be returned.
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         // Run the appropriate HIDRaw driver
-        if self.info.vendor_id() == steam_deck::VID && self.info.product_id() == steam_deck::PID {
-            log::info!("Detected Steam Deck");
-            let tx = self.composite_tx.clone();
-            let rx = self.rx.take().unwrap();
-            let mut driver =
-                steam_deck::DeckController::new(self.info.clone(), tx, rx, self.get_id());
-            driver.run().await?;
-        } else if self.info.vendor_id() == drivers::lego::driver::VID
-            && (self.info.product_id() == drivers::lego::driver::PID
-                || self.info.product_id() == drivers::lego::driver::PID2)
-        {
-            log::info!("Detected Legion Go");
-            let tx = self.composite_tx.clone();
-            let driver = lego::LegionController::new(self.info.clone(), tx, self.get_id());
-            driver.run().await?;
-        } else {
-            return Err(format!(
+        match self.get_driver_type() {
+            DriverType::Unknown => Err(format!(
                 "No driver for hidraw interface found. VID: {}, PID: {}",
                 self.info.vendor_id(),
                 self.info.product_id()
             )
-            .into());
-        }
+            .into()),
 
-        Ok(())
+            DriverType::SteamDeck => {
+                let tx = self.composite_tx.clone();
+                let rx = self.rx.take().unwrap();
+                let mut driver =
+                    steam_deck::DeckController::new(self.info.clone(), tx, rx, self.get_id());
+                driver.run().await?;
+                Ok(())
+            }
+            DriverType::LegionGo => {
+                let tx = self.composite_tx.clone();
+                let driver = lego::LegionController::new(self.info.clone(), tx, self.get_id());
+                driver.run().await?;
+                Ok(())
+            }
+            DriverType::OrangePiNeo => {
+                let tx = self.composite_tx.clone();
+                let driver = opineo::OrangePiNeoTouchpad::new(self.info.clone(), tx, self.get_id());
+                driver.run().await?;
+                Ok(())
+            }
+        }
     }
 
     /// Returns a unique identifier for the source device.
@@ -92,21 +106,46 @@ impl HIDRawDevice {
 
     /// Returns capabilities of this input device
     pub fn get_capabilities(&self) -> Result<Vec<Capability>, Box<dyn Error>> {
-        if self.info.vendor_id() == steam_deck::VID && self.info.product_id() == steam_deck::PID {
-            Ok(Vec::from(steam_deck::CAPABILITIES))
-        } else if self.info.vendor_id() == drivers::lego::driver::VID
-            && (self.info.product_id() == drivers::lego::driver::PID
-                || self.info.product_id() == drivers::lego::driver::PID2)
-        {
-            Ok(Vec::from(lego::CAPABILITIES))
-        } else {
-            Err(format!(
-                "No driver for hidraw interface found. VID: {}, PID: {}",
+        match self.get_driver_type() {
+            DriverType::Unknown => Err(format!(
+                "No capabilities for interface found. VID: {}, PID: {}",
                 self.info.vendor_id(),
                 self.info.product_id()
             )
-            .into())
+            .into()),
+            DriverType::SteamDeck => Ok(Vec::from(steam_deck::CAPABILITIES)),
+            DriverType::LegionGo => Ok(Vec::from(lego::CAPABILITIES)),
+            DriverType::OrangePiNeo => Ok(Vec::from(opineo::CAPABILITIES)),
         }
+    }
+
+    fn get_driver_type(&self) -> DriverType {
+        log::debug!("Finding driver for interface: {:?}", self.info);
+        // Steam Deck
+        if self.info.vendor_id() == steam_deck::VID && self.info.product_id() == steam_deck::PID {
+            log::info!("Detected Steam Deck");
+            return DriverType::SteamDeck;
+        }
+
+        // Legion Go
+        if self.info.vendor_id() == drivers::lego::driver::VID
+            && (self.info.product_id() == drivers::lego::driver::PID
+                || self.info.product_id() == drivers::lego::driver::PID2)
+        {
+            log::info!("Detected Legion Go");
+            return DriverType::LegionGo;
+        }
+
+        // OrangePi NEO
+        if self.info.vendor_id() == drivers::opineo::driver::VID
+            && self.info.product_id() == drivers::opineo::driver::PID
+        {
+            log::info!("Detected OrangePi NEO");
+            return DriverType::OrangePiNeo;
+        }
+
+        // Unknown
+        DriverType::Unknown
     }
 }
 

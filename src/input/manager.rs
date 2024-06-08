@@ -803,7 +803,9 @@ impl Manager {
                     }
                 }
                 SourceDeviceInfo::HIDRawDeviceInfo(info) => {
-                    log::trace!("Checking if existing composite device is missing hidraw device");
+                    log::trace!(
+                        "Checking if existing composite device is missing hidraw device: {info:?}"
+                    );
                     for source_device in source_devices {
                         if source_device.hidraw.is_none() {
                             continue;
@@ -986,6 +988,7 @@ impl Manager {
                     }
                 }
                 SourceDeviceInfo::HIDRawDeviceInfo(info) => {
+                    log::trace!("Checking if hidraw device has a device profile: {info:?}");
                     for source_device in source_devices {
                         if source_device.hidraw.is_none() {
                             continue;
