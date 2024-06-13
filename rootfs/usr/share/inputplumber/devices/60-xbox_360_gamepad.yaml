@@ -1,0 +1,182 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Xbox 360 Gamepad
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: gamepad
+    evdev:
+      name: "Generic X-Box pad"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "0079"
+      product_id: "18d4"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "03eb"
+      product_id: "{ff01,ff02}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "044f"
+      product_id: "b326"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "045e"
+      product_id: "{028e,028f}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "046d"
+      product_id: "{c21d,c21e,c21f,c242}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "056e"
+      product_id: "2004"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "05ac"
+      product_id: "055b"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "06a3"
+      product_id: "f51a"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "0738"
+      product_id: "{4716,4718,4726,4728,4736,4738,4740,4758,9871,b726,b738,beef,cb02,cb03,cb29,f738}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "07ff"
+      product_id: "ffff"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "0e6f"
+      product_id: "{0105,0113,011f,0131,0133,0201,0213,021f,0301,0401,0413,0501,f900}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "0f0d"
+      product_id: "{000a,000c,000d,0016,001b,00dc}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "1038"
+      product_id: "{1430,1431}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "11c9"
+      product_id: "55f0"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "1209"
+      product_id: "2882"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "12ab"
+      product_id: "{0004,0301,0303}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "1430"
+      product_id: "{4748,f801}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "146b"
+      product_id: "{0601,0604}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "1532"
+      product_id: "0037"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "15e4"
+      product_id: "{3f00,3f0a,3f10}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "162e"
+      product_id: "beef"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "1689"
+      product_id: "{fd00,fd01,fe00}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "1949"
+      product_id: "041a"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "1bad"
+      product_id: "{0002,0003,0130,f016,f018,f019,f021,f023,f025,f027,f028,f02e,f036,f038,f039,f03a,f03d,f03e,f03f,f042,f080,f501,f502,f503,f504,f505,f506,f900,f901,f903,f904,f906,fa01,fd00,fd01}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "20d6"
+      product_id: "281f"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "24c6"
+      product_id: "{5000,5300,5303,530a,531a,5397,5500,5501,5502,5503,5506,5510,550d,550e,5b02,5d04,fafe}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "2563"
+      product_id: "058d"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "2dc8"
+      product_id: "{3106,3109}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "31e3"
+      product_id: "{1100,1200,1210,1220,1230,1300,1310}"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "3285"
+      product_id: "0607"
+
+  - group: gamepad
+    evdev:
+      vendor_id: "413d"
+      product_id: "2104"
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - gamepad
+  - mouse
+  - keyboard
