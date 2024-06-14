@@ -80,7 +80,7 @@ impl IMU {
                     let events = driver.poll()?;
                     let native_events = translate_events(events);
                     for event in native_events {
-                        log::trace!("Sending event to CompositeDevice: {:?}", event);
+                        log::trace!("Sending IMU event to CompositeDevice: {:?}", event);
                         // Don't send un-implemented events
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;

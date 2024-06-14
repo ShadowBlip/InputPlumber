@@ -20,54 +20,108 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  - group: mouse # Touch Device
+  # Touchpad
+  - group: mouse # Gamepad Mode
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6182
       interface_num: 1
-  - group: gamepad
+  - group: mouse # DInput Mode
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6184
+      interface_num: 1
+  - group: mouse # Gampead Mode
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6182"
+      name: "  Legion Controller for Windows  Touchpad"
+  - group: mouse # DInput mode
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6184"
+      name: "Legion-Controller 1-D6 Touchpad"
+
+  # Mouse
+  - group: mouse # DInput Mode
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6185
+      interface_num: 1
+  - group: mouse # Gamepad Mode
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6182"
+      name: "  Legion Controller for Windows  Mouse"
+  - group: mouse # FPS/Dinput Mode
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "618[4-5]"
+      name: "Legion-Controller 1-D6 Mouse"
+  - group: mouse # FPS/Dinput Mode
+    blocked: true
+    unique: false
+    evdev:
+      vendor_id: "17ef"
+      product_id: "618[4-5]"
+      name: "Legion-Controller 1-D6"
+
+  # Keyboard
+  - group: mouse # DInput Mode
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6185
+      interface_num: 0
+  - group: keyboard # Gamepad Mode
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6182"
+      name: "  Legion Controller for Windows  Keyboard"
+  - group: keyboard # FPS/DInput Mode
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "618[4-5]"
+      name: "Legion-Controller 1-D6 Keyboard"
+
+  # Gamepad
+  - group: gamepad # Gamepad Mode
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6182
       interface_num: 2
-  - group: gamepad
+  - group: gamepad # Dinput Mode
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6184
+      interface_num: 0
+  - group: gamepad # Dinput Mode
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6184
+      interface_num: 2
+  - group: gamepad # FPS Mode
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6185
       interface_num: 2
-  - group: gamepad
+  - group: gamepad # Newer Kernels
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6182"
+      name: "Lenovo Legion Controller for Windows"
+  - group: gamepad # Older Kernels
     evdev:
       vendor_id: "17ef"
       product_id: "6182"
       name: "Generic X-Box pad"
-  - group: keyboard
-    blocked: true
-    unique: false
-    evdev:
-      vendor_id: "17ef"
-      product_id: "6182"
-      name: "*Legion Controller*"
-  - group: keyboard
-    blocked: false
-    unique: false
-    evdev:
-      vendor_id: "17ef"
-      product_id: "6185"
-      name: "Legion-Controller 1-D6"
-  - group: keyboard
-    blocked: true
-    unique: true
-    evdev:
-      vendor_id: "17ef"
-      product_id: "6185"
-      name: "Legion-Controller 1-D6 Keyboard"
-  - group: keyboard
-    blocked: true
-    unique: true
-    evdev:
-      vendor_id: "17ef"
-      product_id: "6185"
-      name: "Legion-Controller 1-D6 Mouse"
+
+  # IMU
   - group: imu
     iio:
       name: accel_3d

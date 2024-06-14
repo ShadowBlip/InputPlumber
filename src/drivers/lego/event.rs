@@ -3,7 +3,6 @@
 pub enum Event {
     Button(ButtonEvent),
     MouseButton(MouseButtonEvent),
-    Gyro(GyroEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
     Status(StatusEvent),
@@ -148,13 +147,7 @@ pub enum TriggerEvent {
     MouseWheel(MouseWheelInput),
 }
 
-/// AccelerometerEvent has data from the accelerometer
-#[derive(Clone, Debug)]
-pub enum GyroEvent {
-    LeftGyro(GyroInput),
-    RightGyro(GyroInput),
-}
-
+/// StatusEvent has data on if controllers are in FPS mode, connected, and the battery state.
 #[derive(Clone, Debug)]
 pub enum StatusEvent {
     LeftControllerBattery(StatusInput),

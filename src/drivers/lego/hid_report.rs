@@ -154,10 +154,6 @@ impl ReportType {
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    1 ,    0 ,    0 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000001.919879 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 80 80 01 00 00 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 //
-// Start
-// # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,   99 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    1 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
-// E: 000003.383926 64 04 3c 74 01 00 64 04 63 04 01 01 01 02 02 80 80 80 80 00 00 01 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-//
 // A
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 , -128 ,    0 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000002.471810 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 80 80 00 80 00 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
@@ -213,6 +209,10 @@ impl ReportType {
 // Select
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,   99 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    2 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000004.440004 64 04 3c 74 01 00 64 04 63 04 01 01 01 02 z02 80 80 80 80 00 00 02 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+//
+// Start
+// # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,   99 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    1 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
+// E: 000003.383926 64 04 3c 74 01 00 64 04 63 04 01 01 01 02 02 80 80 80 80 00 00 01 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 //
 // Mouse Wheel Click
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 , -128 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
@@ -489,7 +489,7 @@ pub struct KeyboardDataReport {
 // coming from.
 //
 // DInputDataLeft
-//
+// X and Y report backwards here.
 // No Input
 // # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
 // E: 000031.877403 13 08 00 08 80 00 08 80 08 00 00 00 00 00
@@ -545,19 +545,27 @@ pub struct KeyboardDataReport {
 // Start
 // # ReportID: 7 / X:  2048 | Yz  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  1  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
 // E: 000002.754038 13 07 00 08 80 00 08 80 08 80 00 00 00 00
+//
+// # ReportID: 7 / X:  1808 | Y:  3247 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000004.928909 13 07 10 f7 ca 00 08 80 08 00 00 00 00 00 caf = 3247
+// # ReportID: 7 / X:  2480 | Y:  2063 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000012.289568 13 07 b0 f9 80 00 08 80 08 00 00 00 00 00 9b0 = 2480
+
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "13")]
 pub struct DInputDataLeftReport {
     #[packed_field(bytes = "0")]
     pub report_id: u8,
-    #[packed_field(bytes = "1")]
-    pub report_size: u8,
 
     // Axes
-    #[packed_field(bits = "16..=27", endian = "lsb")]
-    pub l_stick_y: Integer<u16, packed_bits::Bits<12>>,
-    #[packed_field(bits = "28..=39", endian = "lsb")]
-    pub l_stick_x: Integer<u16, packed_bits::Bits<12>>,
+    #[packed_field(bytes = "1", endian = "lsb")]
+    pub l_stick_y_lg: u8,
+    #[packed_field(bits = "16..=19", endian = "lsb")]
+    pub l_stick_x_sm: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bits = "20..=23", endian = "lsb")]
+    pub l_stick_y_sm: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bytes = "3", endian = "lsb")]
+    pub l_stick_x_lg: u8,
 
     // Buttons
     #[packed_field(bits = "72")]
@@ -573,9 +581,9 @@ pub struct DInputDataLeftReport {
     #[packed_field(bits = "77")]
     pub y2: bool,
     #[packed_field(bits = "78")]
-    pub select: bool,
+    pub view: bool,
     #[packed_field(bits = "79")]
-    pub start: bool,
+    pub menu: bool,
 }
 
 // DInputDataRight
@@ -641,14 +649,16 @@ pub struct DInputDataLeftReport {
 pub struct DInputDataRightReport {
     #[packed_field(bytes = "0")]
     pub report_id: u8,
-    #[packed_field(bytes = "1")]
-    pub report_size: u8,
 
     // Axes
-    #[packed_field(bits = "16..=27", endian = "lsb")]
-    pub r_stick_y: Integer<u16, packed_bits::Bits<12>>,
-    #[packed_field(bits = "28..=39", endian = "lsb")]
-    pub r_stick_x: Integer<u16, packed_bits::Bits<12>>,
+    #[packed_field(bytes = "1", endian = "lsb")]
+    pub r_stick_y_lg: u8,
+    #[packed_field(bits = "16..=19", endian = "lsb")]
+    pub r_stick_x_sm: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bits = "20..=23", endian = "lsb")]
+    pub r_stick_y_sm: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bytes = "3", endian = "lsb")]
+    pub r_stick_x_lg: u8,
 
     // Buttons
     #[packed_field(bits = "72")]
@@ -754,7 +764,7 @@ pub struct MouseDataReport {
     pub m1: bool,
 
     // Axes
-    #[packed_field(bits = "16..=27", endian = "msb")]
+    #[packed_field(bits = "16..=27", endian = "lsb")]
     pub mouse_x: Integer<i16, packed_bits::Bits<12>>,
     #[packed_field(bits = "28..=39", endian = "msb")]
     pub mouse_y: Integer<i16, packed_bits::Bits<12>>,
