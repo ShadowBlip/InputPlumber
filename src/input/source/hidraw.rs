@@ -129,8 +129,9 @@ impl HIDRawDevice {
 
         // Legion Go
         if self.info.vendor_id() == drivers::lego::driver::VID
-            && (self.info.product_id() == drivers::lego::driver::PID
-                || self.info.product_id() == drivers::lego::driver::PID2)
+            && (self.info.product_id() == drivers::lego::driver::PID1
+                || self.info.product_id() == drivers::lego::driver::PID2
+                || self.info.product_id() == drivers::lego::driver::PID3)
         {
             log::info!("Detected Legion Go");
             return DriverType::LegionGo;
