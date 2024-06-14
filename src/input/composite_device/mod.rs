@@ -545,6 +545,12 @@ impl CompositeDevice {
         let sources = self.source_devices_discovered.drain(..);
         for mut source_device in sources {
             let device_id = source_device.get_id();
+            // If the source device is blocked, don't bother running it
+            if self.source_devices_blocked.contains(&device_id) {
+                log::debug!("Source device '{device_id}' blocked. Skipping running.");
+                continue;
+            }
+
             let source_tx = source_device.transmitter();
             self.source_devices.insert(device_id.clone(), source_tx);
             let tx = self.tx.clone();
@@ -1380,15 +1386,25 @@ impl CompositeDevice {
             }
         };
 
+        // Check to see if this source device should be blocked.
+        let mut is_blocked = false;
+        if let Some(source_config) = self.config.get_matching_device(&device_info) {
+            if let Some(blocked) = source_config.blocked {
+                is_blocked = blocked;
+            }
+        }
+
         // Get the capabilities of the source device.
         // TODO: When we *remove* a source device, we also need to remove
         // capabilities
-        let capabilities = source_device.get_capabilities()?;
-        for cap in capabilities {
-            if self.translatable_capabilities.contains(&cap) {
-                continue;
+        if !is_blocked {
+            let capabilities = source_device.get_capabilities()?;
+            for cap in capabilities {
+                if self.translatable_capabilities.contains(&cap) {
+                    continue;
+                }
+                self.capabilities.insert(cap);
             }
-            self.capabilities.insert(cap);
         }
 
         // TODO: Based on the capability map in the config, translate
