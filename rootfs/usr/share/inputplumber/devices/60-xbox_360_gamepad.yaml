@@ -38,7 +38,7 @@ source_devices:
   - group: gamepad
     evdev:
       vendor_id: "045e"
-      product_id: "{028e,028f}"
+      product_id: "{028e,028f,02a1}"
 
   - group: gamepad
     evdev:
