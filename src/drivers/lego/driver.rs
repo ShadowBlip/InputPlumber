@@ -6,13 +6,15 @@ use std::{
 };
 
 use hidapi::HidDevice;
-use packed_struct::{types::SizedInteger, PackedStruct};
+use packed_struct::{
+    types::{bits::Bits, Integer, SizedInteger},
+    PackedStruct,
+};
 
 use super::{
     event::{
-        AxisEvent, BinaryInput, ButtonEvent, Event, GyroEvent, GyroInput, JoyAxisInput,
-        MouseAxisInput, MouseButtonEvent, MouseWheelInput, StatusEvent, StatusInput,
-        TouchAxisInput, TriggerEvent, TriggerInput,
+        AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, MouseAxisInput, MouseButtonEvent,
+        MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput, TriggerEvent, TriggerInput,
     },
     hid_report::{
         DInputDataLeftReport, DInputDataRightReport, KeyboardDataReport, MouseDataReport,
@@ -22,8 +24,9 @@ use super::{
 
 // Hardware ID's
 pub const VID: u16 = 0x17ef;
-pub const PID: u16 = 0x6182;
-pub const PID2: u16 = 0x6185;
+pub const PID1: u16 = 0x6182;
+pub const PID2: u16 = 0x6184;
+pub const PID3: u16 = 0x6185;
 // Hardware limits
 pub const DINPUT_LEFT_DATA: u8 = 0x07;
 pub const DINPUT_RIGHT_DATA: u8 = 0x08;
@@ -75,7 +78,9 @@ impl Driver {
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
         let info = device.get_device_info()?;
-        if info.vendor_id() != VID || (info.product_id() != PID && info.product_id() != PID2) {
+        if info.vendor_id() != VID
+            || (info.product_id() != PID1 && info.product_id() != PID2) && info.product_id() != PID3
+        {
             return Err(format!("Device '{fmtpath}' is not a Legion Go Controller").into());
         }
 
@@ -125,7 +130,6 @@ impl Driver {
             }
 
             KEYBOARD_TOUCH_DATA => {
-                log::trace!("Got keyboard/touch data.");
                 if bytes_read != KEYBOARD_PACKET_SIZE {
                     if bytes_read != TOUCHPAD_PACKET_SIZE {
                         return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
@@ -184,9 +188,9 @@ impl Driver {
         let input_report = DInputDataLeftReport::unpack(&buf)?;
 
         // Print input report for debugging
-        // log::trace!("--- Input report ---");
-        // log::trace!("{input_report}");
-        // log::trace!("---- End Report ----");
+        //log::trace!("--- Input report ---");
+        //log::trace!("{input_report}");
+        //log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_dinputl_state(input_report);
@@ -208,15 +212,87 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_dinputl(&self, _old_state: Option<DInputDataLeftReport>) -> Vec<Event> {
-        let events = Vec::new();
-        let Some(_) = self.dinputl_state else {
+    fn translate_dinputl(&self, old_state: Option<DInputDataLeftReport>) -> Vec<Event> {
+        let mut events = Vec::new();
+        let Some(state) = self.dinputl_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        //if let Some(_) = old_state {}
+        if let Some(old_state) = old_state {
+            // Binary Events
+            if state.down != old_state.down {
+                events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
+                    pressed: state.down,
+                })));
+            }
+            if state.up != old_state.up {
+                events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
+                    pressed: state.up,
+                })));
+            }
+            if state.left != old_state.left {
+                events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
+                    pressed: state.left,
+                })));
+            }
+            if state.right != old_state.right {
+                events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
+                    pressed: state.right,
+                })));
+            }
+            if state.y1 != old_state.y1 {
+                events.push(Event::Button(ButtonEvent::Y1(BinaryInput {
+                    pressed: state.y1,
+                })));
+            }
+            if state.y2 != old_state.y2 {
+                events.push(Event::Button(ButtonEvent::Y2(BinaryInput {
+                    pressed: state.y2,
+                })));
+            }
+            if state.menu != old_state.menu {
+                events.push(Event::Button(ButtonEvent::Menu(BinaryInput {
+                    pressed: state.menu,
+                })));
+            }
+            if state.view != old_state.view {
+                events.push(Event::Button(ButtonEvent::View(BinaryInput {
+                    pressed: state.view,
+                })));
+            }
+
+            // Axis events
+            if state.l_stick_x_sm != old_state.l_stick_x_sm
+                || state.l_stick_y_sm != old_state.l_stick_y_sm
+                || state.l_stick_x_lg != old_state.l_stick_x_lg
+                || state.l_stick_y_lg != old_state.l_stick_y_lg
+            {
+                events.push(Event::Axis(AxisEvent::LStick(JoyAxisInput {
+                    x: self.xify_dinputl_x_axis(
+                        state.l_stick_x_sm.to_primitive() as u16,
+                        state.l_stick_x_lg as u16,
+                    ),
+                    y: self.xify_dinputl_y_axis(
+                        state.l_stick_y_sm.to_primitive() as u16,
+                        state.l_stick_y_lg as u16,
+                    ),
+                })));
+            }
+        }
         events
+    }
+
+    /// Converts a 4096-0 dinput x axis into a 0-255 xinput axis
+    fn xify_dinputl_x_axis(&self, x_axis_sm: u16, x_axis_lg: u16) -> u8 {
+        let axis = (x_axis_lg << 4 | x_axis_sm) as i16;
+        ((axis - 4095).abs() / 16) as u8
+    }
+
+    /// Converts a 0-4096 dinput y axis into a 0-255 xinput axis
+    fn xify_dinputl_y_axis(&self, y_axis_sm: u16, y_axis_lg: u16) -> u8 {
+        let axis = (y_axis_sm << 8 | y_axis_lg) as i16;
+        (axis / 16) as u8
     }
 
     /// Unpacks the buffer into a [DInputDataReport] structure and updates
@@ -228,9 +304,9 @@ impl Driver {
         let input_report = DInputDataRightReport::unpack(&buf)?;
 
         // Print input report for debugging
-        // log::trace!("--- Input report ---");
-        // log::trace!("{input_report}");
-        // log::trace!("---- End Report ----");
+        //log::trace!("--- Input report ---");
+        //log::trace!("{input_report}");
+        //log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_dinputr_state(input_report);
@@ -252,15 +328,86 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_dinputr(&self, _old_state: Option<DInputDataRightReport>) -> Vec<Event> {
-        let events = Vec::new();
-        let Some(_) = self.dinputr_state else {
+    fn translate_dinputr(&self, old_state: Option<DInputDataRightReport>) -> Vec<Event> {
+        let mut events = Vec::new();
+        let Some(state) = self.dinputr_state else {
             return events;
         };
 
         // Translate state changes into events if they have changed
-        //if let Some(_) = old_state {}
+        if let Some(old_state) = old_state {
+            // Binary Events
+            if state.a != old_state.a {
+                events.push(Event::Button(ButtonEvent::A(BinaryInput {
+                    pressed: state.a,
+                })));
+            }
+            if state.b != old_state.b {
+                events.push(Event::Button(ButtonEvent::B(BinaryInput {
+                    pressed: state.b,
+                })));
+            }
+            if state.x != old_state.x {
+                events.push(Event::Button(ButtonEvent::X(BinaryInput {
+                    pressed: state.x,
+                })));
+            }
+            if state.y != old_state.y {
+                events.push(Event::Button(ButtonEvent::Y(BinaryInput {
+                    pressed: state.y,
+                })));
+            }
+            if state.m2 != old_state.m2 {
+                events.push(Event::Button(ButtonEvent::M2(BinaryInput {
+                    pressed: state.m2,
+                })));
+            }
+            if state.m3 != old_state.m3 {
+                events.push(Event::Button(ButtonEvent::M3(BinaryInput {
+                    pressed: state.m3,
+                })));
+            }
+            if state.y3 != old_state.y3 {
+                events.push(Event::Button(ButtonEvent::Y3(BinaryInput {
+                    pressed: state.y3,
+                })));
+            }
+            if state.quick_access != old_state.quick_access {
+                events.push(Event::Button(ButtonEvent::QuickAccess(BinaryInput {
+                    pressed: state.quick_access,
+                })));
+            }
+
+            // Axis events
+            if state.r_stick_x_sm != old_state.r_stick_x_sm
+                || state.r_stick_y_sm != old_state.r_stick_y_sm
+                || state.r_stick_x_lg != old_state.r_stick_x_lg
+                || state.r_stick_y_lg != old_state.r_stick_y_lg
+            {
+                events.push(Event::Axis(AxisEvent::RStick(JoyAxisInput {
+                    x: self.xify_dinputr_x_axis(
+                        state.r_stick_x_sm.to_primitive() as u16,
+                        state.r_stick_x_lg as u16,
+                    ),
+                    y: self.xify_dinputr_y_axis(
+                        state.r_stick_y_sm.to_primitive() as u16,
+                        state.r_stick_y_lg as u16,
+                    ),
+                })));
+            }
+        }
         events
+    }
+    /// Converts a 0-4096 dinput x axis into a 0-255 xinput axis
+    fn xify_dinputr_x_axis(&self, x_axis_sm: u16, x_axis_lg: u16) -> u8 {
+        let axis = (x_axis_lg << 4 | x_axis_sm) as i16;
+        (axis / 16) as u8
+    }
+
+    /// Converts a 4096-0 dinput y axis into a 0-255 xinput axis
+    fn xify_dinputr_y_axis(&self, y_axis_sm: u16, y_axis_lg: u16) -> u8 {
+        let axis = (y_axis_sm << 8 | y_axis_lg) as i16;
+        ((axis - 4095).abs() / 16) as u8
     }
 
     /// Unpacks the buffer into a [KeyboardDataReport] structure and updates
@@ -348,7 +495,7 @@ impl Driver {
 
         // Translate state changes into events if they have changed
         if let Some(old_state) = old_state {
-            // Button Events
+            // Binary Events
             if state.y3 != old_state.y3 {
                 events.push(Event::MouseButton(MouseButtonEvent::Y3(BinaryInput {
                     pressed: state.y3,
@@ -497,22 +644,33 @@ impl Driver {
             }
             if state.gamepad_mode == 2 {
                 //log::debug!("In FPS Mode, rejecting gamepad input.");
+                if state.legion != old_state.legion {
+                    events.push(Event::Button(ButtonEvent::Legion(BinaryInput {
+                        pressed: state.legion,
+                    })));
+                }
+                if state.quick_access != old_state.quick_access {
+                    events.push(Event::Button(ButtonEvent::QuickAccess(BinaryInput {
+                        pressed: state.quick_access,
+                    })));
+                }
+
                 return events;
             }
-            // Binary events
+            // Binary Events
             if state.a != old_state.a {
                 events.push(Event::Button(ButtonEvent::A(BinaryInput {
                     pressed: state.a,
                 })));
             }
-            if state.x != old_state.x {
-                events.push(Event::Button(ButtonEvent::X(BinaryInput {
-                    pressed: state.x,
-                })));
-            }
             if state.b != old_state.b {
                 events.push(Event::Button(ButtonEvent::B(BinaryInput {
                     pressed: state.b,
+                })));
+            }
+            if state.x != old_state.x {
+                events.push(Event::Button(ButtonEvent::X(BinaryInput {
+                    pressed: state.x,
                 })));
             }
             if state.y != old_state.y {
@@ -621,6 +779,7 @@ impl Driver {
                 })));
             }
 
+            // Axis events
             if state.l_stick_x != old_state.l_stick_x || state.l_stick_y != old_state.l_stick_y {
                 events.push(Event::Axis(AxisEvent::LStick(JoyAxisInput {
                     x: state.l_stick_x,
@@ -634,7 +793,6 @@ impl Driver {
                 })));
             }
 
-            // Trigger events
             if state.a_trigger_l != old_state.a_trigger_l {
                 events.push(Event::Trigger(TriggerEvent::ATriggerL(TriggerInput {
                     value: state.a_trigger_l,
@@ -650,18 +808,6 @@ impl Driver {
                     value: state.mouse_z,
                 })));
             }
-
-            // Accelerometer events
-            events.push(Event::Gyro(GyroEvent::LeftGyro(GyroInput {
-                x: state.left_gyro_x,
-                y: state.left_gyro_y,
-                z: 0,
-            })));
-            events.push(Event::Gyro(GyroEvent::RightGyro(GyroInput {
-                x: state.right_gyro_x,
-                y: state.right_gyro_y,
-                z: 0,
-            })));
 
             // Status events
             if state.l_controller_battery != old_state.l_controller_battery {

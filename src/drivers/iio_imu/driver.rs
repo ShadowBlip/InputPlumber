@@ -194,7 +194,10 @@ impl Driver {
     pub fn calculate_sample_delay(&self) -> Result<Duration, Box<dyn Error>> {
         let accel_rate = self.get_sample_rate("accel").unwrap_or(1.0);
         let gyro_rate = self.get_sample_rate("gyro").unwrap_or(1.0);
-        let sample_delay = 1.0 / accel_rate.max(gyro_rate);
+        let mut sample_delay = 1.0 / accel_rate.max(gyro_rate);
+        if sample_delay <= 0.0 {
+            sample_delay = 0.0025;
+        }
         log::debug!("Updated sample delay is: {sample_delay} seconds.");
 
         Ok(Duration::from_secs_f64(sample_delay))
