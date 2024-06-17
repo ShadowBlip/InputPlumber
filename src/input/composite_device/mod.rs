@@ -605,7 +605,10 @@ impl CompositeDevice {
 
         // Only send valid events to the target device(s)
         if cap == Capability::NotImplemented {
-            log::trace!("Refusing to send 'NotImplemented' event to target devices");
+            log::trace!(
+                "Refusing to send '{}' event to target devices.",
+                cap.to_string()
+            );
             return Ok(());
         }
 
