@@ -135,6 +135,13 @@ impl EventDevice {
     ) -> Result<(), Box<dyn Error>> {
         for event in events {
             log::trace!("Received event: {:?}", event);
+
+            // Block Sync events, we create these at the target anyway and they waste processing.
+            if event.event_type() == EventType::SYNCHRONIZATION {
+                log::trace!("Holding Sync event from propagating through the processing stack.");
+                continue;
+            }
+
             // If this is an ABS event, get the min/max info for this type of
             // event so we can normalize the value.
             let abs_info = if event.event_type() == EventType::ABSOLUTE {
