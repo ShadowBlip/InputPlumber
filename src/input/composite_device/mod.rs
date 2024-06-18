@@ -922,6 +922,7 @@ impl CompositeDevice {
                         }
                     }
                 },
+                Capability::Touchscreen(_) => (),
             }
 
             // if this is a chord with no matches to the intercept_active_inputs, add a keypress

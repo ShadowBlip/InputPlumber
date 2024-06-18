@@ -1,15 +1,17 @@
 use std::error::Error;
 
 use tokio::sync::mpsc;
-use zbus::{fdo, Connection, SignalContext};
-use zbus_macros::dbus_interface;
+use zbus::Connection;
 
-use crate::input::{
-    capability::Capability,
-    composite_device,
-    event::{
-        dbus::{Action, DBusEvent},
-        native::NativeEvent,
+use crate::{
+    dbus::interface::target::dbus::TargetDBusInterface,
+    input::{
+        capability::Capability,
+        composite_device,
+        event::{
+            dbus::{Action, DBusEvent},
+            native::NativeEvent,
+        },
     },
 };
 
@@ -27,29 +29,6 @@ struct State {
     pressed_right: bool,
     pressed_up: bool,
     pressed_down: bool,
-}
-
-/// The [DBusInterface] provides a DBus interface that can be exposed for managing
-/// a [DBusDevice].
-pub struct DBusInterface {}
-
-impl DBusInterface {
-    fn new() -> DBusInterface {
-        DBusInterface {}
-    }
-}
-
-#[dbus_interface(name = "org.shadowblip.Input.DBusDevice")]
-impl DBusInterface {
-    /// Name of the DBus device
-    #[dbus_interface(property)]
-    async fn name(&self) -> fdo::Result<String> {
-        Ok("DBusDevice".into())
-    }
-
-    /// Emitted when an input event occurs
-    #[dbus_interface(signal)]
-    async fn input_event(ctxt: &SignalContext<'_>, event: String, value: f64) -> zbus::Result<()>;
 }
 
 /// The [DBusDevice] is a virtual input device that can emit input events. It
@@ -102,7 +81,7 @@ impl DBusDevice {
 
         tokio::spawn(async move {
             log::debug!("Starting dbus interface: {path}");
-            let iface = DBusInterface::new();
+            let iface = TargetDBusInterface::new();
             if let Err(e) = conn.object_server().at(path.clone(), iface).await {
                 log::debug!("Failed to start dbus interface {path}: {e:?}");
             } else {
@@ -150,7 +129,7 @@ impl DBusDevice {
                 log::debug!("Stopping dbus interface for {path}");
                 let result = conn
                     .object_server()
-                    .remove::<DBusInterface, String>(path.clone())
+                    .remove::<TargetDBusInterface, String>(path.clone())
                     .await;
                 if let Err(e) = result {
                     log::error!("Failed to stop dbus interface {path}: {e:?}");
@@ -253,11 +232,11 @@ impl DBusDevice {
         // updates
         let iface_ref = conn
             .object_server()
-            .interface::<_, DBusInterface>(path.as_str())
+            .interface::<_, TargetDBusInterface>(path.as_str())
             .await?;
 
         // Send the input event signal
-        DBusInterface::input_event(
+        TargetDBusInterface::input_event(
             iface_ref.signal_context(),
             event.action.as_string(),
             event.value,

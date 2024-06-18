@@ -1,3 +1,4 @@
+pub mod fts3528;
 pub mod lego;
 pub mod opineo;
 pub mod steam_deck;
@@ -24,6 +25,7 @@ enum DriverType {
     SteamDeck,
     LegionGo,
     OrangePiNeo,
+    Fts3528Touchscreen,
 }
 
 /// [HIDRawDevice] represents an input device using the input subsystem.
@@ -84,6 +86,14 @@ impl HIDRawDevice {
                 driver.run().await?;
                 Ok(())
             }
+            DriverType::Fts3528Touchscreen => {
+                let tx = self.composite_tx.clone();
+                let rx = self.rx.take().unwrap();
+                let mut driver =
+                    fts3528::Fts3528TouchScreen::new(self.info.clone(), tx, rx, self.get_id());
+                driver.run().await?;
+                Ok(())
+            }
         }
     }
 
@@ -116,6 +126,7 @@ impl HIDRawDevice {
             DriverType::SteamDeck => Ok(Vec::from(steam_deck::CAPABILITIES)),
             DriverType::LegionGo => Ok(Vec::from(lego::CAPABILITIES)),
             DriverType::OrangePiNeo => Ok(Vec::from(opineo::CAPABILITIES)),
+            DriverType::Fts3528Touchscreen => Ok(Vec::from(fts3528::CAPABILITIES)),
         }
     }
 
@@ -143,6 +154,14 @@ impl HIDRawDevice {
         {
             log::info!("Detected OrangePi NEO");
             return DriverType::OrangePiNeo;
+        }
+
+        // FTS3528 Touchscreen
+        if self.info.vendor_id() == drivers::fts3528::driver::VID
+            && self.info.product_id() == drivers::fts3528::driver::PID
+        {
+            log::info!("Detected FTS3528 Touchscreen");
+            return DriverType::Fts3528Touchscreen;
         }
 
         // Unknown

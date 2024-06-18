@@ -24,11 +24,17 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  # Gamepad
   - group: gamepad
     hidraw:
       vendor_id: 0x28de
       product_id: 0x1205
       interface_num: 2
+  # Touchscreen
+  - group: mouse
+    hidraw:
+      vendor_id: 0x2808
+      product_id: 0x1015
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

@@ -323,6 +323,7 @@ impl SteamDeckDevice {
                         InputValue::Touch {
                             index,
                             is_touching: pressed,
+                            pressure: _,
                             x,
                             y,
                         } => todo!(),
@@ -345,6 +346,7 @@ impl SteamDeckDevice {
                         InputValue::Touch {
                             index,
                             is_touching: pressed,
+                            pressure: _,
                             x,
                             y,
                         } => (),
@@ -393,6 +395,7 @@ impl SteamDeckDevice {
                         InputValue::Touch {
                             index: _,
                             is_touching: _,
+                            pressure: _,
                             x: _,
                             y: _,
                         } => (),
@@ -418,6 +421,7 @@ impl SteamDeckDevice {
                         InputValue::Touch {
                             index: _,
                             is_touching: _,
+                            pressure: _,
                             x,
                             y,
                         } => {
@@ -448,6 +452,7 @@ impl SteamDeckDevice {
                         InputValue::Touch {
                             index: _,
                             is_touching: _,
+                            pressure: _,
                             x,
                             y,
                         } => {
@@ -469,6 +474,7 @@ impl SteamDeckDevice {
                 // Treat center pad as a right pad
                 Touchpad::CenterPad(_) => (),
             },
+            Capability::Touchscreen(_) => (),
         };
     }
 }
