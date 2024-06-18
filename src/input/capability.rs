@@ -20,6 +20,7 @@ pub enum Capability {
     Mouse(Mouse),
     Keyboard(Keyboard),
     Touchpad(Touchpad),
+    Touchscreen(Touch),
 }
 
 impl fmt::Display for Capability {
@@ -33,6 +34,7 @@ impl fmt::Display for Capability {
             Capability::Keyboard(_) => write!(f, "Keyboard"),
             Capability::DBus(_) => write!(f, "DBus"),
             Capability::Touchpad(_) => write!(f, "Touchpad"),
+            Capability::Touchscreen(_) => write!(f, "Touchscreen"),
         }
     }
 }

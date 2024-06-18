@@ -1,6 +1,6 @@
 use crate::{
     config::CapabilityConfig,
-    input::capability::{Capability, Gamepad, Mouse, Touchpad},
+    input::capability::{Capability, Gamepad, Mouse, Touch, Touchpad},
 };
 
 /// Possible errors while doing input value translation
@@ -21,21 +21,39 @@ pub enum TranslationError {
 #[derive(Debug, Clone)]
 pub enum InputValue {
     None,
+    /// Bool values are typically used by button input.
     Bool(bool),
+    /// Float values are typically used by trigger input.
     Float(f64),
+    /// Vector2 values are typically used by axis input like joysticks.
     Vector2 {
         x: Option<f64>,
         y: Option<f64>,
     },
+    /// Vector3 values are typically used by IMU sensors to detect position and
+    /// velocity. The units of these values depend on the type of sensor the data
+    /// is coming from.
     Vector3 {
         x: Option<f64>,
         y: Option<f64>,
         z: Option<f64>,
     },
+    /// Touch values are normalized between (0.0, 0.0) and (1.0, 1.0) where (0, 0)
+    /// is the top-left corner of the touch device. The touch index indicates
+    /// the value for a particular finger.
     Touch {
+        /// The finger id of the touch input for multi-touch devices.
         index: u8,
+        /// Whether or not the device is sensing touch.
         is_touching: bool,
+        /// Optionally the amount of pressure the touch is experiencing, normalized
+        /// between 0.0 and 1.0.
+        pressure: Option<f64>,
+        /// The X position of the touch, normalized between 0.0-1.0, where 0
+        /// is the left side of the input device and where 1.0 is the right side
         x: Option<f64>,
+        /// The Y position of the touch, normalized between 0.0-1.0, where 0
+        /// is the top side of the input device and where 1.0 is the bottom side
         y: Option<f64>,
     },
 }
@@ -52,6 +70,7 @@ impl InputValue {
             InputValue::Touch {
                 index: _,
                 is_touching: pressed,
+                pressure: _,
                 x: _,
                 y: _,
             } => *pressed,
@@ -119,6 +138,13 @@ impl InputValue {
                                 Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
                                 Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
                             },
+                            // Gamepad Button -> Touchscreen
+                            Capability::Touchscreen(touch) => match touch {
+                                // Gamepad Button -> Touchscreen Motion
+                                Touch::Motion => Err(TranslationError::NotImplemented),
+                                // Gamepad Button -> Touchscreen Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
                         }
                     }
                     // Axis -> ...
@@ -161,6 +187,8 @@ impl InputValue {
                                 Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
                                 Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
                             },
+                            // Axis -> Touchscreen
+                            Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
                         }
                     }
                     // Trigger -> ...
@@ -201,6 +229,8 @@ impl InputValue {
                             Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
                             Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Trigger -> Touchscreen
+                        Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
                     },
                     // Accelerometer -> ...
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
@@ -214,13 +244,68 @@ impl InputValue {
             Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
             // Touchpad -> ...
             Capability::Touchpad(_) => Err(TranslationError::NotImplemented),
+            // Touchscreen -> ...
+            Capability::Touchscreen(touch) => match touch {
+                // Touchscreen Motion -> ...
+                Touch::Motion => match target_cap {
+                    // Touchscreen Motion -> None
+                    Capability::None => Ok(InputValue::None),
+                    // Touchscreen Motion -> NotImplemented
+                    Capability::NotImplemented => Ok(InputValue::None),
+                    // Touchscreen Motion -> Sync
+                    Capability::Sync => Ok(InputValue::Bool(false)),
+                    // Touchscreen Motion -> DBus
+                    Capability::DBus(_) => todo!(),
+                    // Touchscreen Motion -> Gamepad ...
+                    Capability::Gamepad(_) => Err(TranslationError::NotImplemented),
+                    // Touchscreen Motion -> Mouse
+                    Capability::Mouse(mouse) => match mouse {
+                        // Touchscreen Motion -> Mouse Motion
+                        Mouse::Motion => todo!(),
+                        // Touchscreen Motion -> Mouse Button
+                        Mouse::Button(_) => todo!(),
+                    },
+                    // Touchscreen Motion -> Keyboard
+                    Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
+                    // Touchscreen Motion -> Touchpad
+                    Capability::Touchpad(touchpad) => match touchpad {
+                        Touchpad::LeftPad(target_touch) => match target_touch {
+                            // Touchscreen Motion -> Touchpad Motion
+                            Touch::Motion => Ok(self.clone()),
+                            // Touchscreen Motion -> Touchpad Button
+                            Touch::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                        Touchpad::RightPad(target_touch) => match target_touch {
+                            // Touchscreen Motion -> Touchpad Motion
+                            Touch::Motion => Ok(self.clone()),
+                            // Touchscreen Motion -> Touchpad Button
+                            Touch::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                        Touchpad::CenterPad(target_touch) => match target_touch {
+                            // Touchscreen Motion -> Touchpad Motion
+                            Touch::Motion => Ok(self.clone()),
+                            // Touchscreen Motion -> Touchpad Button
+                            Touch::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                    },
+                    // Touchscreen Motion -> Touchscreen ...
+                    Capability::Touchscreen(target_touch) => match target_touch {
+                        // Touchscreen Motion -> Touchscreen Motion
+                        Touch::Motion => Ok(self.clone()),
+                        // Touchscreen Motion -> Touchscreen Button
+                        Touch::Button(_) => Err(TranslationError::NotImplemented),
+                    },
+                },
+                // Touchscreen Button -> ...
+                Touch::Button(_) => Err(TranslationError::NotImplemented),
+            },
         }
     }
 
     /// Translate the axis value into mouse motion
     fn translate_axis_to_mouse_motion(
         &self,
-        source_config: &CapabilityConfig,
+        _source_config: &CapabilityConfig,
         target_config: &CapabilityConfig,
     ) -> Result<InputValue, TranslationError> {
         // Use provided mapping to determine mouse motion value

@@ -1792,6 +1792,7 @@ impl DualSenseDevice {
                                 if let InputValue::Touch {
                                     index,
                                     is_touching,
+                                    pressure: _,
                                     x,
                                     y,
                                 } = value
@@ -1860,6 +1861,7 @@ impl DualSenseDevice {
             Capability::Mouse(_) => (),
             Capability::Keyboard(_) => (),
             Capability::DBus(_) => (),
+            Capability::Touchscreen(_) => (),
         };
     }
 

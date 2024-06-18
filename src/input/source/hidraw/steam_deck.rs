@@ -426,6 +426,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             InputValue::Touch {
                 index: value.index as u8,
                 is_touching: value.is_touching,
+                pressure: Some(1.0),
                 x,
                 y,
             }
@@ -444,6 +445,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             InputValue::Touch {
                 index: value.index as u8,
                 is_touching: value.is_touching,
+                pressure: Some(1.0),
                 x,
                 y,
             }

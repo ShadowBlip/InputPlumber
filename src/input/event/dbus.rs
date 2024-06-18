@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, Keyboard};
+use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, Keyboard, Touch};
 
 use super::{native::NativeEvent, value::InputValue};
 
@@ -388,6 +388,10 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Keyboard::KeyProg1 => vec![Action::None],
         },
         Capability::Touchpad(_) => vec![Action::None],
+        Capability::Touchscreen(touch) => match touch {
+            Touch::Motion => vec![Action::None],
+            Touch::Button(_) => vec![Action::None],
+        },
     }
 }
 
@@ -418,6 +422,7 @@ fn dbus_event_from_value(action: Action, input_value: InputValue) -> Option<DBus
         InputValue::Touch {
             index,
             is_touching: pressed,
+            pressure: _,
             x,
             y,
         } => None,

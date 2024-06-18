@@ -121,6 +121,7 @@ fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
             InputValue::Touch {
                 index: value.index,
                 is_touching: value.is_touching,
+                pressure: Some(1.0),
                 x,
                 y,
             }
