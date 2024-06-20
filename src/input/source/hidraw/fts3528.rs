@@ -11,7 +11,7 @@ use crate::{
         hid_report::{TOUCHSCREEN_X_MAX, TOUCHSCREEN_Y_MAX},
     },
     input::{
-        capability::{Capability, Touch, Touchpad},
+        capability::{Capability, Touch},
         composite_device::Command,
         event::{native::NativeEvent, value::InputValue, Event},
         source::SourceCommand,
@@ -144,7 +144,7 @@ fn translate_events(events: Vec<fts3528::event::Event>) -> Vec<NativeEvent> {
 fn translate_event(event: fts3528::event::Event) -> NativeEvent {
     match event {
         fts3528::event::Event::Touch(touch) => NativeEvent::new(
-            Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
+            Capability::Touchscreen(Touch::Motion),
             normalize_axis_value(touch),
         ),
     }

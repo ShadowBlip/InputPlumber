@@ -27,7 +27,6 @@ impl TargetDBusInterface {
     }
 
     /// Emitted when an input event occurs
-    #[deprecated(since = "0.24.1", note = "use `event` instead")]
     #[zbus(signal)]
     pub async fn input_event(
         ctxt: &SignalContext<'_>,
@@ -35,12 +34,15 @@ impl TargetDBusInterface {
         value: f64,
     ) -> zbus::Result<()>;
 
-    /// Emitted when an input event occurs
+    /// Emitted when a touch event occurs.
     #[zbus(signal)]
-    pub async fn event(
+    pub async fn touch_event(
         ctxt: &SignalContext<'_>,
-        event_name: String,
-        kind: String, // informs client of what type of value to expect
-        value: Vec<f64>,
+        event: String,
+        index: u32,
+        is_touching: bool,
+        pressure: f64,
+        x: f64,
+        y: f64,
     ) -> zbus::Result<()>;
 }

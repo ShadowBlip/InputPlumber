@@ -11,6 +11,7 @@ use crate::{
         event::{
             dbus::{Action, DBusEvent},
             native::NativeEvent,
+            value::InputValue,
         },
     },
 };
@@ -59,6 +60,7 @@ impl DBusDevice {
     }
 
     /// Returns the DBus path of this device
+    #[allow(dead_code)]
     pub fn get_dbus_path(&self) -> Option<String> {
         self.dbus_path.clone()
     }
@@ -152,12 +154,12 @@ impl DBusDevice {
             // passes or falls below the defined threshold.
             let include_event = match event.action {
                 Action::Left => {
-                    if self.state.pressed_left && event.value < AXIS_THRESHOLD {
-                        event.value = 0.0;
+                    if self.state.pressed_left && event.as_f64() < AXIS_THRESHOLD {
+                        event.value = InputValue::Float(0.0);
                         self.state.pressed_left = false;
                         true
-                    } else if !self.state.pressed_left && event.value > AXIS_THRESHOLD {
-                        event.value = 1.0;
+                    } else if !self.state.pressed_left && event.as_f64() > AXIS_THRESHOLD {
+                        event.value = InputValue::Float(1.0);
                         self.state.pressed_left = true;
                         true
                     } else {
@@ -165,12 +167,12 @@ impl DBusDevice {
                     }
                 }
                 Action::Right => {
-                    if self.state.pressed_right && event.value < AXIS_THRESHOLD {
-                        event.value = 0.0;
+                    if self.state.pressed_right && event.as_f64() < AXIS_THRESHOLD {
+                        event.value = InputValue::Float(0.0);
                         self.state.pressed_right = false;
                         true
-                    } else if !self.state.pressed_right && event.value > AXIS_THRESHOLD {
-                        event.value = 1.0;
+                    } else if !self.state.pressed_right && event.as_f64() > AXIS_THRESHOLD {
+                        event.value = InputValue::Float(1.0);
                         self.state.pressed_right = true;
                         true
                     } else {
@@ -178,12 +180,12 @@ impl DBusDevice {
                     }
                 }
                 Action::Up => {
-                    if self.state.pressed_up && event.value < AXIS_THRESHOLD {
-                        event.value = 0.0;
+                    if self.state.pressed_up && event.as_f64() < AXIS_THRESHOLD {
+                        event.value = InputValue::Float(0.0);
                         self.state.pressed_up = false;
                         true
-                    } else if !self.state.pressed_up && event.value > AXIS_THRESHOLD {
-                        event.value = 1.0;
+                    } else if !self.state.pressed_up && event.as_f64() > AXIS_THRESHOLD {
+                        event.value = InputValue::Float(1.0);
                         self.state.pressed_up = true;
                         true
                     } else {
@@ -191,12 +193,12 @@ impl DBusDevice {
                     }
                 }
                 Action::Down => {
-                    if self.state.pressed_down && event.value < AXIS_THRESHOLD {
-                        event.value = 0.0;
+                    if self.state.pressed_down && event.as_f64() < AXIS_THRESHOLD {
+                        event.value = InputValue::Float(0.0);
                         self.state.pressed_down = false;
                         true
-                    } else if !self.state.pressed_down && event.value > AXIS_THRESHOLD {
-                        event.value = 1.0;
+                    } else if !self.state.pressed_down && event.as_f64() > AXIS_THRESHOLD {
+                        event.value = InputValue::Float(1.0);
                         self.state.pressed_down = true;
                         true
                     } else {
@@ -235,13 +237,49 @@ impl DBusDevice {
             .interface::<_, TargetDBusInterface>(path.as_str())
             .await?;
 
-        // Send the input event signal
-        TargetDBusInterface::input_event(
-            iface_ref.signal_context(),
-            event.action.as_string(),
-            event.value,
-        )
-        .await?;
+        // Send the input event signal based on the type of value
+        match event.value {
+            InputValue::Bool(value) => {
+                let value = match value {
+                    true => 1.0,
+                    false => 0.0,
+                };
+                TargetDBusInterface::input_event(
+                    iface_ref.signal_context(),
+                    event.action.as_string(),
+                    value,
+                )
+                .await?;
+            }
+            InputValue::Float(value) => {
+                TargetDBusInterface::input_event(
+                    iface_ref.signal_context(),
+                    event.action.as_string(),
+                    value,
+                )
+                .await?;
+            }
+            InputValue::Touch {
+                index,
+                is_touching,
+                pressure,
+                x,
+                y,
+            } => {
+                // Send the input event signal
+                TargetDBusInterface::touch_event(
+                    iface_ref.signal_context(),
+                    event.action.as_string(),
+                    index as u32,
+                    is_touching,
+                    pressure.unwrap_or(1.0),
+                    x.unwrap_or(0.0),
+                    y.unwrap_or(0.0),
+                )
+                .await?;
+            }
+            _ => (),
+        }
 
         Ok(())
     }
@@ -273,6 +311,7 @@ impl DBusDevice {
             Capability::DBus(Action::VolumeMute),
             Capability::DBus(Action::Keyboard),
             Capability::DBus(Action::Screenshot),
+            Capability::DBus(Action::Touch),
         ]
     }
 }
