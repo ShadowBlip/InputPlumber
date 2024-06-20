@@ -32,6 +32,7 @@ pub enum Action {
     VolumeMute,
     Keyboard,
     Screenshot,
+    Touch,
 }
 
 impl Action {
@@ -62,6 +63,7 @@ impl Action {
             Action::VolumeMute => "ui_volume_mute",
             Action::Keyboard => "ui_osk",
             Action::Screenshot => "ui_screenshot",
+            Action::Touch => "ui_touch",
         }
     }
 
@@ -100,6 +102,7 @@ impl FromStr for Action {
             "ui_volume_mute" => Ok(Action::VolumeMute),
             "ui_osk" => Ok(Action::Keyboard),
             "ui_screenshot" => Ok(Action::Screenshot),
+            "ui_touch" => Ok(Action::Touch),
             _ => Err(()),
         }
     }
@@ -109,18 +112,39 @@ impl FromStr for Action {
 #[derive(Debug, Clone)]
 pub struct DBusEvent {
     pub action: Action,
-    pub value: f64,
+    pub value: InputValue,
 }
 
 impl DBusEvent {
-    pub fn new(action: Action, value: f64) -> DBusEvent {
+    pub fn new(action: Action, value: InputValue) -> DBusEvent {
         DBusEvent { action, value }
+    }
+
+    /// Try to interpret this event as a float64. Works with bool and f64 values.
+    pub fn as_f64(&self) -> f64 {
+        match self.value {
+            InputValue::None => 0.0,
+            InputValue::Bool(value) => match value {
+                true => 1.0,
+                false => 0.0,
+            },
+            InputValue::Float(value) => value,
+            InputValue::Vector2 { x: _, y: _ } => 0.0,
+            InputValue::Vector3 { x: _, y: _, z: _ } => 0.0,
+            InputValue::Touch {
+                index: _,
+                is_touching: _,
+                pressure: _,
+                x: _,
+                y: _,
+            } => 0.0,
+        }
     }
 }
 
 impl Default for DBusEvent {
     fn default() -> Self {
-        Self::new(Action::None, 0.0)
+        Self::new(Action::None, InputValue::None)
     }
 }
 
@@ -389,7 +413,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
         },
         Capability::Touchpad(_) => vec![Action::None],
         Capability::Touchscreen(touch) => match touch {
-            Touch::Motion => vec![Action::None],
+            Touch::Motion => vec![Action::Touch],
             Touch::Button(_) => vec![Action::None],
         },
     }
@@ -397,40 +421,42 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
 
 /// Returns a DBus event from the given DBus event action and input value.
 fn dbus_event_from_value(action: Action, input_value: InputValue) -> Option<DBusEvent> {
+    // Convert the value
+    // TODO: We should use a different approach to converting these values.
+    // Currently some events are being split up into multiple `bool` values.
     let value = match input_value {
         InputValue::None => None,
         InputValue::Bool(value) => {
             if value {
-                Some(1.0)
+                Some(InputValue::Float(1.0))
             } else {
-                Some(0.0)
+                Some(InputValue::Float(0.0))
             }
         }
-        InputValue::Float(value) => Some(value),
+        InputValue::Float(value) => Some(InputValue::Float(value)),
         InputValue::Vector2 { x, y } => match action {
             // Left should be a negative value
-            Action::Left => x.filter(|&x| x <= 0.0).map(|x| -x),
+            Action::Left => x.filter(|&x| x <= 0.0).map(|x| InputValue::Float(-x)),
             // Right should be a positive value
-            Action::Right => x.filter(|&x| x >= 0.0),
+            Action::Right => x.filter(|&x| x >= 0.0).map(|x| InputValue::Float(x)),
             // Up should be a negative value
-            Action::Up => y.filter(|&y| y <= 0.0).map(|y| -y),
+            Action::Up => y.filter(|&y| y <= 0.0).map(|y| InputValue::Float(-y)),
             // Down should be a positive value
-            Action::Down => y.filter(|&y| y >= 0.0),
+            Action::Down => y.filter(|&y| y >= 0.0).map(|y| InputValue::Float(y)),
             _ => None,
         },
-        InputValue::Vector3 { x, y, z } => None,
+        InputValue::Vector3 { x: _, y: _, z: _ } => None,
         InputValue::Touch {
-            index,
-            is_touching: pressed,
+            index: _,
+            is_touching: _,
             pressure: _,
-            x,
-            y,
-        } => None,
+            x: _,
+            y: _,
+        } => Some(input_value),
     };
-    value?;
+    let Some(value) = value else {
+        return None;
+    };
 
-    Some(DBusEvent {
-        action,
-        value: value.unwrap(),
-    })
+    Some(DBusEvent { action, value })
 }
