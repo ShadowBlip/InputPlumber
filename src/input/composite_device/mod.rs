@@ -5,7 +5,11 @@ use std::{
 };
 
 use evdev::InputEvent;
-use tokio::{sync::mpsc, task::JoinSet, time::Duration};
+use tokio::{
+    sync::mpsc::{self, error::TrySendError},
+    task::JoinSet,
+    time::Duration,
+};
 use zbus::Connection;
 
 use crate::{
@@ -139,6 +143,11 @@ pub struct CompositeDevice {
     /// Map of DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/gamepad0": <Sender>}
     target_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
+    /// Map of device capabilities to a list of target devices that implements
+    /// that capability. This list contains the DBus path for the target device
+    /// so its transmitter channel can be looked up in `target_devices`.
+    /// E.g. {Capability::Keyboard: ["/org/shadowblip/InputPlumber/devices/target/keyboard0"]}
+    target_devices_by_capability: HashMap<Capability, HashSet<String>>,
     /// List of target devices waiting to be attached to this composite device.
     /// This is used to block/requeue multiple calls to set_target_devices().
     /// E.g. ["/org/shadowblip/InputPlumber/devices/target/gamepad0"]
@@ -199,6 +208,7 @@ impl CompositeDevice {
             source_device_tasks: JoinSet::new(),
             source_devices_used: Vec::new(),
             target_devices: HashMap::new(),
+            target_devices_by_capability: HashMap::new(),
             target_devices_queued: HashSet::new(),
             target_dbus_devices: HashMap::new(),
             ff_effect_ids: (0..64).collect(),
@@ -273,7 +283,7 @@ impl CompositeDevice {
         self.run_source_devices().await?;
 
         // Keep track of all target devices
-        for target in targets.values() {
+        for (path, target) in targets.iter() {
             if let Err(e) = target
                 .send(TargetCommand::SetCompositeDevice(self.tx.clone()))
                 .await
@@ -281,6 +291,30 @@ impl CompositeDevice {
                 return Err(
                     format!("Failed to set composite device for target device: {:?}", e).into(),
                 );
+            }
+
+            // Query the target device for its capabilities
+            let (tx, mut rx) = mpsc::channel(1);
+            let cmd = TargetCommand::GetCapabilities(tx);
+            if let Err(e) = target.send(cmd).await {
+                return Err(format!("Failed to get target capabilities: {e:?}").into());
+            }
+            let Some(caps) = rx.recv().await else {
+                return Err("Failed to receive target capabilities".into());
+            };
+
+            // Track the target device by capabilities it has
+            for cap in caps {
+                self.target_devices_by_capability
+                    .entry(cap)
+                    .and_modify(|devices| {
+                        devices.insert(path.clone());
+                    })
+                    .or_insert_with(|| {
+                        let mut devices = HashSet::new();
+                        devices.insert(path.clone());
+                        devices
+                    });
             }
         }
         self.target_devices = targets;
@@ -959,12 +993,33 @@ impl CompositeDevice {
             return Ok(());
         }
 
-        // TODO: Only write the event to devices that are capabile of handling it
+        // Find all target devices capable of handling this event
+        let Some(target_paths) = self.target_devices_by_capability.get(&cap) else {
+            log::trace!("No target devices capable of handling this event: {cap}");
+            return Ok(());
+        };
+        let target_devices: Vec<(&str, &mpsc::Sender<TargetCommand>)> = target_paths
+            .iter()
+            .filter_map(|path| {
+                let sender = self.target_devices.get(path);
+                sender.map(|tx| (path.as_str(), tx))
+            })
+            .collect();
+
+        // Only write the event to devices that are capabile of handling it
         let event = TargetCommand::WriteEvent(event);
         log::trace!("Emit passed event: {:?}", event);
-        #[allow(clippy::for_kv_map)]
-        for (_, target) in &self.target_devices {
-            target.send(event.clone()).await?;
+        for (name, target) in target_devices {
+            if let Err(e) = target.try_send(event.clone()) {
+                match e {
+                    TrySendError::Full(_) => {
+                        log::error!("Failed to write event to: {name}: buffer full");
+                    }
+                    TrySendError::Closed(_) => {
+                        log::error!("Failed to write event to: {name}: device closed");
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -1702,6 +1757,9 @@ impl CompositeDevice {
         for (path, target) in targets_to_stop.into_iter() {
             log::debug!("Stopping old target device: {path}");
             self.target_devices.remove(&path);
+            for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
+                target_devices.remove(&path);
+            }
             if let Err(e) = target.send(TargetCommand::Stop).await {
                 log::error!("Failed to stop old target device: {e:?}");
             }
@@ -1812,8 +1870,34 @@ impl CompositeDevice {
                 "Attached device {path} to {:?}",
                 self.dbus_path.as_ref().unwrap_or(&"".to_string())
             );
+
+            // Query the target device for its capabilities
+            let (tx, mut rx) = mpsc::channel(1);
+            let cmd = TargetCommand::GetCapabilities(tx);
+            if let Err(e) = target.send(cmd).await {
+                return Err(format!("Failed to get target capabilities: {e:?}").into());
+            }
+            let Some(caps) = rx.recv().await else {
+                return Err("Failed to receive target capabilities".into());
+            };
+
+            // Add the target device
             self.target_devices_queued.remove(&path);
-            self.target_devices.insert(path, target);
+            self.target_devices.insert(path.clone(), target);
+
+            // Track the target device by capabilities it has
+            for cap in caps {
+                self.target_devices_by_capability
+                    .entry(cap)
+                    .and_modify(|devices| {
+                        devices.insert(path.clone());
+                    })
+                    .or_insert_with(|| {
+                        let mut devices = HashSet::new();
+                        devices.insert(path.clone());
+                        devices
+                    });
+            }
         }
         // TODO: check this
         //self.signal_targets_changed().await;
