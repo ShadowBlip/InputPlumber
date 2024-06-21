@@ -12,10 +12,10 @@ use std::{
 };
 
 use packed_struct::prelude::*;
+use rand::{self, Rng};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use uhid_virt::{Bus, CreateParams, OutputEvent, StreamError, UHIDDevice};
-use zbus::{fdo, Connection};
-use zbus_macros::dbus_interface;
+use zbus::Connection;
 
 use crate::{
     dbus::interface::target::gamepad::TargetGamepadInterface,
@@ -78,7 +78,21 @@ pub struct DualSenseHardware {
 impl DualSenseHardware {
     pub fn new(model: ModelType, bus_type: BusType) -> Self {
         // "e8:47:3a:d6:e7:74"
-        let mac_addr = [0x74, 0xe7, 0xd6, 0x3a, 0x47, 0xe8];
+        //let mac_addr = [0x74, 0xe7, 0xd6, 0x3a, 0x47, 0xe8];
+        let mut rng = rand::thread_rng();
+        let mac_addr: [u8; 6] = [
+            rng.gen(),
+            rng.gen(),
+            rng.gen(),
+            rng.gen(),
+            rng.gen(),
+            rng.gen(),
+        ];
+        log::debug!(
+            "Creating new DualSense Edge device using MAC Address: {:?}",
+            mac_addr
+        );
+
         Self {
             model,
             bus_type,
@@ -89,10 +103,19 @@ impl DualSenseHardware {
 
 impl Default for DualSenseHardware {
     fn default() -> Self {
+        let mut rng = rand::thread_rng();
+        let mac_addr: [u8; 6] = [
+            rng.gen(),
+            rng.gen(),
+            rng.gen(),
+            rng.gen(),
+            rng.gen(),
+            rng.gen(),
+        ];
         Self {
             model: ModelType::Normal,
             bus_type: BusType::Usb,
-            mac_addr: [0x74, 0xe7, 0xd6, 0x3a, 0x47, 0xe8],
+            mac_addr,
         }
     }
 }
