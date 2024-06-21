@@ -8,6 +8,7 @@ pub mod gamepad;
 pub mod keyboard;
 pub mod mouse;
 pub mod steam_deck;
+pub mod touchscreen_fts3528;
 pub mod xb360;
 
 /// A [TargetDevice] is any virtual input device that emits input events
@@ -21,6 +22,7 @@ pub enum TargetDeviceType {
     XBox360(xb360::XBox360Controller),
     SteamDeck(steam_deck::SteamDeckDevice),
     DualSense(dualsense::DualSenseDevice),
+    Touchscreen(touchscreen_fts3528::Fts3528TouchscreenDevice),
 }
 
 /// A [TargetCommand] is a message that can be sent to a [TargetDevice] over
