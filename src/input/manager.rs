@@ -36,6 +36,7 @@ use crate::input::target::gamepad::GenericGamepad;
 use crate::input::target::keyboard::KeyboardDevice;
 use crate::input::target::mouse::MouseDevice;
 use crate::input::target::steam_deck::SteamDeckDevice;
+use crate::input::target::touchscreen_fts3528::Fts3528TouchscreenDevice;
 use crate::input::target::xb360::XBox360Controller;
 use crate::input::target::TargetDeviceType;
 use crate::procfs;
@@ -434,6 +435,9 @@ impl Manager {
             "dbus" => TargetDeviceType::DBus(DBusDevice::new(self.dbus.clone())),
             "mouse" => TargetDeviceType::Mouse(MouseDevice::new(self.dbus.clone())),
             "keyboard" => TargetDeviceType::Keyboard(KeyboardDevice::new(self.dbus.clone())),
+            "touchscreen-fts3528" => {
+                TargetDeviceType::Touchscreen(Fts3528TouchscreenDevice::new(self.dbus.clone()))
+            }
             _ => TargetDeviceType::Null,
         };
         log::debug!("Created target input device: {kind}");
@@ -529,6 +533,19 @@ impl Manager {
                     });
                 }
                 TargetDeviceType::XBox360(_) => todo!(),
+                TargetDeviceType::Touchscreen(mut device) => {
+                    let path = self.next_target_path("touchscreen")?;
+                    let event_tx = device.transmitter();
+                    target_devices.insert(path.clone(), event_tx.clone());
+                    self.target_devices.insert(path.clone(), event_tx.clone());
+                    device.listen_on_dbus(path.clone()).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = device.run().await {
+                            log::error!("Failed to run target touchscreen device: {:?}", e);
+                        }
+                        log::debug!("Target touchscreen device closed at: {}", path);
+                    });
+                }
             }
         }
 

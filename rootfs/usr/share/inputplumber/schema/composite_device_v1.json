@@ -53,7 +53,8 @@
               "ds5-bt",
               "ds5-edge",
               "ds5-edge-usb",
-              "ds5-edge-bt"
+              "ds5-edge-bt",
+              "touchscreen-fts3528"
             ]
           }
         }
