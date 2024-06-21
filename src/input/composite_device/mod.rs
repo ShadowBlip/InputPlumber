@@ -1709,7 +1709,7 @@ impl CompositeDevice {
         // The dualsense controller will close the HIDRAW as the "unique" ID is the same
         // if the new and old target devices are both dualsense.
         if targets_to_stop_len > 0 {
-            tokio::time::sleep(Duration::from_millis(80)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
         }
 
         let Some(composite_path) = self.dbus_path.clone() else {
