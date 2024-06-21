@@ -1699,20 +1699,12 @@ impl CompositeDevice {
 
         // Stop all old target devices
         let targets_to_stop = self.target_devices.clone();
-        let targets_to_stop_len = targets_to_stop.len();
         for (path, target) in targets_to_stop.into_iter() {
             log::debug!("Stopping old target device: {path}");
             self.target_devices.remove(&path);
             if let Err(e) = target.send(TargetCommand::Stop).await {
                 log::error!("Failed to stop old target device: {e:?}");
             }
-        }
-
-        // TODO: This is a cheap hack to let the target devices stop before starting more.
-        // The dualsense controller will close the HIDRAW as the "unique" ID is the same
-        // if the new and old target devices are both dualsense.
-        if targets_to_stop_len > 0 {
-            tokio::time::sleep(Duration::from_millis(80)).await;
         }
 
         let Some(composite_path) = self.dbus_path.clone() else {
