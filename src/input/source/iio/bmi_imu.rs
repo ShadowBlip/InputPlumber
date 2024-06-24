@@ -1,7 +1,5 @@
-use core::time;
-use std::{any::Any, error::Error, f64::consts::PI, thread};
+use std::{error::Error, f64::consts::PI, thread};
 
-use nix::libc::ETIMEDOUT;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
@@ -45,7 +43,7 @@ impl IMU {
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting IIO IMU driver");
+        log::debug!("Starting BMI IMU driver");
 
         // Get the device id and name for the driver
         let id = self.info.id.clone().unwrap_or_default();
@@ -97,11 +95,11 @@ impl IMU {
 
         // Wait for the task to finish
         if let Err(e) = task.await? {
-            log::error!("Error running IIO Driver: {:?}", e);
+            log::error!("Error running BMI IMU Driver: {:?}", e);
             return Err(e.to_string().into());
         }
 
-        log::debug!("IIO IMU driver stopped");
+        log::debug!("BMI IMU driver stopped");
 
         Ok(())
     }
