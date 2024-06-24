@@ -1,9 +1,10 @@
-pub mod iio_imu;
+pub mod accel_gyro_3d;
+pub mod bmi_imu;
 
 use std::error::Error;
 
 use glob_match::glob_match;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 use zbus::{fdo, Connection};
 use zbus_macros::dbus_interface;
 
@@ -19,6 +20,12 @@ use super::SourceCommand;
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
 
+/// List of available drivers
+enum DriverType {
+    Unknown,
+    BmiImu,
+    AccelGryo3D,
+}
 /// DBusInterface exposing information about a IIO device
 pub struct DBusInterface {
     info: Device,
@@ -119,25 +126,55 @@ impl IIODevice {
             return Err("Unable to determine IIO driver because no name was found".into());
         };
 
-        // IIO IMU Driver
-        if glob_match(
-            "{i2c-10EC5280*,i2c-BMI*,accel-display,bmi*-imu,gyro_3d,accel_3d}",
-            name.as_str(),
-        ) {
-            log::info!("Detected IMU: {name}");
-            let tx = self.composite_tx.clone();
-            let rx = self.rx.take().unwrap();
-            let mut driver = iio_imu::IMU::new(
-                self.info.clone(),
-                self.config.clone(),
-                tx,
-                rx,
-                self.get_id(),
-            );
-            driver.run().await?;
-        } else {
-            return Err(format!("Unsupported IIO device: {name}").into());
+        match self.get_driver_type(&name) {
+            DriverType::Unknown => Err(format!("No driver for IMU found. {}", name).into()),
+            DriverType::BmiImu => {
+                log::info!("Detected BMI_IMU");
+                let tx = self.composite_tx.clone();
+                let rx = self.rx.take().unwrap();
+                let mut driver = bmi_imu::IMU::new(
+                    self.info.clone(),
+                    self.config.clone(),
+                    tx,
+                    rx,
+                    self.get_id(),
+                );
+                driver.run().await?;
+                Ok(())
+            }
+
+            DriverType::AccelGryo3D => {
+                log::info!("Detected IMU: {name}");
+                let tx = self.composite_tx.clone();
+                let rx = self.rx.take().unwrap();
+                let mut driver = accel_gyro_3d::IMU::new(
+                    self.info.clone(),
+                    self.config.clone(),
+                    tx,
+                    rx,
+                    self.get_id(),
+                );
+                driver.run().await?;
+                Ok(())
+            }
         }
-        Ok(())
+    }
+
+    fn get_driver_type(&self, name: &str) -> DriverType {
+        log::debug!("Finding driver for interface: {:?}", self.info);
+        // BMI_IMU
+        if glob_match("{i2c-10EC5280*,i2c-BMI*,bmi*-imu}", name) {
+            log::info!("Detected Steam Deck");
+            return DriverType::BmiImu;
+        }
+
+        // AccelGryo3D
+        if glob_match("{gyro_3d,accel_3d}", name) {
+            log::info!("Detected Legion Go");
+            return DriverType::AccelGryo3D;
+        }
+
+        // Unknown
+        DriverType::Unknown
     }
 }
