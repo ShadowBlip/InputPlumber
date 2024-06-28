@@ -1,6 +1,8 @@
 use tokio::sync::mpsc::Sender;
 
-use super::{capability::Capability, composite_device::Command, event::native::NativeEvent};
+use super::{
+    capability::Capability, composite_device::command::Command, event::native::NativeEvent,
+};
 
 pub mod dbus;
 pub mod dualsense;

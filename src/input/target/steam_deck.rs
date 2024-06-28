@@ -57,7 +57,7 @@ pub struct SteamDeckDevice {
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
     state: PackedInputDataReport,
-    composite_tx: Option<mpsc::Sender<composite_device::Command>>,
+    composite_tx: Option<mpsc::Sender<composite_device::command::Command>>,
 }
 
 impl SteamDeckDevice {
@@ -80,7 +80,7 @@ impl SteamDeckDevice {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: mpsc::Sender<composite_device::Command>) {
+    pub fn set_composite_device(&mut self, tx: mpsc::Sender<composite_device::command::Command>) {
         self.composite_tx = Some(tx);
     }
 

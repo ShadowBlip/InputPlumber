@@ -12,7 +12,7 @@ use crate::{
     },
     input::{
         capability::{Capability, Touch},
-        composite_device::Command,
+        composite_device::command::Command,
         event::{native::NativeEvent, value::InputValue, Event},
         source::SourceCommand,
     },

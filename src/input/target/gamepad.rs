@@ -22,7 +22,7 @@ use crate::{
     dbus::interface::target::gamepad::TargetGamepadInterface,
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
-        composite_device::Command,
+        composite_device::command::Command,
         event::{evdev::EvdevEvent, native::NativeEvent},
         output_event::{OutputEvent, UinputOutputEvent},
     },

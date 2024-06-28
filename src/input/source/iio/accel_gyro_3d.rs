@@ -8,7 +8,7 @@ use crate::{
     iio::device::Device,
     input::{
         capability::{Capability, Gamepad},
-        composite_device::Command,
+        composite_device::command::Command,
         event::{native::NativeEvent, value::InputValue, Event},
         source::SourceCommand,
     },
