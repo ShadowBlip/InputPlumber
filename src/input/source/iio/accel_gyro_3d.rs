@@ -8,7 +8,7 @@ use crate::{
     iio::device::Device,
     input::{
         capability::{Capability, Gamepad},
-        composite_device::command::Command,
+        composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
         source::SourceCommand,
     },
@@ -20,7 +20,7 @@ use crate::{
 pub struct IMU {
     info: Device,
     config: Option<config::IIO>,
-    composite_tx: mpsc::Sender<Command>,
+    composite_device: CompositeDeviceClient,
     rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
 }
@@ -29,14 +29,14 @@ impl IMU {
     pub fn new(
         info: Device,
         config: Option<config::IIO>,
-        composite_tx: mpsc::Sender<Command>,
+        composite_device: CompositeDeviceClient,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
             info,
             config,
-            composite_tx,
+            composite_device,
             rx: Some(rx),
             device_id,
         }
@@ -49,7 +49,7 @@ impl IMU {
         let id = self.info.id.clone().unwrap_or_default();
         let name = self.info.name.clone().unwrap_or_default();
         let device_id = self.device_id.clone();
-        let tx = self.composite_tx.clone();
+        let composite_device = self.composite_device.clone();
         let mut rx = self.rx.take().unwrap();
 
         // Override the mount matrix if one is defined in the config
@@ -83,10 +83,11 @@ impl IMU {
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
                         }
-                        tx.blocking_send(Command::ProcessEvent(
-                            device_id.clone(),
-                            Event::Native(event),
-                        ))?;
+                        let res = composite_device
+                            .blocking_process_event(device_id.clone(), Event::Native(event));
+                        if let Err(e) = res {
+                            return Err(e.to_string().into());
+                        }
                     }
                     // Sleep between each poll iteration
                     thread::sleep(driver.sample_delay);

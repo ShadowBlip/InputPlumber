@@ -1,7 +1,8 @@
 use tokio::sync::mpsc::Sender;
 
 use super::{
-    capability::Capability, composite_device::command::Command, event::native::NativeEvent,
+    capability::Capability, composite_device::client::CompositeDeviceClient,
+    event::native::NativeEvent,
 };
 
 pub mod dbus;
@@ -32,7 +33,7 @@ pub enum TargetDeviceType {
 #[derive(Debug, Clone)]
 pub enum TargetCommand {
     WriteEvent(NativeEvent),
-    SetCompositeDevice(Sender<Command>),
+    SetCompositeDevice(CompositeDeviceClient),
     GetCapabilities(Sender<Vec<Capability>>),
     Stop,
 }

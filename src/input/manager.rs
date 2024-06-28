@@ -24,7 +24,6 @@ use crate::dmi::data::DMIData;
 use crate::dmi::get_cpu_info;
 use crate::dmi::get_dmi_data;
 use crate::iio;
-use crate::input::composite_device;
 use crate::input::composite_device::CompositeDevice;
 use crate::input::source;
 use crate::input::source::hidraw;
@@ -44,6 +43,7 @@ use crate::udev;
 use crate::watcher;
 use crate::watcher::WatchEvent;
 
+use super::composite_device::client::CompositeDeviceClient;
 use super::target::TargetCommand;
 
 const DEV_PATH: &str = "/dev";
@@ -148,7 +148,7 @@ pub struct Manager {
     source_devices_used: HashMap<String, String>,
     /// Mapping of DBus path to its corresponding [CompositeDevice] handle
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <Handle>}
-    composite_devices: HashMap<String, mpsc::Sender<composite_device::command::Command>>,
+    composite_devices: HashMap<String, CompositeDeviceClient>,
     /// Mapping of all source devices used by composite devices with the CompositeDevice path as
     /// the key for the hashmap.
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<SourceDevice>}
@@ -311,17 +311,8 @@ impl Manager {
                     // Send the attach command to the composite device
                     let mut targets = HashMap::new();
                     targets.insert(target_path.clone(), target.clone());
-                    if let Err(e) = device
-                        .send(composite_device::command::Command::AttachTargetDevices(
-                            targets,
-                        ))
-                        .await
-                    {
+                    if let Err(e) = device.attach_target_devices(targets).await {
                         log::error!("Failed to send attach command: {e:?}");
-                    }
-
-                    if let Err(e) = sender.send(Ok(())).await {
-                        log::error!("Failed to send response: {e:?}");
                     }
                     log::debug!("Finished handling attach request for: {target_path}");
                 }
@@ -631,7 +622,7 @@ impl Manager {
         device.listen_on_dbus(path.clone()).await?;
 
         // Get a handle to the device
-        let handle = device.transmitter();
+        let client = device.client();
 
         // Keep track of target devices that this composite device is using
         let mut target_device_paths = Vec::new();
@@ -679,7 +670,7 @@ impl Manager {
         let comp_path = path.clone();
 
         // Add the device to our maps
-        self.composite_devices.insert(comp_path, handle);
+        self.composite_devices.insert(comp_path, client);
         log::debug!("Managed source devices: {:?}", self.source_devices_used);
         self.used_configs.insert(path, config);
         log::debug!("Used configs: {:?}", self.used_configs);
@@ -793,15 +784,15 @@ impl Manager {
                             }
 
                             log::info!("Found missing device, adding source device {id} to existing composite device: {composite_device}");
-                            let handle = self.composite_devices.get(composite_device.as_str());
-                            if handle.is_none() {
+                            let client = self.composite_devices.get(composite_device.as_str());
+                            if client.is_none() {
                                 log::error!(
                                     "No existing composite device found for key {}",
                                     composite_device.as_str()
                                 );
                                 continue;
                             }
-                            self.add_event_device_to_composite_device(&info, handle.unwrap())
+                            self.add_event_device_to_composite_device(&info, client.unwrap())
                                 .await?;
                             self.source_devices_used
                                 .insert(id.clone(), composite_device.clone());
@@ -1093,15 +1084,11 @@ impl Manager {
             return Ok(());
         };
 
-        let Some(handle) = self.composite_devices.get(composite_device_path) else {
+        let Some(client) = self.composite_devices.get(composite_device_path) else {
             return Err(format!("CompostiteDevice {} not found", composite_device_path).into());
         };
 
-        handle
-            .send(composite_device::command::Command::SourceDeviceRemoved(
-                id.clone(),
-            ))
-            .await?;
+        client.remove_source_device(id.clone()).await?;
 
         let Some(device) = self.source_devices.get(&id) else {
             return Err(format!("Device {} not found in source devices", id).into());
@@ -1669,13 +1656,13 @@ impl Manager {
     async fn add_event_device_to_composite_device(
         &self,
         device_info: &procfs::device::Device,
-        tx: &mpsc::Sender<composite_device::command::Command>,
+        client: &CompositeDeviceClient,
     ) -> Result<(), Box<dyn Error>> {
         let device_info = device_info.clone();
-        tx.send(composite_device::command::Command::SourceDeviceAdded(
-            SourceDeviceInfo::EvdevDeviceInfo(device_info),
-        ))
-        .await?;
+        client
+            .add_source_device(SourceDeviceInfo::EvdevDeviceInfo(device_info))
+            .await?;
+
         Ok(())
     }
 
@@ -1684,13 +1671,12 @@ impl Manager {
     async fn add_hidraw_device_to_composite_device(
         &self,
         device_info: &hidapi::DeviceInfo,
-        tx: &mpsc::Sender<composite_device::command::Command>,
+        client: &CompositeDeviceClient,
     ) -> Result<(), Box<dyn Error>> {
         let device_info = device_info.clone();
-        tx.send(composite_device::command::Command::SourceDeviceAdded(
-            SourceDeviceInfo::HIDRawDeviceInfo(device_info),
-        ))
-        .await?;
+        client
+            .add_source_device(SourceDeviceInfo::HIDRawDeviceInfo(device_info))
+            .await?;
 
         Ok(())
     }
@@ -1700,13 +1686,12 @@ impl Manager {
     async fn add_iio_device_to_composite_device(
         &self,
         info: &iio::device::Device,
-        tx: &mpsc::Sender<composite_device::command::Command>,
+        client: &CompositeDeviceClient,
     ) -> Result<(), Box<dyn Error>> {
         let device_info = info.clone();
-        tx.send(composite_device::command::Command::SourceDeviceAdded(
-            SourceDeviceInfo::IIODeviceInfo(device_info),
-        ))
-        .await?;
+        client
+            .add_source_device(SourceDeviceInfo::IIODeviceInfo(device_info))
+            .await?;
 
         Ok(())
     }

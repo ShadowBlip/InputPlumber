@@ -10,8 +10,8 @@ use tokio::sync::mpsc;
 
 use crate::{
     constants::BUS_PREFIX,
-    drivers::{self},
-    input::{capability::Capability, composite_device::command::Command},
+    drivers,
+    input::{capability::Capability, composite_device::client::CompositeDeviceClient},
 };
 
 use super::SourceCommand;
@@ -32,18 +32,18 @@ enum DriverType {
 #[derive(Debug)]
 pub struct HIDRawDevice {
     info: DeviceInfo,
-    composite_tx: mpsc::Sender<Command>,
+    composite_device: CompositeDeviceClient,
     tx: mpsc::Sender<SourceCommand>,
     rx: Option<mpsc::Receiver<SourceCommand>>,
 }
 
 impl HIDRawDevice {
-    pub fn new(info: DeviceInfo, composite_tx: mpsc::Sender<Command>) -> Self {
+    pub fn new(info: DeviceInfo, composite_device: CompositeDeviceClient) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         log::debug!("HIDRaw DeviceInfo: {info:?}");
         Self {
             info,
-            composite_tx,
+            composite_device,
             tx,
             rx: Some(rx),
         }
@@ -67,30 +67,43 @@ impl HIDRawDevice {
             .into()),
 
             DriverType::SteamDeck => {
-                let tx = self.composite_tx.clone();
+                let composite_device = self.composite_device.clone();
                 let rx = self.rx.take().unwrap();
-                let mut driver =
-                    steam_deck::DeckController::new(self.info.clone(), tx, rx, self.get_id());
+                let mut driver = steam_deck::DeckController::new(
+                    self.info.clone(),
+                    composite_device,
+                    rx,
+                    self.get_id(),
+                );
                 driver.run().await?;
                 Ok(())
             }
             DriverType::LegionGo => {
-                let tx = self.composite_tx.clone();
-                let driver = lego::LegionController::new(self.info.clone(), tx, self.get_id());
+                let composite_device = self.composite_device.clone();
+                let driver =
+                    lego::LegionController::new(self.info.clone(), composite_device, self.get_id());
                 driver.run().await?;
                 Ok(())
             }
             DriverType::OrangePiNeo => {
-                let tx = self.composite_tx.clone();
-                let driver = opineo::OrangePiNeoTouchpad::new(self.info.clone(), tx, self.get_id());
+                let composite_device = self.composite_device.clone();
+                let driver = opineo::OrangePiNeoTouchpad::new(
+                    self.info.clone(),
+                    composite_device,
+                    self.get_id(),
+                );
                 driver.run().await?;
                 Ok(())
             }
             DriverType::Fts3528Touchscreen => {
-                let tx = self.composite_tx.clone();
+                let composite_device = self.composite_device.clone();
                 let rx = self.rx.take().unwrap();
-                let mut driver =
-                    fts3528::Fts3528TouchScreen::new(self.info.clone(), tx, rx, self.get_id());
+                let mut driver = fts3528::Fts3528TouchScreen::new(
+                    self.info.clone(),
+                    composite_device,
+                    rx,
+                    self.get_id(),
+                );
                 driver.run().await?;
                 Ok(())
             }

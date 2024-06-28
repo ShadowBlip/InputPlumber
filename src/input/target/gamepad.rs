@@ -22,7 +22,7 @@ use crate::{
     dbus::interface::target::gamepad::TargetGamepadInterface,
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
-        composite_device::command::Command,
+        composite_device::client::CompositeDeviceClient,
         event::{evdev::EvdevEvent, native::NativeEvent},
         output_event::{OutputEvent, UinputOutputEvent},
     },
@@ -41,7 +41,7 @@ pub struct GenericGamepad {
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
-    composite_tx: Option<mpsc::Sender<Command>>,
+    composite_device: Option<CompositeDeviceClient>,
 }
 
 impl GenericGamepad {
@@ -52,7 +52,7 @@ impl GenericGamepad {
             dbus_path: None,
             tx,
             rx,
-            composite_tx: None,
+            composite_device: None,
         }
     }
 
@@ -68,8 +68,8 @@ impl GenericGamepad {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: mpsc::Sender<Command>) {
-        self.composite_tx = Some(tx);
+    pub fn set_composite_device(&mut self, composite_device: CompositeDeviceClient) {
+        self.composite_device = Some(composite_device);
     }
 
     /// Creates a new instance of the dbus device interface on DBus.
@@ -105,12 +105,12 @@ impl GenericGamepad {
         log::debug!("Started listening for events");
         while let Some(command) = self.rx.recv().await {
             match command {
-                TargetCommand::SetCompositeDevice(tx) => {
-                    self.set_composite_device(tx.clone());
+                TargetCommand::SetCompositeDevice(composite_device) => {
+                    self.set_composite_device(composite_device.clone());
 
                     // Spawn a thread to listen for force feedback events
                     let ff_device = device.clone();
-                    GenericGamepad::spawn_ff_thread(ff_device, tx);
+                    GenericGamepad::spawn_ff_thread(ff_device, composite_device);
                 }
                 TargetCommand::WriteEvent(event) => {
                     log::trace!("Got event to emit: {:?}", event);
@@ -260,7 +260,10 @@ impl GenericGamepad {
     }
 
     /// Spawns the force-feedback handler thread
-    fn spawn_ff_thread(ff_device: Arc<Mutex<VirtualDevice>>, tx: mpsc::Sender<Command>) {
+    fn spawn_ff_thread(
+        ff_device: Arc<Mutex<VirtualDevice>>,
+        composite_device: CompositeDeviceClient,
+    ) {
         tokio::task::spawn_blocking(move || {
             loop {
                 // Check to see if the main input thread still has a reference
@@ -273,7 +276,7 @@ impl GenericGamepad {
                 }
 
                 // Read any events
-                if let Err(e) = GenericGamepad::process_ff(&ff_device, &tx) {
+                if let Err(e) = GenericGamepad::process_ff(&ff_device, &composite_device) {
                     log::warn!("Error processing FF events: {:?}", e);
                 }
 
@@ -286,7 +289,7 @@ impl GenericGamepad {
     /// Process force feedback events from the given device
     fn process_ff(
         device: &Arc<Mutex<VirtualDevice>>,
-        composite_dev: &mpsc::Sender<Command>,
+        composite_device: &CompositeDeviceClient,
     ) -> Result<(), Box<dyn Error>> {
         // Listen for events (Force Feedback Events)
         let events = match device.lock() {
@@ -336,8 +339,7 @@ impl GenericGamepad {
                         event.effect(),
                         tx,
                     ));
-                    if let Err(e) = composite_dev.blocking_send(Command::ProcessOutputEvent(upload))
-                    {
+                    if let Err(e) = composite_device.blocking_process_output_event(upload) {
                         event.set_retval(-1);
                         return Err(e.into());
                     }
@@ -369,19 +371,17 @@ impl GenericGamepad {
                     log::debug!("Erase effect: {:?}", event.effect_id());
 
                     let erase = OutputEvent::Uinput(UinputOutputEvent::FFErase(event.effect_id()));
-                    composite_dev.blocking_send(Command::ProcessOutputEvent(erase))?;
+                    composite_device.blocking_process_output_event(erase)?;
                 }
                 EventSummary::ForceFeedback(.., effect_id, STOPPED) => {
                     log::debug!("Stopped effect ID: {}", effect_id.0);
                     log::debug!("Stopping event: {:?}", event);
-                    composite_dev
-                        .blocking_send(Command::ProcessOutputEvent(OutputEvent::Evdev(event)))?;
+                    composite_device.blocking_process_output_event(OutputEvent::Evdev(event))?;
                 }
                 EventSummary::ForceFeedback(.., effect_id, PLAYING) => {
                     log::debug!("Playing effect ID: {}", effect_id.0);
                     log::debug!("Playing event: {:?}", event);
-                    composite_dev
-                        .blocking_send(Command::ProcessOutputEvent(OutputEvent::Evdev(event)))?;
+                    composite_device.blocking_process_output_event(OutputEvent::Evdev(event))?;
                 }
                 _ => {
                     log::debug!("Unhandled event: {:?}", event);

@@ -1,6 +1,5 @@
-use std::{collections::HashSet, str::FromStr, time::Duration};
+use std::str::FromStr;
 
-use tokio::sync::mpsc;
 use zbus::{
     fdo,
     zvariant::{self, Value},
@@ -9,7 +8,7 @@ use zbus_macros::interface;
 
 use crate::input::{
     capability::{Capability, Gamepad, Mouse},
-    composite_device::{command::Command, InterceptMode},
+    composite_device::{client::CompositeDeviceClient, InterceptMode},
     event::{native::NativeEvent, value::InputValue},
 };
 
@@ -17,12 +16,12 @@ use crate::input::{
 /// a [CompositeDevice]. It works by sending command messages to a channel that the
 /// [CompositeDevice] is listening on.
 pub struct CompositeDeviceInterface {
-    tx: mpsc::Sender<Command>,
+    composite_device: CompositeDeviceClient,
 }
 
 impl CompositeDeviceInterface {
-    pub fn new(tx: mpsc::Sender<Command>) -> CompositeDeviceInterface {
-        CompositeDeviceInterface { tx }
+    pub fn new(composite_device: CompositeDeviceClient) -> CompositeDeviceInterface {
+        CompositeDeviceInterface { composite_device }
     }
 }
 
@@ -31,67 +30,35 @@ impl CompositeDeviceInterface {
     /// Name of the composite device
     #[zbus(property)]
     async fn name(&self) -> fdo::Result<String> {
-        let (sender, mut receiver) = mpsc::channel::<String>(1);
-        self.tx
-            .send_timeout(Command::GetName(sender), Duration::from_millis(500))
+        self.composite_device
+            .get_name()
             .await
-            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let Some(name) = receiver.recv().await else {
-            return Ok("".to_string());
-        };
-
-        Ok(name)
+            .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
     /// Name of the currently loaded profile
     #[zbus(property)]
     async fn profile_name(&self) -> fdo::Result<String> {
-        let (sender, mut receiver) = mpsc::channel::<String>(1);
-        self.tx
-            .send_timeout(Command::GetProfileName(sender), Duration::from_millis(500))
+        self.composite_device
+            .get_profile_name()
             .await
-            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let Some(profile_name) = receiver.recv().await else {
-            return Ok("".to_string());
-        };
-
-        Ok(profile_name)
+            .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
     /// Stop the composite device and all target devices
     async fn stop(&self) -> fdo::Result<()> {
-        self.tx
-            .send_timeout(Command::Stop, Duration::from_millis(500))
+        self.composite_device
+            .stop()
             .await
-            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        Ok(())
+            .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
     /// Load the device profile from the given path
     async fn load_profile_path(&self, path: String) -> fdo::Result<()> {
-        let (sender, mut receiver) = mpsc::channel::<Result<(), String>>(1);
-        self.tx
-            .send_timeout(
-                Command::LoadProfilePath(path, sender),
-                Duration::from_millis(500),
-            )
+        self.composite_device
+            .load_profile_path(path)
             .await
-            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-
-        let Some(result) = receiver.recv().await else {
-            return Err(fdo::Error::Failed(
-                "No response from CompositeDevice".to_string(),
-            ));
-        };
-
-        if let Err(e) = result {
-            return Err(fdo::Error::Failed(format!(
-                "Failed to load profile: {:?}",
-                e
-            )));
-        }
-
-        Ok(())
+            .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
     /// Set the target input device types the composite device should emulate,
@@ -99,14 +66,10 @@ impl CompositeDeviceInterface {
     /// current virtual devices for the composite device and create and attach
     /// new target devices.
     async fn set_target_devices(&self, target_device_types: Vec<String>) -> fdo::Result<()> {
-        self.tx
-            .send_timeout(
-                Command::SetTargetDevices(target_device_types),
-                Duration::from_millis(500),
-            )
+        self.composite_device
+            .set_target_devices(target_device_types)
             .await
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        Ok(())
+            .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
     /// Directly write to the composite device's target devices with the given event
@@ -161,8 +124,8 @@ impl CompositeDeviceInterface {
 
         let event = NativeEvent::new(cap, val);
 
-        self.tx
-            .blocking_send(Command::WriteSendEvent(event))
+        self.composite_device
+            .blocking_write_send_event(event)
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
@@ -205,8 +168,8 @@ impl CompositeDeviceInterface {
             chord.push(event);
         }
 
-        self.tx
-            .send_timeout(Command::WriteChordEvent(chord), Duration::from_millis(500))
+        self.composite_device
+            .write_chord(chord)
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
@@ -246,11 +209,8 @@ impl CompositeDeviceInterface {
             target_cap = cap
         }
 
-        self.tx
-            .send_timeout(
-                Command::SetInterceptActivation(activation_caps, target_cap),
-                Duration::from_millis(500),
-            )
+        self.composite_device
+            .set_intercept_activation(activation_caps, target_cap)
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
@@ -260,14 +220,11 @@ impl CompositeDeviceInterface {
     /// List of capabilities that all source devices implement
     #[zbus(property)]
     async fn capabilities(&self) -> fdo::Result<Vec<String>> {
-        let (sender, mut receiver) = mpsc::channel::<HashSet<Capability>>(1);
-        self.tx
-            .send_timeout(Command::GetCapabilities(sender), Duration::from_millis(500))
+        let capabilities = self
+            .composite_device
+            .get_capabilities()
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let Some(capabilities) = receiver.recv().await else {
-            return Ok(Vec::new());
-        };
 
         let mut capability_strings = Vec::new();
         for cap in capabilities {
@@ -295,17 +252,11 @@ impl CompositeDeviceInterface {
     /// List of capabilities that all target devices implement
     #[zbus(property)]
     async fn target_capabilities(&self) -> fdo::Result<Vec<String>> {
-        let (sender, mut receiver) = mpsc::channel::<HashSet<Capability>>(1);
-        self.tx
-            .send_timeout(
-                Command::GetTargetCapabilities(sender),
-                Duration::from_millis(500),
-            )
+        let capabilities = self
+            .composite_device
+            .get_target_capabilities()
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let Some(capabilities) = receiver.recv().await else {
-            return Ok(Vec::new());
-        };
 
         let mut capability_strings = Vec::new();
         for cap in capabilities {
@@ -333,17 +284,11 @@ impl CompositeDeviceInterface {
     /// List of source devices that this composite device is processing inputs for
     #[zbus(property)]
     async fn source_device_paths(&self) -> fdo::Result<Vec<String>> {
-        let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
-        self.tx
-            .send_timeout(
-                Command::GetSourceDevicePaths(sender),
-                Duration::from_millis(500),
-            )
+        let paths = self
+            .composite_device
+            .get_source_device_paths()
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let Some(paths) = receiver.recv().await else {
-            return Ok(Vec::new());
-        };
 
         Ok(paths)
     }
@@ -351,17 +296,11 @@ impl CompositeDeviceInterface {
     /// The intercept mode of the composite device.
     #[zbus(property)]
     async fn intercept_mode(&self) -> fdo::Result<u32> {
-        let (sender, mut receiver) = mpsc::channel::<InterceptMode>(1);
-        self.tx
-            .send_timeout(
-                Command::GetInterceptMode(sender),
-                Duration::from_millis(500),
-            )
+        let mode = self
+            .composite_device
+            .get_intercept_mode()
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let Some(mode) = receiver.recv().await else {
-            return Ok(0);
-        };
 
         match mode {
             InterceptMode::None => Ok(0),
@@ -378,8 +317,8 @@ impl CompositeDeviceInterface {
             2 => InterceptMode::Always,
             _ => InterceptMode::None,
         };
-        self.tx
-            .send_timeout(Command::SetInterceptMode(mode), Duration::from_millis(500))
+        self.composite_device
+            .set_intercept_mode(mode)
             .await
             .map_err(|err| zbus::Error::Failure(err.to_string()))?;
         Ok(())
@@ -388,17 +327,11 @@ impl CompositeDeviceInterface {
     /// Target devices that this [CompositeDevice] is managing
     #[zbus(property)]
     async fn target_devices(&self) -> fdo::Result<Vec<String>> {
-        let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
-        self.tx
-            .send_timeout(
-                Command::GetTargetDevicePaths(sender),
-                Duration::from_millis(500),
-            )
+        let paths = self
+            .composite_device
+            .get_target_device_paths()
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let Some(paths) = receiver.recv().await else {
-            return Ok(Vec::new());
-        };
 
         Ok(paths)
     }
@@ -406,17 +339,11 @@ impl CompositeDeviceInterface {
     /// Target dbus devices that this [CompositeDevice] is managing
     #[zbus(property)]
     async fn dbus_devices(&self) -> fdo::Result<Vec<String>> {
-        let (sender, mut receiver) = mpsc::channel::<Vec<String>>(1);
-        self.tx
-            .send_timeout(
-                Command::GetDBusDevicePaths(sender),
-                Duration::from_millis(500),
-            )
+        let paths = self
+            .composite_device
+            .get_dbus_device_paths()
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
-        let Some(paths) = receiver.recv().await else {
-            return Ok(Vec::new());
-        };
 
         Ok(paths)
     }

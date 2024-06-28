@@ -16,7 +16,7 @@ use super::InterceptMode;
 /// over a channel. These commands are processed in an asyncronous thread and
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
-pub enum Command {
+pub enum CompositeCommand {
     GetName(mpsc::Sender<String>),
     ProcessEvent(String, Event),
     ProcessOutputEvent(OutputEvent),

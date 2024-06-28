@@ -12,7 +12,7 @@ use crate::{
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
         capability::Capability,
-        composite_device::command::Command,
+        composite_device::client::CompositeDeviceClient,
         event::{evdev::EvdevEvent, Event},
         output_event::OutputEvent,
     },
@@ -30,7 +30,7 @@ const POLL_RATE: Duration = Duration::from_micros(1666);
 #[derive(Debug)]
 pub struct EventDevice {
     info: procfs::device::Device,
-    composite_tx: mpsc::Sender<Command>,
+    composite_device: CompositeDeviceClient,
     tx: mpsc::Sender<SourceCommand>,
     rx: mpsc::Receiver<SourceCommand>,
     ff_effects: HashMap<i16, FFEffect>,
@@ -38,11 +38,11 @@ pub struct EventDevice {
 }
 
 impl EventDevice {
-    pub fn new(info: procfs::device::Device, composite_tx: mpsc::Sender<Command>) -> Self {
+    pub fn new(info: procfs::device::Device, composite_device: CompositeDeviceClient) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
             info,
-            composite_tx,
+            composite_device,
             tx,
             rx,
             ff_effects: HashMap::new(),
@@ -159,8 +159,8 @@ impl EventDevice {
 
             // Send the event to the composite device
             let event = Event::Evdev(evdev_event);
-            self.composite_tx
-                .send(Command::ProcessEvent(self.get_id(), event))
+            self.composite_device
+                .process_event(self.get_id(), event)
                 .await?;
         }
 
