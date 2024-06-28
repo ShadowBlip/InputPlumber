@@ -1868,6 +1868,14 @@ impl DualSenseDevice {
     fn get_capabilities(&self) -> Vec<Capability> {
         vec![
             Capability::Gamepad(Gamepad::Accelerometer),
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::Buttons(
+                GamepadButton::DPadUp,
+                GamepadButton::DPadDown,
+            ))),
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::Buttons(
+                GamepadButton::DPadLeft,
+                GamepadButton::DPadRight,
+            ))),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
