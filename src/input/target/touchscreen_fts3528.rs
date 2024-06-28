@@ -22,7 +22,7 @@ use crate::{
     },
     input::{
         capability::{Capability, Touch},
-        composite_device,
+        composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue},
         source::hidraw::fts3528::CAPABILITIES,
     },
@@ -40,7 +40,7 @@ pub struct Fts3528TouchscreenDevice {
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
     state: PackedInputDataReport,
-    composite_tx: Option<mpsc::Sender<composite_device::command::Command>>,
+    composite_device: Option<CompositeDeviceClient>,
 }
 
 impl Fts3528TouchscreenDevice {
@@ -52,7 +52,7 @@ impl Fts3528TouchscreenDevice {
             tx,
             rx,
             state: PackedInputDataReport::default(),
-            composite_tx: None,
+            composite_device: None,
         }
     }
 
@@ -63,8 +63,8 @@ impl Fts3528TouchscreenDevice {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: mpsc::Sender<composite_device::command::Command>) {
-        self.composite_tx = Some(tx);
+    pub fn set_composite_device(&mut self, composite_device: CompositeDeviceClient) {
+        self.composite_device = Some(composite_device);
     }
 
     /// Creates a new instance of the dbus device interface on DBus.
@@ -199,8 +199,8 @@ impl Fts3528TouchscreenDevice {
         log::debug!("Started listening for events to send");
         while let Some(command) = self.rx.recv().await {
             match command {
-                TargetCommand::SetCompositeDevice(tx) => {
-                    self.set_composite_device(tx);
+                TargetCommand::SetCompositeDevice(composite_device) => {
+                    self.set_composite_device(composite_device);
                 }
                 TargetCommand::WriteEvent(event) => {
                     // Update internal state

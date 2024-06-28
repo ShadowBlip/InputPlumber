@@ -12,7 +12,7 @@ use crate::{
     },
     input::{
         capability::{Capability, Touch},
-        composite_device::command::Command,
+        composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
         source::SourceCommand,
     },
@@ -24,7 +24,7 @@ const POLL_RATE: Duration = Duration::from_millis(1);
 #[derive(Debug)]
 pub struct Fts3528TouchScreen {
     info: DeviceInfo,
-    composite_tx: mpsc::Sender<Command>,
+    composite_device: CompositeDeviceClient,
     rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
 }
@@ -32,13 +32,13 @@ pub struct Fts3528TouchScreen {
 impl Fts3528TouchScreen {
     pub fn new(
         info: DeviceInfo,
-        composite_tx: mpsc::Sender<Command>,
+        composite_device: CompositeDeviceClient,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
             info,
-            composite_tx,
+            composite_device,
             rx: Some(rx),
             device_id,
         }
@@ -47,7 +47,7 @@ impl Fts3528TouchScreen {
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting FTS3528 Touchscreen driver");
         let mut rx = self.rx.take().unwrap();
-        let tx = self.composite_tx.clone();
+        let composite_device = self.composite_device.clone();
         let path = self.info.path().to_string_lossy().to_string();
         let device_path = path.clone();
         let device_id = self.device_id.clone();
@@ -65,10 +65,11 @@ impl Fts3528TouchScreen {
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
                         }
-                        tx.blocking_send(Command::ProcessEvent(
-                            device_id.clone(),
-                            Event::Native(event),
-                        ))?;
+                        let res = composite_device
+                            .blocking_process_event(device_id.clone(), Event::Native(event));
+                        if let Err(e) = res {
+                            return Err(e.to_string().into());
+                        }
                     }
 
                     // Receive commands/output events

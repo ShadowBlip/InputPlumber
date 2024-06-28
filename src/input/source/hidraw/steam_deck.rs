@@ -25,7 +25,7 @@ use crate::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
             Touchpad,
         },
-        composite_device::command::Command,
+        composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
         output_event::OutputEvent,
         source::SourceCommand,
@@ -43,7 +43,7 @@ const POLL_RATE: Duration = Duration::from_micros(250);
 #[derive(Debug)]
 pub struct DeckController {
     info: DeviceInfo,
-    composite_tx: mpsc::Sender<Command>,
+    composite_device: CompositeDeviceClient,
     rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
 }
@@ -51,13 +51,13 @@ pub struct DeckController {
 impl DeckController {
     pub fn new(
         info: DeviceInfo,
-        composite_tx: mpsc::Sender<Command>,
+        composite_device: CompositeDeviceClient,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
             info,
-            composite_tx,
+            composite_device,
             rx: Some(rx),
             device_id,
         }
@@ -66,7 +66,7 @@ impl DeckController {
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting Steam Deck Controller driver");
         let rx = self.rx.take().unwrap();
-        let tx = self.composite_tx.clone();
+        let composite_device = self.composite_device.clone();
         let path = self.info.path().to_string_lossy().to_string();
         let device_path = path.clone();
         let device_id = self.device_id.clone();
@@ -98,10 +98,11 @@ impl DeckController {
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
                         }
-                        tx.blocking_send(Command::ProcessEvent(
-                            device_id.clone(),
-                            Event::Native(event),
-                        ))?;
+                        let res = composite_device
+                            .blocking_process_event(device_id.clone(), Event::Native(event));
+                        if let Err(e) = res {
+                            return Err(e.to_string().into());
+                        }
                     }
 
                     // Receive commands/output events

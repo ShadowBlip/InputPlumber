@@ -15,7 +15,7 @@ use crate::{
     dbus::interface::target::mouse::TargetMouseInterface,
     input::{
         capability::{Capability, Mouse, MouseButton},
-        composite_device,
+        composite_device::client::CompositeDeviceClient,
         event::{evdev::EvdevEvent, native::NativeEvent, value::InputValue},
     },
 };
@@ -35,7 +35,7 @@ pub struct MouseDevice {
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
-    composite_tx: Option<mpsc::Sender<composite_device::command::Command>>,
+    composite_device: Option<CompositeDeviceClient>,
 }
 
 impl MouseDevice {
@@ -44,7 +44,7 @@ impl MouseDevice {
         Self {
             conn,
             dbus_path: None,
-            composite_tx: None,
+            composite_device: None,
             tx,
             rx,
         }
@@ -62,8 +62,8 @@ impl MouseDevice {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: mpsc::Sender<composite_device::command::Command>) {
-        self.composite_tx = Some(tx);
+    pub fn set_composite_device(&mut self, composite_device: CompositeDeviceClient) {
+        self.composite_device = Some(composite_device);
     }
 
     /// Creates a new instance of the device interface on DBus.
@@ -116,8 +116,8 @@ impl MouseDevice {
         log::debug!("Started listening for events to send");
         while let Some(command) = self.rx.recv().await {
             match command {
-                TargetCommand::SetCompositeDevice(tx) => {
-                    self.set_composite_device(tx);
+                TargetCommand::SetCompositeDevice(composite_device) => {
+                    self.set_composite_device(composite_device);
                 }
                 TargetCommand::WriteEvent(event) => {
                     log::trace!("Got event to emit: {:?}", event);

@@ -41,7 +41,7 @@ use crate::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
             Touchpad,
         },
-        composite_device::command::Command,
+        composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue},
         output_event,
     },
@@ -129,7 +129,7 @@ pub struct DualSenseDevice {
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
     state: PackedInputDataReport,
-    composite_tx: Option<mpsc::Sender<Command>>,
+    composite_device: Option<CompositeDeviceClient>,
     hardware: DualSenseHardware,
 }
 
@@ -142,7 +142,7 @@ impl DualSenseDevice {
             tx,
             rx,
             state: PackedInputDataReport::Usb(USBPackedInputDataReport::new()),
-            composite_tx: None,
+            composite_device: None,
             hardware,
         }
     }
@@ -154,8 +154,8 @@ impl DualSenseDevice {
 
     /// Configures the device to send output events to the given composite device
     /// channel.
-    pub fn set_composite_device(&mut self, tx: mpsc::Sender<Command>) {
-        self.composite_tx = Some(tx);
+    pub fn set_composite_device(&mut self, composite_device: CompositeDeviceClient) {
+        self.composite_device = Some(composite_device);
     }
 
     /// Creates a new instance of the dbus device interface on DBus.
@@ -305,9 +305,9 @@ impl DualSenseDevice {
             match self.rx.try_recv() {
                 Ok(cmd) => {
                     match cmd {
-                        TargetCommand::SetCompositeDevice(tx) => {
+                        TargetCommand::SetCompositeDevice(composite_device) => {
                             log::trace!("Recieved command to set composite device");
-                            self.set_composite_device(tx.clone());
+                            self.set_composite_device(composite_device.clone());
                         }
                         TargetCommand::WriteEvent(event) => {
                             log::trace!("Recieved event to write: {:?}", event);
@@ -483,14 +483,13 @@ impl DualSenseDevice {
 
                 // Send the output report to the composite device so it can
                 // be processed by source devices.
-                let Some(tx) = self.composite_tx.as_ref() else {
+                let Some(composite_device) = self.composite_device.as_ref() else {
                     log::warn!("No composite device to handle output reports");
                     return Ok(());
                 };
 
                 let event = output_event::OutputEvent::DualSense(state);
-                let cmd = Command::ProcessOutputEvent(event);
-                tx.send(cmd).await?;
+                composite_device.process_output_event(event).await?;
             }
             OUTPUT_REPORT_BT => {
                 log::debug!(

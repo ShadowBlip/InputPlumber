@@ -4,13 +4,12 @@ use evdev::{
     uinput::VirtualDeviceBuilder, AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffectCode, KeyCode,
     UinputAbsSetup,
 };
-use tokio::sync::broadcast;
 
-use crate::input::composite_device;
+use crate::input::composite_device::client::CompositeDeviceClient;
 
 #[derive(Debug)]
 pub struct XBox360Controller {
-    _composite_tx: Option<broadcast::Sender<composite_device::command::Command>>,
+    _composite_tx: Option<CompositeDeviceClient>,
 }
 
 impl XBox360Controller {

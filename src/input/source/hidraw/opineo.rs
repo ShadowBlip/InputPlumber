@@ -1,7 +1,6 @@
 use std::{error::Error, thread, time};
 
 use hidapi::DeviceInfo;
-use tokio::sync::mpsc;
 
 use crate::{
     drivers::opineo::{
@@ -10,7 +9,7 @@ use crate::{
     },
     input::{
         capability::{Capability, Touch, Touchpad},
-        composite_device::command::Command,
+        composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
     },
     udev::get_device,
@@ -27,15 +26,19 @@ enum TouchpadSide {
 #[derive(Debug)]
 pub struct OrangePiNeoTouchpad {
     info: DeviceInfo,
-    composite_tx: mpsc::Sender<Command>,
+    composite_device: CompositeDeviceClient,
     device_id: String,
 }
 
 impl OrangePiNeoTouchpad {
-    pub fn new(info: DeviceInfo, composite_tx: mpsc::Sender<Command>, device_id: String) -> Self {
+    pub fn new(
+        info: DeviceInfo,
+        composite_device: CompositeDeviceClient,
+        device_id: String,
+    ) -> Self {
         Self {
             info,
-            composite_tx,
+            composite_device,
             device_id,
         }
     }
@@ -43,7 +46,7 @@ impl OrangePiNeoTouchpad {
     pub async fn run(&self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting OrangePi NEO Touchpad driver");
         let path = self.info.path().to_string_lossy().to_string();
-        let tx = self.composite_tx.clone();
+        let composite_device = self.composite_device.clone();
 
         // Query the udev module to determine if this is the left or right touchpad.
         let dev_info = get_device(path.clone()).await?;
@@ -77,10 +80,11 @@ impl OrangePiNeoTouchpad {
                         if matches!(event.as_capability(), Capability::NotImplemented) {
                             continue;
                         }
-                        tx.blocking_send(Command::ProcessEvent(
-                            device_id.clone(),
-                            Event::Native(event),
-                        ))?;
+                        let res = composite_device
+                            .blocking_process_event(device_id.clone(), Event::Native(event));
+                        if let Err(e) = res {
+                            return Err(e.to_string().into());
+                        }
                     }
 
                     // Polling interval is about 4ms so we can sleep a little

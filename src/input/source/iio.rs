@@ -12,7 +12,7 @@ use crate::{
     config,
     constants::BUS_PREFIX,
     iio::device::Device,
-    input::{capability::Capability, composite_device::command::Command},
+    input::{capability::Capability, composite_device::client::CompositeDeviceClient},
 };
 
 use super::SourceCommand;
@@ -71,7 +71,7 @@ pub fn get_dbus_path(id: String) -> String {
 pub struct IIODevice {
     info: Device,
     config: Option<config::IIO>,
-    composite_tx: mpsc::Sender<Command>,
+    composite_device: CompositeDeviceClient,
     tx: mpsc::Sender<SourceCommand>,
     rx: Option<mpsc::Receiver<SourceCommand>>,
 }
@@ -80,13 +80,13 @@ impl IIODevice {
     pub fn new(
         info: Device,
         config: Option<config::IIO>,
-        composite_tx: mpsc::Sender<Command>,
+        composite_device: CompositeDeviceClient,
     ) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
             info,
             config,
-            composite_tx,
+            composite_device,
             tx,
             rx: Some(rx),
         }
@@ -130,12 +130,12 @@ impl IIODevice {
             DriverType::Unknown => Err(format!("No driver for IMU found. {}", name).into()),
             DriverType::BmiImu => {
                 log::info!("Detected BMI_IMU");
-                let tx = self.composite_tx.clone();
+                let composite_device = self.composite_device.clone();
                 let rx = self.rx.take().unwrap();
                 let mut driver = bmi_imu::IMU::new(
                     self.info.clone(),
                     self.config.clone(),
-                    tx,
+                    composite_device,
                     rx,
                     self.get_id(),
                 );
@@ -145,12 +145,12 @@ impl IIODevice {
 
             DriverType::AccelGryo3D => {
                 log::info!("Detected IMU: {name}");
-                let tx = self.composite_tx.clone();
+                let composite_device = self.composite_device.clone();
                 let rx = self.rx.take().unwrap();
                 let mut driver = accel_gyro_3d::IMU::new(
                     self.info.clone(),
                     self.config.clone(),
-                    tx,
+                    composite_device,
                     rx,
                     self.get_id(),
                 );
