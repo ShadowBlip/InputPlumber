@@ -148,7 +148,7 @@ pub struct Manager {
     source_devices_used: HashMap<String, String>,
     /// Mapping of DBus path to its corresponding [CompositeDevice] handle
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <Handle>}
-    composite_devices: HashMap<String, mpsc::Sender<composite_device::Command>>,
+    composite_devices: HashMap<String, mpsc::Sender<composite_device::command::Command>>,
     /// Mapping of all source devices used by composite devices with the CompositeDevice path as
     /// the key for the hashmap.
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<SourceDevice>}
@@ -312,7 +312,9 @@ impl Manager {
                     let mut targets = HashMap::new();
                     targets.insert(target_path.clone(), target.clone());
                     if let Err(e) = device
-                        .send(composite_device::Command::AttachTargetDevices(targets))
+                        .send(composite_device::command::Command::AttachTargetDevices(
+                            targets,
+                        ))
                         .await
                     {
                         log::error!("Failed to send attach command: {e:?}");
@@ -1096,7 +1098,9 @@ impl Manager {
         };
 
         handle
-            .send(composite_device::Command::SourceDeviceRemoved(id.clone()))
+            .send(composite_device::command::Command::SourceDeviceRemoved(
+                id.clone(),
+            ))
             .await?;
 
         let Some(device) = self.source_devices.get(&id) else {
@@ -1665,10 +1669,10 @@ impl Manager {
     async fn add_event_device_to_composite_device(
         &self,
         device_info: &procfs::device::Device,
-        tx: &mpsc::Sender<composite_device::Command>,
+        tx: &mpsc::Sender<composite_device::command::Command>,
     ) -> Result<(), Box<dyn Error>> {
         let device_info = device_info.clone();
-        tx.send(composite_device::Command::SourceDeviceAdded(
+        tx.send(composite_device::command::Command::SourceDeviceAdded(
             SourceDeviceInfo::EvdevDeviceInfo(device_info),
         ))
         .await?;
@@ -1680,10 +1684,10 @@ impl Manager {
     async fn add_hidraw_device_to_composite_device(
         &self,
         device_info: &hidapi::DeviceInfo,
-        tx: &mpsc::Sender<composite_device::Command>,
+        tx: &mpsc::Sender<composite_device::command::Command>,
     ) -> Result<(), Box<dyn Error>> {
         let device_info = device_info.clone();
-        tx.send(composite_device::Command::SourceDeviceAdded(
+        tx.send(composite_device::command::Command::SourceDeviceAdded(
             SourceDeviceInfo::HIDRawDeviceInfo(device_info),
         ))
         .await?;
@@ -1696,10 +1700,10 @@ impl Manager {
     async fn add_iio_device_to_composite_device(
         &self,
         info: &iio::device::Device,
-        tx: &mpsc::Sender<composite_device::Command>,
+        tx: &mpsc::Sender<composite_device::command::Command>,
     ) -> Result<(), Box<dyn Error>> {
         let device_info = info.clone();
-        tx.send(composite_device::Command::SourceDeviceAdded(
+        tx.send(composite_device::command::Command::SourceDeviceAdded(
             SourceDeviceInfo::IIODeviceInfo(device_info),
         ))
         .await?;

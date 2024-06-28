@@ -12,7 +12,7 @@ use crate::{
     config,
     constants::BUS_PREFIX,
     iio::device::Device,
-    input::{capability::Capability, composite_device::Command},
+    input::{capability::Capability, composite_device::command::Command},
 };
 
 use super::SourceCommand;

@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use crate::{
     constants::BUS_PREFIX,
     drivers::{self},
-    input::{capability::Capability, composite_device::Command},
+    input::{capability::Capability, composite_device::command::Command},
 };
 
 use super::SourceCommand;

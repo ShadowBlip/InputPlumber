@@ -1,3 +1,6 @@
+pub mod client;
+pub mod command;
+
 use std::{
     borrow::Borrow,
     collections::{BTreeSet, HashMap, HashSet},
@@ -34,6 +37,8 @@ use crate::{
     udev::{hide_device, unhide_device},
 };
 
+use self::command::Command;
+
 use super::{manager::ManagerCommand, output_event::OutputEvent, source::SourceCommand};
 
 /// Size of the command channel buffer for processing input events and commands.
@@ -50,37 +55,6 @@ pub enum InterceptMode {
     Pass,
     /// Intercept all input and send nothing to the target devices
     Always,
-}
-
-/// CompositeDevice commands define all the different ways to interact with [CompositeDevice]
-/// over a channel. These commands are processed in an asyncronous thread and
-/// dispatched as they come in.
-#[derive(Debug, Clone)]
-pub enum Command {
-    GetName(mpsc::Sender<String>),
-    ProcessEvent(String, Event),
-    ProcessOutputEvent(OutputEvent),
-    GetCapabilities(mpsc::Sender<HashSet<Capability>>),
-    GetTargetCapabilities(mpsc::Sender<HashSet<Capability>>),
-    SetInterceptMode(InterceptMode),
-    GetInterceptMode(mpsc::Sender<InterceptMode>),
-    GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
-    GetTargetDevicePaths(mpsc::Sender<Vec<String>>),
-    GetDBusDevicePaths(mpsc::Sender<Vec<String>>),
-    SourceDeviceAdded(SourceDeviceInfo),
-    SourceDeviceStopped(String),
-    SourceDeviceRemoved(String),
-    SetTargetDevices(Vec<String>),
-    AttachTargetDevices(HashMap<String, mpsc::Sender<TargetCommand>>),
-    GetProfileName(mpsc::Sender<String>),
-    LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
-    WriteEvent(NativeEvent),
-    WriteChordEvent(Vec<NativeEvent>),
-    WriteSendEvent(NativeEvent),
-    HandleEvent(NativeEvent),
-    RemoveRecentEvent(Capability),
-    SetInterceptActivation(Vec<Capability>, Capability),
-    Stop,
 }
 
 /// A [CompositeDevice] represents any number source input devices that

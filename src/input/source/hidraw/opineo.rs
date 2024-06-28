@@ -10,7 +10,7 @@ use crate::{
     },
     input::{
         capability::{Capability, Touch, Touchpad},
-        composite_device::Command,
+        composite_device::command::Command,
         event::{native::NativeEvent, value::InputValue, Event},
     },
     udev::get_device,

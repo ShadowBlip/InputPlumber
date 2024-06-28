@@ -13,7 +13,7 @@ use crate::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse, MouseButton,
             Touch, Touchpad,
         },
-        composite_device::Command,
+        composite_device::command::Command,
         event::{native::NativeEvent, value::InputValue, Event},
     },
 };

@@ -9,7 +9,7 @@ use zbus_macros::interface;
 
 use crate::input::{
     capability::{Capability, Gamepad, Mouse},
-    composite_device::{Command, InterceptMode},
+    composite_device::{command::Command, InterceptMode},
     event::{native::NativeEvent, value::InputValue},
 };
 

@@ -12,7 +12,7 @@ use crate::{
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
         capability::Capability,
-        composite_device::Command,
+        composite_device::command::Command,
         event::{evdev::EvdevEvent, Event},
         output_event::OutputEvent,
     },
