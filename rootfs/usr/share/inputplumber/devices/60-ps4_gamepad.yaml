@@ -32,6 +32,6 @@ source_devices:
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - ds5-edge
+  - ds5
   - mouse
   - keyboard

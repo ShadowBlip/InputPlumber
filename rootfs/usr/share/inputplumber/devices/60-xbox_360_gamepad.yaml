@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: Xbox 360 Gamepad
+name: Microsoft X-Box 360 pad
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty then the source devices will *always* be checked.
@@ -177,6 +177,6 @@ source_devices:
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - gamepad
+  - xb360
   - mouse
   - keyboard
