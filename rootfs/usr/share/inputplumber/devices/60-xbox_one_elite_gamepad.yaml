@@ -6,33 +6,23 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: Anbernic Win 600
+name: Microsoft X-Box One Elite pad
 
 # Only use this profile if *any* of the given matches matches. If this list is
-# empty, then the source devices will *always* be checked.
+# empty,then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
-matches:
-  - dmi_data:
-      product_name: Win600
-      sys_vendor: ANBERNIC
+matches: []
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
     evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:02:00.3-5/input0
-  - group: keyboard
-    evdev:
-      name: AT Translated Set 2 keyboard
-      phys_path: isa0060/serio0/input0
+      vendor_id: "045e"
+      product_id: "{02e3,0b00}"
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - xb360
+  - xbox-elite
   - mouse
   - keyboard
-
-# The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: anb1

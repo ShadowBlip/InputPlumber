@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: Xbox One Gamepad
+name: Microsoft X-Box One pad
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty,then the source devices will *always* be checked.
@@ -23,7 +23,7 @@ source_devices:
   - group: gamepad
     evdev:
       vendor_id: "045e"
-      product_id: "{02d1,02dd,02e3,0b00,02ea,0b12}"
+      product_id: "{02d1,02dd,02ea,0b12}"
 
   - group: gamepad
     evdev:
@@ -87,6 +87,6 @@ source_devices:
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - gamepad
+  - xb360
   - mouse
   - keyboard

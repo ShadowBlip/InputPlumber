@@ -22,6 +22,6 @@ source_devices:
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - gamepad
+  - xb360
   - mouse
   - keyboard

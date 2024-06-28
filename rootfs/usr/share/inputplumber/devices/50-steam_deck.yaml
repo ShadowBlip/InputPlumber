@@ -47,7 +47,7 @@ source_devices:
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - gamepad
+  - xbox-elite
   - mouse
   - keyboard
   - touchscreen-fts3528

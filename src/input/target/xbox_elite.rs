@@ -1,5 +1,3 @@
-//! The GenericGamepad target provides a simple generic virtual gamepad based
-//! on the XBox 360 gamepad.
 use std::{
     collections::HashMap,
     error::Error,
@@ -11,8 +9,9 @@ use std::{
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
-    AbsInfo, AbsoluteAxisCode, AttributeSet, EventSummary, FFEffectCode, FFStatusCode, InputEvent,
-    KeyCode, SynchronizationCode, SynchronizationEvent, UInputCode, UinputAbsSetup,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, BusType, EventSummary, FFEffectCode, FFStatusCode,
+    InputEvent, InputId, KeyCode, SynchronizationCode, SynchronizationEvent, UInputCode,
+    UinputAbsSetup,
 };
 use nix::fcntl::{FcntlArg, OFlag};
 use tokio::{sync::mpsc, time::Duration};
@@ -36,7 +35,7 @@ const BUFFER_SIZE: usize = 2048;
 const POLL_RATE: Duration = Duration::from_micros(1666);
 
 #[derive(Debug)]
-pub struct GenericGamepad {
+pub struct XboxEliteController {
     conn: Connection,
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
@@ -44,7 +43,7 @@ pub struct GenericGamepad {
     composite_device: Option<CompositeDeviceClient>,
 }
 
-impl GenericGamepad {
+impl XboxEliteController {
     pub fn new(conn: Connection) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
@@ -57,7 +56,7 @@ impl GenericGamepad {
     }
 
     /// Returns the DBus path of this device
-    pub fn get_dbus_path(&self) -> Option<String> {
+    pub fn _get_dbus_path(&self) -> Option<String> {
         self.dbus_path.clone()
     }
 
@@ -91,7 +90,7 @@ impl GenericGamepad {
 
     /// Creates and runs the target device
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Creating virtual gamepad");
+        log::debug!("Creating virtual Xbox Elite gamepad");
         let device = self.create_virtual_device()?;
 
         // Put the device behind an Arc Mutex so it can be shared between the
@@ -110,7 +109,7 @@ impl GenericGamepad {
 
                     // Spawn a thread to listen for force feedback events
                     let ff_device = device.clone();
-                    GenericGamepad::spawn_ff_thread(ff_device, composite_device);
+                    XboxEliteController::spawn_ff_thread(ff_device, composite_device);
                 }
                 TargetCommand::WriteEvent(event) => {
                     log::trace!("Got event to emit: {:?}", event);
@@ -211,6 +210,10 @@ impl GenericGamepad {
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY2);
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY3);
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY4);
+        keys.insert(KeyCode::BTN_TRIGGER_HAPPY5);
+        keys.insert(KeyCode::BTN_TRIGGER_HAPPY6);
+        keys.insert(KeyCode::BTN_TRIGGER_HAPPY7);
+        keys.insert(KeyCode::BTN_TRIGGER_HAPPY8);
 
         // Setup ABS inputs
         let joystick_setup = AbsInfo::new(0, -32768, 32767, 16, 128, 1);
@@ -234,9 +237,13 @@ impl GenericGamepad {
         ff.insert(FFEffectCode::FF_SINE);
         ff.insert(FFEffectCode::FF_GAIN);
 
+        // Identify to the kernel as an Xbox One Elite
+        let id = InputId::new(BusType(3), 0x045e, 0x02e3, 0x0001);
+
         // Build the device
         let device = VirtualDeviceBuilder::new()?
-            .name("InputPlumber Gamepad")
+            .name("Microsoft X-Box One Elite pad")
+            .input_id(id)
             .with_keys(&keys)?
             .with_absolute_axis(&abs_x)?
             .with_absolute_axis(&abs_y)?
@@ -276,7 +283,7 @@ impl GenericGamepad {
                 }
 
                 // Read any events
-                if let Err(e) = GenericGamepad::process_ff(&ff_device, &composite_device) {
+                if let Err(e) = XboxEliteController::process_ff(&ff_device, &composite_device) {
                     log::warn!("Error processing FF events: {:?}", e);
                 }
 
@@ -395,25 +402,29 @@ impl GenericGamepad {
     /// Returns capabilities of the target device
     fn get_capabilities(&self) -> Vec<Capability> {
         vec![
-            Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
         ]
