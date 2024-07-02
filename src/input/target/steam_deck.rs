@@ -222,6 +222,11 @@ impl SteamDeckDevice {
                         log::error!("Failed to send target capabilities: {e:?}");
                     }
                 }
+                TargetCommand::GetType(tx) => {
+                    if let Err(e) = tx.send("steam-deck".to_string()).await {
+                        log::error!("Failed to send target type: {e:?}");
+                    }
+                }
                 TargetCommand::Stop => break,
             };
         }

@@ -1736,9 +1736,36 @@ impl CompositeDevice {
             return Ok(());
         }
 
-        // Stop all old target devices
-        let targets_to_stop = self.target_devices.clone();
-        for (path, target) in targets_to_stop.into_iter() {
+        // Identify which target devices are new
+        let mut device_types_to_start: Vec<String> = vec![];
+        for kind in device_types.iter() {
+            if self.target_kind_running(kind).await? {
+                log::debug!("Target device {kind} already running, nothing to do.");
+                continue;
+            }
+
+            device_types_to_start.push(kind.clone());
+        }
+
+        // Identify the targets that need to close
+        let mut targets_to_stop: HashMap<String, mpsc::Sender<TargetCommand>> = HashMap::new();
+        for (path, target) in self.target_devices.clone().into_iter() {
+            let (tx, mut rx) = mpsc::channel(1);
+            let cmd = TargetCommand::GetType(tx);
+            if let Err(e) = target.send(cmd).await {
+                return Err(format!("Failed to request target type: {e:?}").into());
+            }
+            let Some(target_type) = rx.recv().await else {
+                return Err("Failed to receive target type".into());
+            };
+            if !device_types.contains(&target_type) {
+                log::debug!("Target device {path} not in new devices list. Adding to stop list.");
+                targets_to_stop.insert(path, target);
+            }
+        }
+
+        // Stop all old target devices that aren't going to persist
+        for (path, target) in targets_to_stop.clone().into_iter() {
             log::debug!("Stopping old target device: {path}");
             self.target_devices.remove(&path);
             for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
@@ -1753,8 +1780,8 @@ impl CompositeDevice {
             return Err("No composite device DBus path found".into());
         };
 
-        // Create target devices using the input manager
-        for kind in device_types {
+        // Create new target devices using the input manager
+        for kind in device_types_to_start {
             log::debug!("Requesting to create device: {kind}");
             let (sender, mut receiver) = mpsc::channel(1);
             self.manager
@@ -1801,6 +1828,29 @@ impl CompositeDevice {
         //self.signal_targets_changed().await;
 
         Ok(())
+    }
+
+    // Deterimines if a given target device kind is already running
+    async fn target_kind_running(&self, kind: &str) -> Result<bool, Box<dyn Error>> {
+        // TODO: Save this on the DS5 target device so we can properly look it up.
+        let kind = match kind {
+            "ds5" => "ds5_edge",
+            _ => kind,
+        };
+        for target in self.target_devices.values() {
+            let (tx, mut rx) = mpsc::channel(1);
+            let cmd = TargetCommand::GetType(tx);
+            if let Err(e) = target.send(cmd).await {
+                return Err(format!("Failed to request target type: {e:?}").into());
+            }
+            let Some(target_type) = rx.recv().await else {
+                return Err("Failed to receive target type".into());
+            };
+            if kind == target_type {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     // Get the capabilities of all target devices

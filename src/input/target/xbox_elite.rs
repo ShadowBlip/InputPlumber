@@ -32,7 +32,7 @@ use super::TargetCommand;
 /// Size of the [TargetCommand] buffer for receiving input events
 const BUFFER_SIZE: usize = 2048;
 /// How long to sleep before polling for events.
-const POLL_RATE: Duration = Duration::from_micros(1666);
+const POLL_RATE: Duration = Duration::from_millis(8); //125Hz is standard for xbox controllers
 
 #[derive(Debug)]
 pub struct XboxEliteController {
@@ -125,6 +125,11 @@ impl XboxEliteController {
                     let caps = self.get_capabilities();
                     if let Err(e) = tx.send(caps).await {
                         log::error!("Failed to send target capabilities: {e:?}");
+                    }
+                }
+                TargetCommand::GetType(tx) => {
+                    if let Err(e) = tx.send("xbox-elite".to_string()).await {
+                        log::error!("Failed to send target type: {e:?}");
                     }
                 }
                 TargetCommand::Stop => break,

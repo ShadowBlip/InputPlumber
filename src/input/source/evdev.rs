@@ -24,7 +24,7 @@ use super::SourceCommand;
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
 /// How long to sleep before polling for events.
-const POLL_RATE: Duration = Duration::from_micros(1666);
+const POLL_RATE: Duration = Duration::from_millis(8);
 
 /// [EventDevice] represents an input device using the input subsystem.
 #[derive(Debug)]

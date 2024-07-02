@@ -215,6 +215,11 @@ impl Fts3528TouchscreenDevice {
                         log::error!("Failed to send target capabilities: {e:?}");
                     }
                 }
+                TargetCommand::GetType(tx) => {
+                    if let Err(e) = tx.send("touchscreen-fts3528".to_string()).await {
+                        log::error!("Failed to send target type: {e:?}");
+                    }
+                }
                 TargetCommand::Stop => break,
             };
         }

@@ -86,7 +86,7 @@ impl Driver {
             accel_info,
             gyro,
             gyro_info,
-            sample_delay: Duration::from_micros(2500), //400Hz
+            sample_delay: Duration::from_millis(8), //125Hz
         })
     }
 
@@ -192,12 +192,13 @@ impl Driver {
     /// events again. Uses the fastest frequency set between the currently set accelerometer and
     /// gyroscope sample rates. Called automatically when the sample_rate is changed.
     pub fn calculate_sample_delay(&self) -> Result<Duration, Box<dyn Error>> {
-        let accel_rate = self.get_sample_rate("accel").unwrap_or(1.0);
-        let gyro_rate = self.get_sample_rate("gyro").unwrap_or(1.0);
-        let mut sample_delay = 1.0 / accel_rate.max(gyro_rate);
-        if sample_delay <= 0.0 {
-            sample_delay = 0.0025;
-        }
+        //let accel_rate = self.get_sample_rate("accel").unwrap_or(1.0);
+        //let gyro_rate = self.get_sample_rate("gyro").unwrap_or(1.0);
+        //let mut sample_delay = 1.0 / accel_rate.max(gyro_rate);
+        let sample_delay = 0.008;
+        //if sample_delay <= 0.0 {
+        //    sample_delay = 0.0025;
+        //}
         log::debug!("Updated sample delay is: {sample_delay} seconds.");
 
         Ok(Duration::from_secs_f64(sample_delay))
