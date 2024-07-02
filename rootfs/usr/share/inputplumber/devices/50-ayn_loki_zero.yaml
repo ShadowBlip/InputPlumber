@@ -6,20 +6,14 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: AYN Loki
+name: AYN Loki Zero
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty, then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: Loki Max
-      sys_vendor: ayn
-  - dmi_data:
       product_name: Loki MiniPro
-      sys_vendor: ayn
-  - dmi_data:
-      product_name: Loki Zero
       sys_vendor: ayn
 
 # One or more source devices to combine into a single virtual device. The events
@@ -28,26 +22,18 @@ source_devices:
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:74:00.0-1/input0
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
       phys_path: usb-0000:04:00.3-4/input0
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:04:00.4-2/input0
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
-  - group: imu
-    iio:
-      name: i2c-BMI0160:00
-      mount_matrix:
-        x: [1, 0, 0]
-        y: [0, 0, -1]
-        z: [0, 1, 0]
+  #- group: imu #TODO:reenable after we switch from polling
+  #  iio:
+  #    name: i2c-BMI0160:00
+  #    mount_matrix:
+  #      x: [1, 0, 0]
+  #      y: [0, 0, -1]
+  #      z: [0, 1, 0]
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

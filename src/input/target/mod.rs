@@ -35,5 +35,6 @@ pub enum TargetCommand {
     WriteEvent(NativeEvent),
     SetCompositeDevice(CompositeDeviceClient),
     GetCapabilities(Sender<Vec<Capability>>),
+    GetType(Sender<String>),
     Stop,
 }
