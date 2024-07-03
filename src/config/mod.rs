@@ -38,7 +38,7 @@ pub struct DeviceProfile {
 
 impl DeviceProfile {
     /// Load a [CapabilityProfile] from the given YAML string
-    pub fn from_yaml(content: String) -> Result<DeviceProfile, LoadError> {
+    pub fn _from_yaml(content: String) -> Result<DeviceProfile, LoadError> {
         let device: DeviceProfile = serde_yaml::from_str(content.as_str())?;
         Ok(device)
     }
@@ -94,12 +94,12 @@ impl ProfileMapping {
                 }
             }
             // Gamepad trigger
-            else if let Some(trigger) = gamepad.trigger.as_ref() {
+            else if let Some(_trigger) = gamepad.trigger.as_ref() {
                 // Trigger was defined for source event!
                 return true;
             }
             // Gamepad gyro
-            else if let Some(gyro) = gamepad.gyro.as_ref() {
+            else if let Some(_gyro) = gamepad.gyro.as_ref() {
                 // Gyro was defined for source event!
                 // TODO: this
             }
@@ -154,7 +154,7 @@ pub struct CapabilityMap {
 
 impl CapabilityMap {
     /// Load a [CapabilityMap] from the given YAML string
-    pub fn from_yaml(content: String) -> Result<CapabilityMap, LoadError> {
+    pub fn _from_yaml(content: String) -> Result<CapabilityMap, LoadError> {
         let device: CapabilityMap = serde_yaml::from_str(content.as_str())?;
         Ok(device)
     }
@@ -310,6 +310,7 @@ pub struct CompositeDeviceConfig {
     pub kind: String,
     pub name: String,
     pub matches: Vec<Match>,
+    pub single_source: Option<bool>,
     pub capability_map_id: Option<String>,
     pub source_devices: Vec<SourceDevice>,
     pub target_devices: Option<Vec<String>>,
@@ -317,7 +318,7 @@ pub struct CompositeDeviceConfig {
 
 impl CompositeDeviceConfig {
     /// Load a [CompositeDevice] from the given YAML string
-    pub fn from_yaml(content: String) -> Result<CompositeDeviceConfig, LoadError> {
+    pub fn _from_yaml(content: String) -> Result<CompositeDeviceConfig, LoadError> {
         let device: CompositeDeviceConfig = serde_yaml::from_str(content.as_str())?;
         Ok(device)
     }
@@ -330,7 +331,7 @@ impl CompositeDeviceConfig {
     }
 
     /// Returns an array of all defined hidraw source devices
-    fn get_hidraw_configs(&self) -> Vec<Hidraw> {
+    fn _get_hidraw_configs(&self) -> Vec<Hidraw> {
         self.source_devices
             .iter()
             .filter_map(|device| device.hidraw.clone())
@@ -338,7 +339,7 @@ impl CompositeDeviceConfig {
     }
 
     /// Returns an array of all defined evdev source devices
-    fn get_evdev_configs(&self) -> Vec<Evdev> {
+    fn _get_evdev_configs(&self) -> Vec<Evdev> {
         self.source_devices
             .iter()
             .filter_map(|device| device.evdev.clone())

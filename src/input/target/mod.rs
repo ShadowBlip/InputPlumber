@@ -13,6 +13,7 @@ pub mod steam_deck;
 pub mod touchscreen_fts3528;
 pub mod xb360;
 pub mod xbox_elite;
+pub mod xbox_series;
 
 /// A [TargetDevice] is any virtual input device that emits input events
 #[derive(Debug)]
@@ -21,8 +22,9 @@ pub enum TargetDeviceType {
     DBus(dbus::DBusDevice),
     Keyboard(keyboard::KeyboardDevice),
     Mouse(mouse::MouseDevice),
-    Xbox360(xb360::XBox360Controller),
+    XBox360(xb360::XBox360Controller),
     XBoxElite(xbox_elite::XboxEliteController),
+    XBoxSeries(xbox_series::XboxSeriesController),
     SteamDeck(steam_deck::SteamDeckDevice),
     DualSense(dualsense::DualSenseDevice),
     Touchscreen(touchscreen_fts3528::Fts3528TouchscreenDevice),
