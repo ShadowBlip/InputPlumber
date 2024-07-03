@@ -13,90 +13,110 @@ name: Microsoft X-Box pad
 # /sys/class/dmi/id/product_name
 matches: []
 
+# Only allow a single source device per composite device of this type.
+single_source: true
+
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "044f"
       product_id: "0f07"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "045e"
       product_id: "{0202,0285,0287,0288,0289}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "046d"
       product_id: "{ca84,ca88}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "1007"
       product_id: "107a"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "05fe"
       product_id: "{3030,3031}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "062a"
       product_id: "0020"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "0738"
       product_id: "{4506,4516,4520,4522,4526,4536,4540,4556,4586,4588,45ff,4743,6040}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "0c12"
       product_id: "{0005,8801,8802,8809,880a,8810,9902}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "0d2f"
       product_id: "0002"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "0e4c"
       product_id: "{1097,1103,2390,3510}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "0e6f"
       product_id: "{0003,0005,0006,0008}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "0e8f"
       product_id: "{020,3008}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "0f30"
       product_id: "{010b,0202,8888}"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "102c"
       product_id: "ff0c"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "12ab"
       product_id: "8809"
 
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "1430"
       product_id: "8888"
 
   - group: gamepad
+    unique: true
     evdev:
       name: "Chinese-made Xbox Controller"
       vendor_id: "ffff"

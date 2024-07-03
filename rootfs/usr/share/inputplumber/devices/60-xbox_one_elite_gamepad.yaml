@@ -13,10 +13,14 @@ name: Microsoft X-Box One Elite pad
 # /sys/class/dmi/id/product_name
 matches: []
 
+# Only allow a single source device per composite device of this type.
+single_source: true
+
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
+    unique: true
     evdev:
       vendor_id: "045e"
       product_id: "{02e3,0b00}"

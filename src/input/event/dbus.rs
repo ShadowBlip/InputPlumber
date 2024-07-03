@@ -410,6 +410,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Keyboard::KeyF23 => vec![Action::None],
             Keyboard::KeyF24 => vec![Action::None],
             Keyboard::KeyProg1 => vec![Action::None],
+            Keyboard::KeyRecord => vec![Action::None],
         },
         Capability::Touchpad(_) => vec![Action::None],
         Capability::Touchscreen(touch) => match touch {

@@ -35,7 +35,7 @@ const BUFFER_SIZE: usize = 2048;
 const POLL_RATE: Duration = Duration::from_millis(8); //125Hz is standard for xbox controllers
 
 #[derive(Debug)]
-pub struct XboxEliteController {
+pub struct XboxSeriesController {
     conn: Connection,
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
@@ -43,7 +43,7 @@ pub struct XboxEliteController {
     composite_device: Option<CompositeDeviceClient>,
 }
 
-impl XboxEliteController {
+impl XboxSeriesController {
     pub fn new(conn: Connection) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
@@ -90,7 +90,7 @@ impl XboxEliteController {
 
     /// Creates and runs the target device
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Creating virtual Xbox Elite gamepad");
+        log::debug!("Creating virtual Xbox Series gamepad");
         let device = self.create_virtual_device()?;
 
         // Put the device behind an Arc Mutex so it can be shared between the
@@ -109,7 +109,7 @@ impl XboxEliteController {
 
                     // Spawn a thread to listen for force feedback events
                     let ff_device = device.clone();
-                    XboxEliteController::spawn_ff_thread(ff_device, composite_device);
+                    XboxSeriesController::spawn_ff_thread(ff_device, composite_device);
                 }
                 TargetCommand::WriteEvent(event) => {
                     log::trace!("Got event to emit: {:?}", event);
@@ -216,10 +216,6 @@ impl XboxEliteController {
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY2);
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY3);
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY4);
-        keys.insert(KeyCode::BTN_TRIGGER_HAPPY5);
-        keys.insert(KeyCode::BTN_TRIGGER_HAPPY6);
-        keys.insert(KeyCode::BTN_TRIGGER_HAPPY7);
-        keys.insert(KeyCode::BTN_TRIGGER_HAPPY8);
 
         // Setup ABS inputs
         let joystick_setup = AbsInfo::new(0, -32768, 32767, 16, 128, 1);
@@ -243,12 +239,12 @@ impl XboxEliteController {
         ff.insert(FFEffectCode::FF_SINE);
         ff.insert(FFEffectCode::FF_GAIN);
 
-        // Identify to the kernel as an Xbox One Elite
-        let id = InputId::new(BusType(3), 0x045e, 0x0b00, 0x0001);
+        // Identify to the kernel as an Xbox One Series
+        let id = InputId::new(BusType(3), 0x045e, 0x0b12, 0x0001);
 
         // Build the device
         let device = VirtualDeviceBuilder::new()?
-            .name("Microsoft X-Box One Elite 2 pad")
+            .name("Microsoft Xbox Series S|X Controller")
             .input_id(id)
             .with_keys(&keys)?
             .with_absolute_axis(&abs_x)?
@@ -289,7 +285,7 @@ impl XboxEliteController {
                 }
 
                 // Read any events
-                if let Err(e) = XboxEliteController::process_ff(&ff_device, &composite_device) {
+                if let Err(e) = XboxSeriesController::process_ff(&ff_device, &composite_device) {
                     log::warn!("Error processing FF events: {:?}", e);
                 }
 
@@ -425,14 +421,10 @@ impl XboxEliteController {
             Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)),

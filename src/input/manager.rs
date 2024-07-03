@@ -37,6 +37,7 @@ use crate::input::target::steam_deck::SteamDeckDevice;
 use crate::input::target::touchscreen_fts3528::Fts3528TouchscreenDevice;
 use crate::input::target::xb360::XBox360Controller;
 use crate::input::target::xbox_elite::XboxEliteController;
+use crate::input::target::xbox_series::XboxSeriesController;
 use crate::input::target::TargetDeviceType;
 use crate::procfs;
 use crate::udev;
@@ -425,15 +426,18 @@ impl Manager {
                 TargetDeviceType::DualSense(DualSenseDevice::new(self.dbus.clone(), hw))
             }
             // Deprecated, retained for backwards compatibility
-            "gamepad" => TargetDeviceType::Xbox360(XBox360Controller::new(self.dbus.clone())),
+            "gamepad" => TargetDeviceType::XBox360(XBox360Controller::new(self.dbus.clone())),
             "keyboard" => TargetDeviceType::Keyboard(KeyboardDevice::new(self.dbus.clone())),
             "mouse" => TargetDeviceType::Mouse(MouseDevice::new(self.dbus.clone())),
             "touchscreen-fts3528" => {
                 TargetDeviceType::Touchscreen(Fts3528TouchscreenDevice::new(self.dbus.clone()))
             }
-            "xb360" => TargetDeviceType::Xbox360(XBox360Controller::new(self.dbus.clone())),
+            "xb360" => TargetDeviceType::XBox360(XBox360Controller::new(self.dbus.clone())),
             "xbox-elite" => {
                 TargetDeviceType::XBoxElite(XboxEliteController::new(self.dbus.clone()))
+            }
+            "xbox-series" => {
+                TargetDeviceType::XBoxSeries(XboxSeriesController::new(self.dbus.clone()))
             }
             _ => TargetDeviceType::Null,
         };
@@ -529,7 +533,20 @@ impl Manager {
                         log::debug!("Target touchscreen device closed at: {}", path);
                     });
                 }
-                TargetDeviceType::Xbox360(mut gamepad) => {
+                TargetDeviceType::XBox360(mut gamepad) => {
+                    let path = self.next_target_path("gamepad")?;
+                    let event_tx = gamepad.transmitter();
+                    target_devices.insert(path.clone(), event_tx.clone());
+                    self.target_devices.insert(path.clone(), event_tx.clone());
+                    gamepad.listen_on_dbus(path.clone()).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = gamepad.run().await {
+                            log::error!("Failed to run target gamepad: {:?}", e);
+                        }
+                        log::debug!("Target gamepad device closed at: {}", path);
+                    });
+                }
+                TargetDeviceType::XBoxSeries(mut gamepad) => {
                     let path = self.next_target_path("gamepad")?;
                     let event_tx = gamepad.transmitter();
                     target_devices.insert(path.clone(), event_tx.clone());
@@ -767,6 +784,10 @@ impl Manager {
             match device_info.clone() {
                 SourceDeviceInfo::EvdevDeviceInfo(info) => {
                     log::trace!("Checking if existing composite device is missing event device");
+                    if config.single_source.unwrap_or(false) {
+                        log::trace!("{:?} is a single source device. Skipping.", config.name);
+                        continue;
+                    }
                     for source_device in source_devices {
                         if source_device.evdev.is_none() {
                             continue;

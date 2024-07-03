@@ -19,6 +19,11 @@
           "description": "Name of the composite device mapping",
           "type": "string"
         },
+        "single_source": {
+          "description": "If true, this composite device should only use one source device. Defaults to false.",
+          "type": "boolean",
+          "default": false
+        },
         "matches": {
           "description": "Only use this profile if *any* of the given DMI system matches match. If this list is empty, then the source devices will *always* be checked.",
           "type": "array",
@@ -38,7 +43,7 @@
           "type": "string"
         },
         "target_devices": {
-          "description": "Target input device(s) to emulate. Can be one of ['mouse', 'keyboard', 'gamepad', 'xb360'].",
+          "description": "Target input device(s) to emulate. Can be one of ['mouse', 'keyboard', 'gamepad', 'xb360', 'xbox-elite', 'xbox-series', 'deck', 'ds5', 'ds5-edge', 'touchscreen-fts3528'].",
           "type": "array",
           "items": {
             "type": "string",
@@ -48,6 +53,7 @@
               "gamepad",
               "xb360",
               "xbox-elite",
+              "xbox-series",
               "deck",
               "ds5",
               "ds5-usb",

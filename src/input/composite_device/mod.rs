@@ -612,7 +612,7 @@ impl CompositeDevice {
             Event::DBus(_) => todo!(),
         };
         let cap = event.as_capability();
-        //log::trace!("Event capability: {:?}", cap);
+        log::trace!("Event capability: {:?}", cap);
 
         // Only send valid events to the target device(s)
         if cap == Capability::NotImplemented {
