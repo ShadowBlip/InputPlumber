@@ -36,6 +36,7 @@ source_devices:
       vendor_id: 0x2808
       product_id: 0x1015
   - group: mouse
+    unique: false
     blocked: true
     evdev:
       name: "FTS3528:00 2808:1015*"
