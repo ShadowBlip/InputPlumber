@@ -241,7 +241,35 @@ impl InputValue {
             // Mouse -> ...
             Capability::Mouse(_) => Err(TranslationError::NotImplemented),
             // Keyboard -> ...
-            Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
+            Capability::Keyboard(_) => match target_cap {
+                // Keyboard Key -> None
+                Capability::None => Ok(InputValue::None),
+                // Keyboard Key -> NotImplemented
+                Capability::NotImplemented => Ok(InputValue::None),
+                // Keyboard Key -> Sync
+                Capability::Sync => Ok(InputValue::Bool(false)),
+                // Keyboard Key -> DBus
+                Capability::DBus(_) => Ok(self.clone()),
+                // Keyboard Key -> Gamepad
+                Capability::Gamepad(gamepad) => match gamepad {
+                    Gamepad::Button(_) => Ok(self.clone()),
+                    Gamepad::Axis(_) => Err(TranslationError::NotImplemented),
+                    Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
+                    Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
+                    Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                },
+                // Keyboard Key -> Mouse
+                Capability::Mouse(mouse) => match mouse {
+                    Mouse::Motion => Err(TranslationError::NotImplemented),
+                    Mouse::Button(_) => Ok(self.clone()),
+                },
+                // Keyboard Key -> Keyboard
+                Capability::Keyboard(_) => Ok(self.clone()),
+                // Keyboard Key -> Touchpad
+                Capability::Touchpad(_) => Err(TranslationError::NotImplemented),
+                // Keyboard Key -> Touchscreen
+                Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+            },
             // Touchpad -> ...
             Capability::Touchpad(_) => Err(TranslationError::NotImplemented),
             // Touchscreen -> ...
