@@ -134,7 +134,7 @@ dist/$(NAME).tar.gz: build $(ALL_ROOTFS)
 dist-rpm: dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Build a redistributable RPM package
 dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/release/$(NAME)
 	mkdir -p dist
-	cargo install cargo-generate-rpm
+	cargo install --version 0.14.1 cargo-generate-rpm
 	cargo generate-rpm
 	cp ./target/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
 	cd dist && sha256sum $(NAME)-$(VERSION)-1.$(ARCH).rpm > $(NAME)-$(VERSION)-1.$(ARCH).rpm.sha256.txt
