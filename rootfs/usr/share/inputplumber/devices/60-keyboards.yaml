@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=../schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Keyboards
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: keyboard
+    evdev:
+      handler: kbd
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - gamepad
+  - keyboard
+
+# The ID of a device event mapping in the 'capability_maps' folder
+capability_map_id: keyboard

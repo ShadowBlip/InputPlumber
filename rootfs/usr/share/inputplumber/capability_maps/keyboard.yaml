@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=../schema/capability_map_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: Keyboards
+
+# Unique identifier of the capability mapping
+id: keyboard
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Left Meta
+    source_events:
+      - keyboard: KeyLeftMeta
+    target_event:
+      gamepad:
+        button: Guide
+  - name: Right Meta
+    source_events:
+      - keyboard: KeyRightMeta
+    target_event:
+      gamepad:
+        button: Guide
+  - name: Left
+    source_events:
+      - keyboard: KeyLeft
+    target_event:
+      gamepad:
+        button: DPadLeft
+  - name: Right
+    source_events:
+      - keyboard: KeyRight
+    target_event:
+      gamepad:
+        button: DPadRight
+  - name: Up
+    source_events:
+      - keyboard: KeyUp
+    target_event:
+      gamepad:
+        button: DPadUp
+  - name: Down
+    source_events:
+      - keyboard: KeyDown
+    target_event:
+      gamepad:
+        button: DPadDown
+
+# List of events to filter from the source devices
+filtered_events: []
