@@ -1,6 +1,6 @@
 [package]
 name = "inputplumber"
-version = "0.26.1"
+version = "0.26.2"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Open source input manager for Linux"
