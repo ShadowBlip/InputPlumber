@@ -25,28 +25,30 @@ libevdev = "*"
 
 [dependencies]
 env_logger = "0.11.3"
-evdev = { git = "https://github.com/emberian/evdev.git", features = ["tokio"] }
+evdev = { git = "https://github.com/emberian/evdev.git", features = [
+  "tokio",
+], rev = "42b58ee08508b7799322a13bf89121a1d29cf0a2" }
 glob-match = "0.2.1"
-hidapi = "2.6.0"
+hidapi = "2.6.1"
 industrial-io = "0.5.2"
 #evdev = { version = "0.12.1", features = ["tokio"] }
 inotify = "0.10.2"
 # Omit trace logging for release builds
-log = { version = "0.4.20", features = [
+log = { version = "0.4.22", features = [
   "max_level_trace",
   "release_max_level_debug",
 ] }
-nix = { version = "0.28.0", features = ["fs"] }
+nix = { version = "0.29.0", features = ["fs"] }
 packed_struct = "0.10.1"
 procfs = "0.16.0"
 rand = "0.8.5"
-serde = { version = "1.0.192", features = ["derive"] }
-serde_yaml = "0.9.27"
-thiserror = "1.0.56"
+serde = { version = "1.0.204", features = ["derive"] }
+serde_yaml = "0.9.34"
+thiserror = "1.0.61"
 tokio = { version = "*", features = ["full"] }
 uhid-virt = "0.0.7"
-zbus = { version = "4.2.2", default-features = false, features = ["tokio"] }
-zbus_macros = "4.2.2"
+zbus = { version = "4.3.1", default-features = false, features = ["tokio"] }
+zbus_macros = "4.3.1"
 
 [profile.release]
 debug = false
