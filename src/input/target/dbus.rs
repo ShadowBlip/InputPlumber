@@ -6,7 +6,7 @@ use zbus::Connection;
 use crate::{
     dbus::interface::target::dbus::TargetDBusInterface,
     input::{
-        capability::Capability,
+        capability::{Capability, Gamepad},
         composite_device::client::CompositeDeviceClient,
         event::{
             dbus::{Action, DBusEvent},
@@ -106,9 +106,10 @@ impl DBusDevice {
                     self.set_composite_device(composite_device);
                 }
                 TargetCommand::WriteEvent(event) => {
-                    //log::debug!("Got event to emit: {:?}", event);
+                    log::trace!("Got event to emit: {:?}", event);
                     let dbus_events = self.translate_event(event);
                     for dbus_event in dbus_events {
+                        log::trace!("Writing DBus event: {dbus_event:?}");
                         self.write_dbus_event(dbus_event).await?;
                     }
                 }
@@ -151,9 +152,22 @@ impl DBusDevice {
 
     /// Translate the given native event into one or more dbus events
     fn translate_event(&mut self, event: NativeEvent) -> Vec<DBusEvent> {
+        // Check to see if this is an axis event, which requires special
+        // handling.
+        let source_cap = event.as_capability();
+        let is_axis_event = match source_cap {
+            Capability::Gamepad(gamepad) => matches!(gamepad, Gamepad::Axis(_)),
+            _ => false,
+        };
+
         let mut translated = vec![];
         let events = DBusEvent::from_native_event(event);
         for mut event in events {
+            if !is_axis_event {
+                translated.push(event);
+                continue;
+            }
+
             // Axis input is a special case, where we need to keep track of the
             // current state of the axis, and only emit events whenever the axis
             // passes or falls below the defined threshold.
