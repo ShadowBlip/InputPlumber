@@ -6,10 +6,10 @@ version: 1
 kind: CapabilityMap
 
 # Name for the device event map
-name: GPD Type 1
+name: GPD Type 3
 
 # Unique identifier of the capability mapping
-id: gpd1
+id: gpd3
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:

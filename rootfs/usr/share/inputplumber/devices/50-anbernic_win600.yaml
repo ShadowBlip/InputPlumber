@@ -26,10 +26,12 @@ source_devices:
     evdev:
       name: Microsoft X-Box 360 pad
       phys_path: usb-0000:02:00.3-5/input0
+      handler: event*
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
+      handler: event*
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

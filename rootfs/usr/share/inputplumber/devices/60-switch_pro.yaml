@@ -22,6 +22,7 @@ source_devices:
   - group: gamepad
     evdev:
       name: Nintendo Co., Ltd. Pro Controller
+      handler: event*
   #- group: imu
   #  evdev:
   #    name: Nintendo Co., Ltd. Pro Controller (IMU)

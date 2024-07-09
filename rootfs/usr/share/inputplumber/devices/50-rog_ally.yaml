@@ -26,11 +26,13 @@ source_devices:
     evdev:
       name: Microsoft X-Box 360 pad
       phys_path: usb-0000:0[8-a]:00.3-2/input0
+      handler: event*
   - group: keyboard
     unique: false
     evdev:
       name: Asus Keyboard
       phys_path: usb-0000:0[8-a]:00.3-3/input[0-2]
+      handler: event*
   - group: imu
     iio:
       name: bmi323-imu

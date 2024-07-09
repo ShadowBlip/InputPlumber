@@ -6,13 +6,13 @@ pub mod steam_deck;
 
 use std::error::Error;
 
-use hidapi::{DeviceInfo, HidApi};
 use tokio::sync::mpsc;
 
 use crate::{
-    constants::BUS_PREFIX,
+    constants::BUS_SOURCES_PREFIX,
     drivers,
     input::{capability::Capability, composite_device::client::CompositeDeviceClient},
+    udev::device::UdevDevice,
 };
 
 use super::{client::SourceDeviceClient, SourceCommand};
@@ -33,18 +33,17 @@ enum DriverType {
 /// [HIDRawDevice] represents an input device using the input subsystem.
 #[derive(Debug)]
 pub struct HIDRawDevice {
-    info: DeviceInfo,
+    device: UdevDevice,
     composite_device: CompositeDeviceClient,
     tx: mpsc::Sender<SourceCommand>,
     rx: Option<mpsc::Receiver<SourceCommand>>,
 }
 
 impl HIDRawDevice {
-    pub fn new(info: DeviceInfo, composite_device: CompositeDeviceClient) -> Self {
+    pub fn new(device: UdevDevice, composite_device: CompositeDeviceClient) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
-        log::debug!("HIDRaw DeviceInfo: {info:?}");
         Self {
-            info,
+            device,
             composite_device,
             tx,
             rx: Some(rx),
@@ -63,15 +62,15 @@ impl HIDRawDevice {
         match self.get_driver_type() {
             DriverType::Unknown => Err(format!(
                 "No driver for hidraw interface found. VID: {}, PID: {}",
-                self.info.vendor_id(),
-                self.info.product_id()
+                self.device.id_vendor(),
+                self.device.id_product()
             )
             .into()),
             DriverType::DualSense => {
                 let composite_device = self.composite_device.clone();
                 let rx = self.rx.take().unwrap();
                 let mut driver = dualsense::DualSenseController::new(
-                    self.info.clone(),
+                    self.device.clone(),
                     composite_device,
                     rx,
                     self.get_id(),
@@ -83,7 +82,7 @@ impl HIDRawDevice {
                 let composite_device = self.composite_device.clone();
                 let rx = self.rx.take().unwrap();
                 let mut driver = steam_deck::DeckController::new(
-                    self.info.clone(),
+                    self.device.clone(),
                     composite_device,
                     rx,
                     self.get_id(),
@@ -93,18 +92,18 @@ impl HIDRawDevice {
             }
             DriverType::LegionGo => {
                 let composite_device = self.composite_device.clone();
-                let driver =
-                    lego::LegionController::new(self.info.clone(), composite_device, self.get_id());
+                let driver = lego::LegionController::new(
+                    self.device.clone(),
+                    composite_device,
+                    self.get_id(),
+                );
                 driver.run().await?;
                 Ok(())
             }
             DriverType::OrangePiNeo => {
                 let composite_device = self.composite_device.clone();
-                let driver = opineo::OrangePiNeoTouchpad::new(
-                    self.info.clone(),
-                    composite_device,
-                    self.get_id(),
-                );
+                let driver =
+                    opineo::OrangePiNeoTouchpad::new(self.device.clone(), composite_device);
                 driver.run().await?;
                 Ok(())
             }
@@ -112,7 +111,7 @@ impl HIDRawDevice {
                 let composite_device = self.composite_device.clone();
                 let rx = self.rx.take().unwrap();
                 let mut driver = fts3528::Fts3528TouchScreen::new(
-                    self.info.clone(),
+                    self.device.clone(),
                     composite_device,
                     rx,
                     self.get_id(),
@@ -123,21 +122,24 @@ impl HIDRawDevice {
         }
     }
 
+    /// Returns a copy of the UdevDevice
+    pub fn get_device(&self) -> UdevDevice {
+        self.device.clone()
+    }
+
+    /// Returns a refrence to the UdevDevice
+    pub fn get_device_ref(&self) -> &UdevDevice {
+        &self.device
+    }
+
     /// Returns a unique identifier for the source device.
     pub fn get_id(&self) -> String {
-        //let name = format!(
-        //    "{:04x}:{:04x}",
-        //    self.info.vendor_id(),
-        //    self.info.product_id()
-        //);
-        let device_path = self.info.path().to_string_lossy().to_string();
-        let name = device_path.split('/').last().unwrap();
-        format!("hidraw://{}", name)
+        format!("hidraw://{}", self.device.sysname())
     }
 
     /// Returns the full path to the device handler (e.g. /dev/hidraw0)
     pub fn get_device_path(&self) -> String {
-        self.info.path().to_string_lossy().to_string()
+        self.device.devnode()
     }
 
     /// Returns capabilities of this input device
@@ -145,8 +147,8 @@ impl HIDRawDevice {
         match self.get_driver_type() {
             DriverType::Unknown => Err(format!(
                 "No capabilities for interface found. VID: {}, PID: {}",
-                self.info.vendor_id(),
-                self.info.product_id()
+                self.device.id_vendor(),
+                self.device.id_product()
             )
             .into()),
             DriverType::SteamDeck => Ok(Vec::from(steam_deck::CAPABILITIES)),
@@ -158,9 +160,9 @@ impl HIDRawDevice {
     }
 
     fn get_driver_type(&self) -> DriverType {
-        log::debug!("Finding driver for interface: {:?}", self.info);
-        let vid = self.info.vendor_id();
-        let pid = self.info.product_id();
+        log::debug!("Finding driver for interface: {:?}", self.device);
+        let vid = self.device.id_vendor();
+        let pid = self.device.id_product();
 
         // Sony DualSense
         if vid == dualsense::VID && dualsense::PIDS.contains(&pid) {
@@ -175,11 +177,7 @@ impl HIDRawDevice {
         }
 
         // Legion Go
-        if vid == drivers::lego::driver::VID
-            && (pid == drivers::lego::driver::PID1
-                || pid == drivers::lego::driver::PID2
-                || pid == drivers::lego::driver::PID3)
-        {
+        if vid == drivers::lego::driver::VID && drivers::lego::driver::PIDS.contains(&pid) {
             log::info!("Detected Legion Go");
             return DriverType::LegionGo;
         }
@@ -187,6 +185,7 @@ impl HIDRawDevice {
         // OrangePi NEO
         if vid == drivers::opineo::driver::VID && pid == drivers::opineo::driver::PID {
             log::info!("Detected OrangePi NEO");
+
             return DriverType::OrangePiNeo;
         }
 
@@ -201,16 +200,7 @@ impl HIDRawDevice {
     }
 }
 
-/// Returns an array of all HIDRaw devices
-pub fn list_devices() -> Result<Vec<DeviceInfo>, Box<dyn Error>> {
-    let api = HidApi::new()?;
-    let devices: Vec<DeviceInfo> = api.device_list().cloned().collect();
-
-    Ok(devices)
-}
-
 /// Returns the DBus path for a [HIDRawDevice] from a device path (E.g. /dev/hidraw0)
-pub fn get_dbus_path(device_path: String) -> String {
-    let path = device_path.split('/').last().unwrap();
-    format!("{}/devices/source/{}", BUS_PREFIX, path)
+pub fn get_dbus_path(device_name: String) -> String {
+    format!("{}/{}", BUS_SOURCES_PREFIX, device_name)
 }

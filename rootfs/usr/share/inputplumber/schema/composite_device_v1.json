@@ -219,6 +219,9 @@
         },
         "interface_num": {
           "type": "integer"
+        },
+        "name": {
+          "type": "string"
         }
       },
       "title": "Hidraw"

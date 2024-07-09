@@ -23,3 +23,15 @@ source_devices:
     ignore: true
     evdev:
       handler: js*
+  - group: gamepad
+    ignore: true
+    evdev:
+      handler: event*
+  - group: mouse
+    ignore: true
+    evdev:
+      handler: mouse*
+  - group: mouse
+    ignore: true
+    evdev:
+      handler: mice*

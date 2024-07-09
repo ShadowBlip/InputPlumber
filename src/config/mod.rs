@@ -2,18 +2,14 @@ use std::io;
 
 use ::procfs::CpuInfo;
 use glob_match::glob_match;
-use hidapi::DeviceInfo;
+
 use serde::Deserialize;
 use thiserror::Error;
 
 use crate::{
     dmi::data::DMIData,
-    iio,
-    input::{
-        event::{native::NativeEvent, value::InputValue},
-        manager::SourceDeviceInfo,
-    },
-    procfs,
+    input::event::{native::NativeEvent, value::InputValue},
+    udev::device::UdevDevice,
 };
 
 /// Represents all possible errors loading a [CompositeDevice]
@@ -321,6 +317,7 @@ pub struct Hidraw {
     pub product_id: Option<u16>,
     pub interface_num: Option<i32>,
     pub handler: Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -385,59 +382,78 @@ impl CompositeDeviceConfig {
             .collect()
     }
 
-    /// Returns a [SourceDevice] if it matches the given [SourceDeviceInfo].
-    pub fn get_matching_device(&self, device: &SourceDeviceInfo) -> Option<SourceDevice> {
-        match device {
-            SourceDeviceInfo::EvdevDeviceInfo(evdev) => {
+    /// Returns a [SourceDevice] if it matches the given [UdevDevice].
+    pub fn get_matching_device(&self, udevice: &UdevDevice) -> Option<SourceDevice> {
+        let device = udevice.get_device().unwrap();
+        let subsystem = device.subsystem().unwrap().to_str().unwrap_or_default();
+        match subsystem {
+            "input" => {
                 for config in self.source_devices.iter() {
                     if let Some(evdev_config) = config.evdev.as_ref() {
-                        if self.has_matching_evdev(evdev, evdev_config) {
+                        if self.has_matching_evdev(udevice, evdev_config) {
                             return Some(config.clone());
                         }
                     }
                 }
             }
-            SourceDeviceInfo::HIDRawDeviceInfo(hidraw) => {
+            "hidraw" => {
                 for config in self.source_devices.iter() {
                     if let Some(hidraw_config) = config.hidraw.as_ref() {
-                        if self.has_matching_hidraw(hidraw, hidraw_config) {
+                        if self.has_matching_hidraw(udevice, hidraw_config) {
                             return Some(config.clone());
                         }
                     }
                 }
             }
-            SourceDeviceInfo::IIODeviceInfo(iio) => {
+            "iio" => {
                 for config in self.source_devices.iter() {
                     if let Some(iio_config) = config.iio.as_ref() {
-                        if self.has_matching_iio(iio, iio_config) {
+                        if self.has_matching_iio(udevice, iio_config) {
                             return Some(config.clone());
                         }
                     }
                 }
             }
-        }
+            _ => (),
+        };
         None
     }
 
     /// Returns true if a given hidraw device is within a list of hidraw configs.
-    pub fn has_matching_hidraw(&self, device: &DeviceInfo, hidraw_config: &Hidraw) -> bool {
-        log::debug!("Checking hidraw config: {:?}", hidraw_config);
+    pub fn has_matching_hidraw(&self, device: &UdevDevice, hidraw_config: &Hidraw) -> bool {
+        log::trace!("Checking hidraw config '{:?}'", hidraw_config,);
         let hidraw_config = hidraw_config.clone();
 
+        // TODO: Switch either evdev of hidraw configs to use the same type. Legacy version had i16
+        // for hidraw and string for evdev.
         if let Some(vendor_id) = hidraw_config.vendor_id {
-            if device.vendor_id() != vendor_id {
+            let vid = device.id_vendor();
+            log::trace!("Checking vendor id: {vendor_id} against {vid}");
+            if vid != vendor_id {
                 return false;
             }
         }
 
         if let Some(product_id) = hidraw_config.product_id {
-            if device.product_id() != product_id {
+            let pid = device.id_product();
+            log::trace!("Checking product_id: {product_id} against {pid}");
+            if pid != device.id_product() {
                 return false;
             }
         }
 
         if let Some(interface_num) = hidraw_config.interface_num {
-            if device.interface_number() != interface_num {
+            let ifnum = device.interface_number();
+            log::trace!("Checking interface number: {interface_num} against {ifnum}");
+            if ifnum != interface_num {
+                return false;
+            }
+        }
+
+        if let Some(name) = hidraw_config.name {
+            let dname = device.name();
+            log::trace!("Checking name: {name} against {dname}");
+            if !glob_match(name.as_str(), dname.as_str()) {
                 return false;
             }
         }
@@ -446,24 +462,22 @@ impl CompositeDeviceConfig {
     }
 
     /// Returns true if a given iio device is within a list of iio configs.
-    pub fn has_matching_iio(&self, device: &iio::device::Device, iio_config: &IIO) -> bool {
-        log::debug!("Checking iio config: {:?}", iio_config);
+    pub fn has_matching_iio(&self, device: &UdevDevice, iio_config: &IIO) -> bool {
+        log::trace!("Checking iio config: {:?} against {:?}", iio_config, device);
         let iio_config = iio_config.clone();
 
         if let Some(id) = iio_config.id {
-            let Some(device_id) = device.id.as_ref() else {
-                return false;
-            };
-            if !glob_match(id.as_str(), device_id.as_str()) {
+            let dsyspath = device.syspath();
+            log::trace!("Checking id: {id} against {dsyspath}");
+            if !glob_match(id.as_str(), dsyspath.as_str()) {
                 return false;
             }
         }
 
         if let Some(name) = iio_config.name {
-            let Some(device_name) = device.name.as_ref() else {
-                return false;
-            };
-            if !glob_match(name.as_str(), device_name.as_str()) {
+            let dname = device.name();
+            log::trace!("Checking name: {name} against {dname}");
+            if !glob_match(name.as_str(), dname.as_str()) {
                 return false;
             }
         }
@@ -472,48 +486,52 @@ impl CompositeDeviceConfig {
     }
 
     /// Returns true if a given evdev device is within a list of evdev configs.
-    pub fn has_matching_evdev(
-        &self,
-        device: &procfs::device::Device,
-        evdev_config: &Evdev,
-    ) -> bool {
+    pub fn has_matching_evdev(&self, device: &UdevDevice, evdev_config: &Evdev) -> bool {
         //TODO: Check if the evdev has no proterties defined, that would always match.
+        log::trace!(
+            "Checking iio config: {:?} against {:?}",
+            evdev_config,
+            device
+        );
 
         let evdev_config = evdev_config.clone();
 
         if let Some(name) = evdev_config.name {
-            if !glob_match(name.as_str(), device.name.as_str()) {
+            let dname = device.name();
+            log::trace!("Checking name: {name} against {dname}");
+            if !glob_match(name.as_str(), dname.as_str()) {
                 return false;
             }
         }
 
         if let Some(phys_path) = evdev_config.phys_path {
-            if !glob_match(phys_path.as_str(), device.phys_path.as_str()) {
+            let dphys_path = device.phys();
+            log::trace!("Checking phys_path: {phys_path} against {dphys_path}");
+            if !glob_match(phys_path.as_str(), dphys_path.as_str()) {
                 return false;
             }
         }
 
         if let Some(handler) = evdev_config.handler {
-            let mut has_matches = false;
-            for handle in device.handlers.clone() {
-                if !glob_match(handler.as_str(), handle.as_str()) {
-                    continue;
-                }
-                has_matches = true;
-            }
-            if !has_matches {
+            let handle = device.sysname();
+            log::trace!("Checking handler: {handler} against {handle}");
+            if !glob_match(handler.as_str(), handle.as_str()) {
                 return false;
             }
         }
 
         if let Some(vendor_id) = evdev_config.vendor_id {
-            if !glob_match(vendor_id.as_str(), device.id.vendor.as_str()) {
+            let id_vendor = format!("{:04x}", device.id_vendor());
+            log::trace!("Checking vendor ID: {vendor_id} against {id_vendor}");
+            if !glob_match(vendor_id.as_str(), id_vendor.as_str()) {
                 return false;
             }
         }
 
         if let Some(product_id) = evdev_config.product_id {
-            if !glob_match(product_id.as_str(), device.id.product.as_str()) {
+            let id_product = format!("{:04x}", device.id_product());
+            log::trace!("Checking product ID: {product_id} against {id_product}");
+            if !glob_match(product_id.as_str(), id_product.as_str()) {
                 return false;
             }
         }

@@ -40,12 +40,14 @@ source_devices:
       vendor_id: "17ef"
       product_id: "6182"
       name: "  Legion Controller for Windows  Touchpad"
+      handler: event*
   - group: mouse # DInput mode
     blocked: true
     evdev:
       vendor_id: "17ef"
       product_id: "6184"
       name: "Legion-Controller 1-D6 Touchpad"
+      handler: event*
 
   # Mouse
   - group: mouse # DInput Mode
@@ -59,12 +61,14 @@ source_devices:
       vendor_id: "17ef"
       product_id: "6182"
       name: "  Legion Controller for Windows  Mouse"
+      handler: event*
   - group: mouse # FPS/Dinput Mode
     blocked: true
     evdev:
       vendor_id: "17ef"
       product_id: "618[4-5]"
       name: "Legion-Controller 1-D6 Mouse"
+      handler: event*
   - group: mouse # FPS/Dinput Mode
     blocked: true
     unique: false
@@ -72,6 +76,7 @@ source_devices:
       vendor_id: "17ef"
       product_id: "618[4-5]"
       name: "Legion-Controller 1-D6"
+      handler: event*
 
   # Keyboard
   - group: mouse # DInput Mode
@@ -85,12 +90,14 @@ source_devices:
       vendor_id: "17ef"
       product_id: "6182"
       name: "  Legion Controller for Windows  Keyboard"
+      handler: event*
   - group: keyboard # FPS/DInput Mode
     blocked: true
     evdev:
       vendor_id: "17ef"
       product_id: "618[4-5]"
       name: "Legion-Controller 1-D6 Keyboard"
+      handler: event*
 
   # Gamepad
   - group: gamepad # Gamepad Mode
@@ -118,11 +125,13 @@ source_devices:
       vendor_id: "17ef"
       product_id: "6182"
       name: "Lenovo Legion Controller for Windows"
+      handler: event*
   - group: gamepad # Older Kernels
     evdev:
       vendor_id: "17ef"
       product_id: "6182"
       name: "Generic X-Box pad"
+      handler: event*
 
   # IMU
   - group: imu

@@ -23,84 +23,98 @@ source_devices:
     unique: true
     evdev:
       name: "Microsoft X-Box One pad"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "045e"
       product_id: "{02d1,02dd,02ea,0b12}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "0738"
       product_id: "4a01"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "0e6f"
       product_id: "{0139,013a,0146,0147,015c,0161,0162,0163,0164,0165,0246,02a0,02a1,02a2,02a4,02a6,02a7,02a8,02ab,02ad,02b3,02b8,0346}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "0f0d"
       product_id: "{0063,0067,0078,00c5}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "10f5"
       product_id: "7005"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1430"
       product_id: "079B"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1532"
       product_id: "{0a00,0a03,0a29}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "20d6"
       product_id: "{2001,2009}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "2e24"
       product_id: "0652"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "24c6"
       product_id: "{541a,542a,543a,551a,561a,581a}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "2dc"
       product_id: "2000"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "2e9"
       product_id: "0504"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "328"
       product_id: "0614"
+      handler: event*
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

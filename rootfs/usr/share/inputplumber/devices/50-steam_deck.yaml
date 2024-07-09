@@ -43,11 +43,13 @@ source_devices:
     blocked: true
     evdev:
       name: "FTS3528:00 2808:1015*"
+      handler: event*
   # Keyboard
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
+      handler: event*
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

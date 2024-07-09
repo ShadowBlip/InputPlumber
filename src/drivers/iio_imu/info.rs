@@ -1,4 +1,4 @@
-use std::{collections::HashSet, error::Error, fmt};
+use std::{error::Error, fmt};
 
 /// The [MountMatrix] is used to define how sensors are oriented inside a device
 /// https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/mount-matrix.txt

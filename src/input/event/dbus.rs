@@ -415,11 +415,11 @@ fn dbus_event_from_value(action: Action, input_value: InputValue) -> Option<DBus
             // Left should be a negative value
             Action::Left => x.filter(|&x| x <= 0.0).map(|x| InputValue::Float(-x)),
             // Right should be a positive value
-            Action::Right => x.filter(|&x| x >= 0.0).map(|x| InputValue::Float(x)),
+            Action::Right => x.filter(|&x| x >= 0.0).map(InputValue::Float),
             // Up should be a negative value
             Action::Up => y.filter(|&y| y <= 0.0).map(|y| InputValue::Float(-y)),
             // Down should be a positive value
-            Action::Down => y.filter(|&y| y >= 0.0).map(|y| InputValue::Float(y)),
+            Action::Down => y.filter(|&y| y >= 0.0).map(InputValue::Float),
             _ => None,
         },
         InputValue::Vector3 { x: _, y: _, z: _ } => None,

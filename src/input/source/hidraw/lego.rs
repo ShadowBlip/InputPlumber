@@ -1,7 +1,5 @@
 use std::{error::Error, thread, time};
 
-use hidapi::DeviceInfo;
-
 use crate::{
     drivers::lego::{
         driver::{self, Driver},
@@ -15,24 +13,25 @@ use crate::{
         composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
     },
+    udev::device::UdevDevice,
 };
 
 /// Legion Go implementation of HIDRAW interface
 #[derive(Debug)]
 pub struct LegionController {
-    info: DeviceInfo,
+    device: UdevDevice,
     composite_device: CompositeDeviceClient,
     device_id: String,
 }
 
 impl LegionController {
     pub fn new(
-        info: DeviceInfo,
+        device: UdevDevice,
         composite_device: CompositeDeviceClient,
         device_id: String,
     ) -> Self {
         Self {
-            info,
+            device,
             composite_device,
             device_id,
         }
@@ -40,7 +39,7 @@ impl LegionController {
 
     pub async fn run(&self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting Legion Controller driver");
-        let path = self.info.path().to_string_lossy().to_string();
+        let path = self.device.devpath();
         let composite_device = self.composite_device.clone();
 
         // Spawn a blocking task to read the events

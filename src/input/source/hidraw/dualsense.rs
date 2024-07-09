@@ -1,7 +1,6 @@
 use std::{collections::HashMap, error::Error, thread, time::Duration};
 
 use evdev::{FFEffectData, FFEffectKind};
-use hidapi::DeviceInfo;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
@@ -19,6 +18,7 @@ use crate::{
         output_event::OutputEvent,
         source::command::SourceCommand,
     },
+    udev::device::UdevDevice,
 };
 
 /// Vendor ID
@@ -31,7 +31,7 @@ const POLL_RATE: Duration = Duration::from_millis(1);
 /// Sony DualSense Controller implementation of HIDRaw interface
 #[derive(Debug)]
 pub struct DualSenseController {
-    info: DeviceInfo,
+    device: UdevDevice,
     composite_device: CompositeDeviceClient,
     rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
@@ -40,13 +40,13 @@ pub struct DualSenseController {
 impl DualSenseController {
     /// Create a new [DualSenseController] source device.
     pub fn new(
-        info: DeviceInfo,
+        device: UdevDevice,
         composite_device: CompositeDeviceClient,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
-            info,
+            device,
             composite_device,
             rx: Some(rx),
             device_id,
@@ -58,7 +58,7 @@ impl DualSenseController {
         log::debug!("Starting DualSense Controller driver");
         let rx = self.rx.take().unwrap();
         let composite_device = self.composite_device.clone();
-        let path = self.info.path().to_string_lossy().to_string();
+        let path = self.device.devnode();
         let device_path = path.clone();
         let device_id = self.device_id.clone();
 
@@ -157,12 +157,6 @@ impl DualSenseOutput {
                         }
                     }
                     SourceCommand::Stop => return Err("Device stopped".into()),
-                    SourceCommand::GetSampleRate(_, _) => (),
-                    SourceCommand::GetSampleRatesAvail(_, _) => (),
-                    SourceCommand::SetSampleRate(_, _, _) => (),
-                    SourceCommand::GetScale(_, _) => (),
-                    SourceCommand::GetScalesAvail(_, _) => (),
-                    SourceCommand::SetScale(_, _, _) => (),
                 },
                 Err(e) => match e {
                     TryRecvError::Empty => return Ok(()),

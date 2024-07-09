@@ -9,6 +9,7 @@ pub mod device;
 use std::{error::Error, fs, path::Path};
 
 use tokio::process::Command;
+use udev::Enumerator;
 
 use self::device::Device;
 
@@ -211,4 +212,28 @@ pub async fn get_device(path: String) -> Result<Device, Box<dyn Error>> {
     }
 
     Ok(device)
+}
+
+/// Returns a list of devices in the given subsystem that have a devnode property.
+pub fn discover_devices(subsystem: &str) -> Result<Vec<udev::Device>, Box<dyn Error>> {
+    let mut enumerator = Enumerator::new()?;
+    enumerator.match_subsystem(subsystem)?;
+
+    log::debug!("Started udev {subsystem} enumerator.");
+
+    let mut node_devices = Vec::new();
+    let devices = enumerator.scan_devices()?;
+    for device in devices {
+        let Some(_) = device.devnode() else {
+            log::trace!("No devnode found for device: {:?}", device);
+            continue;
+        };
+
+        let name = device.sysname();
+        log::debug!("udev {subsystem} enumerator found device: {:?}", name);
+
+        node_devices.push(device);
+    }
+
+    Ok(node_devices)
 }

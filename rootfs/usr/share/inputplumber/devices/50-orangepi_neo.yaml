@@ -22,7 +22,8 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  #- group: mouse # Touch Devices
+  ## Touch Devices
+  #- group: mouse
   #  unique: false
   #  hidraw:
   #    vendor_id: 0x0911
@@ -32,23 +33,30 @@ source_devices:
   #  evdev:
   #    name: OPI0001:00 0911:5288 Touchpad
   #    phys_path: i2c-OPI0001:00
+  #    handler: event*
   #- group: mouse
   #  blocked: true
   #  evdev:
   #    name: OPI0002:00 0911:5288 Touchpad
   #    phys_path: i2c-OPI0002:00
+  #    handler: event*
+
+  ## Gamepad Devices
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
       phys_path: usb-0000:c3:00.3-5/input0
+      handler: event*
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
+      handler: event*
   - group: keyboard
     evdev:
       name: "  OrangePi USB Controller"
       phys_path: usb-0000:c3:00.3-5/input1
+      handler: event*
   - group: imu
     iio:
       name: i2c-BMI0260:00
