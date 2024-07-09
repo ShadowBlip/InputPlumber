@@ -8,6 +8,8 @@ use std::{
 use hidapi::HidDevice;
 use packed_struct::{types::SizedInteger, PackedStruct};
 
+use crate::udev::device::UdevDevice;
+
 use super::{
     event::{Event, TouchAxisInput},
     hid_report::TouchpadDataReport,
@@ -38,14 +40,14 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub fn new(path: String) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let fmtpath = path.clone();
-        let path = CString::new(path)?;
+    pub fn new(udevice: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let path = udevice.devnode();
+        let cs_path = CString::new(path.clone())?;
         let api = hidapi::HidApi::new()?;
-        let device = api.open_path(&path)?;
+        let device = api.open_path(&cs_path)?;
         let info = device.get_device_info()?;
         if info.vendor_id() != VID || info.product_id() != PID {
-            return Err(format!("Device '{fmtpath}' is not a OrangePi NEO Controller").into());
+            return Err(format!("Device '{path}' is not a OrangePi NEO Controller").into());
         }
 
         Ok(Self {

@@ -24,6 +24,7 @@ source_devices:
     evdev:
       vendor_id: "045e"
       product_id: "{02e3,0b00}"
+      handler: event*
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

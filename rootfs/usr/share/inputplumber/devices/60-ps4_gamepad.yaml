@@ -23,6 +23,7 @@ source_devices:
       name: Sony Interactive Entertainment Wireless Controller
       vendor_id: 054c
       product_id: 09cc
+      handler: event*
 
   # Block the hidraw device to prevent SDL usage of the device
   - group: gamepad

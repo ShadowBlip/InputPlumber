@@ -5,20 +5,20 @@ use tokio::sync::mpsc::{self, error::TryRecvError};
 use crate::{
     config,
     drivers::iio_imu::{self, driver::Driver, info::MountMatrix},
-    iio::device::Device,
     input::{
         capability::{Capability, Gamepad},
         composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
         source::SourceCommand,
     },
+    udev::device::UdevDevice,
 };
 
 /// IIO IMU implementation of IIO interface
 #[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
 pub struct IMU {
-    info: Device,
+    device: UdevDevice,
     config: Option<config::IIO>,
     composite_device: CompositeDeviceClient,
     rx: Option<mpsc::Receiver<SourceCommand>>,
@@ -27,14 +27,14 @@ pub struct IMU {
 
 impl IMU {
     pub fn new(
-        info: Device,
+        device: UdevDevice,
         config: Option<config::IIO>,
         composite_device: CompositeDeviceClient,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
-            info,
+            device,
             config,
             composite_device,
             rx: Some(rx),
@@ -46,8 +46,8 @@ impl IMU {
         log::debug!("Starting BMI IMU driver");
 
         // Get the device id and name for the driver
-        let id = self.info.id.clone().unwrap_or_default();
-        let name = self.info.name.clone().unwrap_or_default();
+        let id = self.device.sysname();
+        let name = self.device.name();
         let device_id = self.device_id.clone();
         let composite_device = self.composite_device.clone();
         let mut rx = self.rx.take().unwrap();
@@ -72,9 +72,9 @@ impl IMU {
         // data.
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut driver = Driver::new(id, name, mount_matrix)?;
+                let driver = Driver::new(id, name, mount_matrix)?;
                 loop {
-                    receive_commands(&mut rx, &mut driver)?;
+                    receive_commands(&mut rx)?;
                     let events = driver.poll()?;
                     let native_events = translate_events(events);
                     for event in native_events {
@@ -144,7 +144,6 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
 /// empty.
 fn receive_commands(
     rx: &mut mpsc::Receiver<SourceCommand>,
-    driver: &mut Driver,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     const MAX_COMMANDS: u8 = 64;
     let mut commands_processed = 0;
@@ -155,66 +154,6 @@ fn receive_commands(
                 SourceCommand::UploadEffect(_, _) => (),
                 SourceCommand::UpdateEffect(_, _) => (),
                 SourceCommand::EraseEffect(_, _) => (),
-                SourceCommand::GetSampleRate(kind, tx) => {
-                    let result = driver.get_sample_rate(kind.as_str());
-                    let send_result = match result {
-                        Ok(rate) => tx.send(Ok(rate)),
-                        Err(e) => tx.send(Err(e.to_string().into())),
-                    };
-                    if let Err(e) = send_result {
-                        log::error!("Failed to send GetSampleRate, {e:?}");
-                    }
-                }
-                SourceCommand::GetSampleRatesAvail(kind, tx) => {
-                    let result = driver.get_sample_rates_avail(kind.as_str());
-                    let send_result = match result {
-                        Ok(rate) => tx.send(Ok(rate)),
-                        Err(e) => tx.send(Err(e.to_string().into())),
-                    };
-                    if let Err(e) = send_result {
-                        log::error!("Failed to send GetSampleRatesAvail, {e:?}");
-                    }
-                }
-                SourceCommand::SetSampleRate(kind, sample_rate, tx) => {
-                    let result = driver.set_sample_rate(kind.as_str(), sample_rate);
-                    let send_result = match result {
-                        Ok(rate) => tx.send(Ok(rate)),
-                        Err(e) => tx.send(Err(e.to_string().into())),
-                    };
-                    if let Err(e) = send_result {
-                        log::error!("Failed to send SetSampleRate, {e:?}");
-                    }
-                }
-                SourceCommand::GetScale(kind, tx) => {
-                    let result = driver.get_scale(kind.as_str());
-                    let send_result = match result {
-                        Ok(rate) => tx.send(Ok(rate)),
-                        Err(e) => tx.send(Err(e.to_string().into())),
-                    };
-                    if let Err(e) = send_result {
-                        log::error!("Failed to send GetScale, {e:?}");
-                    }
-                }
-                SourceCommand::GetScalesAvail(kind, tx) => {
-                    let result = driver.get_scales_avail(kind.as_str());
-                    let send_result = match result {
-                        Ok(rate) => tx.send(Ok(rate)),
-                        Err(e) => tx.send(Err(e.to_string().into())),
-                    };
-                    if let Err(e) = send_result {
-                        log::error!("Failed to send GetScalesAvail, {e:?}");
-                    }
-                }
-                SourceCommand::SetScale(kind, scale, tx) => {
-                    let result = driver.set_scale(kind.as_str(), scale);
-                    let send_result = match result {
-                        Ok(rate) => tx.send(Ok(rate)),
-                        Err(e) => tx.send(Err(e.to_string().into())),
-                    };
-                    if let Err(e) = send_result {
-                        log::error!("Failed to send SetScale, {e:?}");
-                    }
-                }
                 SourceCommand::Stop => return Err("Device stopped".into()),
             },
             Err(e) => match e {

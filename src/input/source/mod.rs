@@ -1,5 +1,7 @@
 use std::error::Error;
 
+use crate::udev::device::UdevDevice;
+
 use self::{client::SourceDeviceClient, command::SourceCommand};
 
 use super::capability::Capability;
@@ -19,6 +21,24 @@ pub enum SourceDevice {
 }
 
 impl SourceDevice {
+    /// Returns a copy of the devices UdevDevice
+    pub fn get_device(&self) -> UdevDevice {
+        match self {
+            SourceDevice::Event(device) => device.get_device(),
+            SourceDevice::HIDRaw(device) => device.get_device(),
+            SourceDevice::Iio(device) => device.get_device(),
+        }
+    }
+
+    /// Returns a copy of the UdevDevice
+    pub fn get_device_ref(&self) -> &UdevDevice {
+        match self {
+            SourceDevice::Event(device) => device.get_device_ref(),
+            SourceDevice::HIDRaw(device) => device.get_device_ref(),
+            SourceDevice::Iio(device) => device.get_device_ref(),
+        }
+    }
+
     /// Returns a unique identifier for the source device.
     pub fn get_id(&self) -> String {
         match self {

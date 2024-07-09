@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::{iio::device::Device, input::source::client::SourceDeviceClient};
+use crate::udev::device::{get_attribute_from_tree, set_attribute_on_tree, UdevDevice};
 use zbus::{fdo, Connection};
 use zbus_macros::interface;
 
@@ -8,31 +8,26 @@ use crate::input::source::iio::get_dbus_path;
 
 /// DBusInterface exposing information about a HIDRaw device
 pub struct SourceIioImuInterface {
-    _info: Device,
-    source_device: SourceDeviceClient,
+    device: UdevDevice,
 }
 
 impl SourceIioImuInterface {
-    pub fn new(info: Device, source_device: SourceDeviceClient) -> SourceIioImuInterface {
-        SourceIioImuInterface {
-            _info: info,
-            source_device,
-        }
+    pub fn new(device: UdevDevice) -> SourceIioImuInterface {
+        SourceIioImuInterface { device }
     }
 
     /// Creates a new instance of the source hidraw interface on DBus. Returns
     /// a structure with information about the source device.
     pub async fn listen_on_dbus(
         conn: Connection,
-        info: Device,
-        source_device: SourceDeviceClient,
+        device: UdevDevice,
     ) -> Result<(), Box<dyn Error>> {
-        let Some(id) = info.id.clone() else {
-            return Err("Failed to get ID of IIO device".into());
+        let iface = SourceIioImuInterface::new(device);
+        let Ok(id) = iface.id() else {
+            return Ok(());
         };
         let path = get_dbus_path(id);
 
-        let iface = SourceIioImuInterface::new(info, source_device);
         tokio::task::spawn(async move {
             log::debug!("Starting dbus interface: {path}");
             let result = conn.object_server().at(path.clone(), iface).await;
@@ -48,45 +43,80 @@ impl SourceIioImuInterface {
 
 #[interface(name = "org.shadowblip.Input.Source.IIOIMUDevice")]
 impl SourceIioImuInterface {
+    /// Returns the human readable name of the device (e.g. XBox 360 Pad)
+    #[zbus(property)]
+    fn id(&self) -> fdo::Result<String> {
+        Ok(self.device.sysname())
+    }
+
+    /// Returns the human readable name of the device (e.g. XBox 360 Pad)
+    #[zbus(property)]
+    fn name(&self) -> fdo::Result<String> {
+        Ok(self.device.name())
+    }
+
     #[zbus(property)]
     async fn accel_sample_rate(&self) -> fdo::Result<f64> {
-        match self.source_device.get_sample_rate("accel").await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(fdo::Error::Failed(e.to_string())),
-        }
+        let Ok(dev) = self.device.get_device() else {
+            return Ok(0.0);
+        };
+        Ok(get_attribute_from_tree(&dev, "in_accel_sampling_frequency")
+            .parse()
+            .unwrap_or_default())
     }
 
     #[zbus(property)]
     async fn accel_sample_rates_avail(&self) -> fdo::Result<Vec<f64>> {
-        match self.source_device.get_sample_rates_avail("accel").await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(fdo::Error::Failed(e.to_string())),
+        let Ok(dev) = self.device.get_device() else {
+            return Ok(vec![0.0]);
+        };
+        let v = get_attribute_from_tree(&dev, "in_accel_sampling_frequency_available");
+
+        let mut all_scales = Vec::new();
+        for val in v.split_whitespace() {
+            // convert the string into f64
+            all_scales.push(val.parse::<f64>().unwrap_or_default());
         }
+        Ok(all_scales)
     }
 
     #[zbus(property)]
     async fn angvel_sample_rate(&self) -> fdo::Result<f64> {
-        match self.source_device.get_sample_rate("gyro").await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(fdo::Error::Failed(e.to_string())),
-        }
+        let Ok(dev) = self.device.get_device() else {
+            return Ok(0.0);
+        };
+        Ok(
+            get_attribute_from_tree(&dev, "in_anglvel_sampling_frequency")
+                .parse()
+                .unwrap_or_default(),
+        )
     }
 
     #[zbus(property)]
     async fn angvel_sample_rates_avail(&self) -> fdo::Result<Vec<f64>> {
-        match self.source_device.get_sample_rates_avail("gyro").await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(fdo::Error::Failed(e.to_string())),
+        let Ok(dev) = self.device.get_device() else {
+            return Ok(vec![0.0]);
+        };
+        let v = get_attribute_from_tree(&dev, "in_anglvel_sampling_frequency_available");
+
+        let mut all_scales = Vec::new();
+        for val in v.split_whitespace() {
+            // convert the string into f64
+            all_scales.push(val.parse::<f64>().unwrap_or_default());
         }
+        Ok(all_scales)
     }
 
     #[zbus(property)]
     async fn set_accel_sample_rate(&self, sample_rate: f64) -> zbus::Result<()> {
-        match self
-            .source_device
-            .set_sample_rate("accel", sample_rate)
-            .await
-        {
+        let Ok(mut dev) = self.device.get_device() else {
+            return Ok(());
+        };
+        match set_attribute_on_tree(
+            &mut dev,
+            "in_accel_sampling_frequency",
+            sample_rate.to_string().as_str(),
+        ) {
             Ok(result) => Ok(result),
             Err(e) => Err(zbus::Error::Failure(e.to_string())),
         }
@@ -94,51 +124,75 @@ impl SourceIioImuInterface {
 
     #[zbus(property)]
     async fn set_angvel_sample_rate(&self, sample_rate: f64) -> zbus::Result<()> {
-        match self
-            .source_device
-            .set_sample_rate("gyro", sample_rate)
-            .await
-        {
+        let Ok(mut dev) = self.device.get_device() else {
+            return Ok(());
+        };
+        match set_attribute_on_tree(
+            &mut dev,
+            "in_anglvel_sampling_frequency",
+            sample_rate.to_string().as_str(),
+        ) {
             Ok(result) => Ok(result),
             Err(e) => Err(zbus::Error::Failure(e.to_string())),
         }
     }
-    //
+
     #[zbus(property)]
     async fn accel_scale(&self) -> fdo::Result<f64> {
-        match self.source_device.get_scale("accel").await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(fdo::Error::Failed(e.to_string())),
-        }
+        let Ok(dev) = self.device.get_device() else {
+            return Ok(0.0);
+        };
+        Ok(get_attribute_from_tree(&dev, "in_accel_scale")
+            .parse()
+            .unwrap_or_default())
     }
 
     #[zbus(property)]
     async fn accel_scales_avail(&self) -> fdo::Result<Vec<f64>> {
-        match self.source_device.get_scales_available("accel").await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(fdo::Error::Failed(e.to_string())),
+        let Ok(dev) = self.device.get_device() else {
+            return Ok(vec![0.0]);
+        };
+        let v = get_attribute_from_tree(&dev, "in_accel_scale_available");
+
+        let mut all_scales = Vec::new();
+        for val in v.split_whitespace() {
+            // convert the string into f64
+            all_scales.push(val.parse::<f64>().unwrap_or_default());
         }
+        Ok(all_scales)
     }
 
     #[zbus(property)]
     async fn angvel_scale(&self) -> fdo::Result<f64> {
-        match self.source_device.get_scale("gyro").await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(fdo::Error::Failed(e.to_string())),
-        }
+        let Ok(dev) = self.device.get_device() else {
+            return Ok(0.0);
+        };
+        Ok(get_attribute_from_tree(&dev, "in_anglvel_scale")
+            .parse()
+            .unwrap_or_default())
     }
 
     #[zbus(property)]
     async fn angvel_scales_avail(&self) -> fdo::Result<Vec<f64>> {
-        match self.source_device.get_scales_available("gyro").await {
-            Ok(result) => Ok(result),
-            Err(e) => Err(fdo::Error::Failed(e.to_string())),
+        let Ok(dev) = self.device.get_device() else {
+            return Ok(vec![0.0]);
+        };
+        let v = get_attribute_from_tree(&dev, "in_anglvel_scale_available");
+
+        let mut all_scales = Vec::new();
+        for val in v.split_whitespace() {
+            // convert the string into f64
+            all_scales.push(val.parse::<f64>().unwrap_or_default());
         }
+        Ok(all_scales)
     }
 
     #[zbus(property)]
     async fn set_accel_scale(&self, scale: f64) -> zbus::Result<()> {
-        match self.source_device.set_scale("accel", scale).await {
+        let Ok(mut dev) = self.device.get_device() else {
+            return Ok(());
+        };
+        match set_attribute_on_tree(&mut dev, "in_accel_scale", scale.to_string().as_str()) {
             Ok(result) => Ok(result),
             Err(e) => Err(zbus::Error::Failure(e.to_string())),
         }
@@ -146,7 +200,10 @@ impl SourceIioImuInterface {
 
     #[zbus(property)]
     async fn set_angvel_scale(&self, scale: f64) -> zbus::Result<()> {
-        match self.source_device.set_scale("gyro", scale).await {
+        let Ok(mut dev) = self.device.get_device() else {
+            return Ok(());
+        };
+        match set_attribute_on_tree(&mut dev, "in_anglvel_scale", scale.to_string().as_str()) {
             Ok(result) => Ok(result),
             Err(e) => Err(zbus::Error::Failure(e.to_string())),
         }

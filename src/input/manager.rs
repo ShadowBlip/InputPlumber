@@ -5,8 +5,11 @@ use std::fs;
 use std::time::Duration;
 
 use ::procfs::CpuInfo;
+use ::udev::MonitorBuilder;
+use mio::{Events, Interest, Poll, Token};
 use thiserror::Error;
 use tokio::sync::mpsc;
+use tokio::task;
 use zbus::fdo::ManagedObjects;
 use zbus::zvariant::ObjectPath;
 use zbus::Connection;
@@ -25,10 +28,7 @@ use crate::dbus::interface::source::iio_imu::SourceIioImuInterface;
 use crate::dmi::data::DMIData;
 use crate::dmi::get_cpu_info;
 use crate::dmi::get_dmi_data;
-use crate::iio;
 use crate::input::composite_device::CompositeDevice;
-use crate::input::source;
-use crate::input::source::hidraw;
 use crate::input::target::dbus::DBusDevice;
 use crate::input::target::dualsense;
 use crate::input::target::dualsense::DualSenseDevice;
@@ -41,17 +41,12 @@ use crate::input::target::xb360::XBox360Controller;
 use crate::input::target::xbox_elite::XboxEliteController;
 use crate::input::target::xbox_series::XboxSeriesController;
 use crate::input::target::TargetDeviceType;
-use crate::procfs;
 use crate::udev;
-use crate::watcher;
-use crate::watcher::WatchEvent;
+use crate::udev::device::UdevDevice;
 
 use super::composite_device::client::CompositeDeviceClient;
 use super::target::client::TargetDeviceClient;
 
-const DEV_PATH: &str = "/dev";
-const INPUT_PATH: &str = "/dev/input";
-const IIO_PATH: &str = "/sys/bus/iio/devices";
 const BUFFER_SIZE: usize = 20480;
 
 #[derive(Error, Debug)]
@@ -67,23 +62,11 @@ pub enum ManagerError {
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
 pub enum ManagerCommand {
-    EventDeviceAdded {
-        name: String,
+    DeviceAdded {
+        device: UdevDevice,
     },
-    EventDeviceRemoved {
-        name: String,
-    },
-    HIDRawAdded {
-        name: String,
-    },
-    HIDRawRemoved {
-        name: String,
-    },
-    IIODeviceAdded {
-        name: String,
-    },
-    IIODeviceRemoved {
-        name: String,
+    DeviceRemoved {
+        device: UdevDevice,
     },
     CreateCompositeDevice {
         config: CompositeDeviceConfig,
@@ -104,14 +87,6 @@ pub enum ManagerCommand {
         path: String,
     },
     CompositeDeviceStopped(String),
-}
-
-/// Information used to create a source device
-#[derive(Debug, Clone)]
-pub enum SourceDeviceInfo {
-    EvdevDeviceInfo(procfs::device::Device),
-    HIDRawDeviceInfo(hidapi::DeviceInfo),
-    IIODeviceInfo(iio::device::Device),
 }
 
 /// Manages input devices
@@ -216,36 +191,6 @@ impl Manager {
         while let Some(cmd) = self.rx.recv().await {
             log::debug!("Received command: {:?}", cmd);
             match cmd {
-                ManagerCommand::EventDeviceAdded { name } => {
-                    if let Err(e) = self.on_event_device_added(name).await {
-                        log::error!("Error adding event device: {:?}", e);
-                    }
-                }
-                ManagerCommand::EventDeviceRemoved { name } => {
-                    if let Err(e) = self.on_event_device_removed(name).await {
-                        log::error!("Error removing event device: {:?}", e);
-                    }
-                }
-                ManagerCommand::HIDRawAdded { name } => {
-                    if let Err(e) = self.on_hidraw_added(name).await {
-                        log::error!("Error adding hidraw device: {:?}", e);
-                    }
-                }
-                ManagerCommand::HIDRawRemoved { name } => {
-                    if let Err(e) = self.on_hidraw_removed(name).await {
-                        log::error!("Error removing hidraw device: {:?}", e);
-                    }
-                }
-                ManagerCommand::IIODeviceAdded { name } => {
-                    if let Err(e) = self.on_iio_added(name).await {
-                        log::error!("Error adding iio device: {:?}", e);
-                    }
-                }
-                ManagerCommand::IIODeviceRemoved { name } => {
-                    if let Err(e) = self.on_iio_removed(name).await {
-                        log::error!("Error removing iio device: {:?}", e);
-                    }
-                }
                 ManagerCommand::CreateCompositeDevice { config } => {
                     if let Err(e) = self.create_composite_device(config).await {
                         log::error!("Error creating composite device: {:?}", e);
@@ -334,6 +279,16 @@ impl Manager {
                     log::debug!("Target device stopped: {path}");
                     self.target_devices.remove(&path);
                 }
+                ManagerCommand::DeviceAdded { device } => {
+                    if let Err(e) = self.on_device_added(device).await {
+                        log::error!("Error adding device: {e:?}");
+                    }
+                }
+                ManagerCommand::DeviceRemoved { device } => {
+                    if let Err(e) = self.on_device_removed(device).await {
+                        log::error!("Error removing device: {e:}?");
+                    }
+                }
             }
         }
 
@@ -354,7 +309,7 @@ impl Manager {
     async fn create_composite_device_from_config(
         &mut self,
         config: &CompositeDeviceConfig,
-        device_info: SourceDeviceInfo,
+        device: UdevDevice,
     ) -> Result<CompositeDevice, Box<dyn Error>> {
         // Lookup the capability map associated with this config if it exists
         let capability_map = if let Some(map_id) = config.capability_map_id.clone() {
@@ -372,25 +327,19 @@ impl Manager {
             self.dbus.clone(),
             self.tx.clone(),
             config,
-            device_info,
+            device,
             capability_map,
         )?;
 
         // Check to see if there's already a CompositeDevice for
         // these source devices.
         // TODO: Should we allow multiple composite devices with the same source?
-        let mut devices_in_use = false;
         let source_device_ids = device.get_source_devices_used();
         for (id, path) in self.source_devices_used.iter() {
             if !source_device_ids.contains(id) {
                 continue;
             }
-            log::debug!("Source device '{}' already in use by: {}", id, path);
-            devices_in_use = true;
-            break;
-        }
-        if devices_in_use {
-            return Err("Source device(s) are already in use".into());
+            return Err(format!("Source device '{id}' already in use by {path}").into());
         }
 
         Ok(device)
@@ -401,7 +350,7 @@ impl Manager {
         &mut self,
         kind: &str,
     ) -> Result<TargetDeviceType, Box<dyn Error>> {
-        log::debug!("Creating target device: {kind}");
+        log::trace!("Creating target device: {kind}");
         // Create the target device to emulate based on the kind
         let device = match kind {
             "dbus" => TargetDeviceType::DBus(DBusDevice::new(self.dbus.clone())),
@@ -443,7 +392,6 @@ impl Manager {
             }
             _ => TargetDeviceType::Null,
         };
-        log::debug!("Created target input device: {kind}");
         Ok(device)
     }
 
@@ -483,7 +431,7 @@ impl Manager {
             let tx = self.tx.clone();
             let path = path.clone();
             let target = target.clone();
-            tokio::task::spawn(async move {
+            task::spawn(async move {
                 target.closed().await;
                 if let Err(e) = tx.send(ManagerCommand::TargetDeviceStopped { path }).await {
                     log::error!("Failed to target device stopped: {e:?}");
@@ -538,6 +486,9 @@ impl Manager {
         // Keep track of the source devices that this composite device is
         // using.
         let source_device_ids = device.get_source_devices_used();
+        log::debug!(
+            "Starting CompositeDevice at {path} with the following sources: {source_device_ids:?}"
+        );
         for id in source_device_ids {
             self.source_devices_used.insert(id.clone(), path.clone());
             self.source_devices.insert(id, source_device.clone());
@@ -564,6 +515,7 @@ impl Manager {
         let mut target_device_paths = Vec::new();
 
         // Create a DBus target device
+        log::debug!("Creating target devices for {path}");
         let dbus_device = self.create_target_device("dbus").await?;
         let dbus_devices = self.start_target_devices(vec![dbus_device]).await?;
         let dbus_paths = dbus_devices.keys();
@@ -593,9 +545,9 @@ impl Manager {
         let tx = self.tx.clone();
         tokio::spawn(async move {
             if let Err(e) = device.run(targets).await {
-                log::error!("Error running device: {:?}", e);
+                log::error!("Error running {dbus_path}: {:?}", e);
             }
-            log::debug!("Composite device stopped running: {:?}", dbus_path);
+            log::debug!("Composite device stopped running: {dbus_path}");
             if let Err(e) = tx
                 .send(ManagerCommand::CompositeDeviceStopped(dbus_path))
                 .await
@@ -607,12 +559,12 @@ impl Manager {
 
         // Add the device to our maps
         self.composite_devices.insert(comp_path, client);
-        log::debug!("Managed source devices: {:?}", self.source_devices_used);
+        log::trace!("Managed source devices: {:?}", self.source_devices_used);
         self.used_configs.insert(path, config);
-        log::debug!("Used configs: {:?}", self.used_configs);
+        log::trace!("Used configs: {:?}", self.used_configs);
         self.composite_device_targets
             .insert(composite_path.clone(), target_device_paths);
-        log::debug!("Used target devices: {:?}", self.composite_device_targets);
+        log::trace!("Used target devices: {:?}", self.composite_device_targets);
 
         Ok(())
     }
@@ -624,7 +576,7 @@ impl Manager {
         // Remove the DBus interface
         let dbus_path = ObjectPath::from_string_unchecked(path.clone());
         let conn = self.dbus.clone();
-        tokio::task::spawn(async move {
+        task::spawn(async move {
             log::debug!("Stopping dbus interface: {dbus_path}");
             let result = conn
                 .object_server()
@@ -674,7 +626,7 @@ impl Manager {
     async fn on_source_device_added(
         &mut self,
         id: String,
-        device_info: SourceDeviceInfo,
+        device: UdevDevice,
     ) -> Result<(), Box<dyn Error>> {
         // Check all existing composite devices to see if this device is part of
         // their config
@@ -684,9 +636,11 @@ impl Manager {
             };
             log::trace!("Checking existing config {:?} for device", config.name);
             let source_devices = config.source_devices.clone();
-            match device_info.clone() {
-                SourceDeviceInfo::EvdevDeviceInfo(info) => {
+            // TODO: Consolidate these
+            match device.subsystem().as_str() {
+                "input" => {
                     log::trace!("Checking if existing composite device is missing event device");
+
                     if config.single_source.unwrap_or(false) {
                         log::trace!("{:?} is a single source device. Skipping.", config.name);
                         continue;
@@ -695,7 +649,8 @@ impl Manager {
                         if source_device.evdev.is_none() {
                             continue;
                         }
-                        if config.has_matching_evdev(&info, &source_device.clone().evdev.unwrap()) {
+                        if config.has_matching_evdev(&device, &source_device.clone().evdev.unwrap())
+                        {
                             // Check if the device has already been used in this config or not, stop here if the device must be unique.
                             if let Some(sources) =
                                 self.composite_device_sources.get(composite_device)
@@ -707,7 +662,7 @@ impl Manager {
                                     if let Some(ignored) = source_device.ignore {
                                         if ignored {
                                             log::debug!("Ignoring device {:?}, not adding to composite device: {}", source_device, composite_device);
-                                            continue;
+                                            break 'start;
                                         }
                                     }
                                     if let Some(unique) = source_device.clone().unique {
@@ -732,7 +687,7 @@ impl Manager {
                                 );
                                 continue;
                             }
-                            self.add_event_device_to_composite_device(&info, client.unwrap())
+                            self.add_device_to_composite_device(device, client.unwrap())
                                 .await?;
                             self.source_devices_used
                                 .insert(id.clone(), composite_device.clone());
@@ -752,15 +707,17 @@ impl Manager {
                         }
                     }
                 }
-                SourceDeviceInfo::HIDRawDeviceInfo(info) => {
+                "hidraw" => {
                     log::trace!(
-                        "Checking if existing composite device is missing hidraw device: {info:?}"
+                        "Checking if existing composite device is missing hidraw device: {:?}",
+                        device.name()
                     );
                     for source_device in source_devices {
                         if source_device.hidraw.is_none() {
                             continue;
                         }
-                        if config.has_matching_hidraw(&info, &source_device.clone().hidraw.unwrap())
+                        if config
+                            .has_matching_hidraw(&device, &source_device.clone().hidraw.unwrap())
                         {
                             // Check if the device has already been used in this config or not, stop here if the device must be unique.
                             if let Some(sources) =
@@ -773,7 +730,7 @@ impl Manager {
                                     if let Some(ignored) = source_device.ignore {
                                         if ignored {
                                             log::debug!("Ignoring device {:?}, not adding to composite device: {}", source_device, composite_device);
-                                            continue;
+                                            break 'start;
                                         }
                                     }
                                     if let Some(unique) = source_device.clone().unique {
@@ -797,7 +754,7 @@ impl Manager {
                                 );
                                 continue;
                             }
-                            self.add_hidraw_device_to_composite_device(&info, handle.unwrap())
+                            self.add_device_to_composite_device(device, handle.unwrap())
                                 .await?;
                             self.source_devices_used
                                 .insert(id.clone(), composite_device.clone());
@@ -817,13 +774,13 @@ impl Manager {
                         }
                     }
                 }
-                SourceDeviceInfo::IIODeviceInfo(info) => {
+                "iio" => {
                     log::trace!("Checking if existing composite device is missing hidraw device");
                     for source_device in source_devices {
                         if source_device.iio.is_none() {
                             continue;
                         }
-                        if config.has_matching_iio(&info, &source_device.clone().iio.unwrap()) {
+                        if config.has_matching_iio(&device, &source_device.clone().iio.unwrap()) {
                             // Check if the device has already been used in this config or not, stop here if the device must be unique.
                             if let Some(sources) =
                                 self.composite_device_sources.get(composite_device)
@@ -859,7 +816,7 @@ impl Manager {
                                 );
                                 continue;
                             }
-                            self.add_iio_device_to_composite_device(&info, handle.unwrap())
+                            self.add_device_to_composite_device(device, handle.unwrap())
                                 .await?;
                             self.source_devices_used
                                 .insert(id.clone(), composite_device.clone());
@@ -879,7 +836,8 @@ impl Manager {
                         }
                     }
                 }
-            }
+                _ => (),
+            };
             log::trace!("Device does not match existing device: {:?}", config.name);
         }
         log::debug!("No existing composite device matches device.");
@@ -898,27 +856,27 @@ impl Manager {
             }
 
             let source_devices = config.source_devices.clone();
-            match device_info.clone() {
-                SourceDeviceInfo::EvdevDeviceInfo(info) => {
+            match device.subsystem().as_str() {
+                "input" => {
                     for source_device in source_devices {
                         if source_device.evdev.is_none() {
                             continue;
                         }
                         // how to refrence source devices used by this config?
 
-                        if config.has_matching_evdev(&info, &source_device.clone().evdev.unwrap()) {
+                        if config.has_matching_evdev(&device, &source_device.clone().evdev.unwrap())
+                        {
                             if let Some(ignored) = source_device.ignore {
                                 if ignored {
-                                    log::debug!(
-                                        "Ignoring matching event device: {:?}",
-                                        device_info
-                                    );
+                                    log::trace!("Event device configured to ignore: {:?}", device);
                                     return Ok(());
                                 }
                             }
-                            log::info!("Found a matching event device, creating composite device");
-                            let device = self
-                                .create_composite_device_from_config(&config, device_info.clone())
+                            log::info!(
+                                "Found a matching evdev device {id}, creating CompositeDevice"
+                            );
+                            let dev = self
+                                .create_composite_device_from_config(&config, device)
                                 .await?;
 
                             // Get the target input devices from the config
@@ -926,7 +884,7 @@ impl Manager {
 
                             // Create the composite deivce
                             self.start_composite_device(
-                                device,
+                                dev,
                                 config,
                                 target_devices_config,
                                 source_device.clone(),
@@ -937,26 +895,25 @@ impl Manager {
                         }
                     }
                 }
-                SourceDeviceInfo::HIDRawDeviceInfo(info) => {
-                    log::trace!("Checking if hidraw device has a device profile: {info:?}");
+                "hidraw" => {
                     for source_device in source_devices {
                         if source_device.hidraw.is_none() {
                             continue;
                         }
-                        if config.has_matching_hidraw(&info, &source_device.clone().hidraw.unwrap())
+                        if config
+                            .has_matching_hidraw(&device, &source_device.clone().hidraw.unwrap())
                         {
                             if let Some(ignored) = source_device.ignore {
                                 if ignored {
-                                    log::debug!(
-                                        "Ignoring matching hidraw device: {:?}",
-                                        device_info
-                                    );
+                                    log::trace!("hidraw device configured to ignore: {:?}", device);
                                     return Ok(());
                                 }
                             }
-                            log::info!("Found a matching hidraw device, creating composite device");
-                            let device = self
-                                .create_composite_device_from_config(&config, device_info.clone())
+                            log::info!(
+                                "Found a matching hidraw device {id}, creating CompositeDevice"
+                            );
+                            let dev = self
+                                .create_composite_device_from_config(&config, device)
                                 .await?;
 
                             // Get the target input devices from the config
@@ -964,7 +921,7 @@ impl Manager {
 
                             // Create the composite deivce
                             self.start_composite_device(
-                                device,
+                                dev,
                                 config,
                                 target_devices_config,
                                 source_device.clone(),
@@ -975,21 +932,23 @@ impl Manager {
                         }
                     }
                 }
-                SourceDeviceInfo::IIODeviceInfo(info) => {
+                "iio" => {
                     for source_device in source_devices {
                         if source_device.iio.is_none() {
                             continue;
                         }
-                        if config.has_matching_iio(&info, &source_device.clone().iio.unwrap()) {
+                        if config.has_matching_iio(&device, &source_device.clone().iio.unwrap()) {
                             if let Some(ignored) = source_device.ignore {
                                 if ignored {
-                                    log::debug!("Ignoring matching iio device: {:?}", device_info);
+                                    log::trace!("iio device configured to ignore: {:?}", device);
                                     return Ok(());
                                 }
                             }
-                            log::info!("Found a matching iio device, creating composite device");
-                            let device = self
-                                .create_composite_device_from_config(&config, device_info.clone())
+                            log::info!(
+                                "Found a matching iio device {id}, creating CompositeDevice"
+                            );
+                            let dev = self
+                                .create_composite_device_from_config(&config, device.clone())
                                 .await?;
 
                             // Get the target input devices from the config
@@ -997,7 +956,7 @@ impl Manager {
 
                             // Create the composite deivce
                             self.start_composite_device(
-                                device,
+                                dev,
                                 config,
                                 target_devices_config,
                                 source_device.clone(),
@@ -1008,6 +967,7 @@ impl Manager {
                         }
                     }
                 }
+                _ => (),
             }
             log::trace!("Device does not match config: {:?}", config.name);
         }
@@ -1017,8 +977,12 @@ impl Manager {
     }
 
     /// Called when any source device is removed
-    async fn on_source_device_removed(&mut self, id: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("Source device removed: {}", id);
+    async fn on_source_device_removed(
+        &mut self,
+        device: UdevDevice,
+        id: String,
+    ) -> Result<(), Box<dyn Error>> {
+        log::debug!("Source device removed: {}", device.name());
         let Some(composite_device_path) = self.source_devices_used.get(&id) else {
             log::debug!("Source device not being managed by a composite device");
             return Ok(());
@@ -1028,7 +992,7 @@ impl Manager {
             return Err(format!("CompostiteDevice {} not found", composite_device_path).into());
         };
 
-        client.remove_source_device(id.clone()).await?;
+        client.remove_source_device(device).await?;
 
         let Some(device) = self.source_devices.get(&id) else {
             return Err(format!("Device {} not found in source devices", id).into());
@@ -1051,93 +1015,198 @@ impl Manager {
         Ok(())
     }
 
-    /// Called when an event device (e.g. /dev/input/event5) is added
-    async fn on_event_device_added(&mut self, handler: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("Event device added: {}", handler);
-
-        // Look up the connected device using procfs
-        log::debug!("Finding device in procfs: {handler}");
-        let mut info: Option<procfs::device::Device> = None;
-        let devices = procfs::device::get_all()?;
-        for device in devices {
-            for name in device.handlers.clone() {
-                if name != handler {
-                    continue;
-                }
-                info = Some(device.clone());
-            }
+    /// Called when a new device is detected by udev
+    async fn on_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
+        // We REQUIRE a dev node
+        let dev_node = device.devnode();
+        if dev_node.is_empty() {
+            return Ok(());
         }
-        let Some(info) = info else {
-            return Err(format!("Failed to find device information for: {}", handler).into());
-        };
+        let sys_name = device.sysname();
+        if sys_name.is_empty() {
+            return Ok(());
+        }
+        let sysname = sys_name.clone();
+        let dev = device.clone();
 
-        // Create a DBus interface for the event device
-        log::debug!("Attempting to listen on dbus for {handler}");
-        let conn = self.dbus.clone();
-        let hand = handler.clone();
-        let inf = info.clone();
-        tokio::task::spawn(async move {
-            let result = SourceEventDeviceInterface::listen_on_dbus(conn, hand, inf).await;
-            if let Err(e) = result {
-                log::error!("Error creating source evdev dbus interface: {e:?}");
-            }
-            log::debug!("Finished adding source device on dbus");
-        });
+        log::debug!(
+            "Device added: {}",
+            device.devnode.as_deref().unwrap_or(device.syspath.as_str())
+        );
 
-        // Add the device as a source device
-        let id = format!("evdev://{}", handler);
-        let path = source::evdev::get_dbus_path(handler.clone());
-        self.source_device_dbus_paths.insert(id.clone(), path);
+        // Get the device subsystem
+        let subsystem = device.subsystem();
 
-        // Check to see if the device is virtual
-        if info.is_virtual() {
-            // TODO: Remove this after udev refactor
-            // It can take a few CPU cycles for udev to tag devices, so we need
-            // to wait briefly.
-            tokio::time::sleep(Duration::from_millis(200)).await;
+        // Create a DBus interface depending on the device subsystem
+        match subsystem.as_str() {
+            "input" => {
+                log::info!("Event device added");
 
-            // Look up the connected device using udev
-            let dev_path = format!("/dev/input/{}", handler);
-            let device_info = udev::get_device(dev_path.clone()).await?;
+                // Create a DBus interface for the event device
+                let conn = self.dbus.clone();
+                log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
 
-            // Check if the virtual device is using the bluetooth bus
-            let id_bus = device_info.properties.get("ID_BUS");
-            log::debug!("Bus ID for {dev_path}: {id_bus:?}");
-            let is_bluetooth = {
-                if let Some(bus) = id_bus {
-                    bus == "bluetooth"
+                task::spawn(async move {
+                    let result =
+                        SourceEventDeviceInterface::listen_on_dbus(conn, sysname, dev).await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source evdev dbus interface: {e:?}");
+                    }
+                    log::debug!("Finished adding source device on dbus");
+                });
+
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    // Look up the connected device using udev
+                    let device_info = udev::get_device(dev_node.clone()).await?;
+
+                    // Check if the virtual device is using the bluetooth bus
+                    // TODO: Can we get properties from UdevDevice::get_attribute_from_tree?
+                    let id_bus = device_info.properties.get("ID_BUS");
+
+                    log::debug!("Bus ID for {dev_node}: {id_bus:?}");
+                    let is_bluetooth = {
+                        if let Some(bus) = id_bus {
+                            bus == "bluetooth"
+                        } else {
+                            false
+                        }
+                    };
+
+                    if !is_bluetooth {
+                        log::debug!("{} is virtual, skipping consideration.", dev_node);
+                        return Ok(());
+                    }
+                    log::debug!("{} is virtual, but detected as bluetooth", dev_node)
                 } else {
-                    false
+                    log::trace!("Real device: {}", dev_node);
                 }
-            };
 
-            if !is_bluetooth {
-                log::debug!("{} is virtual, skipping consideration.", dev_path);
-                return Ok(());
+                // Signal that a source device was added
+                let id = format!("evdev://{}", sys_name);
+                log::debug!("Spawing task to add source device: {id}");
+                self.on_source_device_added(id.clone(), device).await?;
+                log::debug!("Finished adding {id}");
             }
-            log::debug!("{} is virtual, but detected as bluetooth", dev_path);
-        }
+            "hidraw" => {
+                log::info!("hidraw device added");
+                // Create a DBus interface for the event device
+                let conn = self.dbus.clone();
+                log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
+                task::spawn(async move {
+                    let result = SourceHIDRawInterface::listen_on_dbus(conn, sysname, dev).await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source evdev dbus interface: {e:?}");
+                    }
+                    log::debug!("Finished adding source device on dbus");
+                });
 
-        // Signal that a source device was added
-        log::debug!("Spawing task to add source device");
-        self.on_source_device_added(id, SourceDeviceInfo::EvdevDeviceInfo(info))
-            .await?;
-        log::debug!("Finished adding event device {handler}");
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    // Check to see if this virtual device is a bluetooth device
+                    let uniq = device.uniq();
+                    if uniq.is_empty() {
+                        log::debug!("{} is virtual, skipping consideration.", dev_node);
+                        return Ok(());
+                    };
+
+                    // Check bluez to see if that uniq is a bluetooth device
+                    let object_manager = zbus::fdo::ObjectManagerProxy::builder(&self.dbus)
+                        .destination("org.bluez")?
+                        .path("/")?
+                        .build()
+                        .await?;
+                    let objects: ManagedObjects = object_manager.get_managed_objects().await?;
+
+                    // Check each dbus object for a connected device
+                    let mut matches_bluetooth = false;
+                    for (path, obj) in objects.iter() {
+                        // Only consider device objects
+                        if !obj.contains_key("org.bluez.Device1") {
+                            log::trace!("{path} does not have org.bluez.Device1 interface");
+                            continue;
+                        }
+
+                        // Get a reference to the device
+                        let bt_device = Device1Proxy::builder(&self.dbus)
+                            .destination("org.bluez")?
+                            .path(path)?
+                            .build()
+                            .await?;
+
+                        // Only consider connected bluetooth devices
+                        if !bt_device.connected().await? {
+                            continue;
+                        }
+
+                        // Check to see if the 'uniq' field matches the bluetooth addr
+                        let address = bt_device.address().await?;
+                        log::debug!(
+                            "Checking if virtual device {uniq} is bluetooth device: {address}"
+                        );
+                        if uniq.to_lowercase() == address.to_lowercase() {
+                            matches_bluetooth = true;
+                            break;
+                        }
+                    }
+
+                    if !matches_bluetooth {
+                        log::debug!("{} is virtual, skipping consideration.", dev_node);
+                        return Ok(());
+                    }
+                    log::debug!("{} is virtual, but detected as bluetooth", dev_node);
+                } else {
+                    log::trace!("Real device: {}", dev_node);
+                }
+
+                // Signal that a source device was added
+                let id = format!("hidraw://{}", sys_name);
+                log::debug!("Spawing task to add source device: {id}");
+                self.on_source_device_added(id.clone(), device).await?;
+                log::debug!("Finished adding event device {id}");
+            }
+
+            "iio" => {
+                log::info!("iio device added");
+
+                // Create a DBus interface for the event device
+                let conn = self.dbus.clone();
+                log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
+                task::spawn(async move {
+                    let result = SourceIioImuInterface::listen_on_dbus(conn, dev).await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source evdev dbus interface: {e:?}");
+                    }
+                    log::debug!("Finished adding source device on dbus");
+                });
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    log::debug!("{} is virtual, skipping consideration.", dev_node);
+                    return Ok(());
+                } else {
+                    log::trace!("Real device: {}", dev_node);
+                }
+
+                // Signal that a source device was added
+                let id = format!("iio://{}", sys_name);
+                log::debug!("Spawing task to add source device: {id}");
+                self.on_source_device_added(id.clone(), device).await?;
+                log::debug!("Finished adding event device {id}");
+            }
+
+            _ => {
+                return Err(format!("Device subsystem not supported: {subsystem:?}").into());
+            }
+        };
 
         Ok(())
     }
 
-    /// Called when an event device (e.g. /dev/input/event5) is removed
-    async fn on_event_device_removed(&mut self, handler: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("Event device removed: {}", handler);
-
-        // Remove the device from our hashmap
-        let id = format!("evdev://{}", handler);
-        // Remove the DBus interface
-        let path = source::evdev::get_dbus_path(handler);
-        let path = ObjectPath::from_string_unchecked(path.clone());
+    async fn on_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
+        log::debug!("Device removed: {:?}", device.name());
+        let path = ObjectPath::from_string_unchecked(device.devpath());
         let conn = self.dbus.clone();
-        tokio::task::spawn(async move {
+        task::spawn(async move {
             log::debug!("Stopping dbus interface: {path}");
             let result = conn
                 .object_server()
@@ -1150,162 +1219,44 @@ impl Manager {
             }
         });
 
-        // Signal that a source device was removed
-        self.source_device_dbus_paths.remove(&id);
-        self.on_source_device_removed(id).await?;
+        let id = match device.subsystem().as_str() {
+            "input" => {
+                let handler = device
+                    .devpath()
+                    .strip_prefix("/dev/input/")
+                    .unwrap_or("")
+                    .to_string();
 
-        Ok(())
-    }
+                format!("evdev://{}", handler)
+            }
+            "hidraw" => {
+                let handler = device
+                    .devpath()
+                    .strip_prefix("/dev/")
+                    .unwrap_or("")
+                    .to_string();
 
-    /// Called when a hidraw device (e.g. /dev/hidraw0) is added
-    async fn on_hidraw_added(&mut self, name: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("HIDRaw added: {}", name);
-        let dev_path = format!("/dev/{}", name);
+                format!("hidraw://{}", handler)
+            }
+            "iio" => {
+                let handler = device
+                    .devpath()
+                    .strip_prefix("/sys/bus/iio/devices/")
+                    .unwrap_or("")
+                    .to_string();
 
-        // Look up the connected device using hidapi
-        let devices = hidraw::list_devices()?;
-        let device = devices
-            .iter()
-            .find(|dev| dev.path().to_string_lossy() == dev_path)
-            .cloned();
-        let Some(info) = device else {
-            return Err(format!("Failed to find device information for: {}", dev_path).into());
+                format!("iio://{}", handler)
+            }
+            _ => "".to_string(),
         };
 
-        // Look up the connected device using udev
-        let device_info = udev::get_device(dev_path.clone()).await?;
-
-        // Create a DBus interface for the hidraw device
-        SourceHIDRawInterface::listen_on_dbus(self.dbus.clone(), info.clone()).await?;
-
-        // Add the device as a source device
-        let id = format!("hidraw://{}", name);
-        let path = source::hidraw::get_dbus_path(dev_path.clone());
-        self.source_device_dbus_paths.insert(id.clone(), path);
-
-        // Check to see if the device is virtual
-        if device_info.is_virtual() {
-            // Check to see if this virtual device is a bluetooth device
-            let Some(uniq) = device_info.get_uniq() else {
-                log::debug!("{} is virtual, skipping consideration.", dev_path);
-                return Ok(());
-            };
-
-            // Check bluez to see if that uniq is a bluetooth device
-            let object_manager = zbus::fdo::ObjectManagerProxy::builder(&self.dbus)
-                .destination("org.bluez")?
-                .path("/")?
-                .build()
-                .await?;
-            let objects: ManagedObjects = object_manager.get_managed_objects().await?;
-
-            // Check each dbus object for a connected device
-            let mut matches_bluetooth = false;
-            for (path, obj) in objects.iter() {
-                // Only consider device objects
-                if !obj.contains_key("org.bluez.Device1") {
-                    log::trace!("{path} does not have org.bluez.Device1 interface");
-                    continue;
-                }
-
-                // Get a reference to the device
-                let bt_device = Device1Proxy::builder(&self.dbus)
-                    .destination("org.bluez")?
-                    .path(path)?
-                    .build()
-                    .await?;
-
-                // Only consider connected bluetooth devices
-                if !bt_device.connected().await? {
-                    continue;
-                }
-
-                // Check to see if the 'uniq' field matches the bluetooth addr
-                let address = bt_device.address().await?;
-                log::debug!("Checking if virtual device {uniq} is bluetooth device: {address}");
-                if uniq.to_lowercase() == address.to_lowercase() {
-                    matches_bluetooth = true;
-                    break;
-                }
-            }
-
-            if !matches_bluetooth {
-                log::debug!("{} is virtual, skipping consideration.", dev_path);
-                return Ok(());
-            }
-            log::debug!("{} is virtual, but detected as bluetooth", dev_path);
+        if id.is_empty() {
+            return Ok(());
         }
-        self.on_source_device_added(id, SourceDeviceInfo::HIDRawDeviceInfo(info))
-            .await?;
-
-        Ok(())
-    }
-
-    /// Called when a hidraw device (e.g. /dev/hidraw0) is removed
-    async fn on_hidraw_removed(&mut self, name: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("HIDRaw removed: {}", name);
-        let id = format!("hidraw://{}", name);
 
         // Signal that a source device was removed
         self.source_device_dbus_paths.remove(&id);
-        self.on_source_device_removed(id).await?;
-
-        Ok(())
-    }
-
-    /// Called when an iio device (e.g. /sys/bus/iio/devices/iio:device0) is added
-    async fn on_iio_added(&mut self, id: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("IIO device added: {}", id);
-        let path = format!("/sys/bus/iio/devices/{}", id);
-
-        // Look up the connected device using hidapi
-        let devices = iio::device::list_devices()?;
-        let device = devices
-            .iter()
-            .find(|dev| dev.id.clone().unwrap_or_default() == id)
-            .cloned();
-        let Some(info) = device else {
-            return Err(format!("Failed to find device information for: {}", path).into());
-        };
-
-        // Create a DBus interface for the hidraw device
-        source::iio::DBusInterface::listen_on_dbus(self.dbus.clone(), info.clone()).await?;
-
-        // Signal that a source device was added
-        let id = format!("iio://{}", id);
-        let identity = id.clone();
-        self.on_source_device_added(id, SourceDeviceInfo::IIODeviceInfo(info))
-            .await?;
-
-        // Add the device as a source device
-        let path = source::iio::get_dbus_path(path);
-        self.source_device_dbus_paths.insert(identity, path);
-
-        Ok(())
-    }
-
-    /// Called when an iio device (e.g. /sys/bus/iio/devices/iio:device0) is removed
-    async fn on_iio_removed(&mut self, id: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("IIO device removed: {}", id);
-        let id = format!("iio://{}", id);
-        self.on_source_device_removed(id.clone()).await?;
-
-        // Remove the DBus interface
-        // We do this here because we connect in the CompostiteDevice.
-        let conn = self.dbus.clone();
-        let path = crate::input::source::iio::get_dbus_path(id);
-        tokio::task::spawn(async move {
-            log::debug!("Stopping dbus interface for {path}");
-            let result = conn
-                .object_server()
-                .remove::<SourceIioImuInterface, String>(path.clone())
-                .await;
-            if let Err(e) = result {
-                log::error!("Failed to stop dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Stopped dbus interface for {path}");
-            }
-        });
+        self.on_source_device_removed(device, id).await?;
 
         Ok(())
     }
@@ -1346,202 +1297,80 @@ impl Manager {
 
     /// Starts watching for input devices that are added and removed.
     async fn watch_input_devices(&self) -> Result<(), Box<dyn Error>> {
-        // Create a channel to handle watch events
-        let (watcher_tx, mut watcher_rx) = mpsc::channel(BUFFER_SIZE);
-
         log::debug!("Performing initial input device discovery");
-        Manager::discover_human_interface_devices(&watcher_tx).await?;
-        Manager::discover_event_devices(&watcher_tx).await?;
-        Manager::discover_iio_devices(&watcher_tx).await?;
-        log::debug!("Initial input device discovery complete");
-
-        // Start a task to dispatch filesystem watch events to the `run()` loop
         let cmd_tx = self.tx.clone();
-        tokio::spawn(async move {
-            log::debug!("Dispatching filesystem watch events");
-            while let Some(event) = watcher_rx.recv().await {
-                log::debug!("Received watch event: {:?}", event);
-                match event {
-                    // Create events
-                    WatchEvent::Create { name, base_path } => {
-                        if base_path == INPUT_PATH && name.starts_with("event") {
-                            let result =
-                                cmd_tx.send(ManagerCommand::EventDeviceAdded { name }).await;
-                            if let Err(e) = result {
-                                log::error!("Unable to send command: {:?}", e);
-                            }
-                        } else if name.starts_with("hidraw") {
-                            let result = cmd_tx.send(ManagerCommand::HIDRawAdded { name }).await;
-                            if let Err(e) = result {
-                                log::error!("Unable to send command: {:?}", e);
-                            }
-                        } else if base_path == IIO_PATH {
-                            let result = cmd_tx.send(ManagerCommand::IIODeviceAdded { name }).await;
-                            if let Err(e) = result {
-                                log::error!("Unable to send command: {:?}", e);
-                            }
-                        }
-                    }
-                    // Delete events
-                    WatchEvent::Delete { name, base_path } => {
-                        if base_path == INPUT_PATH && name.starts_with("event") {
-                            let result = cmd_tx
-                                .send(ManagerCommand::EventDeviceRemoved { name })
-                                .await;
-                            if let Err(e) = result {
-                                log::error!("Unable to send command: {:?}", e);
-                            }
-                        } else if name.starts_with("hidraw") {
-                            let result = cmd_tx.send(ManagerCommand::HIDRawRemoved { name }).await;
-                            if let Err(e) = result {
-                                log::error!("Unable to send command: {:?}", e);
-                            }
-                        } else if base_path == IIO_PATH {
-                            let result =
-                                cmd_tx.send(ManagerCommand::IIODeviceRemoved { name }).await;
-                            if let Err(e) = result {
-                                log::error!("Unable to send command: {:?}", e);
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        });
+        let hidraw_devices = udev::discover_devices("hidraw")?;
+        let hidraw_devices = hidraw_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(&cmd_tx, hidraw_devices).await?;
+        let event_devices = udev::discover_devices("input")?;
+        let event_devices = event_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(&cmd_tx, event_devices).await?;
+        let iio_devices = udev::discover_devices("iio")?;
+        let iio_devices = iio_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(&cmd_tx, iio_devices).await?;
 
-        Ok(())
-    }
+        task::spawn_blocking(move || {
+            let mut monitor = MonitorBuilder::new()?
+                .match_subsystem("hidraw")?
+                .match_subsystem("input")?
+                .match_subsystem("iio")?
+                .listen()?;
 
-    async fn discover_human_interface_devices(
-        watcher_tx: &mpsc::Sender<WatchEvent>,
-    ) -> Result<(), Box<dyn Error>> {
-        // Start watcher thread to listen for hidraw device changes
-        if std::path::Path::new(DEV_PATH).exists() {
-            let tx = watcher_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                log::info!("Started hidraw device discovery thread");
-                watcher::watch(DEV_PATH.into(), tx)
-            });
-            // Perform an initial hidraw device discovery
-            let paths = std::fs::read_dir(DEV_PATH)?;
-            for entry in paths {
-                if let Err(e) = entry {
-                    log::warn!("Unable to read from directory: {:?}", e);
-                    continue;
-                }
-                let path = entry.unwrap().file_name();
-                let path = path.into_string().ok();
-                let Some(path) = path else {
-                    continue;
-                };
-                if !path.starts_with("hidraw") {
-                    continue;
-                }
-                log::debug!("Discovered hidraw device: {:?}", path);
-                let result = watcher_tx
-                    .send(WatchEvent::Create {
-                        name: path,
-                        base_path: DEV_PATH.into(),
-                    })
-                    .await;
-                if let Err(e) = result {
-                    log::error!("Unable to send command: {:?}", e);
-                }
-            }
-        }
+            let mut poll = Poll::new()?;
+            let mut events = Events::with_capacity(1024);
+            poll.registry()
+                .register(&mut monitor, Token(0), Interest::READABLE)?;
 
-        Ok(())
-    }
-
-    async fn discover_event_devices(
-        watcher_tx: &mpsc::Sender<WatchEvent>,
-    ) -> Result<(), Box<dyn Error>> {
-        // Start watcher thread to listen for event device changes
-        if std::path::Path::new(INPUT_PATH).exists() {
-            let tx = watcher_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                log::info!("Started evdev discovery thread");
-                watcher::watch(INPUT_PATH.into(), tx)
-            });
-            // Perform an initial event device discovery
-            let paths = std::fs::read_dir(INPUT_PATH)?;
-            for entry in paths {
-                if let Err(e) = entry {
-                    log::warn!("Unable to read from directory: {:?}", e);
-                    continue;
-                }
-                let path = entry.unwrap().file_name();
-                let path = path.into_string().ok();
-                let Some(path) = path else {
-                    continue;
-                };
-                if !path.starts_with("event") {
-                    continue;
-                }
-                log::debug!("Discovered event device: {:?}", path);
-                let result = watcher_tx
-                    .send(WatchEvent::Create {
-                        name: path,
-                        base_path: INPUT_PATH.into(),
-                    })
-                    .await;
-                if let Err(e) = result {
-                    log::error!("Unable to send command: {:?}", e);
-                }
-            }
-        }
-        Ok(())
-    }
-
-    async fn discover_iio_devices(
-        watcher_tx: &mpsc::Sender<WatchEvent>,
-    ) -> Result<(), Box<dyn Error>> {
-        // Start watcher thread to listen for iio device changes
-        let tx = watcher_tx.clone();
-        tokio::task::spawn(async move {
-            log::info!("Started iio device discovery loop.");
-            // Apply some duct tape here...
-            // Perform iio device discovery
-            let mut discovered_paths: Vec<String> = Vec::new();
             loop {
-                if std::path::Path::new(IIO_PATH).exists() {
-                    let paths = match std::fs::read_dir(IIO_PATH) {
-                        Ok(paths) => paths,
-                        Err(e) => {
-                            log::error!("Got error reading path. {e:?}");
-                            return;
-                        }
+                if poll.poll(&mut events, None).is_err() {
+                    std::thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+                for event in monitor.iter() {
+                    let action = event.action().unwrap_or_default();
+                    let device = event.device();
+                    let Some(path) = device.devnode() else {
+                        log::trace!("No devnode found for device: {device:?}");
+                        continue;
                     };
-                    for entry in paths {
-                        if let Err(e) = entry {
-                            log::warn!("Unable to read from directory: {:?}", e);
-                            continue;
+
+                    match action.to_str().unwrap() {
+                        "add" => {
+                            log::debug!("Got add action for {path:?}");
+                            cmd_tx.blocking_send(ManagerCommand::DeviceAdded {
+                                device: device.into(),
+                            })?;
                         }
-                        let path = entry.unwrap().file_name();
-                        let path = path.into_string().ok();
-                        let Some(path) = path else {
-                            continue;
-                        };
-                        if !discovered_paths.contains(&path) {
-                            log::debug!("Discovered iio device: {:?}", path);
-                            discovered_paths.push(path.clone());
-                            let result = tx
-                                .send(WatchEvent::Create {
-                                    name: path,
-                                    base_path: IIO_PATH.into(),
-                                })
-                                .await;
-                            if let Err(e) = result {
-                                log::error!("Unable to send command: {:?}", e);
-                            }
+                        "remove" => {
+                            log::debug!("Got remove action for {path:?}");
+                            cmd_tx.blocking_send(ManagerCommand::DeviceRemoved {
+                                device: device.into(),
+                            })?;
+                        }
+                        _ => {
+                            log::trace!("Unhandled udev action: {action:?}");
                         }
                     }
-                } else {
-                    log::error!("IIO device path not found.");
                 }
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                std::thread::sleep(Duration::from_millis(10));
             }
+            #[allow(unreachable_code)]
+            Ok::<(), Box<dyn Error + Send + Sync>>(())
         });
+
+        Ok(())
+    }
+
+    async fn discover_devices(
+        manager_tx: &mpsc::Sender<ManagerCommand>,
+        devices: Vec<UdevDevice>,
+    ) -> Result<(), Box<dyn Error>> {
+        for device in devices {
+            manager_tx
+                .send(ManagerCommand::DeviceAdded { device })
+                .await?;
+        }
+
         Ok(())
     }
 
@@ -1559,7 +1388,7 @@ impl Manager {
         for path in paths {
             let files = fs::read_dir(path);
             if files.is_err() {
-                log::warn!("Failed to load directory {}: {}", path, files.unwrap_err());
+                log::trace!("Failed to load directory {}: {}", path, files.unwrap_err());
                 continue;
             }
             let mut files: Vec<_> = files.unwrap().map(|r| r.unwrap()).collect();
@@ -1597,7 +1426,7 @@ impl Manager {
     /// load/parse them. Returns an array of these configs which can be used
     /// to automatically create a [CompositeDevice].
     pub async fn load_device_configs(&self) -> Vec<CompositeDeviceConfig> {
-        let task = tokio::task::spawn_blocking(move || {
+        let task = task::spawn_blocking(move || {
             let mut devices: Vec<CompositeDeviceConfig> = Vec::new();
             let paths = vec![
                 "./rootfs/usr/share/inputplumber/devices",
@@ -1610,7 +1439,7 @@ impl Manager {
                 log::trace!("Checking {path} for composite device configs");
                 let files = fs::read_dir(path);
                 if files.is_err() {
-                    log::warn!("Failed to load directory {}: {}", path, files.unwrap_err());
+                    log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
                     continue;
                 }
                 let mut files: Vec<_> = files.unwrap().map(|r| r.unwrap()).collect();
@@ -1661,48 +1490,12 @@ impl Manager {
         Ok(())
     }
 
-    /// Send a signal using the given composite device handle that a new source
-    /// device should be started.
-    async fn add_event_device_to_composite_device(
+    async fn add_device_to_composite_device(
         &self,
-        device_info: &procfs::device::Device,
+        device: UdevDevice,
         client: &CompositeDeviceClient,
     ) -> Result<(), Box<dyn Error>> {
-        let device_info = device_info.clone();
-        client
-            .add_source_device(SourceDeviceInfo::EvdevDeviceInfo(device_info))
-            .await?;
-
-        Ok(())
-    }
-
-    /// Send a signal using the given composite device handle that a new source
-    /// device should be started.
-    async fn add_hidraw_device_to_composite_device(
-        &self,
-        device_info: &hidapi::DeviceInfo,
-        client: &CompositeDeviceClient,
-    ) -> Result<(), Box<dyn Error>> {
-        let device_info = device_info.clone();
-        client
-            .add_source_device(SourceDeviceInfo::HIDRawDeviceInfo(device_info))
-            .await?;
-
-        Ok(())
-    }
-
-    /// Send a signal using the given composite device handle that a new source
-    /// device should be started.
-    async fn add_iio_device_to_composite_device(
-        &self,
-        info: &iio::device::Device,
-        client: &CompositeDeviceClient,
-    ) -> Result<(), Box<dyn Error>> {
-        let device_info = info.clone();
-        client
-            .add_source_device(SourceDeviceInfo::IIODeviceInfo(device_info))
-            .await?;
-
+        client.add_source_device(device).await?;
         Ok(())
     }
 }

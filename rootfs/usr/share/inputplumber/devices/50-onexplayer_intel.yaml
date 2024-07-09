@@ -31,10 +31,12 @@ source_devices:
     evdev:
       name: OneXPlayer Gamepad
       phys_path: usb-0000:00:14.0-9/input0
+      handler: event*
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
+      handler: event*
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

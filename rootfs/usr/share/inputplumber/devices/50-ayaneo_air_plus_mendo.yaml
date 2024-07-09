@@ -27,14 +27,17 @@ source_devices:
     evdev:
       name: Nintendo Co., Ltd. Pro Controller
       phys_path: usb-0000:05:00.0-1/input0
+      handler: event*
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
       phys_path: usb-0000:05:00.0-1/input0
+      handler: event*
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
+      handler: event*
   - group: imu
     iio:
       name: bmi323-imu

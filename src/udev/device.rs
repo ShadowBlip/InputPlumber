@@ -1,8 +1,318 @@
 use std::{
     collections::HashMap,
+    error::Error,
+    ffi::OsStr,
     fs::{self, read_link},
     path::Path,
 };
+
+#[derive(Debug, Clone, Default)]
+pub struct UdevDevice {
+    pub syspath: String,
+    pub devnode: Option<String>,
+}
+
+impl UdevDevice {
+    //
+    pub fn get_device(&self) -> Result<::udev::Device, Box<dyn Error + Send + Sync>> {
+        match ::udev::Device::from_syspath(Path::new(self.syspath.as_str())) {
+            Ok(device) => Ok(device),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Returns true if this device is virtual
+    pub fn is_virtual(&self) -> bool {
+        let Ok(device) = self.get_device() else {
+            return true;
+        };
+
+        // Some devices (e.g. Steam Deck,DualSense) have a syspath in /devices/virtual but also
+        // have a real phys path. Only check the syspath if there is no phys attribute.
+        if !device
+            .attribute_value("phys")
+            .unwrap_or(OsStr::new(""))
+            .to_string_lossy()
+            .to_string()
+            .is_empty()
+        {
+            return false;
+        }
+        device
+            .syspath()
+            .to_string_lossy()
+            .to_string()
+            .contains("/devices/virtual")
+    }
+
+    pub fn devnode(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        device
+            .devnode()
+            .unwrap_or(Path::new(""))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    pub fn devpath(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        device.devpath().to_string_lossy().to_string()
+    }
+
+    pub fn id_bustype(&self) -> u16 {
+        let Ok(device) = self.get_device() else {
+            return 0;
+        };
+        let orig = get_attribute_from_tree(&device, "id/bustype");
+        let stripped = orig.strip_prefix("0x").unwrap_or(orig.as_str());
+        let attr = u16::from_str_radix(stripped, 16).unwrap_or(0);
+        if attr != 0 {
+            return attr;
+        }
+        let Some(attr) = get_attribute_from_sysfs(&device, "input", "id/bustype") else {
+            return 0;
+        };
+        u16::from_str_radix(attr.as_str(), 16).unwrap_or(0)
+    }
+
+    pub fn id_product(&self) -> u16 {
+        let Ok(device) = self.get_device() else {
+            return 0;
+        };
+        let orig = get_attribute_from_tree(&device, "idProduct");
+        let stripped = orig.strip_prefix("0x").unwrap_or(orig.as_str());
+        let attr = u16::from_str_radix(stripped, 16).unwrap_or(0);
+        if attr != 0 {
+            return attr;
+        }
+        let Some(attr) = get_attribute_from_sysfs(&device, "input", "id/product") else {
+            return 0;
+        };
+        u16::from_str_radix(attr.as_str(), 16).unwrap_or(0)
+    }
+
+    pub fn id_vendor(&self) -> u16 {
+        let Ok(device) = self.get_device() else {
+            return 0;
+        };
+        let orig = get_attribute_from_tree(&device, "idVendor");
+        let stripped = orig.strip_prefix("0x").unwrap_or(orig.as_str());
+        let attr = u16::from_str_radix(stripped, 16).unwrap_or(0);
+        if attr != 0 {
+            return attr;
+        }
+        let Some(attr) = get_attribute_from_sysfs(&device, "input", "id/vendor") else {
+            return 0;
+        };
+        u16::from_str_radix(attr.as_str(), 16).unwrap_or(0)
+    }
+
+    pub fn id_version(&self) -> u16 {
+        let Ok(device) = self.get_device() else {
+            return 0;
+        };
+        let orig = get_attribute_from_tree(&device, "id/version");
+        let stripped = orig.strip_prefix("0x").unwrap_or(orig.as_str());
+        let attr = u16::from_str_radix(stripped, 16).unwrap_or(0);
+        if attr != 0 {
+            return attr;
+        }
+        let Some(attr) = get_attribute_from_sysfs(&device, "input", "id/version") else {
+            return 0;
+        };
+        u16::from_str_radix(attr.as_str(), 16).unwrap_or(0)
+    }
+
+    pub fn interface_number(&self) -> i32 {
+        let Ok(device) = self.get_device() else {
+            return -1;
+        };
+        let orig = get_attribute_from_tree(&device, "bInterfaceNumber");
+        let stripped = orig.strip_prefix("0x").unwrap_or(orig.as_str());
+        i32::from_str_radix(stripped, 16).unwrap_or(0)
+    }
+
+    pub fn manufacturer(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        get_attribute_from_tree(&device, "manufacturer")
+    }
+
+    pub fn name(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        let attr = get_attribute_from_tree(&device, "name");
+        if !attr.is_empty() {
+            return attr;
+        }
+        let Some(attr) = get_attribute_from_sysfs(&device, "input", "name") else {
+            return "".to_string();
+        };
+        attr
+    }
+
+    pub fn phys(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        let attr = get_attribute_from_tree(&device, "phys");
+        if !attr.is_empty() {
+            return attr;
+        }
+        let Some(attr) = get_attribute_from_sysfs(&device, "input", "phys") else {
+            return "".to_string();
+        };
+        attr
+    }
+
+    pub fn product(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        get_attribute_from_tree(&device, "product")
+    }
+
+    pub fn serial_number(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        get_attribute_from_tree(&device, "serial")
+    }
+
+    pub fn subsystem(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        device
+            .subsystem()
+            .unwrap_or(OsStr::new(""))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    pub fn sysname(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        device.sysname().to_string_lossy().to_string()
+    }
+
+    pub fn syspath(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        device.syspath().to_string_lossy().to_string()
+    }
+
+    pub fn uniq(&self) -> String {
+        let Ok(device) = self.get_device() else {
+            return "".to_string();
+        };
+        let attr = get_attribute_from_tree(&device, "uniq");
+        if !attr.is_empty() {
+            return attr;
+        }
+        let Some(attr) = get_attribute_from_sysfs(&device, "input", "uniq") else {
+            return "".to_string();
+        };
+        attr
+    }
+}
+
+/// Looks for the given attribute at the given path using sysfs.
+pub fn get_attribute_from_sysfs(
+    device: &::udev::Device,
+    path: &str,
+    attribute: &str,
+) -> Option<String> {
+    let Some(parent) = device.parent() else {
+        return None;
+    };
+
+    let input_path_string = format!("{}/{path}", parent.syspath().to_str().unwrap());
+    let input_path = Path::new(input_path_string.as_str());
+    if !input_path.exists() {
+        return None;
+    }
+
+    let paths = fs::read_dir(input_path).ok()?;
+
+    for path in paths {
+        let p = path.ok()?;
+        let path = p.path();
+        let attr_path_string = format!("{}/{attribute}", path.display());
+        let attr_path = Path::new(attr_path_string.as_str());
+        if attr_path.exists() {
+            let attr = fs::read_to_string(attr_path)
+                .ok()
+                .map(|s| s.trim().to_string());
+            if let Some(ref str) = attr {
+                if str.is_empty() {
+                    return None;
+                }
+            }
+            return attr;
+        }
+    }
+
+    None
+}
+
+/// Gets an attribute from the first device in the device tree to match the attribute.
+pub fn get_attribute_from_tree(device: &::udev::Device, attribute: &str) -> String {
+    // Check if the current device has this attribute
+    //log::debug!("Looking for {attribute}.");
+    let attr = match device.attribute_value(attribute) {
+        Some(attr) => attr,
+        None => {
+            if let Some(parent) = device.parent() {
+                //log::debug!("Could not find {attribute}. Checking parrent...");
+                return get_attribute_from_tree(&parent, attribute);
+            } else {
+                //log::debug!("No more parents to check. Returning nil");
+                return "".to_string();
+            };
+        }
+    };
+    attr.to_string_lossy().to_string()
+}
+
+/// Sets an attribute from the first device in the device tree to match the attribute with the
+/// given value.
+pub fn set_attribute_on_tree(
+    device: &mut ::udev::Device,
+    attribute: &str,
+    value: &str,
+) -> Result<(), Box<dyn Error>> {
+    let result = match device.attribute_value(attribute) {
+        Some(_) => Ok(device.set_attribute_value(OsStr::new(attribute), OsStr::new(value))?),
+        None => {
+            if let Some(mut parent) = device.parent() {
+                return set_attribute_on_tree(&mut parent, attribute, value);
+            } else {
+                return Err("Failed to find {attribute} on device tree.".into());
+            };
+        }
+    };
+    result
+}
+
+impl From<::udev::Device> for UdevDevice {
+    fn from(value: ::udev::Device) -> Self {
+        Self {
+            syspath: value.syspath().to_string_lossy().to_string(),
+            devnode: value
+                .devnode()
+                .map(|devn| devn.to_string_lossy().to_string()),
+        }
+    }
+}
 
 /// Container for system devices
 /// This contains parsed data from a single device entry from 'udevadm info'
@@ -37,43 +347,6 @@ pub struct Device {
 }
 
 impl Device {
-    /// Returns true if the given device is virtual
-    pub fn is_virtual(&self) -> bool {
-        self.path.starts_with("/devices/virtual")
-    }
-
-    /// Return the 'uniq' value from input siblings
-    pub fn get_uniq(&self) -> Option<String> {
-        let parent = self.get_parent()?;
-        let input_path_string = format!("/sys{parent}/input");
-        let input_path = Path::new(input_path_string.as_str());
-        if !input_path.exists() {
-            return None;
-        }
-
-        let paths = fs::read_dir(input_path).ok()?;
-
-        for path in paths {
-            let p = path.ok()?;
-            let path = p.path();
-            let uniq_path_string = format!("{}/uniq", path.display());
-            let uniq_path = Path::new(uniq_path_string.as_str());
-            if uniq_path.exists() {
-                let uniq = fs::read_to_string(uniq_path)
-                    .ok()
-                    .map(|s| s.trim().to_string());
-                if let Some(ref str) = uniq {
-                    if str.is_empty() {
-                        return None;
-                    }
-                }
-                return uniq;
-            }
-        }
-
-        None
-    }
-
     /// Returns the parent sysfs device path
     pub fn get_parent(&self) -> Option<String> {
         let path = format!("/sys{}/device", self.path.clone());

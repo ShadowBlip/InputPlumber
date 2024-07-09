@@ -2,12 +2,14 @@ use std::collections::{HashMap, HashSet};
 
 use tokio::sync::mpsc;
 
-use crate::input::{
-    capability::Capability,
-    event::{native::NativeEvent, Event},
-    manager::SourceDeviceInfo,
-    output_event::OutputEvent,
-    target::client::TargetDeviceClient,
+use crate::{
+    input::{
+        capability::Capability,
+        event::{native::NativeEvent, Event},
+        output_event::OutputEvent,
+        target::client::TargetDeviceClient,
+    },
+    udev::device::UdevDevice,
 };
 
 use super::InterceptMode;
@@ -27,9 +29,9 @@ pub enum CompositeCommand {
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
     GetTargetDevicePaths(mpsc::Sender<Vec<String>>),
     GetDBusDevicePaths(mpsc::Sender<Vec<String>>),
-    SourceDeviceAdded(SourceDeviceInfo),
-    SourceDeviceStopped(String),
-    SourceDeviceRemoved(String),
+    SourceDeviceAdded(UdevDevice),
+    SourceDeviceStopped(UdevDevice),
+    SourceDeviceRemoved(UdevDevice),
     SetTargetDevices(Vec<String>),
     AttachTargetDevices(HashMap<String, TargetDeviceClient>),
     GetProfileName(mpsc::Sender<String>),

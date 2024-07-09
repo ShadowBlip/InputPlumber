@@ -8,7 +8,6 @@ use std::{
 };
 
 use evdev::{FFEffectData, FFEffectKind};
-use hidapi::DeviceInfo;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
@@ -30,6 +29,7 @@ use crate::{
         output_event::OutputEvent,
         source::SourceCommand,
     },
+    udev::device::UdevDevice,
 };
 
 /// Vendor ID
@@ -42,7 +42,7 @@ const POLL_RATE: Duration = Duration::from_micros(250);
 /// Steam Deck Controller implementation of HIDRaw interface
 #[derive(Debug)]
 pub struct DeckController {
-    info: DeviceInfo,
+    device: UdevDevice,
     composite_device: CompositeDeviceClient,
     rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
@@ -50,13 +50,13 @@ pub struct DeckController {
 
 impl DeckController {
     pub fn new(
-        info: DeviceInfo,
+        device: UdevDevice,
         composite_device: CompositeDeviceClient,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
-            info,
+            device,
             composite_device,
             rx: Some(rx),
             device_id,
@@ -67,7 +67,7 @@ impl DeckController {
         log::debug!("Starting Steam Deck Controller driver");
         let rx = self.rx.take().unwrap();
         let composite_device = self.composite_device.clone();
-        let path = self.info.path().to_string_lossy().to_string();
+        let path = self.device.devpath();
         let device_path = path.clone();
         let device_id = self.device_id.clone();
 
@@ -189,12 +189,6 @@ impl DeckOutput {
                         }
                     }
                     SourceCommand::Stop => return Err("Device stopped".into()),
-                    SourceCommand::GetSampleRate(_, _) => (),
-                    SourceCommand::GetSampleRatesAvail(_, _) => (),
-                    SourceCommand::SetSampleRate(_, _, _) => (),
-                    SourceCommand::GetScale(_, _) => (),
-                    SourceCommand::GetScalesAvail(_, _) => (),
-                    SourceCommand::SetScale(_, _, _) => (),
                 },
                 Err(e) => match e {
                     TryRecvError::Empty => return Ok(()),
@@ -425,7 +419,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let y = Some(-y); // Y-Axis is inverted
 
             InputValue::Touch {
-                index: value.index as u8,
+                index: value.index,
                 is_touching: value.is_touching,
                 pressure: Some(1.0),
                 x,
@@ -444,7 +438,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let y = Some(-y); // Y-Axis is inverted
 
             InputValue::Touch {
-                index: value.index as u8,
+                index: value.index,
                 is_touching: value.is_touching,
                 pressure: Some(1.0),
                 x,

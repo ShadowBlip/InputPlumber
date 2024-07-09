@@ -16,7 +16,7 @@ use crate::{
         event::{evdev::EvdevEvent, native::NativeEvent, Event},
         output_event::OutputEvent,
     },
-    procfs,
+    udev::device::UdevDevice,
 };
 
 use super::{client::SourceDeviceClient, SourceCommand};
@@ -29,7 +29,7 @@ const POLL_RATE: Duration = Duration::from_millis(8);
 /// [EventDevice] represents an input device using the input subsystem.
 #[derive(Debug)]
 pub struct EventDevice {
-    info: procfs::device::Device,
+    device: UdevDevice,
     composite_device: CompositeDeviceClient,
     tx: mpsc::Sender<SourceCommand>,
     rx: mpsc::Receiver<SourceCommand>,
@@ -39,10 +39,10 @@ pub struct EventDevice {
 }
 
 impl EventDevice {
-    pub fn new(info: procfs::device::Device, composite_device: CompositeDeviceClient) -> Self {
+    pub fn new(device: UdevDevice, composite_device: CompositeDeviceClient) -> Self {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
-            info,
+            device,
             composite_device,
             tx,
             rx,
@@ -248,12 +248,6 @@ impl EventDevice {
                         }
                     }
                     SourceCommand::Stop => return Err("Device stopped".into()),
-                    SourceCommand::GetSampleRate(_, _) => (),
-                    SourceCommand::GetSampleRatesAvail(_, _) => (),
-                    SourceCommand::SetSampleRate(_, _, _) => (),
-                    SourceCommand::GetScale(_, _) => (),
-                    SourceCommand::GetScalesAvail(_, _) => (),
-                    SourceCommand::SetScale(_, _, _) => (),
                 },
                 Err(e) => match e {
                     TryRecvError::Empty => return Ok(()),
@@ -388,27 +382,29 @@ impl EventDevice {
         Ok(())
     }
 
+    /// Returns a copy of the UdevDevice
+    pub fn get_device(&self) -> UdevDevice {
+        self.device.clone()
+    }
+
+    /// Returns a copy of the UdevDevice
+    pub fn get_device_ref(&self) -> &UdevDevice {
+        &self.device
+    }
+
     /// Returns a unique identifier for the source device.
     pub fn get_id(&self) -> String {
-        format!("evdev://{}", self.get_event_handler())
+        format!("evdev://{}", self.device.sysname())
     }
 
     /// Returns the name of the event handler (e.g. event3)
     pub fn get_event_handler(&self) -> String {
-        let handlers = &self.info.handlers;
-        for handler in handlers {
-            if !handler.starts_with("event") {
-                continue;
-            }
-            return handler.clone();
-        }
-        "".into()
+        self.device.devnode()
     }
 
     /// Returns the full path to the device handler (e.g. /dev/input/event3)
     pub fn get_device_path(&self) -> String {
-        let handler = self.get_event_handler();
-        format!("/dev/input/{}", handler)
+        self.device.devnode()
     }
 
     /// Returns the capabilities that this source device can fulfill.

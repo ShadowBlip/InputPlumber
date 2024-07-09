@@ -2,14 +2,10 @@ use std::{
     error::Error,
     ffi::CString,
     time::{Duration, Instant},
-    u8, vec,
 };
 
 use hidapi::HidDevice;
-use packed_struct::{
-    types::{bits::Bits, Integer, SizedInteger},
-    PackedStruct,
-};
+use packed_struct::{types::SizedInteger, PackedStruct};
 
 use super::{
     event::{
@@ -27,6 +23,7 @@ pub const VID: u16 = 0x17ef;
 pub const PID1: u16 = 0x6182;
 pub const PID2: u16 = 0x6184;
 pub const PID3: u16 = 0x6185;
+pub const PIDS: [u16; 3] = [PID1, PID2, PID3];
 // Hardware limits
 pub const DINPUT_LEFT_DATA: u8 = 0x07;
 pub const DINPUT_RIGHT_DATA: u8 = 0x08;

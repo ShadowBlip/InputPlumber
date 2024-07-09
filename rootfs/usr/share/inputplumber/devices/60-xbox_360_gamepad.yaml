@@ -23,192 +23,224 @@ source_devices:
     unique: true
     evdev:
       name: "Generic X-Box pad"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "0079"
       product_id: "18d4"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "03eb"
       product_id: "{ff01,ff02}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "044f"
       product_id: "b326"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "045e"
       product_id: "{028e,028f,02a1}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "046d"
       product_id: "{c21d,c21e,c21f,c242}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "056e"
       product_id: "2004"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "05ac"
       product_id: "055b"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "06a3"
       product_id: "f51a"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "0738"
       product_id: "{4716,4718,4726,4728,4736,4738,4740,4758,9871,b726,b738,beef,cb02,cb03,cb29,f738}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "07ff"
       product_id: "ffff"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "0e6f"
       product_id: "{0105,0113,011f,0131,0133,0201,0213,021f,0301,0401,0413,0501,f900}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "0f0d"
       product_id: "{000a,000c,000d,0016,001b,00dc}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1038"
       product_id: "{1430,1431}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "11c9"
       product_id: "55f0"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1209"
       product_id: "2882"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "12ab"
       product_id: "{0004,0301,0303}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1430"
       product_id: "{4748,f801}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "146b"
       product_id: "{0601,0604}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1532"
       product_id: "0037"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "15e4"
       product_id: "{3f00,3f0a,3f10}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "162e"
       product_id: "beef"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1689"
       product_id: "{fd00,fd01,fe00}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1949"
       product_id: "041a"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "1bad"
       product_id: "{0002,0003,0130,f016,f018,f019,f021,f023,f025,f027,f028,f02e,f036,f038,f039,f03a,f03d,f03e,f03f,f042,f080,f501,f502,f503,f504,f505,f506,f900,f901,f903,f904,f906,fa01,fd00,fd01}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "20d6"
       product_id: "281f"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "24c6"
       product_id: "{5000,5300,5303,530a,531a,5397,5500,5501,5502,5503,5506,5510,550d,550e,5b02,5d04,fafe}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "2563"
       product_id: "058d"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "2dc8"
       product_id: "{3106,3109}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "31e3"
       product_id: "{1100,1200,1210,1220,1230,1300,1310}"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "3285"
       product_id: "0607"
+      handler: event*
 
   - group: gamepad
     unique: true
     evdev:
       vendor_id: "413d"
       product_id: "2104"
+      handler: event*
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

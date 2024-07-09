@@ -1,6 +1,5 @@
 use std::{error::Error, thread, time::Duration};
 
-use hidapi::DeviceInfo;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
@@ -16,6 +15,7 @@ use crate::{
         event::{native::NativeEvent, value::InputValue, Event},
         source::SourceCommand,
     },
+    udev::device::UdevDevice,
 };
 
 /// How long to sleep before polling for events.
@@ -23,7 +23,7 @@ const POLL_RATE: Duration = Duration::from_millis(1);
 
 #[derive(Debug)]
 pub struct Fts3528TouchScreen {
-    info: DeviceInfo,
+    device: UdevDevice,
     composite_device: CompositeDeviceClient,
     rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
@@ -31,13 +31,13 @@ pub struct Fts3528TouchScreen {
 
 impl Fts3528TouchScreen {
     pub fn new(
-        info: DeviceInfo,
+        device: UdevDevice,
         composite_device: CompositeDeviceClient,
         rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
-            info,
+            device,
             composite_device,
             rx: Some(rx),
             device_id,
@@ -48,7 +48,7 @@ impl Fts3528TouchScreen {
         log::debug!("Starting FTS3528 Touchscreen driver");
         let mut rx = self.rx.take().unwrap();
         let composite_device = self.composite_device.clone();
-        let path = self.info.path().to_string_lossy().to_string();
+        let path = self.device.devpath();
         let device_path = path.clone();
         let device_id = self.device_id.clone();
 

@@ -38,6 +38,7 @@ log = { version = "0.4.22", features = [
   "max_level_trace",
   "release_max_level_debug",
 ] }
+mio = { version = "0.8.11", features = ["os-poll", "os-ext", "net"] }
 nix = { version = "0.29.0", features = ["fs"] }
 packed_struct = "0.10.1"
 procfs = "0.16.0"
@@ -46,6 +47,7 @@ serde = { version = "1.0.204", features = ["derive"] }
 serde_yaml = "0.9.34"
 thiserror = "1.0.61"
 tokio = { version = "*", features = ["full"] }
+udev = { version = "^0.8", features = ["mio"] }
 uhid-virt = "0.0.7"
 zbus = { version = "4.3.1", default-features = false, features = ["tokio"] }
 zbus_macros = "4.3.1"

@@ -1,7 +1,5 @@
 use std::{error::Error, thread, time};
 
-use hidapi::DeviceInfo;
-
 use crate::{
     drivers::opineo::{
         driver::{self, Driver},
@@ -12,7 +10,7 @@ use crate::{
         composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
     },
-    udev::get_device,
+    udev::device::UdevDevice,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -25,39 +23,29 @@ enum TouchpadSide {
 /// OrangePi NEO implementation of HIDRAW interface
 #[derive(Debug)]
 pub struct OrangePiNeoTouchpad {
-    info: DeviceInfo,
+    device: UdevDevice,
     composite_device: CompositeDeviceClient,
-    device_id: String,
 }
 
 impl OrangePiNeoTouchpad {
-    pub fn new(
-        info: DeviceInfo,
-        composite_device: CompositeDeviceClient,
-        device_id: String,
-    ) -> Self {
+    pub fn new(device: UdevDevice, composite_device: CompositeDeviceClient) -> Self {
         Self {
-            info,
+            device,
             composite_device,
-            device_id,
         }
     }
 
     pub async fn run(&self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting OrangePi NEO Touchpad driver");
-        let path = self.info.path().to_string_lossy().to_string();
         let composite_device = self.composite_device.clone();
 
         // Query the udev module to determine if this is the left or right touchpad.
-        let dev_info = get_device(path.clone()).await?;
-
-        log::debug!("udev info for device: {dev_info:?}");
-
+        let name = self.device.name();
         let touchpad_side = {
-            if dev_info.path.contains("i2c-OPI0001:00") {
+            if name == "OPI0001:00" {
                 log::debug!("Detected left pad.");
                 TouchpadSide::Left
-            } else if dev_info.path.contains("i2c-OPI0002:00") {
+            } else if name == "OPI0002:00" {
                 log::debug!("Detected right pad.");
                 TouchpadSide::Right
             } else {
@@ -67,11 +55,11 @@ impl OrangePiNeoTouchpad {
         };
 
         // Spawn a blocking task to read the events
-        let device_path = path.clone();
-        let device_id = self.device_id.clone();
+        let device = self.device.clone();
+
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut driver = Driver::new(device_path.clone())?;
+                let mut driver = Driver::new(device.clone())?;
                 loop {
                     let events = driver.poll()?;
                     let native_events = translate_events(events, touchpad_side);
@@ -81,7 +69,7 @@ impl OrangePiNeoTouchpad {
                             continue;
                         }
                         let res = composite_device
-                            .blocking_process_event(device_id.clone(), Event::Native(event));
+                            .blocking_process_event(device.sysname().clone(), Event::Native(event));
                         if let Err(e) = res {
                             return Err(e.to_string().into());
                         }
