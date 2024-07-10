@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: MSI Claw
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Only use this profile if *any* of the given matches match. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches:
+  - dmi_data:
+      product_name: "Claw A1M"
+      sys_vendor: "Micro-Star International Co., Ltd."
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  # Extra Buttons
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
+
+  # Gamepad
+  - group: gamepad
+    evdev:
+      vendor_id: "0db0"
+      product_id: "1901"
+      phys_path: "usb-0000:00:14.0-9/input0"
+
+  # IMU
+  - group: imu
+    iio:
+      name: accel_3d
+      mount_matrix:
+        x: [0, 1, 0]
+        y: [0, 0, -1]
+        z: [-1, 0, 0]
+  - group: imu
+    iio:
+      name: gyro_3d
+      mount_matrix:
+        x: [0, 1, 0]
+        y: [0, 0, -1]
+        z: [-1, 0, 0]
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - xbox-elite
+  - mouse
+  - keyboard
+
+# The ID of a device event mapping in the 'event_maps' folder
+capability_map_id: claw1
