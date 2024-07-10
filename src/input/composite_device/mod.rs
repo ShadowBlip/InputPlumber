@@ -39,7 +39,9 @@ use crate::{
 
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
 
-use super::{manager::ManagerCommand, output_event::OutputEvent, source::SourceCommand};
+use super::{
+    manager::ManagerCommand, message::Message, output_event::OutputEvent, source::SourceCommand,
+};
 
 /// Size of the command channel buffer for processing input events and commands.
 const BUFFER_SIZE: usize = 16384;
@@ -97,9 +99,9 @@ pub struct CompositeDevice {
     /// Mode defining how inputs should be routed
     intercept_mode: InterceptMode,
     /// Transmit channel for sending commands to this composite device
-    tx: mpsc::Sender<CompositeCommand>,
+    tx: mpsc::Sender<Message<CompositeCommand>>,
     /// Receiver channel for listening for commands
-    rx: mpsc::Receiver<CompositeCommand>,
+    rx: mpsc::Receiver<Message<CompositeCommand>>,
     /// Map of source device id to their respective transmitter channel.
     /// E.g. {"evdev://event0": <Sender>}
     source_devices: HashMap<String, mpsc::Sender<SourceCommand>>,
@@ -303,7 +305,8 @@ impl CompositeDevice {
                 break;
             }
             //log::trace!("Received {num} command(s)");
-            for cmd in buffer.drain(..) {
+            for msg in buffer.drain(..) {
+                let (cmd, _span) = msg.destructure();
                 log::trace!("Received command: {:?}", cmd);
                 match cmd {
                     CompositeCommand::ProcessEvent(device_id, event) => {
@@ -579,10 +582,8 @@ impl CompositeDevice {
                     log::error!("Failed running device: {:?}", e);
                 }
                 log::debug!("Source device closed");
-                if let Err(e) = tx
-                    .send(CompositeCommand::SourceDeviceStopped(device_id))
-                    .await
-                {
+                let msg = Message::new(CompositeCommand::SourceDeviceStopped(device_id));
+                if let Err(e) = tx.send(msg).await {
                     log::error!("Failed to send device stop command: {:?}", e);
                 }
             });
@@ -910,7 +911,8 @@ impl CompositeDevice {
                 let tx = self.tx.clone();
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_millis(sleep_time)).await;
-                    if let Err(e) = tx.send(CompositeCommand::WriteEvent(event)).await {
+                    let msg = Message::new(CompositeCommand::WriteEvent(event));
+                    if let Err(e) = tx.send(msg).await {
                         log::error!("Failed to send chord event command: {:?}", e);
                     }
                 });
@@ -1015,7 +1017,8 @@ impl CompositeDevice {
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
                 tokio::time::sleep(sleep_time).await;
-                if let Err(e) = tx.send(CompositeCommand::WriteEvent(event)).await {
+                let msg = Message::new(CompositeCommand::WriteEvent(event));
+                if let Err(e) = tx.send(msg).await {
                     log::error!("Failed to send delayed event command: {:?}", e);
                 }
             });
@@ -1030,7 +1033,8 @@ impl CompositeDevice {
         let tx = self.tx.clone();
         tokio::task::spawn(async move {
             tokio::time::sleep(sleep_time).await;
-            if let Err(e) = tx.send(CompositeCommand::RemoveRecentEvent(cap)).await {
+            let msg = Message::new(CompositeCommand::RemoveRecentEvent(cap));
+            if let Err(e) = tx.send(msg).await {
                 log::error!("Failed to send remove recent event command: {:?}", e);
             }
         });
@@ -1051,7 +1055,8 @@ impl CompositeDevice {
             log::debug!("Send event {:?} at sleep time {sleep_time}", event);
             tokio::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(sleep_time)).await;
-                if let Err(e) = tx.send(CompositeCommand::WriteEvent(event)).await {
+                let msg = Message::new(CompositeCommand::WriteEvent(event));
+                if let Err(e) = tx.send(msg).await {
                     log::error!("Failed to send chord event command: {:?}", e);
                 }
             });
@@ -1205,7 +1210,8 @@ impl CompositeDevice {
                 let tx = self.tx.clone();
                 tokio::task::spawn(async move {
                     tokio::time::sleep(sleep_time).await;
-                    if let Err(e) = tx.send(CompositeCommand::HandleEvent(event)).await {
+                    let msg = Message::new(CompositeCommand::HandleEvent(event));
+                    if let Err(e) = tx.send(msg).await {
                         log::error!("Failed to send delayed event command: {:?}", e);
                     }
                 });
@@ -1220,7 +1226,8 @@ impl CompositeDevice {
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
                 tokio::time::sleep(sleep_time).await;
-                if let Err(e) = tx.send(CompositeCommand::RemoveRecentEvent(cap)).await {
+                let msg = Message::new(CompositeCommand::RemoveRecentEvent(cap));
+                if let Err(e) = tx.send(msg).await {
                     log::error!("Failed to send remove recent event command: {:?}", e);
                 }
             });
@@ -1504,10 +1511,8 @@ impl CompositeDevice {
         if let Some(target_devices) = profile.target_devices {
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
-                if let Err(e) = tx
-                    .send(CompositeCommand::SetTargetDevices(target_devices))
-                    .await
-                {
+                let msg = Message::new(CompositeCommand::SetTargetDevices(target_devices));
+                if let Err(e) = tx.send(msg).await {
                     log::error!("Failed to send set target devices: {e:?}");
                 }
             });
@@ -1726,10 +1731,8 @@ impl CompositeDevice {
             );
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
-                if let Err(e) = tx
-                    .send(CompositeCommand::SetTargetDevices(device_types))
-                    .await
-                {
+                let msg = Message::new(CompositeCommand::SetTargetDevices(device_types));
+                if let Err(e) = tx.send(msg).await {
                     log::error!("Error sending composite device command! {e:?}");
                 }
             });

@@ -6,6 +6,7 @@ use crate::input::{
     capability::Capability,
     event::{native::NativeEvent, Event},
     manager::SourceDeviceInfo,
+    message::Message,
     output_event::OutputEvent,
     target::TargetCommand,
 };
@@ -41,4 +42,10 @@ pub enum CompositeCommand {
     RemoveRecentEvent(Capability),
     SetInterceptActivation(Vec<Capability>, Capability),
     Stop,
+}
+
+impl From<Message<CompositeCommand>> for CompositeCommand {
+    fn from(value: Message<CompositeCommand>) -> Self {
+        value.data
+    }
 }
