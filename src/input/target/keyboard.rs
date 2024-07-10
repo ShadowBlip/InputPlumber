@@ -17,7 +17,7 @@ use crate::{
     },
 };
 
-use super::TargetCommand;
+use super::{client::TargetDeviceClient, command::TargetCommand};
 
 const BUFFER_SIZE: usize = 2048;
 
@@ -43,13 +43,13 @@ impl KeyboardDevice {
     }
 
     /// Returns the DBus path of this device
-    pub fn get_dbus_path(&self) -> Option<String> {
+    pub fn _get_dbus_path(&self) -> Option<String> {
         self.dbus_path.clone()
     }
 
-    /// Returns a transmitter channel that can be used to send events to this device
-    pub fn transmitter(&self) -> mpsc::Sender<TargetCommand> {
-        self.tx.clone()
+    /// Returns a client channel that can be used to send events to this device
+    pub fn client(&self) -> TargetDeviceClient {
+        self.tx.clone().into()
     }
 
     /// Configures the device to send output events to the given composite device
@@ -63,10 +63,10 @@ impl KeyboardDevice {
         log::debug!("Starting dbus interface on {path}");
         let conn = self.conn.clone();
         self.dbus_path = Some(path.clone());
-        let tx = self.tx.clone();
+        let client = self.client();
         tokio::spawn(async move {
             log::debug!("Starting dbus interface: {path}");
-            let iface = TargetKeyboardInterface::new(tx);
+            let iface = TargetKeyboardInterface::new(client);
             if let Err(e) = conn.object_server().at(path.clone(), iface).await {
                 log::debug!("Failed to start dbus interface {path}: {e:?}");
             } else {

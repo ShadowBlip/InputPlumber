@@ -27,7 +27,7 @@ use crate::{
     },
 };
 
-use super::TargetCommand;
+use super::{client::TargetDeviceClient, command::TargetCommand};
 
 /// Size of the [TargetCommand] buffer for receiving input events
 const BUFFER_SIZE: usize = 2048;
@@ -60,9 +60,9 @@ impl XboxEliteController {
         self.dbus_path.clone()
     }
 
-    /// Returns a transmitter channel that can be used to send events to this device
-    pub fn transmitter(&self) -> mpsc::Sender<TargetCommand> {
-        self.tx.clone()
+    /// Returns a client channel that can be used to send events to this device
+    pub fn client(&self) -> TargetDeviceClient {
+        self.tx.clone().into()
     }
 
     /// Configures the device to send output events to the given composite device

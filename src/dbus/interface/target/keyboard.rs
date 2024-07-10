@@ -1,25 +1,22 @@
-use std::time::Duration;
-
-use tokio::sync::mpsc;
 use zbus::fdo;
 use zbus_macros::interface;
 
 use crate::input::{
     capability::{Capability, Keyboard},
     event::{native::NativeEvent, value::InputValue},
-    target::TargetCommand,
+    target::client::TargetDeviceClient,
 };
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
 /// a [KeyboardDevice]. It works by sending command messages to a channel that the
 /// [KeyboardDevice] is listening on.
 pub struct TargetKeyboardInterface {
-    command_tx: mpsc::Sender<TargetCommand>,
+    target_device: TargetDeviceClient,
 }
 
 impl TargetKeyboardInterface {
-    pub fn new(command_tx: mpsc::Sender<TargetCommand>) -> TargetKeyboardInterface {
-        TargetKeyboardInterface { command_tx }
+    pub fn new(target_device: TargetDeviceClient) -> TargetKeyboardInterface {
+        TargetKeyboardInterface { target_device }
     }
 }
 
@@ -42,8 +39,8 @@ impl TargetKeyboardInterface {
         let event = NativeEvent::new(capability, value);
 
         // Write the event to the virtual device
-        self.command_tx
-            .send_timeout(TargetCommand::WriteEvent(event), Duration::from_millis(500))
+        self.target_device
+            .write_event(event)
             .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
 

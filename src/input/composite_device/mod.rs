@@ -8,11 +8,7 @@ use std::{
 };
 
 use evdev::InputEvent;
-use tokio::{
-    sync::mpsc::{self, error::TrySendError},
-    task::JoinSet,
-    time::Duration,
-};
+use tokio::{sync::mpsc, task::JoinSet, time::Duration};
 use zbus::Connection;
 
 use crate::{
@@ -32,7 +28,6 @@ use crate::{
         manager::SourceDeviceInfo,
         output_event::UinputOutputEvent,
         source::{self, SourceDevice},
-        target::TargetCommand,
     },
     udev::{hide_device, unhide_device},
 };
@@ -41,6 +36,7 @@ use self::{client::CompositeDeviceClient, command::CompositeCommand};
 
 use super::{
     manager::ManagerCommand, output_event::OutputEvent, source::client::SourceDeviceClient,
+    target::client::TargetDeviceClient,
 };
 
 /// Size of the command channel buffer for processing input events and commands.
@@ -118,7 +114,7 @@ pub struct CompositeDevice {
     source_devices_used: Vec<String>,
     /// Map of DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/gamepad0": <Sender>}
-    target_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
+    target_devices: HashMap<String, TargetDeviceClient>,
     /// Map of device capabilities to a list of target devices that implements
     /// that capability. This list contains the DBus path for the target device
     /// so its transmitter channel can be looked up in `target_devices`.
@@ -130,7 +126,7 @@ pub struct CompositeDevice {
     target_devices_queued: HashSet<String>,
     /// Map of DBusDevice DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
-    target_dbus_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
+    target_dbus_devices: HashMap<String, TargetDeviceClient>,
     /// Set of available Force Feedback effect IDs that are not in use
     /// TODO: Just use the keys from ff_effect_id_source_map to determine next id
     ff_effect_ids: BTreeSet<i16>,
@@ -251,7 +247,7 @@ impl CompositeDevice {
     /// devices to translate the events and send them to the appropriate target.
     pub async fn run(
         &mut self,
-        targets: HashMap<String, mpsc::Sender<TargetCommand>>,
+        targets: HashMap<String, TargetDeviceClient>,
     ) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting composite device");
 
@@ -260,23 +256,18 @@ impl CompositeDevice {
 
         // Keep track of all target devices
         for (path, target) in targets.iter() {
-            if let Err(e) = target
-                .send(TargetCommand::SetCompositeDevice(self.client()))
-                .await
-            {
+            if let Err(e) = target.set_composite_device(self.client()).await {
                 return Err(
                     format!("Failed to set composite device for target device: {:?}", e).into(),
                 );
             }
 
             // Query the target device for its capabilities
-            let (tx, mut rx) = mpsc::channel(1);
-            let cmd = TargetCommand::GetCapabilities(tx);
-            if let Err(e) = target.send(cmd).await {
-                return Err(format!("Failed to get target capabilities: {e:?}").into());
-            }
-            let Some(caps) = rx.recv().await else {
-                return Err("Failed to receive target capabilities".into());
+            let caps = match target.get_capabilities().await {
+                Ok(caps) => caps,
+                Err(e) => {
+                    return Err(format!("Failed to get target capabilities: {e:?}").into());
+                }
             };
 
             // Track the target device by capabilities it has
@@ -468,12 +459,12 @@ impl CompositeDevice {
         // Stop all target devices
         log::debug!("Stopping target devices");
         for (path, target) in &self.target_devices {
-            if let Err(e) = target.send(TargetCommand::Stop).await {
+            if let Err(e) = target.stop().await {
                 log::error!("Failed to stop target device {path}: {e:?}");
             }
         }
         for (path, target) in &self.target_dbus_devices {
-            if let Err(e) = target.send(TargetCommand::Stop).await {
+            if let Err(e) = target.stop().await {
                 log::error!("Failed to stop dbus device {path}: {e:?}");
             }
         }
@@ -523,7 +514,7 @@ impl CompositeDevice {
     }
 
     /// Sets the DBus target devices on the [CompositeDevice].
-    pub fn set_dbus_devices(&mut self, devices: HashMap<String, mpsc::Sender<TargetCommand>>) {
+    pub fn set_dbus_devices(&mut self, devices: HashMap<String, TargetDeviceClient>) {
         self.target_dbus_devices = devices;
     }
 
@@ -907,11 +898,10 @@ impl CompositeDevice {
 
         // If this event implements the DBus capability, send the event to DBus devices
         if matches!(cap, Capability::DBus(_)) {
-            let event = TargetCommand::WriteEvent(event);
             log::trace!("Emit dbus event: {:?}", event);
             #[allow(clippy::for_kv_map)]
             for (_, target) in &self.target_dbus_devices {
-                target.send(event.clone()).await?;
+                target.write_event(event.clone()).await?;
             }
             return Ok(());
         }
@@ -919,11 +909,10 @@ impl CompositeDevice {
         // If the device is in intercept mode, only send events to DBus
         // target devices.
         if matches!(self.intercept_mode, InterceptMode::Always) {
-            let event = TargetCommand::WriteEvent(event);
             log::trace!("Emit intercepted event: {:?}", event);
             #[allow(clippy::for_kv_map)]
             for (_, target) in &self.target_dbus_devices {
-                target.send(event.clone()).await?;
+                target.write_event(event.clone()).await?;
             }
             return Ok(());
         }
@@ -933,27 +922,19 @@ impl CompositeDevice {
             log::trace!("No target devices capable of handling this event: {cap}");
             return Ok(());
         };
-        let target_devices: Vec<(&str, &mpsc::Sender<TargetCommand>)> = target_paths
+        let target_devices: Vec<(&str, &TargetDeviceClient)> = target_paths
             .iter()
             .filter_map(|path| {
-                let sender = self.target_devices.get(path);
-                sender.map(|tx| (path.as_str(), tx))
+                let device = self.target_devices.get(path);
+                device.map(|client| (path.as_str(), client))
             })
             .collect();
 
         // Only write the event to devices that are capabile of handling it
-        let event = TargetCommand::WriteEvent(event);
         log::trace!("Emit passed event: {:?}", event);
         for (name, target) in target_devices {
-            if let Err(e) = target.try_send(event.clone()) {
-                match e {
-                    TrySendError::Full(_) => {
-                        log::error!("Failed to write event to: {name}: buffer full");
-                    }
-                    TrySendError::Closed(_) => {
-                        log::error!("Failed to write event to: {name}: device closed");
-                    }
-                }
+            if let Err(e) = target.write_event(event.clone()).await {
+                log::error!("Failed to write event to: {name}: {e:?}");
             }
         }
         Ok(())
@@ -1705,15 +1686,13 @@ impl CompositeDevice {
         }
 
         // Identify the targets that need to close
-        let mut targets_to_stop: HashMap<String, mpsc::Sender<TargetCommand>> = HashMap::new();
+        let mut targets_to_stop: HashMap<String, TargetDeviceClient> = HashMap::new();
         for (path, target) in self.target_devices.clone().into_iter() {
-            let (tx, mut rx) = mpsc::channel(1);
-            let cmd = TargetCommand::GetType(tx);
-            if let Err(e) = target.send(cmd).await {
-                return Err(format!("Failed to request target type: {e:?}").into());
-            }
-            let Some(target_type) = rx.recv().await else {
-                return Err("Failed to receive target type".into());
+            let target_type = match target.get_type().await {
+                Ok(value) => value,
+                Err(e) => {
+                    return Err(format!("Failed to request target type: {e:?}").into());
+                }
             };
             if !device_types.contains(&target_type) {
                 log::debug!("Target device {path} not in new devices list. Adding to stop list.");
@@ -1728,7 +1707,7 @@ impl CompositeDevice {
             for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
                 target_devices.remove(&path);
             }
-            if let Err(e) = target.send(TargetCommand::Stop).await {
+            if let Err(e) = target.stop().await {
                 log::error!("Failed to stop old target device: {e:?}");
             }
         }
@@ -1795,13 +1774,11 @@ impl CompositeDevice {
             _ => kind,
         };
         for target in self.target_devices.values() {
-            let (tx, mut rx) = mpsc::channel(1);
-            let cmd = TargetCommand::GetType(tx);
-            if let Err(e) = target.send(cmd).await {
-                return Err(format!("Failed to request target type: {e:?}").into());
-            }
-            let Some(target_type) = rx.recv().await else {
-                return Err("Failed to receive target type".into());
+            let target_type = match target.get_type().await {
+                Ok(value) => value,
+                Err(e) => {
+                    return Err(format!("Failed to request target type: {e:?}").into());
+                }
             };
             if kind == target_type {
                 return Ok(true);
@@ -1814,26 +1791,22 @@ impl CompositeDevice {
     async fn get_target_capabilities(&self) -> Result<HashSet<Capability>, Box<dyn Error>> {
         let mut target_caps = HashSet::new();
         for target in self.target_devices.values() {
-            let (tx, mut rx) = mpsc::channel(1);
-            let cmd = TargetCommand::GetCapabilities(tx);
-            if let Err(e) = target.send(cmd).await {
-                return Err(format!("Failed to get target capabilities: {e:?}").into());
-            }
-            let Some(caps) = rx.recv().await else {
-                return Err("Failed to receive target capabilities".into());
+            let caps = match target.get_capabilities().await {
+                Ok(caps) => caps,
+                Err(e) => {
+                    return Err(format!("Failed to get target capabilities: {e:?}").into());
+                }
             };
             for cap in caps {
                 target_caps.insert(cap);
             }
         }
         for target in self.target_dbus_devices.values() {
-            let (tx, mut rx) = mpsc::channel(1);
-            let cmd = TargetCommand::GetCapabilities(tx);
-            if let Err(e) = target.send(cmd).await {
-                return Err(format!("Failed to get target capabilities: {e:?}").into());
-            }
-            let Some(caps) = rx.recv().await else {
-                return Err("Failed to receive target capabilities".into());
+            let caps = match target.get_capabilities().await {
+                Ok(caps) => caps,
+                Err(e) => {
+                    return Err(format!("Failed to get target capabilities: {e:?}").into());
+                }
             };
             for cap in caps {
                 target_caps.insert(cap);
@@ -1846,13 +1819,12 @@ impl CompositeDevice {
     /// Attach the given target devices to the composite device
     async fn attach_target_devices(
         &mut self,
-        targets: HashMap<String, mpsc::Sender<TargetCommand>>,
+        targets: HashMap<String, TargetDeviceClient>,
     ) -> Result<(), Box<dyn Error>> {
         // Keep track of all target devices
         for (path, target) in targets.into_iter() {
             log::debug!("Attaching target device: {path}");
-            let cmd = TargetCommand::SetCompositeDevice(self.client());
-            if let Err(e) = target.send(cmd).await {
+            if let Err(e) = target.set_composite_device(self.client()).await {
                 return Err(
                     format!("Failed to set composite device for target device: {:?}", e).into(),
                 );
@@ -1863,13 +1835,11 @@ impl CompositeDevice {
             );
 
             // Query the target device for its capabilities
-            let (tx, mut rx) = mpsc::channel(1);
-            let cmd = TargetCommand::GetCapabilities(tx);
-            if let Err(e) = target.send(cmd).await {
-                return Err(format!("Failed to get target capabilities: {e:?}").into());
-            }
-            let Some(caps) = rx.recv().await else {
-                return Err("Failed to receive target capabilities".into());
+            let caps = match target.get_capabilities().await {
+                Ok(caps) => caps,
+                Err(e) => {
+                    return Err(format!("Failed to get target capabilities: {e:?}").into());
+                }
             };
 
             // Add the target device
