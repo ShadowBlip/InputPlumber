@@ -14,7 +14,7 @@ use crate::{
     input::{capability::Capability, composite_device::client::CompositeDeviceClient},
 };
 
-use super::SourceCommand;
+use super::{client::SourceDeviceClient, SourceCommand};
 
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
@@ -50,8 +50,8 @@ impl HIDRawDevice {
     }
 
     /// Returns a transmitter channel that can be used to send events to this device
-    pub fn transmitter(&self) -> mpsc::Sender<SourceCommand> {
-        self.tx.clone()
+    pub fn client(&self) -> SourceDeviceClient {
+        self.tx.clone().into()
     }
 
     /// Run the source device handler. HIDRaw devices require device-specific
