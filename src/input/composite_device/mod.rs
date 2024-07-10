@@ -39,7 +39,9 @@ use crate::{
 
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
 
-use super::{manager::ManagerCommand, output_event::OutputEvent, source::SourceCommand};
+use super::{
+    manager::ManagerCommand, output_event::OutputEvent, source::client::SourceDeviceClient,
+};
 
 /// Size of the command channel buffer for processing input events and commands.
 const BUFFER_SIZE: usize = 16384;
@@ -102,7 +104,7 @@ pub struct CompositeDevice {
     rx: mpsc::Receiver<CompositeCommand>,
     /// Map of source device id to their respective transmitter channel.
     /// E.g. {"evdev://event0": <Sender>}
-    source_devices: HashMap<String, mpsc::Sender<SourceCommand>>,
+    source_devices: HashMap<String, SourceDeviceClient>,
     /// Source devices that this composite device will consume.
     source_devices_discovered: Vec<SourceDevice>,
     /// HashSet of source devices that are blocked from passing their input events to target
@@ -490,7 +492,7 @@ impl CompositeDevice {
 
         // Send stop command to all source devices
         for (path, source) in &self.source_devices {
-            if let Err(e) = source.send(SourceCommand::Stop).await {
+            if let Err(e) = source.stop().await {
                 log::debug!("Failed to stop source device {path}: {e:?}");
             }
         }
@@ -559,17 +561,17 @@ impl CompositeDevice {
                 continue;
             }
 
-            let source_tx = source_device.transmitter();
+            let source_tx = source_device.client();
             self.source_devices.insert(device_id.clone(), source_tx);
             let tx = self.tx.clone();
 
             // Add the IIO IMU Dbus interface. We do this here because it needs the source
             // device transmitter and this is the only place we can refrence it at the moment.
-            if let SourceDevice::IIODevice(ref device) = source_device {
+            if let SourceDevice::Iio(ref device) = source_device {
                 SourceIioImuInterface::listen_on_dbus(
                     self.conn.clone(),
                     device.get_info(),
-                    device.transmitter(),
+                    device.client(),
                 )
                 .await?;
             }
@@ -657,9 +659,7 @@ impl CompositeDevice {
                                 continue;
                             };
                             log::debug!("Updating effect {source_effect_id} from {source_id}");
-                            source
-                                .send(SourceCommand::UpdateEffect(*source_effect_id, *data))
-                                .await?;
+                            source.update_effect(*source_effect_id, *data).await?;
                         }
                         target_dev.send(Some(*id))?;
                         return Ok(());
@@ -669,31 +669,13 @@ impl CompositeDevice {
                     let mut source_effect_ids = HashMap::new();
                     for (source_id, source) in self.source_devices.iter() {
                         log::debug!("Uploading effect to {source_id}");
-                        let (tx, rx) = std::sync::mpsc::channel();
-                        match source.try_send(SourceCommand::UploadEffect(*data, tx)) {
-                            Ok(_) => {}
-                            Err(e) => log::error!("Error sending UploadEffect: {:?}", e),
-                        };
-
-                        // Wait for the result of the upload
-                        match rx.recv_timeout(Duration::from_secs(1)) {
-                            Ok(upload_result) => {
-                                if let Err(e) = upload_result {
-                                    log::debug!(
-                                        "Failed to upload FF effect to {source_id}: {:?}",
-                                        e
-                                    );
-                                    continue;
-                                }
-                                let source_effect_id = upload_result.unwrap();
+                        match source.upload_effect(*data).await {
+                            Ok(source_effect_id) => {
                                 log::debug!("Successfully uploaded effect with source effect id {source_effect_id}");
                                 source_effect_ids.insert(source_id.clone(), source_effect_id);
                             }
-                            Err(err) => {
-                                log::error!(
-                                    "Failed to receive response from source device {source_id} to upload effect: {:?}",
-                                    err
-                                );
+                            Err(e) => {
+                                log::error!("Error uploading effect: {:?}", e);
                             }
                         }
                     }
@@ -725,25 +707,8 @@ impl CompositeDevice {
                                 continue;
                             };
                             log::debug!("Erasing effect from {source_id}");
-                            let (tx, rx) = std::sync::mpsc::channel();
-                            source
-                                .send(SourceCommand::EraseEffect(*source_effect_id, tx))
-                                .await?;
-
-                            // Wait for the result of the erase
-                            match rx.recv_timeout(Duration::from_secs(1)) {
-                                Ok(erase_result) => {
-                                    if let Err(e) = erase_result {
-                                        log::debug!(
-                                            "Failed to erase FF effect from {source_id}: {:?}",
-                                            e
-                                        );
-                                        continue;
-                                    }
-                                }
-                                Err(err) => {
-                                    log::error!("Failed to receive response from source device {source_id} to erase effect: {:?}", err);
-                                }
+                            if let Err(e) = source.erase_effect(*source_effect_id).await {
+                                log::debug!("Failed to erase FF effect from {source_id}: {:?}", e);
                             }
                         }
                     }
@@ -791,24 +756,16 @@ impl CompositeDevice {
                     let output_event = OutputEvent::Evdev(new_event);
 
                     // Write the FF event to the source device
-                    let event = SourceCommand::WriteEvent(output_event);
-                    match source.try_send(event) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            log::error!("Failed to send Output event to {}. {:?}", source_id, e)
-                        }
-                    };
+                    if let Err(e) = source.write_event(output_event).await {
+                        log::error!("Failed to send Output event to {}. {:?}", source_id, e)
+                    }
                     continue;
                 }
             }
 
-            let event = SourceCommand::WriteEvent(event.clone());
-            match source.try_send(event) {
-                Ok(_) => {}
-                Err(e) => {
-                    log::error!("Failed to send Output event to {}. {:?}", source_id, e)
-                }
-            };
+            if let Err(e) = source.write_event(event.clone()).await {
+                log::error!("Failed to send Output event to {}. {:?}", source_id, e)
+            }
         }
 
         //log::trace!("Finished processing output events.");
@@ -1400,12 +1357,12 @@ impl CompositeDevice {
                 // Create an instance of the device
                 log::debug!("Adding source device: {:?}", info);
                 let device = source::evdev::EventDevice::new(info.clone(), self.client());
-                SourceDevice::EventDevice(device)
+                SourceDevice::Event(device)
             }
             SourceDeviceInfo::HIDRawDeviceInfo(info) => {
                 log::debug!("Adding source device: {:?}", info);
                 let device = source::hidraw::HIDRawDevice::new(info, self.client());
-                SourceDevice::HIDRawDevice(device)
+                SourceDevice::HIDRaw(device)
             }
             SourceDeviceInfo::IIODeviceInfo(info) => {
                 // Get any defined config for the IIO device
@@ -1418,7 +1375,7 @@ impl CompositeDevice {
 
                 log::debug!("Adding source device: {:?}", info);
                 let device = source::iio::IIODevice::new(info, config, self.client());
-                SourceDevice::IIODevice(device)
+                SourceDevice::Iio(device)
             }
         };
 
