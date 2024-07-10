@@ -3,9 +3,9 @@ use thiserror::Error;
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
 
 use crate::input::event::native::NativeEvent;
+use crate::input::target::client::TargetDeviceClient;
 use crate::input::{
     capability::Capability, event::Event, manager::SourceDeviceInfo, output_event::OutputEvent,
-    target::TargetCommand,
 };
 
 use super::{CompositeCommand, InterceptMode};
@@ -35,7 +35,7 @@ pub struct CompositeDeviceClient {
 
 impl From<Sender<CompositeCommand>> for CompositeDeviceClient {
     fn from(tx: Sender<CompositeCommand>) -> Self {
-        Self { tx }
+        CompositeDeviceClient::new(tx)
     }
 }
 
@@ -193,7 +193,7 @@ impl CompositeDeviceClient {
     /// Attach the given target devices to the composite device
     pub async fn attach_target_devices(
         &self,
-        devices: HashMap<String, Sender<TargetCommand>>,
+        devices: HashMap<String, TargetDeviceClient>,
     ) -> Result<(), ClientError> {
         self.tx
             .send(CompositeCommand::AttachTargetDevices(devices))

@@ -28,7 +28,7 @@ use crate::{
     },
 };
 
-use super::TargetCommand;
+use super::{client::TargetDeviceClient, command::TargetCommand};
 
 const POLL_INTERVAL_MS: u64 = 10;
 const BUFFER_SIZE: usize = 2048;
@@ -56,9 +56,9 @@ impl Fts3528TouchscreenDevice {
         }
     }
 
-    /// Returns a transmitter channel that can be used to send events to this device
-    pub fn transmitter(&self) -> mpsc::Sender<TargetCommand> {
-        self.tx.clone()
+    /// Returns a client channel that can be used to send events to this device
+    pub fn client(&self) -> TargetDeviceClient {
+        self.tx.clone().into()
     }
 
     /// Configures the device to send output events to the given composite device

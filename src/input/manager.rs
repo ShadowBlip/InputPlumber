@@ -45,7 +45,7 @@ use crate::watcher;
 use crate::watcher::WatchEvent;
 
 use super::composite_device::client::CompositeDeviceClient;
-use super::target::TargetCommand;
+use super::target::client::TargetDeviceClient;
 
 const DEV_PATH: &str = "/dev";
 const INPUT_PATH: &str = "/dev/input";
@@ -162,7 +162,7 @@ pub struct Manager {
     used_configs: HashMap<String, CompositeDeviceConfig>,
     /// Mapping of target devices to their respective handles
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Handle>}
-    target_devices: HashMap<String, mpsc::Sender<TargetCommand>>,
+    target_devices: HashMap<String, TargetDeviceClient>,
 }
 
 impl Manager {
@@ -323,7 +323,7 @@ impl Manager {
                         log::error!("Failed to find target device: {path}");
                         continue;
                     };
-                    if let Err(e) = target.send(TargetCommand::Stop).await {
+                    if let Err(e) = target.stop().await {
                         log::error!("Failed to send stop command to target device {path}: {e:?}");
                     }
                     log::debug!("Finished handling stop target device request for {path}");
@@ -450,129 +450,30 @@ impl Manager {
     async fn start_target_devices(
         &mut self,
         targets: Vec<TargetDeviceType>,
-    ) -> Result<HashMap<String, mpsc::Sender<TargetCommand>>, Box<dyn Error>> {
+    ) -> Result<HashMap<String, TargetDeviceClient>, Box<dyn Error>> {
         let mut target_devices = HashMap::new();
-        for target in targets {
-            match target {
-                TargetDeviceType::Null => (),
-                TargetDeviceType::DBus(mut device) => {
-                    let path = self.next_target_path("dbus")?;
-                    let event_tx = device.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    device.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = device.run().await {
-                            log::error!("Failed to run target dbus device: {:?}", e);
-                        }
-                        log::debug!("Target dbus device closed at: {}", path);
-                    });
+        for mut target in targets {
+            // Get the target device class to determine the DBus path to use for
+            // the device.
+            let device_class = target.dbus_device_class();
+            let path = self.next_target_path(device_class)?;
+
+            // Get a client reference to communicate with the target device
+            let Some(client) = target.client() else {
+                log::trace!("No client implemented for target device");
+                continue;
+            };
+            target_devices.insert(path.clone(), client.clone());
+            self.target_devices.insert(path.clone(), client.clone());
+            target.listen_on_dbus(path.clone()).await?;
+
+            // Run the target device
+            tokio::spawn(async move {
+                if let Err(e) = target.run().await {
+                    log::error!("Failed to run target device {path}: {e:?}");
                 }
-                TargetDeviceType::DualSense(mut device) => {
-                    let path = self.next_target_path("gamepad")?;
-                    let event_tx = device.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    device.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = device.run().await {
-                            log::error!("Failed to run target dualsense device: {:?}", e);
-                        }
-                        log::debug!("Target dualsense device closed at: {}", path);
-                    });
-                }
-                TargetDeviceType::Keyboard(mut device) => {
-                    let path = self.next_target_path("keyboard")?;
-                    let event_tx = device.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    device.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = device.run().await {
-                            log::error!("Failed to run target keyboard: {:?}", e);
-                        }
-                        log::debug!("Target keyboard device closed at: {}", path);
-                    });
-                }
-                TargetDeviceType::Mouse(mut mouse) => {
-                    let path = self.next_target_path("mouse")?;
-                    let event_tx = mouse.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    mouse.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = mouse.run().await {
-                            log::error!("Failed to run target mouse: {:?}", e);
-                        }
-                        log::debug!("Target mouse device closed at: {}", path);
-                    });
-                }
-                TargetDeviceType::SteamDeck(mut device) => {
-                    let path = self.next_target_path("gamepad")?;
-                    let event_tx = device.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    device.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = device.run().await {
-                            log::error!("Failed to run target steam deck device: {:?}", e);
-                        }
-                        log::debug!("Target steam deck device closed at: {}", path);
-                    });
-                }
-                TargetDeviceType::Touchscreen(mut device) => {
-                    let path = self.next_target_path("touchscreen")?;
-                    let event_tx = device.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    device.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = device.run().await {
-                            log::error!("Failed to run target touchscreen device: {:?}", e);
-                        }
-                        log::debug!("Target touchscreen device closed at: {}", path);
-                    });
-                }
-                TargetDeviceType::XBox360(mut gamepad) => {
-                    let path = self.next_target_path("gamepad")?;
-                    let event_tx = gamepad.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    gamepad.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = gamepad.run().await {
-                            log::error!("Failed to run target gamepad: {:?}", e);
-                        }
-                        log::debug!("Target gamepad device closed at: {}", path);
-                    });
-                }
-                TargetDeviceType::XBoxSeries(mut gamepad) => {
-                    let path = self.next_target_path("gamepad")?;
-                    let event_tx = gamepad.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    gamepad.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = gamepad.run().await {
-                            log::error!("Failed to run target gamepad: {:?}", e);
-                        }
-                        log::debug!("Target gamepad device closed at: {}", path);
-                    });
-                }
-                TargetDeviceType::XBoxElite(mut gamepad) => {
-                    let path = self.next_target_path("gamepad")?;
-                    let event_tx = gamepad.transmitter();
-                    target_devices.insert(path.clone(), event_tx.clone());
-                    self.target_devices.insert(path.clone(), event_tx.clone());
-                    gamepad.listen_on_dbus(path.clone()).await?;
-                    tokio::spawn(async move {
-                        if let Err(e) = gamepad.run().await {
-                            log::error!("Failed to run target gamepad: {:?}", e);
-                        }
-                        log::debug!("Target gamepad device closed at: {}", path);
-                    });
-                }
-            }
+                log::debug!("Target device closed at: {path}");
+            });
         }
 
         // Spawn tasks to cleanup target devices
@@ -597,7 +498,7 @@ impl Manager {
     async fn create_and_start_target_device(
         &mut self,
         kind: &str,
-    ) -> Result<HashMap<String, mpsc::Sender<TargetCommand>>, ManagerError> {
+    ) -> Result<HashMap<String, TargetDeviceClient>, ManagerError> {
         // Create the target device
         let device = match self.create_target_device(kind).await {
             Ok(device) => device,

@@ -7,7 +7,7 @@ use crate::input::{
     event::{native::NativeEvent, Event},
     manager::SourceDeviceInfo,
     output_event::OutputEvent,
-    target::TargetCommand,
+    target::client::TargetDeviceClient,
 };
 
 use super::InterceptMode;
@@ -31,7 +31,7 @@ pub enum CompositeCommand {
     SourceDeviceStopped(String),
     SourceDeviceRemoved(String),
     SetTargetDevices(Vec<String>),
-    AttachTargetDevices(HashMap<String, mpsc::Sender<TargetCommand>>),
+    AttachTargetDevices(HashMap<String, TargetDeviceClient>),
     GetProfileName(mpsc::Sender<String>),
     LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
     WriteEvent(NativeEvent),
