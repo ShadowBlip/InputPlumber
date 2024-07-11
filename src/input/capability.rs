@@ -63,6 +63,12 @@ impl FromStr for Capability {
             "DBus" => Ok(Capability::DBus(Action::from_str(
                 parts.join(":").as_str(),
             )?)),
+            "Touchpad" => Ok(Capability::Touchpad(Touchpad::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "Touchscreen" => Ok(Capability::Touchscreen(Touch::from_str(
+                parts.join(":").as_str(),
+            )?)),
             _ => Err(()),
         }
     }
@@ -156,6 +162,54 @@ impl From<CapabilityConfig> for Capability {
             }
             let action = action.unwrap();
             return Capability::DBus(action);
+        }
+
+        // Touchpad
+        if let Some(touchpad) = value.touchpad.as_ref() {
+            let touch = {
+                if touchpad.touch.motion.is_some() {
+                    Touch::Motion
+                } else if touchpad.touch.button.is_some() {
+                    let button_string = touchpad.touch.button.as_ref().unwrap();
+                    let button = TouchButton::from_str(button_string.as_str());
+                    if button.is_err() {
+                        log::error!("Invalid or unimplemented button: {button_string}");
+                        return Capability::NotImplemented;
+                    }
+                    let button = button.unwrap();
+                    Touch::Button(button)
+                } else {
+                    log::error!("Invalid or unimplemented touchpad config");
+                    return Capability::NotImplemented;
+                }
+            };
+
+            // TODO: Is there a better way to do this?
+            match touchpad.name.as_str() {
+                "LeftPad" => return Capability::Touchpad(Touchpad::LeftPad(touch)),
+                "RightPad" => return Capability::Touchpad(Touchpad::RightPad(touch)),
+                "CenterPad" => return Capability::Touchpad(Touchpad::CenterPad(touch)),
+                _ => return Capability::NotImplemented,
+            }
+        }
+
+        // Touchscreen
+        if let Some(touch) = value.touchscreen.as_ref() {
+            // Motion
+            if touch.motion.is_some() {
+                return Capability::Touchscreen(Touch::Motion);
+            }
+
+            // Button
+            if let Some(button_string) = touch.button.as_ref() {
+                let button = TouchButton::from_str(button_string);
+                if button.is_err() {
+                    log::error!("Invalid or unimplemented button: {button_string}");
+                    return Capability::NotImplemented;
+                }
+                let button = button.unwrap();
+                return Capability::Touchscreen(Touch::Button(button));
+            }
         }
 
         Capability::NotImplemented
@@ -1040,6 +1094,7 @@ impl FromStr for Keyboard {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Touchpad {
     LeftPad(Touch),
