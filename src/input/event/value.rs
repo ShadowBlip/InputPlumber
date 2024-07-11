@@ -3,6 +3,8 @@ use crate::{
     input::capability::{Capability, Gamepad, Mouse, Touch, Touchpad},
 };
 
+use super::dbus::Action;
+
 /// Possible errors while doing input value translation
 pub enum TranslationError {
     /// Translation not yet implemented
@@ -283,15 +285,18 @@ impl InputValue {
                     // Touchscreen Motion -> Sync
                     Capability::Sync => Ok(InputValue::Bool(false)),
                     // Touchscreen Motion -> DBus
-                    Capability::DBus(_) => todo!(),
+                    Capability::DBus(action) => match action {
+                        Action::Touch => Ok(self.clone()),
+                        _ => Err(TranslationError::NotImplemented),
+                    },
                     // Touchscreen Motion -> Gamepad ...
                     Capability::Gamepad(_) => Err(TranslationError::NotImplemented),
                     // Touchscreen Motion -> Mouse
                     Capability::Mouse(mouse) => match mouse {
                         // Touchscreen Motion -> Mouse Motion
-                        Mouse::Motion => todo!(),
+                        Mouse::Motion => Err(TranslationError::NotImplemented),
                         // Touchscreen Motion -> Mouse Button
-                        Mouse::Button(_) => todo!(),
+                        Mouse::Button(_) => Err(TranslationError::NotImplemented),
                     },
                     // Touchscreen Motion -> Keyboard
                     Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
