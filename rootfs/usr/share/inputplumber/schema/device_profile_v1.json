@@ -31,13 +31,16 @@
               "keyboard",
               "gamepad",
               "xb360",
+              "xbox-elite",
+              "xbox-series",
               "deck",
               "ds5",
               "ds5-usb",
               "ds5-bt",
               "ds5-edge",
               "ds5-edge-usb",
-              "ds5-edge-bt"
+              "ds5-edge-bt",
+              "touchscreen-fts3528"
             ]
           }
         },
@@ -254,6 +257,12 @@
         "mouse": {
           "$ref": "#/definitions/MouseEvent"
         },
+        "touchpad": {
+          "$ref": "#/definitions/TouchpadEvent"
+        },
+        "touchscreen": {
+          "$ref": "#/definitions/TouchEvent"
+        },
         "dbus": {
           "type": "string",
           "enum": [
@@ -276,7 +285,11 @@
             "ui_r2",
             "ui_r3",
             "ui_volume_up",
-            "ui_volume_down"
+            "ui_volume_down",
+            "ui_volume_mute",
+            "ui_osk",
+            "ui_screenshot",
+            "ui_touch"
           ]
         },
         "gamepad": {
@@ -324,6 +337,68 @@
             "right",
             "up",
             "down"
+          ]
+        },
+        "speed_pps": {
+          "type": "number",
+          "description": "Speed of the target motion event in pixels per second",
+          "default": 800
+        }
+      }
+    },
+    "TouchpadEvent": {
+      "title": "TouchpadEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "LeftPad",
+            "RightPad",
+            "CenterPad"
+          ]
+        },
+        "touch": {
+          "$ref": "#/definitions/TouchEvent"
+        }
+      }
+    },
+    "TouchEvent": {
+      "title": "TouchEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "motion": {
+          "$ref": "#/definitions/TouchMotionEvent"
+        },
+        "button": {
+          "type": "string",
+          "enum": [
+            "Touch",
+            "Press"
+          ]
+        }
+      },
+      "required": []
+    },
+    "TouchMotionEvent": {
+      "title": "TouchMotionEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "region": {
+          "type": "string",
+          "description": "Map from a specific region of the touch device",
+          "enum": [
+            "left",
+            "right",
+            "top",
+            "bottom",
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right"
           ]
         },
         "speed_pps": {

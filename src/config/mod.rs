@@ -135,6 +135,22 @@ impl ProfileMapping {
             }
         }
 
+        // Touchpad event
+        // TODO: implement touchpad specific matching
+
+        // Touchscreen event
+        if let Some(touch) = self.source_event.touchscreen.as_ref() {
+            // Touch motion
+            if let Some(motion) = touch.motion.as_ref() {
+                // Touch motion was defined for source event!
+                if let Some(_direction) = motion.region.as_ref() {
+                    // TODO: Implement ability to map certain parts of the touch
+                    // screen.
+                    return true;
+                }
+            }
+        }
+
         // If no other input types were defined in the config, then it counts as
         // a match.
         true
@@ -182,6 +198,8 @@ pub struct CapabilityConfig {
     pub keyboard: Option<String>,
     pub mouse: Option<MouseCapability>,
     pub dbus: Option<String>,
+    pub touchpad: Option<TouchpadCapability>,
+    pub touchscreen: Option<TouchCapability>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -228,6 +246,27 @@ pub struct MouseCapability {
 #[serde(rename_all = "snake_case")]
 pub struct MouseMotionCapability {
     pub direction: Option<String>,
+    pub speed_pps: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct TouchpadCapability {
+    pub name: String,
+    pub touch: TouchCapability,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct TouchCapability {
+    pub button: Option<String>,
+    pub motion: Option<TouchMotionCapability>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct TouchMotionCapability {
+    pub region: Option<String>,
     pub speed_pps: Option<u64>,
 }
 
