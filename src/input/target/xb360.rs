@@ -113,7 +113,11 @@ impl XBox360Controller {
                 }
                 TargetCommand::WriteEvent(event) => {
                     log::trace!("Got event to emit: {:?}", event);
+                    log::debug!("Before value: {:?}", event.get_value());
                     let evdev_events = self.translate_event(event, axes_map.clone());
+                    for event in evdev_events.iter() {
+                        log::debug!("After value: {:?}", event.value());
+                    }
                     if let Ok(mut dev) = device.lock() {
                         dev.emit(evdev_events.as_slice())?;
                         dev.emit(&[
