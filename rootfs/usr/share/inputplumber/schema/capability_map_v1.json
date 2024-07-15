@@ -251,6 +251,7 @@
           "enum": [
             "LeftStick",
             "RightStick",
+            "Hat0",
             "Hat1",
             "Hat2",
             "Hat3"

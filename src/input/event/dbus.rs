@@ -215,7 +215,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 GamepadAxis::LeftStick => {
                     vec![Action::Left, Action::Right, Action::Up, Action::Down]
                 }
-                GamepadAxis::Hat1 => {
+                GamepadAxis::Hat0 => {
                     vec![Action::Left, Action::Right, Action::Up, Action::Down]
                 }
                 GamepadAxis::Buttons(negative, positive) => {

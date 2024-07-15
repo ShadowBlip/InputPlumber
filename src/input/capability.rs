@@ -513,6 +513,7 @@ impl FromStr for GamepadButton {
 pub enum GamepadAxis {
     LeftStick,
     RightStick,
+    Hat0,
     Hat1,
     Hat2,
     Hat3,
@@ -525,6 +526,7 @@ impl fmt::Display for GamepadAxis {
         match self {
             GamepadAxis::LeftStick => write!(f, "LeftStick"),
             GamepadAxis::RightStick => write!(f, "RightStick"),
+            GamepadAxis::Hat0 => write!(f, "Hat0"),
             GamepadAxis::Hat1 => write!(f, "Hat1"),
             GamepadAxis::Hat2 => write!(f, "Hat2"),
             GamepadAxis::Hat3 => write!(f, "Hat3"),
@@ -540,6 +542,7 @@ impl FromStr for GamepadAxis {
         match s {
             "LeftStick" => Ok(GamepadAxis::LeftStick),
             "RightStick" => Ok(GamepadAxis::RightStick),
+            "Hat0" => Ok(GamepadAxis::Hat0),
             "Hat1" => Ok(GamepadAxis::Hat1),
             "Hat2" => Ok(GamepadAxis::Hat2),
             "Hat3" => Ok(GamepadAxis::Hat3),

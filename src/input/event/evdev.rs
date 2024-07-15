@@ -623,14 +623,17 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 GamepadAxis::RightStick => {
                     vec![AbsoluteAxisCode::ABS_RX.0, AbsoluteAxisCode::ABS_RY.0]
                 }
-                GamepadAxis::Hat1 => {
+                GamepadAxis::Hat0 => {
                     vec![AbsoluteAxisCode::ABS_HAT0X.0, AbsoluteAxisCode::ABS_HAT0Y.0]
                 }
-                GamepadAxis::Hat2 => {
+                GamepadAxis::Hat1 => {
                     vec![AbsoluteAxisCode::ABS_HAT1X.0, AbsoluteAxisCode::ABS_HAT1Y.0]
                 }
-                GamepadAxis::Hat3 => {
+                GamepadAxis::Hat2 => {
                     vec![AbsoluteAxisCode::ABS_HAT2X.0, AbsoluteAxisCode::ABS_HAT2Y.0]
+                }
+                GamepadAxis::Hat3 => {
+                    vec![AbsoluteAxisCode::ABS_HAT3X.0, AbsoluteAxisCode::ABS_HAT3Y.0]
                 }
                 GamepadAxis::Buttons(_, _) => {
                     vec![AbsoluteAxisCode::ABS_HAT0X.0, AbsoluteAxisCode::ABS_HAT0Y.0]
