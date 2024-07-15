@@ -2,9 +2,14 @@ pub mod dualsense;
 pub mod fts3528;
 pub mod lego;
 pub mod opineo;
+pub mod rog_ally;
 pub mod steam_deck;
+pub mod xpad_uhid;
 
 use std::{error::Error, time::Duration};
+
+use rog_ally::RogAlly;
+use xpad_uhid::XpadUhid;
 
 use crate::{
     constants::BUS_SOURCES_PREFIX, drivers, input::composite_device::client::CompositeDeviceClient,
@@ -26,6 +31,8 @@ enum DriverType {
     LegionGo,
     OrangePiNeo,
     Fts3528Touchscreen,
+    XpadUhid,
+    RogAlly,
 }
 
 /// [HidRawDevice] represents an input device using the hidraw subsystem.
@@ -36,6 +43,8 @@ pub enum HidRawDevice {
     LegionGo(SourceDriver<LegionController>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
     Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
+    XpadUhid(SourceDriver<XpadUhid>),
+    RogAlly(SourceDriver<RogAlly>),
 }
 
 impl HidRawDevice {
@@ -85,6 +94,21 @@ impl HidRawDevice {
                 let source_device = SourceDriver::new(composite_device, device, device_info);
                 Ok(Self::Fts3528Touchscreen(source_device))
             }
+            DriverType::XpadUhid => {
+                let device = XpadUhid::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::XpadUhid(source_device))
+            }
+            DriverType::RogAlly => {
+                let device = RogAlly::new(device_info.clone())?;
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(500),
+                    buffer_size: 1024,
+                };
+                let source_device =
+                    SourceDriver::new_with_options(composite_device, device, device_info, options);
+                Ok(Self::RogAlly(source_device))
+            }
         }
     }
 
@@ -123,6 +147,20 @@ impl HidRawDevice {
         if vid == drivers::fts3528::driver::VID && pid == drivers::fts3528::driver::PID {
             log::info!("Detected FTS3528 Touchscreen");
             return DriverType::Fts3528Touchscreen;
+        }
+
+        // XpadUhid
+        if drivers::xpad_uhid::driver::VIDS.contains(&vid)
+            && drivers::xpad_uhid::driver::PIDS.contains(&pid)
+        {
+            log::info!("Detected UHID XPAD");
+            return DriverType::XpadUhid;
+        }
+
+        // Rog Ally
+        if vid == drivers::rog_ally::driver::VID && drivers::rog_ally::driver::PIDS.contains(&pid) {
+            log::info!("Detected ROG Ally");
+            return DriverType::RogAlly;
         }
 
         // Unknown

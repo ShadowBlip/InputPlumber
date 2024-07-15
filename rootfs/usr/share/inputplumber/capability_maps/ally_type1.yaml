@@ -18,7 +18,7 @@ mapping:
       - keyboard: KeyF16
     target_event:
       gamepad:
-        button: Guide #Select
+        button: Guide
   - name: Control Center (Long)
     source_events:
       - keyboard: KeyLeftCtrl
@@ -32,7 +32,7 @@ mapping:
       - keyboard: KeyProg1
     target_event:
       gamepad:
-        button: QuickAccess #Start
+        button: QuickAccess
   - name: Armory Crate (Long)
     source_events:
       - keyboard: KeyF17

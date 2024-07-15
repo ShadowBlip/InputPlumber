@@ -115,10 +115,10 @@ impl Driver {
         //log::trace!("---- End Report ----");
 
         // Update the state
-        let old_dinput_state = self.update_touchpad_state(input_report);
+        let old_state = self.update_touchpad_state(input_report);
 
         // Translate the state into a stream of input events
-        let events = self.translate_touch(old_dinput_state);
+        let events = self.translate_touch(old_state);
 
         Ok(events)
     }
