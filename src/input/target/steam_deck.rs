@@ -356,7 +356,7 @@ impl SteamDeckDevice {
                             y,
                         } => (),
                     },
-                    GamepadAxis::Hat1 => match value {
+                    GamepadAxis::Hat0 => match value {
                         InputValue::None => (),
                         InputValue::Bool(_) => (),
                         InputValue::Float(_) => (),
@@ -405,6 +405,7 @@ impl SteamDeckDevice {
                             y: _,
                         } => (),
                     },
+                    GamepadAxis::Hat1 => (),
                     GamepadAxis::Hat2 => (),
                     GamepadAxis::Hat3 => (),
                     GamepadAxis::Buttons(_, _) => (),

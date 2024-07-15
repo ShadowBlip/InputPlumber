@@ -28,6 +28,32 @@ mapping:
     target_events:
       - dbus: ui_quick
 
+  # Dpad
+  - name: D-Up
+    source_event:
+      gamepad:
+        button: DPadUp
+    target_events:
+      - keyboard: KeyUp
+  - name: D-Down
+    source_event:
+      gamepad:
+        button: DPadDown
+    target_events:
+      - keyboard: KeyDown
+  - name: D-Left
+    source_event:
+      gamepad:
+        button: DPadLeft
+    target_events:
+      - keyboard: KeyLeft
+  - name: D-Right
+    source_event:
+      gamepad:
+        button: DPadRight
+    target_events:
+      - keyboard: KeyRight
+
   # Left Stick
   - name: Left
     source_event:

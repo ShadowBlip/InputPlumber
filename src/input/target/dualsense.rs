@@ -1290,7 +1290,7 @@ impl DualSenseDevice {
                             }
                         }
                     }
-                    GamepadAxis::Hat1 => {
+                    GamepadAxis::Hat0 => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
                                 let value = denormalize_signed_value(x, -1.0, 1.0);
@@ -1480,6 +1480,7 @@ impl DualSenseDevice {
                             }
                         }
                     }
+                    GamepadAxis::Hat1 => (),
                     GamepadAxis::Hat2 => (),
                     GamepadAxis::Hat3 => (),
                     // TODO: Remove GamepadAxis::Buttons
