@@ -2,7 +2,9 @@ use std::sync::mpsc::Sender;
 
 use ::evdev::{FFEffectData, InputEvent};
 
-use crate::drivers::dualsense::hid_report::SetStatePackedOutputData;
+use crate::drivers::{
+    dualsense::hid_report::SetStatePackedOutputData, xpad_uhid::hid_report::XpadUhidOutputData,
+};
 
 use super::output_capability::OutputCapability;
 

@@ -1,4 +1,4 @@
-/// Events that can be emitted by the Steam Deck controller
+/// Events that can be emitted by the Legion Go controller
 #[derive(Clone, Debug)]
 pub enum Event {
     Button(ButtonEvent),
@@ -157,3 +157,4 @@ pub enum StatusEvent {
     RightControllerMode0(StatusInput),
     RightControllerMode1(StatusInput),
 }
+

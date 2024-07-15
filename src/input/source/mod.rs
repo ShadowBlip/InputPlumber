@@ -373,6 +373,8 @@ impl SourceDevice {
                 HidRawDevice::LegionGo(device) => device.info(),
                 HidRawDevice::OrangePiNeo(device) => device.info(),
                 HidRawDevice::Fts3528Touchscreen(device) => device.info(),
+                HidRawDevice::XpadUhid(device) => device.info(),
+                HidRawDevice::RogAlly(device) => device.info(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.info(),
@@ -394,6 +396,8 @@ impl SourceDevice {
                 HidRawDevice::LegionGo(device) => device.info_ref(),
                 HidRawDevice::OrangePiNeo(device) => device.info_ref(),
                 HidRawDevice::Fts3528Touchscreen(device) => device.info_ref(),
+                HidRawDevice::XpadUhid(device) => device.info_ref(),
+                HidRawDevice::RogAlly(device) => device.info_ref(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.info_ref(),
@@ -415,6 +419,8 @@ impl SourceDevice {
                 HidRawDevice::LegionGo(device) => device.get_id(),
                 HidRawDevice::OrangePiNeo(device) => device.get_id(),
                 HidRawDevice::Fts3528Touchscreen(device) => device.get_id(),
+                HidRawDevice::XpadUhid(device) => device.get_id(),
+                HidRawDevice::RogAlly(device) => device.get_id(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.get_id(),
@@ -436,6 +442,8 @@ impl SourceDevice {
                 HidRawDevice::LegionGo(device) => device.client(),
                 HidRawDevice::OrangePiNeo(device) => device.client(),
                 HidRawDevice::Fts3528Touchscreen(device) => device.client(),
+                HidRawDevice::XpadUhid(device) => device.client(),
+                HidRawDevice::RogAlly(device) => device.client(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.client(),
@@ -457,6 +465,8 @@ impl SourceDevice {
                 HidRawDevice::LegionGo(device) => device.run().await,
                 HidRawDevice::OrangePiNeo(device) => device.run().await,
                 HidRawDevice::Fts3528Touchscreen(device) => device.run().await,
+                HidRawDevice::XpadUhid(device) => device.run().await,
+                HidRawDevice::RogAlly(device) => device.run().await,
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.run().await,
@@ -478,6 +488,8 @@ impl SourceDevice {
                 HidRawDevice::LegionGo(device) => device.get_capabilities(),
                 HidRawDevice::OrangePiNeo(device) => device.get_capabilities(),
                 HidRawDevice::Fts3528Touchscreen(device) => device.get_capabilities(),
+                HidRawDevice::XpadUhid(device) => device.get_capabilities(),
+                HidRawDevice::RogAlly(device) => device.get_capabilities(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.get_capabilities(),
@@ -499,6 +511,8 @@ impl SourceDevice {
                 HidRawDevice::LegionGo(device) => device.get_device_path(),
                 HidRawDevice::OrangePiNeo(device) => device.get_device_path(),
                 HidRawDevice::Fts3528Touchscreen(device) => device.get_device_path(),
+                HidRawDevice::XpadUhid(device) => device.get_device_path(),
+                HidRawDevice::RogAlly(device) => device.get_device_path(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.get_device_path(),

@@ -154,7 +154,7 @@ impl XboxEliteController {
 
 impl TargetInputDevice for XboxEliteController {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
-        log::debug!("Received event: {event:?}");
+        log::trace!("Received event: {event:?}");
 
         // Check for QuickAccess, create chord for event.
         let cap = event.as_capability();
@@ -181,7 +181,7 @@ impl TargetInputDevice for XboxEliteController {
 
             self.queued_events.push(guide);
             self.queued_events.push(south);
-            log::debug!("Added QAM Chord to queued events!");
+            log::trace!("Added QAM Chord to queued events!");
             return Ok(());
         }
 

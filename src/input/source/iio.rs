@@ -66,7 +66,7 @@ impl IioDevice {
         log::debug!("Finding driver for IIO interface: {name}");
         // BMI_IMU
         if glob_match("{i2c-10EC5280*,i2c-BMI*,bmi*-imu}", name) {
-            log::info!("Detected Steam Deck");
+            log::info!("Detected BMI IMU");
             return DriverType::BmiImu;
         }
 

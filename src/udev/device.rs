@@ -228,17 +228,24 @@ impl AttributeSetter for ::udev::Device {
         attribute: &str,
         value: &str,
     ) -> Result<(), Box<dyn Error>> {
-        let result = match self.attribute_value(attribute) {
-            Some(_) => Ok(self.set_attribute_value(OsStr::new(attribute), OsStr::new(value))?),
+        match self.attribute_value(attribute) {
+            Some(_) => {
+                log::trace!("Set '{attribute}' on {:?}", self.syspath(),);
+                Ok(self.set_attribute_value(OsStr::new(attribute), OsStr::new(value))?)
+            }
             None => {
                 if let Some(mut parent) = self.parent() {
-                    return parent.set_attribute_on_tree(attribute, value);
+                    log::trace!(
+                        "Couldn't find '{attribute}' on {:?}, checking parent {:?}",
+                        self.syspath(),
+                        parent.syspath()
+                    );
+                    parent.set_attribute_on_tree(attribute, value)
                 } else {
-                    return Err("Failed to find {attribute} on device tree.".into());
-                };
+                    Err(format!("Failed to find '{attribute}' on device tree.").into())
+                }
             }
-        };
-        result
+        }
     }
 }
 
