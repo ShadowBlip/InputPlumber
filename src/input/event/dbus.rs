@@ -218,31 +218,6 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 GamepadAxis::Hat0 => {
                     vec![Action::Left, Action::Right, Action::Up, Action::Down]
                 }
-                GamepadAxis::Buttons(negative, positive) => {
-                    let mut dpad_actions = vec![];
-                    // Match negative axis buttons (up and left)
-                    match negative {
-                        GamepadButton::DPadUp => {
-                            dpad_actions.push(Action::Up);
-                        }
-                        GamepadButton::DPadLeft => {
-                            dpad_actions.push(Action::Left);
-                        }
-                        _ => (),
-                    };
-                    // Match positive axis buttons (down and right)
-                    match positive {
-                        GamepadButton::DPadDown => {
-                            dpad_actions.push(Action::Down);
-                        }
-                        GamepadButton::DPadRight => {
-                            dpad_actions.push(Action::Right);
-                        }
-                        _ => (),
-                    }
-
-                    dpad_actions
-                }
                 _ => vec![Action::None],
             },
             _ => vec![Action::None],

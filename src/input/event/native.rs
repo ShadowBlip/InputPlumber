@@ -1,4 +1,6 @@
-use crate::input::capability::Capability;
+use evdev::AbsoluteAxisCode;
+
+use crate::input::capability::{Capability, Gamepad, GamepadButton};
 
 use super::{evdev::EvdevEvent, value::InputValue};
 
@@ -70,6 +72,49 @@ impl NativeEvent {
     /// Returns whether or not the event is "pressed"
     pub fn pressed(&self) -> bool {
         self.value.pressed()
+    }
+
+    pub fn from_evdev_raw(event: EvdevEvent, hat_state: Option<i32>) -> NativeEvent {
+        // If this is a Dpad input, figure out with button this event is for
+        let capability = if let Some(old_state) = hat_state {
+            let axis = AbsoluteAxisCode(event.as_input_event().code());
+            let value = event.as_input_event().value();
+
+            match axis {
+                AbsoluteAxisCode::ABS_HAT0X => match value {
+                    -1 => Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+                    1 => Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+                    0 => match old_state {
+                        -1 => Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+                        1 => Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+                        _ => Capability::NotImplemented,
+                    },
+                    _ => Capability::NotImplemented,
+                },
+                AbsoluteAxisCode::ABS_HAT0Y => match value {
+                    -1 => Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+                    1 => Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+                    0 => match old_state {
+                        -1 => Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+                        1 => Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+                        _ => Capability::NotImplemented,
+                    },
+                    _ => Capability::NotImplemented,
+                },
+
+                _ => Capability::NotImplemented,
+            }
+        } else {
+            event.as_capability()
+        };
+
+        let value = event.get_value();
+
+        NativeEvent {
+            capability,
+            value,
+            source_capability: None,
+        }
     }
 }
 

@@ -517,8 +517,6 @@ pub enum GamepadAxis {
     Hat1,
     Hat2,
     Hat3,
-    /// Axis input from two binary button inputs
-    Buttons(GamepadButton, GamepadButton),
 }
 
 impl fmt::Display for GamepadAxis {
@@ -530,7 +528,6 @@ impl fmt::Display for GamepadAxis {
             GamepadAxis::Hat1 => write!(f, "Hat1"),
             GamepadAxis::Hat2 => write!(f, "Hat2"),
             GamepadAxis::Hat3 => write!(f, "Hat3"),
-            GamepadAxis::Buttons(_, _) => write!(f, "Buttons"),
         }
     }
 }
