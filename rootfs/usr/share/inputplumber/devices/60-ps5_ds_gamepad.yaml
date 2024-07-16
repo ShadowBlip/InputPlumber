@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Sony Interactive Entertainment DualSense Wireless Controller
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+source_devices:
+  # Read events from the evdev device
+  - group: gamepad
+    evdev:
+      name: Sony Interactive Entertainment DualSense Wireless Controller
+      vendor_id: 054c
+      product_id: 0ce6
+
+  # Block the touchpad/imu until driver support is added
+  - group: gamepad
+    blocked: true
+    unique: false
+    evdev:
+      name: Sony Interactive Entertainment DualSense Wireless Controller {Touchpad,Motion Sensors}
+      vendor_id: 054c
+      product_id: 0ce6
+
+  # Block the hidraw device to prevent SDL usage of the device
+  - group: gamepad
+    blocked: true
+    unique: false
+    hidraw:
+      vendor_id: 0x054c
+      product_id: 0x0ce6
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - ds5
+  - mouse
+  - keyboard
