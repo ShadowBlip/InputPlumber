@@ -408,7 +408,6 @@ impl SteamDeckDevice {
                     GamepadAxis::Hat1 => (),
                     GamepadAxis::Hat2 => (),
                     GamepadAxis::Hat3 => (),
-                    GamepadAxis::Buttons(_, _) => (),
                 },
                 Gamepad::Trigger(_) => (),
                 Gamepad::Accelerometer => (),

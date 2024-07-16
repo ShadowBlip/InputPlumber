@@ -50,14 +50,20 @@ impl EvdevEvent {
                     x: None,
                     y: Some(normal_value),
                 },
-                AbsoluteAxisCode::ABS_HAT0X => InputValue::Vector2 {
-                    x: Some(normal_value),
-                    y: None,
-                },
-                AbsoluteAxisCode::ABS_HAT0Y => InputValue::Vector2 {
-                    x: None,
-                    y: Some(normal_value),
-                },
+                AbsoluteAxisCode::ABS_HAT0X => {
+                    if normal_value == 0.0 {
+                        InputValue::Bool(false)
+                    } else {
+                        InputValue::Bool(true)
+                    }
+                }
+                AbsoluteAxisCode::ABS_HAT0Y => {
+                    if normal_value == 0.0 {
+                        InputValue::Bool(false)
+                    } else {
+                        InputValue::Bool(true)
+                    }
+                }
                 AbsoluteAxisCode::ABS_HAT1X => InputValue::Vector2 {
                     x: Some(normal_value),
                     y: None,
@@ -427,12 +433,12 @@ impl EvdevEvent {
                 AbsoluteAxisCode::ABS_RZ => {
                     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger))
                 }
-                AbsoluteAxisCode::ABS_HAT0X => Capability::Gamepad(Gamepad::Axis(
-                    GamepadAxis::Buttons(GamepadButton::DPadLeft, GamepadButton::DPadRight),
-                )),
-                AbsoluteAxisCode::ABS_HAT0Y => Capability::Gamepad(Gamepad::Axis(
-                    GamepadAxis::Buttons(GamepadButton::DPadUp, GamepadButton::DPadDown),
-                )),
+                AbsoluteAxisCode::ABS_HAT0X => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat0))
+                }
+                AbsoluteAxisCode::ABS_HAT0Y => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat0))
+                }
                 _ => Capability::NotImplemented,
             },
             EventType::RELATIVE => match RelativeAxisCode(code) {
@@ -634,9 +640,6 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 }
                 GamepadAxis::Hat3 => {
                     vec![AbsoluteAxisCode::ABS_HAT3X.0, AbsoluteAxisCode::ABS_HAT3Y.0]
-                }
-                GamepadAxis::Buttons(_, _) => {
-                    vec![AbsoluteAxisCode::ABS_HAT0X.0, AbsoluteAxisCode::ABS_HAT0Y.0]
                 }
             },
             Gamepad::Trigger(trigg) => match trigg {

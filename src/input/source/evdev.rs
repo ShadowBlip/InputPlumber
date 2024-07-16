@@ -11,9 +11,9 @@ use crate::{
     constants::BUS_PREFIX,
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
-        capability::Capability,
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton},
         composite_device::client::CompositeDeviceClient,
-        event::{evdev::EvdevEvent, Event},
+        event::{evdev::EvdevEvent, native::NativeEvent, Event},
         output_event::OutputEvent,
     },
     procfs,
@@ -35,6 +35,7 @@ pub struct EventDevice {
     rx: mpsc::Receiver<SourceCommand>,
     ff_effects: HashMap<i16, FFEffect>,
     ff_effects_dualsense: Option<i16>,
+    hat_state: HashMap<AbsoluteAxisCode, i32>,
 }
 
 impl EventDevice {
@@ -47,6 +48,7 @@ impl EventDevice {
             rx,
             ff_effects: HashMap::new(),
             ff_effects_dualsense: None,
+            hat_state: HashMap::new(),
         }
     }
 
@@ -129,7 +131,7 @@ impl EventDevice {
 
     /// Process incoming events and send them to the composite device.
     async fn process_events(
-        &self,
+        &mut self,
         events: Vec<InputEvent>,
         axes_info: &HashMap<AbsoluteAxisCode, AbsInfo>,
     ) -> Result<(), Box<dyn Error>> {
@@ -150,6 +152,26 @@ impl EventDevice {
                 None
             };
 
+            let state = if event.event_type() == EventType::ABSOLUTE {
+                let axis = AbsoluteAxisCode(event.code());
+
+                let state = match axis {
+                    AbsoluteAxisCode::ABS_HAT0X | AbsoluteAxisCode::ABS_HAT0Y => {
+                        let value = event.value();
+                        let last_value = *self.hat_state.get(&axis).unwrap_or(&0);
+                        self.hat_state
+                            .entry(axis)
+                            .and_modify(|v| *v = value)
+                            .or_insert(value);
+                        Some(last_value)
+                    }
+                    _ => None,
+                };
+                state
+            } else {
+                None
+            };
+
             // Convert the event into an [EvdevEvent] and optionally include
             // the axis information with min/max values
             let mut evdev_event: EvdevEvent = event.into();
@@ -157,8 +179,11 @@ impl EventDevice {
                 evdev_event.set_abs_info(*info);
             }
 
+            // Convert the event into a [NativeEvent]
+            let native_event: NativeEvent = NativeEvent::from_evdev_raw(evdev_event, state);
+
             // Send the event to the composite device
-            let event = Event::Evdev(evdev_event);
+            let event = Event::Native(native_event);
             self.composite_device
                 .process_event(self.get_id(), event)
                 .await?;
@@ -432,6 +457,20 @@ impl EventDevice {
                         let input_event = InputEvent::new(event.0, axis.0, 0);
                         let evdev_event = EvdevEvent::from(input_event);
                         let cap = evdev_event.as_capability();
+                        if cap == Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat0)) {
+                            capabilities
+                                .push(Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)));
+                            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                                GamepadButton::DPadDown,
+                            )));
+                            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                                GamepadButton::DPadLeft,
+                            )));
+                            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                                GamepadButton::DPadRight,
+                            )));
+                            continue;
+                        }
                         capabilities.push(cap);
                     }
                 }
