@@ -388,6 +388,8 @@ pub enum GamepadButton {
     Keyboard,
     /// Dedicated screenshot button
     Screenshot,
+    /// Dedicated mute button
+    Mute,
     /// Directional Pad up
     DPadUp,
     /// Directional Pad down
@@ -444,6 +446,7 @@ impl fmt::Display for GamepadButton {
             GamepadButton::QuickAccess2 => write!(f, "QuickAccess2"),
             GamepadButton::Keyboard => write!(f, "Keyboard"),
             GamepadButton::Screenshot => write!(f, "Screenshot"),
+            GamepadButton::Mute => write!(f, "Mute"),
             GamepadButton::DPadUp => write!(f, "DPadUp"),
             GamepadButton::DPadDown => write!(f, "DPadDown"),
             GamepadButton::DPadLeft => write!(f, "DPadLeft"),
@@ -484,6 +487,7 @@ impl FromStr for GamepadButton {
             "QuickAccess2" => Ok(GamepadButton::QuickAccess2),
             "Keyboard" => Ok(GamepadButton::Keyboard),
             "Screenshot" => Ok(GamepadButton::Screenshot),
+            "Mute" => Ok(GamepadButton::Mute),
             "DPadUp" => Ok(GamepadButton::DPadUp),
             "DPadDown" => Ok(GamepadButton::DPadDown),
             "DPadLeft" => Ok(GamepadButton::DPadLeft),

@@ -17,29 +17,30 @@ single_source: false
 matches: []
 
 source_devices:
-  # Read events from the evdev device
   - group: gamepad
-    evdev:
-      name: Sony Interactive Entertainment DualSense Edge Wireless Controller
-      vendor_id: 054c
-      product_id: 0df2
-
-  # Block the touchpad/imu until driver support is added
-  - group: gamepad
-    blocked: true
-    unique: false
-    evdev:
-      name: Sony Interactive Entertainment DualSense Edge Wireless Controller {Touchpad,Motion Sensors}
-      vendor_id: 054c
-      product_id: 0df2
-
-  # Block the hidraw device to prevent SDL usage of the device
-  - group: gamepad
-    blocked: true
-    unique: false
     hidraw:
       vendor_id: 0x054c
       product_id: 0x0df2
+
+  # Block the evdev implementations
+  - group: gamepad
+    blocked: true
+    evdev:
+      name: "{Sony Interactive Entertainment DualSense Edge Wireless Controller,DualSense Edge Wireless Controller}"
+      vendor_id: 054c
+      product_id: 0df2
+  - group: gamepad
+    blocked: true
+    evdev:
+      name: "{Sony Interactive Entertainment DualSense Edge Wireless Controller Touchpad,DualSense Edge Wireless Controller Touchpad}"
+      vendor_id: 054c
+      product_id: 0df2
+  - group: gamepad
+    blocked: true
+    evdev:
+      name: "{Sony Interactive Entertainment DualSense Edge Wireless Controller Motion Sensors,DualSense Edge Wireless Controller Motion Sensors}"
+      vendor_id: 054c
+      product_id: 0df2
 
 # The target input device(s) that the virtual device profile can use
 target_devices:

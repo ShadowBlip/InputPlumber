@@ -1,17 +1,90 @@
 //! Structures derived from the great work of the community of the Game Controller
 //! Collective Wiki.
 //! Source: https://controllers.fandom.com/wiki/Sony_DualSense
+use std::{error::Error, fmt::Display};
+
 use packed_struct::prelude::*;
 
 use super::driver::*;
 
+/// DualSense input report for USB and Bluetooth
 #[derive(Debug, Copy, Clone)]
 pub enum PackedInputDataReport {
     Usb(USBPackedInputDataReport),
     Bluetooth(BluetoothPackedInputDataReport),
 }
 
-#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+impl PackedInputDataReport {
+    pub fn unpack(buf: &[u8], size: usize) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let report_id = buf[0];
+        match report_id {
+            INPUT_REPORT_USB => {
+                // Validate the size of the report
+                if size != INPUT_REPORT_USB_SIZE {
+                    let err = format!(
+                        "Invalid report size for USB: Expected {INPUT_REPORT_USB_SIZE}, Got {size}"
+                    );
+                    return Err(err.into());
+                }
+                log::trace!("Got USB input report");
+
+                // Get a subslice of the buffer
+                let buffer = buf.try_into()?;
+                let data = USBPackedInputDataReport::unpack(buffer)?;
+                Ok(Self::Usb(data))
+            }
+            INPUT_REPORT_BT => {
+                // Validate the size of the report
+                if size != INPUT_REPORT_BT_SIZE {
+                    let err = format!(
+                        "Invalid report size for BT: Expected {INPUT_REPORT_BT_SIZE}, Got {size}"
+                    );
+                    return Err(err.into());
+                }
+                log::trace!("Got Bluetooth input report");
+
+                // Get a subslice of the buffer
+                let buffer = buf.try_into()?;
+                let data = BluetoothPackedInputDataReport::unpack(buffer)?;
+                Ok(Self::Bluetooth(data))
+            }
+            _ => Err(format!("Invalid report id: {report_id}").into()),
+        }
+    }
+
+    /// Return the underlying input report. Both USB and Bluetooth implementations
+    /// share the same USB input state.
+    pub fn state(&self) -> &InputState {
+        match self {
+            PackedInputDataReport::Usb(report) => &report.state,
+            PackedInputDataReport::Bluetooth(report) => &report.state,
+        }
+    }
+
+    /// Return a mutable reference to the underlying input report. Both USB and
+    /// Bluetooth implementations share the same USB input state.
+    pub fn state_mut(&mut self) -> &mut InputState {
+        match self {
+            PackedInputDataReport::Usb(ref mut report) => &mut report.state,
+            PackedInputDataReport::Bluetooth(ref mut report) => &mut report.state,
+        }
+    }
+}
+
+impl Display for PackedInputDataReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PackedInputDataReport::Usb(data) => {
+                write!(f, "{}", data)
+            }
+            PackedInputDataReport::Bluetooth(data) => {
+                write!(f, "{}", data)
+            }
+        }
+    }
+}
+
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum Direction {
     North = 0,
     NorthEast = 1,
@@ -21,13 +94,15 @@ pub enum Direction {
     SouthWest = 5,
     West = 6,
     NorthWest = 7,
+    #[default]
     None = 8,
 }
 
-#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum PowerState {
     Disharging = 0x00,
     Charging = 0x01,
+    #[default]
     Complete = 0x02,
     AbnormalVoltage = 0x0A,
     AbnormalTemperature = 0x0B,
@@ -54,23 +129,270 @@ pub struct TouchFingerData {
     pub y_hi: u8,
 }
 
+impl Default for TouchFingerData {
+    fn default() -> Self {
+        Self {
+            context: 128,
+            x_lo: Default::default(),
+            y_lo: Default::default(),
+            x_hi: Default::default(),
+            y_hi: Default::default(),
+        }
+    }
+}
+
 impl TouchFingerData {
+    pub fn get_x(&self) -> u16 {
+        let x_hi = self.x_hi.to_primitive() as u16;
+        let x_hi = x_hi.rotate_left(8);
+        x_hi | self.x_lo as u16
+    }
+
+    pub fn get_y(&self) -> u16 {
+        let y_lo = self.y_lo.to_primitive() as u16;
+        let y_hi = (self.y_hi as u16).rotate_left(4);
+        y_hi | y_lo
+    }
+
     pub fn set_x(&mut self, x_raw: u16) {
         self.x_lo = (x_raw & 0x00FF) as u8;
         self.x_hi = Integer::from_primitive((x_raw & 0x0F00).rotate_right(8) as u8);
     }
+
     pub fn set_y(&mut self, y_raw: u16) {
         self.y_lo = Integer::from_primitive((y_raw & 0x000F) as u8);
         self.y_hi = (y_raw & 0x0FF0).rotate_right(4) as u8;
     }
 }
 
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq, Default)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "9")]
 pub struct TouchData {
     #[packed_field(element_size_bytes = "4")]
     pub touch_finger_data: [TouchFingerData; 2],
     pub timestamp: u8,
+}
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "63")]
+pub struct InputState {
+    // byte 0-6
+    #[packed_field(bytes = "0")]
+    pub joystick_l_x: u8, // left stick X axis
+    #[packed_field(bytes = "1")]
+    pub joystick_l_y: u8, // left stick Y axis
+    #[packed_field(bytes = "2")]
+    pub joystick_r_x: u8, // right stick X axis
+    #[packed_field(bytes = "3")]
+    pub joystick_r_y: u8, // right stick Y axis
+    #[packed_field(bytes = "4")]
+    pub l2_trigger: u8, // L2 trigger axis
+    #[packed_field(bytes = "5")]
+    pub r2_trigger: u8, // R2 trigger axis
+    #[packed_field(bytes = "6")]
+    pub seq_number: u8, // Sequence number, always 0x01 on BT
+
+    // byte 7
+    #[packed_field(bits = "56")]
+    pub triangle: bool, // Button cluster, x, ◯, □, ∆
+    #[packed_field(bits = "57")]
+    pub circle: bool,
+    #[packed_field(bits = "58")]
+    pub cross: bool,
+    #[packed_field(bits = "59")]
+    pub square: bool,
+    #[packed_field(bits = "60..=63", ty = "enum")]
+    pub dpad: Direction, // Directional buttons
+
+    // byte 8
+    #[packed_field(bits = "64")]
+    pub r3: bool,
+    #[packed_field(bits = "65")]
+    pub l3: bool,
+    #[packed_field(bits = "66")]
+    pub options: bool, // Options button ☰
+    #[packed_field(bits = "67")]
+    pub create: bool, // Create button ⚟
+    #[packed_field(bits = "68")]
+    pub r2: bool, // Triggers
+    #[packed_field(bits = "69")]
+    pub l2: bool,
+    #[packed_field(bits = "70")]
+    pub r1: bool,
+    #[packed_field(bits = "71")]
+    pub l1: bool,
+
+    // byte 9
+    #[packed_field(bits = "72")]
+    pub right_paddle: bool, // Right paddle button (DualSense Edge)
+    #[packed_field(bits = "73")]
+    pub left_paddle: bool, // Left paddle button (DualSense Edge)
+    #[packed_field(bits = "74")]
+    pub right_fn: bool, // Right function button (DualSense Edge)
+    #[packed_field(bits = "75")]
+    pub left_fn: bool, // Left function button (DualSense Edge)
+    #[packed_field(bits = "76")]
+    pub _unkn_0: bool, // Appears unused
+    #[packed_field(bits = "77")]
+    pub mute: bool, // Mic mute button 🔇
+    #[packed_field(bits = "78")]
+    pub touchpad: bool, // Touchpad button
+    #[packed_field(bits = "79")]
+    pub ps: bool, // PS button
+
+    // byte 10
+    #[packed_field(bytes = "10")]
+    pub _unkn_1: u8, // Appears unused
+
+    // byte 11-14
+    #[packed_field(bytes = "11..=14", endian = "lsb")]
+    pub _unkn_counter: Integer<u32, packed_bits::Bits<32>>, // Linux driver calls this reserved
+
+    // byte 15-26
+    #[packed_field(bytes = "15..=16", endian = "lsb")]
+    pub gyro_x: Integer<i16, packed_bits::Bits<16>>, // Gyro
+    #[packed_field(bytes = "17..=18", endian = "lsb")]
+    pub gyro_y: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "19..=20", endian = "lsb")]
+    pub gyro_z: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "21..=22", endian = "lsb")]
+    pub accel_x: Integer<i16, packed_bits::Bits<16>>, // Accelerometer
+    #[packed_field(bytes = "23..=24", endian = "lsb")]
+    pub accel_y: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "25..=26", endian = "lsb")]
+    pub accel_z: Integer<i16, packed_bits::Bits<16>>,
+
+    // byte 27
+    #[packed_field(bytes = "27..=30", endian = "lsb")]
+    pub sensor_timestamp: Integer<u32, packed_bits::Bits<32>>,
+    #[packed_field(bytes = "31")]
+    pub temperature: u8, // reserved2 in Linux driver
+
+    // byte 32-40
+    #[packed_field(bytes = "32..=40")]
+    pub touch_data: TouchData,
+
+    // byte 41-42
+    #[packed_field(bits = "328..=331", endian = "lsb")]
+    pub trigger_left_status: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bits = "332..=335", endian = "lsb")]
+    pub trigger_left_stop_location: Integer<u8, packed_bits::Bits<4>>, // Can range from 0-9
+    #[packed_field(bits = "336..=339", endian = "lsb")]
+    pub trigger_right_status: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bits = "340..=343", endian = "lsb")]
+    pub trigger_right_stop_location: Integer<u8, packed_bits::Bits<4>>, // Can range from 0-9
+
+    // byte 43-46
+    #[packed_field(bytes = "43..=46", endian = "lsb")]
+    pub host_timestamp: Integer<u32, packed_bits::Bits<32>>, // Mirrors data from report write
+
+    // byte 47
+    #[packed_field(bits = "376..=379", endian = "lsb")]
+    pub trigger_left_effect: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bits = "380..=383", endian = "lsb")]
+    pub trigger_right_effect: Integer<u8, packed_bits::Bits<4>>,
+
+    // byte 48-51
+    #[packed_field(bytes = "48..=51", endian = "lsb")]
+    pub device_timestamp: Integer<u32, packed_bits::Bits<32>>,
+
+    // byte 52
+    #[packed_field(bits = "416..=419", ty = "enum")]
+    pub power_state: PowerState,
+    #[packed_field(bits = "420..=423", endian = "lsb")]
+    pub power_percent: Integer<u8, packed_bits::Bits<4>>, // 0x00 - 0x0A
+
+    // byte 53
+    #[packed_field(bits = "424..426", endian = "lsb")]
+    pub _plugged_unkn_0: Integer<u8, packed_bits::Bits<3>>,
+    #[packed_field(bits = "427")]
+    pub plugged_usb_power: bool,
+    #[packed_field(bits = "428")]
+    pub plugged_usb_data: bool,
+    #[packed_field(bits = "429")]
+    pub mic_mutes: bool,
+    #[packed_field(bits = "430")]
+    pub plugged_mic: bool,
+    #[packed_field(bits = "431")]
+    pub plugged_headphones: bool,
+
+    // byte 54
+    #[packed_field(bits = "432..=437", endian = "lsb")]
+    pub _plugged_unkn_1: Integer<u8, packed_bits::Bits<6>>,
+    #[packed_field(bits = "438")]
+    pub haptic_low_pass_filter: bool,
+    #[packed_field(bits = "439")]
+    pub plugged_external_mic: bool,
+
+    // byte 55-63
+    #[packed_field(bytes = "55..=62")]
+    pub aes_cmac: [u8; 8],
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self {
+            joystick_l_x: 127,
+            joystick_l_y: 127,
+            joystick_r_x: 127,
+            joystick_r_y: 127,
+            power_percent: Integer::from_primitive(100),
+            plugged_usb_data: true,
+            plugged_usb_power: true,
+            l2_trigger: Default::default(),
+            r2_trigger: Default::default(),
+            seq_number: Default::default(),
+            triangle: Default::default(),
+            circle: Default::default(),
+            cross: Default::default(),
+            square: Default::default(),
+            dpad: Default::default(),
+            r3: Default::default(),
+            l3: Default::default(),
+            options: Default::default(),
+            create: Default::default(),
+            r2: Default::default(),
+            l2: Default::default(),
+            r1: Default::default(),
+            l1: Default::default(),
+            right_paddle: Default::default(),
+            left_paddle: Default::default(),
+            right_fn: Default::default(),
+            left_fn: Default::default(),
+            _unkn_0: Default::default(),
+            mute: Default::default(),
+            touchpad: Default::default(),
+            ps: Default::default(),
+            _unkn_1: Default::default(),
+            _unkn_counter: Default::default(),
+            gyro_x: Default::default(),
+            gyro_y: Default::default(),
+            gyro_z: Default::default(),
+            accel_x: Default::default(),
+            accel_y: Default::default(),
+            accel_z: Default::default(),
+            sensor_timestamp: Default::default(),
+            temperature: Default::default(),
+            touch_data: Default::default(),
+            trigger_left_status: Default::default(),
+            trigger_left_stop_location: Default::default(),
+            trigger_right_status: Default::default(),
+            trigger_right_stop_location: Default::default(),
+            host_timestamp: Default::default(),
+            trigger_left_effect: Default::default(),
+            trigger_right_effect: Default::default(),
+            device_timestamp: Default::default(),
+            power_state: Default::default(),
+            _plugged_unkn_0: Default::default(),
+            mic_mutes: Default::default(),
+            plugged_mic: Default::default(),
+            plugged_headphones: Default::default(),
+            _plugged_unkn_1: Default::default(),
+            haptic_low_pass_filter: Default::default(),
+            plugged_external_mic: Default::default(),
+            aes_cmac: Default::default(),
+        }
+    }
 }
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
@@ -80,254 +402,30 @@ pub struct USBPackedInputDataReport {
     #[packed_field(bytes = "0")]
     pub report_id: u8, // Report ID (always 0x01)
 
-    // byte 1-7
-    #[packed_field(bytes = "1")]
-    pub joystick_l_x: u8, // left stick X axis
-    #[packed_field(bytes = "2")]
-    pub joystick_l_y: u8, // left stick Y axis
-    #[packed_field(bytes = "3")]
-    pub joystick_r_x: u8, // right stick X axis
-    #[packed_field(bytes = "4")]
-    pub joystick_r_y: u8, // right stick Y axis
-    #[packed_field(bytes = "5")]
-    pub l2_trigger: u8, // L2 trigger axis
-    #[packed_field(bytes = "6")]
-    pub r2_trigger: u8, // R2 trigger axis
-    #[packed_field(bytes = "7")]
-    pub seq_number: u8, // Sequence number, always 0x01 on BT
-
-    // byte 8
-    #[packed_field(bits = "64")]
-    pub triangle: bool, // Button cluster, x, ◯, □, ∆
-    #[packed_field(bits = "65")]
-    pub circle: bool,
-    #[packed_field(bits = "66")]
-    pub cross: bool,
-    #[packed_field(bits = "67")]
-    pub square: bool,
-    #[packed_field(bits = "68..=71", ty = "enum")]
-    pub dpad: Direction, // Directional buttons
-
-    // byte 9
-    #[packed_field(bits = "72")]
-    pub r3: bool,
-    #[packed_field(bits = "73")]
-    pub l3: bool,
-    #[packed_field(bits = "74")]
-    pub options: bool, // Options button ☰
-    #[packed_field(bits = "75")]
-    pub create: bool, // Create button ⚟
-    #[packed_field(bits = "76")]
-    pub r2: bool, // Triggers
-    #[packed_field(bits = "77")]
-    pub l2: bool,
-    #[packed_field(bits = "78")]
-    pub r1: bool,
-    #[packed_field(bits = "79")]
-    pub l1: bool,
-
-    // byte 10
-    #[packed_field(bits = "80")]
-    pub right_paddle: bool, // Right paddle button (DualSense Edge)
-    #[packed_field(bits = "81")]
-    pub left_paddle: bool, // Left paddle button (DualSense Edge)
-    #[packed_field(bits = "82")]
-    pub right_fn: bool, // Right function button (DualSense Edge)
-    #[packed_field(bits = "83")]
-    pub left_fn: bool, // Left function button (DualSense Edge)
-    #[packed_field(bits = "84")]
-    pub _unkn_0: bool, // Appears unused
-    #[packed_field(bits = "85")]
-    pub mute: bool, // Mic mute button 🔇
-    #[packed_field(bits = "86")]
-    pub touchpad: bool, // Touchpad button
-    #[packed_field(bits = "87")]
-    pub ps: bool, // PS button
-
-    // byte 11
-    #[packed_field(bytes = "11")]
-    pub _unkn_1: u8, // Appears unused
-
-    // byte 12-15
-    #[packed_field(bytes = "12..=15", endian = "lsb")]
-    pub _unkn_counter: Integer<u32, packed_bits::Bits<32>>, // Linux driver calls this reserved
-
-    // byte 16-27
-    #[packed_field(bytes = "16..=17", endian = "lsb")]
-    pub gyro_x: Integer<i16, packed_bits::Bits<16>>, // Gyro
-    #[packed_field(bytes = "18..=19", endian = "lsb")]
-    pub gyro_y: Integer<i16, packed_bits::Bits<16>>,
-    #[packed_field(bytes = "20..=21", endian = "lsb")]
-    pub gyro_z: Integer<i16, packed_bits::Bits<16>>,
-    #[packed_field(bytes = "22..=23", endian = "lsb")]
-    pub accel_x: Integer<i16, packed_bits::Bits<16>>, // Accelerometer
-    #[packed_field(bytes = "24..=25", endian = "lsb")]
-    pub accel_y: Integer<i16, packed_bits::Bits<16>>,
-    #[packed_field(bytes = "26..=27", endian = "lsb")]
-    pub accel_z: Integer<i16, packed_bits::Bits<16>>,
-
-    // byte 28
-    #[packed_field(bytes = "28..=31", endian = "lsb")]
-    pub sensor_timestamp: Integer<u32, packed_bits::Bits<32>>,
-    #[packed_field(bytes = "32")]
-    pub temperature: u8, // reserved2 in Linux driver
-
-    // byte 33-41
-    #[packed_field(bytes = "33..=41")]
-    pub touch_data: TouchData,
-
-    // byte 42-43
-    #[packed_field(bits = "336..=339", endian = "lsb")]
-    pub trigger_left_status: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bits = "340..=343", endian = "lsb")]
-    pub trigger_left_stop_location: Integer<u8, packed_bits::Bits<4>>, // Can range from 0-9
-    #[packed_field(bits = "344..=347", endian = "lsb")]
-    pub trigger_right_status: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bits = "348..=351", endian = "lsb")]
-    pub trigger_right_stop_location: Integer<u8, packed_bits::Bits<4>>, // Can range from 0-9
-
-    // byte 44-47
-    #[packed_field(bytes = "44..=47", endian = "lsb")]
-    pub host_timestamp: Integer<u32, packed_bits::Bits<32>>, // Mirrors data from report write
-
-    // byte 48
-    #[packed_field(bits = "384..=387", endian = "lsb")]
-    pub trigger_left_effect: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bits = "388..=391", endian = "lsb")]
-    pub trigger_right_effect: Integer<u8, packed_bits::Bits<4>>,
-
-    // byte 49-52
-    #[packed_field(bytes = "49..=52", endian = "lsb")]
-    pub device_timestamp: Integer<u32, packed_bits::Bits<32>>,
-
-    // byte 53
-    #[packed_field(bits = "424..=427", ty = "enum")]
-    pub power_state: PowerState,
-    #[packed_field(bits = "428..=431", endian = "lsb")]
-    pub power_percent: Integer<u8, packed_bits::Bits<4>>, // 0x00 - 0x0A
-
-    // byte 54
-    #[packed_field(bits = "432..434", endian = "lsb")]
-    pub _plugged_unkn_0: Integer<u8, packed_bits::Bits<3>>,
-    #[packed_field(bits = "435")]
-    pub plugged_usb_power: bool,
-    #[packed_field(bits = "436")]
-    pub plugged_usb_data: bool,
-    #[packed_field(bits = "437")]
-    pub mic_mutes: bool,
-    #[packed_field(bits = "438")]
-    pub plugged_mic: bool,
-    #[packed_field(bits = "439")]
-    pub plugged_headphones: bool,
-
-    // byte 55
-    #[packed_field(bits = "440..=445", endian = "lsb")]
-    pub _plugged_unkn_1: Integer<u8, packed_bits::Bits<6>>,
-    #[packed_field(bits = "446")]
-    pub haptic_low_pass_filter: bool,
-    #[packed_field(bits = "447")]
-    pub plugged_external_mic: bool,
-
-    // byte 56-64
-    #[packed_field(bytes = "56..=63")]
-    pub aes_cmac: [u8; 8],
+    // byte 1-64
+    #[packed_field(bytes = "1..=63")]
+    pub state: InputState,
 }
 
 impl USBPackedInputDataReport {
     /// Return a new empty input data report
     pub fn new() -> Self {
-        Self {
-            report_id: INPUT_REPORT_USB,
-            joystick_l_x: 127,
-            joystick_l_y: 127,
-            joystick_r_x: 127,
-            joystick_r_y: 127,
-            l2_trigger: 0,
-            r2_trigger: 0,
-            seq_number: 0,
-            dpad: Direction::None,
-            square: false,
-            cross: false,
-            circle: false,
-            triangle: false,
-            l1: false,
-            r1: false,
-            l2: false,
-            r2: false,
-            create: false,
-            options: false,
-            l3: false,
-            r3: false,
-            ps: false,
-            touchpad: false,
-            mute: false,
-            _unkn_0: false,
-            left_fn: false,
-            right_fn: false,
-            left_paddle: false,
-            right_paddle: false,
-            _unkn_1: 0,
-            _unkn_counter: Integer::from_primitive(0),
-            gyro_x: Integer::from_primitive(0),
-            gyro_y: Integer::from_primitive(0),
-            gyro_z: Integer::from_primitive(0),
-            accel_x: Integer::from_primitive(0),
-            accel_y: Integer::from_primitive(0),
-            accel_z: Integer::from_primitive(0),
-            sensor_timestamp: Integer::from_primitive(0),
-            temperature: 0,
-            touch_data: TouchData {
-                touch_finger_data: [
-                    TouchFingerData {
-                        context: 128,
-                        x_lo: 0,
-                        y_lo: Integer::from_primitive(0),
-                        x_hi: Integer::from_primitive(0),
-                        y_hi: 0,
-                    },
-                    TouchFingerData {
-                        context: 128,
-                        x_lo: 0,
-                        y_lo: Integer::from_primitive(0),
-                        x_hi: Integer::from_primitive(0),
-                        y_hi: 0,
-                    },
-                ],
-                timestamp: 0,
-            },
-            trigger_right_stop_location: Integer::from_primitive(0),
-            trigger_right_status: Integer::from_primitive(0),
-            trigger_left_stop_location: Integer::from_primitive(0),
-            trigger_left_status: Integer::from_primitive(0),
-            host_timestamp: Integer::from_primitive(0),
-            trigger_right_effect: Integer::from_primitive(0),
-            trigger_left_effect: Integer::from_primitive(0),
-            device_timestamp: Integer::from_primitive(0),
-            power_percent: Integer::from_primitive(100),
-            power_state: PowerState::Complete,
-            plugged_headphones: false,
-            plugged_mic: false,
-            mic_mutes: false,
-            plugged_usb_data: true,
-            plugged_usb_power: true,
-            _plugged_unkn_0: Integer::from_primitive(0),
-            plugged_external_mic: false,
-            haptic_low_pass_filter: false,
-            _plugged_unkn_1: Integer::from_primitive(0),
-            aes_cmac: [0, 0, 0, 0, 0, 0, 0, 0],
-        }
+        Self::default()
     }
 }
 
 impl Default for USBPackedInputDataReport {
     fn default() -> Self {
-        Self::new()
+        Self {
+            report_id: INPUT_REPORT_USB,
+            state: Default::default(),
+        }
     }
 }
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "10")]
-pub struct BluetoothPackedInputDataReport {
+pub struct BluetoothSimplePackedInputDataReport {
     // byte 0
     #[packed_field(bytes = "0")]
     pub report_id: u8, // Report ID (always 0x01)
@@ -387,45 +485,56 @@ pub struct BluetoothPackedInputDataReport {
     pub r2_trigger: u8, // R2 trigger axis
 }
 
-impl BluetoothPackedInputDataReport {
-    /// Return a new empty input data report
-    pub fn new() -> Self {
-        Self {
-            report_id: INPUT_REPORT_BT,
-            joystick_l_x: 127,
-            joystick_l_y: 127,
-            joystick_r_x: 127,
-            joystick_r_y: 127,
-            l2_trigger: 0,
-            r2_trigger: 0,
-            counter: [0, 0, 0, 0, 0, 0],
-            dpad: Direction::None,
-            square: false,
-            cross: false,
-            circle: false,
-            triangle: false,
-            l1: false,
-            r1: false,
-            l2: false,
-            r2: false,
-            create: false,
-            options: false,
-            l3: false,
-            r3: false,
-            ps: false,
-            touchpad: false,
-        }
-    }
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "78")]
+pub struct BluetoothPackedInputDataReport {
+    // byte 0
+    #[packed_field(bytes = "0")]
+    pub report_id: u8, // Report ID (always 0x31)
+
+    // byte 1
+    #[packed_field(bits = "8..=11", endian = "lsb")]
+    pub seq_number: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bits = "12..=13", endian = "lsb")]
+    pub _unkn_0: Integer<u8, packed_bits::Bits<2>>,
+    /// Present for mic data
+    #[packed_field(bits = "14")]
+    pub has_mic: bool,
+    /// Present for packets with state data
+    #[packed_field(bits = "15")]
+    pub has_hid: bool,
+
+    // byte 2-65
+    #[packed_field(bytes = "2..=64")]
+    pub state: InputState,
+
+    // byte 66
+    #[packed_field(bytes = "65")]
+    pub _unkn_1: u8,
+
+    // byte 67
+    #[packed_field(bytes = "66")]
+    pub bt_crc_fail_count: u8,
 }
 
 impl Default for BluetoothPackedInputDataReport {
     fn default() -> Self {
-        Self::new()
+        Self {
+            report_id: INPUT_REPORT_BT,
+            has_hid: true,
+            has_mic: false,
+            _unkn_0: Default::default(),
+            seq_number: Default::default(),
+            state: InputState::default(),
+            _unkn_1: 0,
+            bt_crc_fail_count: Default::default(),
+        }
     }
 }
 
-#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum MuteLight {
+    #[default]
     Off = 0,
     On = 1,
     Breathing = 2,
@@ -436,15 +545,17 @@ pub enum MuteLight {
     NoAction7 = 7,
 }
 
-#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum LightFadeAnimation {
+    #[default]
     Nothing = 0,
     FadeIn = 1,
     FadeOut = 2,
 }
 
-#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum LightBrightness {
+    #[default]
     Bright = 0,
     Mid = 1,
     Dim = 2,
@@ -457,7 +568,7 @@ pub enum LightBrightness {
 
 /// State data can be emitted from Output events to change data such as LED
 /// colors.
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq, Default)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "47")]
 pub struct SetStatePackedOutputData {
     // byte 0
@@ -627,6 +738,15 @@ pub struct UsbPackedOutputReport {
     pub state: SetStatePackedOutputData,
 }
 
+impl Default for UsbPackedOutputReport {
+    fn default() -> Self {
+        Self {
+            report_id: 0x02,
+            state: Default::default(),
+        }
+    }
+}
+
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "48")]
 pub struct UsbPackedOutputReportShort {
@@ -637,4 +757,13 @@ pub struct UsbPackedOutputReportShort {
     // byte 1-47
     #[packed_field(bytes = "1..=47")]
     pub state: SetStatePackedOutputData,
+}
+
+impl Default for UsbPackedOutputReportShort {
+    fn default() -> Self {
+        Self {
+            report_id: 0x02,
+            state: Default::default(),
+        }
+    }
 }

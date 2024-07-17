@@ -479,11 +479,6 @@ impl CompositeDeviceConfig {
     ) -> bool {
         //TODO: Check if the evdev has no proterties defined, that would always match.
 
-        if device.is_virtual() {
-            log::debug!("{} is virtual, skipping.", device.name);
-            return false;
-        }
-
         let evdev_config = evdev_config.clone();
 
         if let Some(name) = evdev_config.name {

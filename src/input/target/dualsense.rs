@@ -734,504 +734,220 @@ impl DualSenseDevice {
     fn update_state(&mut self, event: NativeEvent) {
         let value = event.get_value();
         let capability = event.as_capability();
+        let state = self.state.state_mut();
         match capability {
             Capability::None => (),
             Capability::NotImplemented => (),
             Capability::Sync => (),
             Capability::Gamepad(gamepad) => match gamepad {
                 Gamepad::Button(btn) => match btn {
-                    GamepadButton::South => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.cross = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.cross = event.pressed()
-                        }
-                    },
-                    GamepadButton::East => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.circle = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.circle = event.pressed()
-                        }
-                    },
-                    GamepadButton::North => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.square = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.square = event.pressed()
-                        }
-                    },
-                    GamepadButton::West => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => {
-                            state.triangle = event.pressed()
-                        }
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.triangle = event.pressed()
-                        }
-                    },
-                    GamepadButton::Start => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => {
-                            state.options = event.pressed()
-                        }
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.options = event.pressed()
-                        }
-                    },
-                    GamepadButton::Select => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.create = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.create = event.pressed()
-                        }
-                    },
-                    GamepadButton::Guide => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.ps = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.ps = event.pressed()
-                        }
-                    },
+                    GamepadButton::South => state.cross = event.pressed(),
+                    GamepadButton::East => state.circle = event.pressed(),
+                    GamepadButton::North => state.square = event.pressed(),
+                    GamepadButton::West => state.triangle = event.pressed(),
+                    GamepadButton::Start => state.options = event.pressed(),
+                    GamepadButton::Select => state.create = event.pressed(),
+                    GamepadButton::Guide => state.ps = event.pressed(),
                     GamepadButton::QuickAccess => (),
-                    GamepadButton::DPadUp => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => match state.dpad {
-                            Direction::North => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::None
-                                }
+                    GamepadButton::DPadUp => match state.dpad {
+                        Direction::North => {
+                            if !event.pressed() {
+                                state.dpad = Direction::None
+                            }
+                        }
+                        Direction::NorthEast => {
+                            if !event.pressed() {
+                                state.dpad = Direction::East
+                            }
+                        }
+                        Direction::East => {
+                            if event.pressed() {
+                                state.dpad = Direction::NorthEast
+                            }
+                        }
+                        Direction::SouthEast => {
+                            if event.pressed() {
+                                state.dpad = Direction::NorthEast
+                            }
+                        }
+                        Direction::South => {
+                            if event.pressed() {
+                                state.dpad = Direction::North
+                            }
+                        }
+                        Direction::SouthWest => {
+                            if event.pressed() {
+                                state.dpad = Direction::NorthWest
+                            }
+                        }
+                        Direction::West => {
+                            if event.pressed() {
+                                state.dpad = Direction::NorthWest
+                            }
+                        }
+                        Direction::NorthWest => {
+                            if !event.pressed() {
+                                state.dpad = Direction::West
+                            }
+                        }
+                        Direction::None => {
+                            if event.pressed() {
+                                state.dpad = Direction::North
                             }
-                            Direction::NorthEast => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::East
-                                }
-                            }
-                            Direction::East => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthEast
-                                }
-                            }
-                            Direction::SouthEast => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthEast
-                                }
-                            }
-                            Direction::South => {
-                                if event.pressed() {
-                                    state.dpad = Direction::North
-                                }
-                            }
-                            Direction::SouthWest => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthWest
-                                }
-                            }
-                            Direction::West => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthWest
-                                }
-                            }
-                            Direction::NorthWest => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::West
-                                }
-                            }
-                            Direction::None => {
-                                if event.pressed() {
-                                    state.dpad = Direction::North
-                                }
-                            }
-                        },
-                        PackedInputDataReport::Bluetooth(ref mut state) => match state.dpad {
-                            Direction::North => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::None
-                                }
-                            }
-                            Direction::NorthEast => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::East
-                                }
-                            }
-                            Direction::East => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthEast
-                                }
-                            }
-                            Direction::SouthEast => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthEast
-                                }
-                            }
-                            Direction::South => {
-                                if event.pressed() {
-                                    state.dpad = Direction::North
-                                }
-                            }
-                            Direction::SouthWest => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthWest
-                                }
-                            }
-                            Direction::West => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthWest
-                                }
-                            }
-                            Direction::NorthWest => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::West
-                                }
-                            }
-                            Direction::None => {
-                                if event.pressed() {
-                                    state.dpad = Direction::North
-                                }
-                            }
-                        },
-                    },
-                    GamepadButton::DPadDown => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => match state.dpad {
-                            Direction::North => {
-                                if event.pressed() {
-                                    state.dpad = Direction::South
-                                }
-                            }
-                            Direction::NorthEast => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthEast
-                                }
-                            }
-                            Direction::East => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthEast
-                                }
-                            }
-                            Direction::SouthEast => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::East
-                                }
-                            }
-                            Direction::South => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::None
-                                }
-                            }
-                            Direction::SouthWest => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::West
-                                }
-                            }
-                            Direction::West => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthWest
-                                }
-                            }
-                            Direction::NorthWest => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthWest
-                                }
-                            }
-                            Direction::None => {
-                                if event.pressed() {
-                                    state.dpad = Direction::South
-                                }
-                            }
-                        },
-                        PackedInputDataReport::Bluetooth(ref mut state) => match state.dpad {
-                            Direction::North => {
-                                if event.pressed() {
-                                    state.dpad = Direction::South
-                                }
-                            }
-                            Direction::NorthEast => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthEast
-                                }
-                            }
-                            Direction::East => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthEast
-                                }
-                            }
-                            Direction::SouthEast => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::East
-                                }
-                            }
-                            Direction::South => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::None
-                                }
-                            }
-                            Direction::SouthWest => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::West
-                                }
-                            }
-                            Direction::West => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthWest
-                                }
-                            }
-                            Direction::NorthWest => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthWest
-                                }
-                            }
-                            Direction::None => {
-                                if event.pressed() {
-                                    state.dpad = Direction::South
-                                }
-                            }
-                        },
-                    },
-                    GamepadButton::DPadLeft => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => match state.dpad {
-                            Direction::North => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthWest
-                                }
-                            }
-                            Direction::NorthEast => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthWest
-                                }
-                            }
-                            Direction::East => {
-                                if event.pressed() {
-                                    state.dpad = Direction::West
-                                }
-                            }
-                            Direction::SouthEast => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthWest
-                                }
-                            }
-                            Direction::South => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthWest
-                                }
-                            }
-                            Direction::SouthWest => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::South
-                                }
-                            }
-                            Direction::West => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::None
-                                }
-                            }
-                            Direction::NorthWest => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::North
-                                }
-                            }
-                            Direction::None => {
-                                if event.pressed() {
-                                    state.dpad = Direction::West
-                                }
-                            }
-                        },
-                        PackedInputDataReport::Bluetooth(ref mut state) => match state.dpad {
-                            Direction::North => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthWest
-                                }
-                            }
-                            Direction::NorthEast => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthWest
-                                }
-                            }
-                            Direction::East => {
-                                if event.pressed() {
-                                    state.dpad = Direction::West
-                                }
-                            }
-                            Direction::SouthEast => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthWest
-                                }
-                            }
-                            Direction::South => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthWest
-                                }
-                            }
-                            Direction::SouthWest => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::South
-                                }
-                            }
-                            Direction::West => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::None
-                                }
-                            }
-                            Direction::NorthWest => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::North
-                                }
-                            }
-                            Direction::None => {
-                                if event.pressed() {
-                                    state.dpad = Direction::West
-                                }
-                            }
-                        },
-                    },
-                    GamepadButton::DPadRight => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => match state.dpad {
-                            Direction::North => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthEast
-                                }
-                            }
-                            Direction::NorthEast => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::North
-                                }
-                            }
-                            Direction::East => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::None
-                                }
-                            }
-                            Direction::SouthEast => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::South
-                                }
-                            }
-                            Direction::South => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthEast
-                                }
-                            }
-                            Direction::SouthWest => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthEast
-                                }
-                            }
-                            Direction::West => {
-                                if event.pressed() {
-                                    state.dpad = Direction::East
-                                }
-                            }
-                            Direction::NorthWest => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthEast
-                                }
-                            }
-                            Direction::None => {
-                                if event.pressed() {
-                                    state.dpad = Direction::East
-                                }
-                            }
-                        },
-                        PackedInputDataReport::Bluetooth(ref mut state) => match state.dpad {
-                            Direction::North => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthEast
-                                }
-                            }
-                            Direction::NorthEast => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::North
-                                }
-                            }
-                            Direction::East => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::None
-                                }
-                            }
-                            Direction::SouthEast => {
-                                if !event.pressed() {
-                                    state.dpad = Direction::South
-                                }
-                            }
-                            Direction::South => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthEast
-                                }
-                            }
-                            Direction::SouthWest => {
-                                if event.pressed() {
-                                    state.dpad = Direction::SouthEast
-                                }
-                            }
-                            Direction::West => {
-                                if event.pressed() {
-                                    state.dpad = Direction::East
-                                }
-                            }
-                            Direction::NorthWest => {
-                                if event.pressed() {
-                                    state.dpad = Direction::NorthEast
-                                }
-                            }
-                            Direction::None => {
-                                if event.pressed() {
-                                    state.dpad = Direction::East
-                                }
-                            }
-                        },
-                    },
-                    GamepadButton::LeftBumper => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.l1 = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.l1 = event.pressed()
                         }
                     },
-                    GamepadButton::LeftTrigger => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.l2 = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.l2 = event.pressed()
+                    GamepadButton::DPadDown => match state.dpad {
+                        Direction::North => {
+                            if event.pressed() {
+                                state.dpad = Direction::South
+                            }
+                        }
+                        Direction::NorthEast => {
+                            if event.pressed() {
+                                state.dpad = Direction::SouthEast
+                            }
+                        }
+                        Direction::East => {
+                            if event.pressed() {
+                                state.dpad = Direction::SouthEast
+                            }
+                        }
+                        Direction::SouthEast => {
+                            if !event.pressed() {
+                                state.dpad = Direction::East
+                            }
+                        }
+                        Direction::South => {
+                            if !event.pressed() {
+                                state.dpad = Direction::None
+                            }
+                        }
+                        Direction::SouthWest => {
+                            if !event.pressed() {
+                                state.dpad = Direction::West
+                            }
+                        }
+                        Direction::West => {
+                            if event.pressed() {
+                                state.dpad = Direction::SouthWest
+                            }
+                        }
+                        Direction::NorthWest => {
+                            if event.pressed() {
+                                state.dpad = Direction::SouthWest
+                            }
+                        }
+                        Direction::None => {
+                            if event.pressed() {
+                                state.dpad = Direction::South
+                            }
                         }
                     },
-                    GamepadButton::LeftPaddle1 => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => {
-                            state.left_fn = event.pressed()
+                    GamepadButton::DPadLeft => match state.dpad {
+                        Direction::North => {
+                            if event.pressed() {
+                                state.dpad = Direction::NorthWest
+                            }
                         }
-                        PackedInputDataReport::Bluetooth(_) => (),
-                    },
-                    GamepadButton::LeftPaddle2 => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => {
-                            state.left_paddle = event.pressed()
+                        Direction::NorthEast => {
+                            if event.pressed() {
+                                state.dpad = Direction::NorthWest
+                            }
                         }
-                        PackedInputDataReport::Bluetooth(_) => (),
-                    },
-                    GamepadButton::LeftStick => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.l3 = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.l3 = event.pressed()
+                        Direction::East => {
+                            if event.pressed() {
+                                state.dpad = Direction::West
+                            }
+                        }
+                        Direction::SouthEast => {
+                            if event.pressed() {
+                                state.dpad = Direction::SouthWest
+                            }
+                        }
+                        Direction::South => {
+                            if event.pressed() {
+                                state.dpad = Direction::SouthWest
+                            }
+                        }
+                        Direction::SouthWest => {
+                            if !event.pressed() {
+                                state.dpad = Direction::South
+                            }
+                        }
+                        Direction::West => {
+                            if !event.pressed() {
+                                state.dpad = Direction::None
+                            }
+                        }
+                        Direction::NorthWest => {
+                            if !event.pressed() {
+                                state.dpad = Direction::North
+                            }
+                        }
+                        Direction::None => {
+                            if event.pressed() {
+                                state.dpad = Direction::West
+                            }
                         }
                     },
+                    GamepadButton::DPadRight => match state.dpad {
+                        Direction::North => {
+                            if event.pressed() {
+                                state.dpad = Direction::NorthEast
+                            }
+                        }
+                        Direction::NorthEast => {
+                            if !event.pressed() {
+                                state.dpad = Direction::North
+                            }
+                        }
+                        Direction::East => {
+                            if !event.pressed() {
+                                state.dpad = Direction::None
+                            }
+                        }
+                        Direction::SouthEast => {
+                            if !event.pressed() {
+                                state.dpad = Direction::South
+                            }
+                        }
+                        Direction::South => {
+                            if event.pressed() {
+                                state.dpad = Direction::SouthEast
+                            }
+                        }
+                        Direction::SouthWest => {
+                            if event.pressed() {
+                                state.dpad = Direction::SouthEast
+                            }
+                        }
+                        Direction::West => {
+                            if event.pressed() {
+                                state.dpad = Direction::East
+                            }
+                        }
+                        Direction::NorthWest => {
+                            if event.pressed() {
+                                state.dpad = Direction::NorthEast
+                            }
+                        }
+                        Direction::None => {
+                            if event.pressed() {
+                                state.dpad = Direction::East
+                            }
+                        }
+                    },
+                    GamepadButton::LeftBumper => state.l1 = event.pressed(),
+                    GamepadButton::LeftTrigger => state.l2 = event.pressed(),
+                    GamepadButton::LeftPaddle1 => state.left_fn = event.pressed(),
+                    GamepadButton::LeftPaddle2 => state.left_paddle = event.pressed(),
+                    GamepadButton::LeftStick => state.l3 = event.pressed(),
                     GamepadButton::LeftStickTouch => (),
-                    GamepadButton::RightBumper => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.r1 = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.r1 = event.pressed()
-                        }
-                    },
-                    GamepadButton::RightTrigger => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.r2 = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.r2 = event.pressed()
-                        }
-                    },
-                    GamepadButton::RightPaddle1 => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => {
-                            state.right_fn = event.pressed()
-                        }
-                        PackedInputDataReport::Bluetooth(_) => (),
-                    },
-                    GamepadButton::RightPaddle2 => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => {
-                            state.right_paddle = event.pressed()
-                        }
-                        PackedInputDataReport::Bluetooth(_) => (),
-                    },
-                    GamepadButton::RightStick => match self.state {
-                        PackedInputDataReport::Usb(ref mut state) => state.r3 = event.pressed(),
-                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                            state.r3 = event.pressed()
-                        }
-                    },
+                    GamepadButton::RightBumper => state.r1 = event.pressed(),
+                    GamepadButton::RightTrigger => state.r2 = event.pressed(),
+                    GamepadButton::RightPaddle1 => state.right_fn = event.pressed(),
+                    GamepadButton::RightPaddle2 => state.right_paddle = event.pressed(),
+                    GamepadButton::RightStick => state.r3 = event.pressed(),
                     GamepadButton::RightStickTouch => (),
                     GamepadButton::LeftPaddle3 => (),
                     GamepadButton::RightPaddle3 => (),
@@ -1242,25 +958,11 @@ impl DualSenseDevice {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
                                 let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
-                                match self.state {
-                                    PackedInputDataReport::Usb(ref mut state) => {
-                                        state.joystick_l_x = value
-                                    }
-                                    PackedInputDataReport::Bluetooth(ref mut state) => {
-                                        state.joystick_l_x = value
-                                    }
-                                }
+                                state.joystick_l_x = value
                             }
                             if let Some(y) = y {
                                 let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
-                                match self.state {
-                                    PackedInputDataReport::Usb(ref mut state) => {
-                                        state.joystick_l_y = value
-                                    }
-                                    PackedInputDataReport::Bluetooth(ref mut state) => {
-                                        state.joystick_l_y = value
-                                    }
-                                }
+                                state.joystick_l_y = value
                             }
                         }
                     }
@@ -1268,25 +970,11 @@ impl DualSenseDevice {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
                                 let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
-                                match self.state {
-                                    PackedInputDataReport::Usb(ref mut state) => {
-                                        state.joystick_r_x = value
-                                    }
-                                    PackedInputDataReport::Bluetooth(ref mut state) => {
-                                        state.joystick_r_x = value
-                                    }
-                                }
+                                state.joystick_r_x = value
                             }
                             if let Some(y) = y {
                                 let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
-                                match self.state {
-                                    PackedInputDataReport::Usb(ref mut state) => {
-                                        state.joystick_r_y = value
-                                    }
-                                    PackedInputDataReport::Bluetooth(ref mut state) => {
-                                        state.joystick_r_y = value
-                                    }
-                                }
+                                state.joystick_r_y = value
                             }
                         }
                     }
@@ -1295,186 +983,48 @@ impl DualSenseDevice {
                             if let Some(x) = x {
                                 let value = denormalize_signed_value(x, -1.0, 1.0);
                                 match value.cmp(&0) {
-                                    Ordering::Less => match self.state {
-                                        PackedInputDataReport::Usb(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::North => {
-                                                    state.dpad = Direction::NorthWest
-                                                }
-                                                Direction::South => {
-                                                    state.dpad = Direction::SouthWest
-                                                }
-                                                _ => state.dpad = Direction::West,
-                                            }
-                                        }
-                                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::North => {
-                                                    state.dpad = Direction::NorthWest
-                                                }
-                                                Direction::South => {
-                                                    state.dpad = Direction::SouthWest
-                                                }
-                                                _ => state.dpad = Direction::West,
-                                            }
-                                        }
+                                    Ordering::Less => match state.dpad {
+                                        Direction::North => state.dpad = Direction::NorthWest,
+                                        Direction::South => state.dpad = Direction::SouthWest,
+                                        _ => state.dpad = Direction::West,
                                     },
-                                    Ordering::Equal => match self.state {
-                                        PackedInputDataReport::Usb(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::NorthWest => {
-                                                    state.dpad = Direction::North
-                                                }
-                                                Direction::SouthWest => {
-                                                    state.dpad = Direction::South
-                                                }
-                                                Direction::NorthEast => {
-                                                    state.dpad = Direction::North
-                                                }
-                                                Direction::SouthEast => {
-                                                    state.dpad = Direction::South
-                                                }
-                                                Direction::East => state.dpad = Direction::None,
-                                                Direction::West => state.dpad = Direction::None,
-                                                _ => (),
-                                            }
-                                        }
-                                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::NorthWest => {
-                                                    state.dpad = Direction::North
-                                                }
-                                                Direction::SouthWest => {
-                                                    state.dpad = Direction::South
-                                                }
-                                                Direction::NorthEast => {
-                                                    state.dpad = Direction::North
-                                                }
-                                                Direction::SouthEast => {
-                                                    state.dpad = Direction::South
-                                                }
-                                                Direction::East => state.dpad = Direction::None,
-                                                Direction::West => state.dpad = Direction::None,
-                                                _ => (),
-                                            }
-                                        }
+                                    Ordering::Equal => match state.dpad {
+                                        Direction::NorthWest => state.dpad = Direction::North,
+                                        Direction::SouthWest => state.dpad = Direction::South,
+                                        Direction::NorthEast => state.dpad = Direction::North,
+                                        Direction::SouthEast => state.dpad = Direction::South,
+                                        Direction::East => state.dpad = Direction::None,
+                                        Direction::West => state.dpad = Direction::None,
+                                        _ => (),
                                     },
-                                    Ordering::Greater => match self.state {
-                                        PackedInputDataReport::Usb(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::North => {
-                                                    state.dpad = Direction::NorthEast
-                                                }
-                                                Direction::South => {
-                                                    state.dpad = Direction::SouthEast
-                                                }
-                                                _ => state.dpad = Direction::East,
-                                            }
-                                        }
-                                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::North => {
-                                                    state.dpad = Direction::NorthEast
-                                                }
-                                                Direction::South => {
-                                                    state.dpad = Direction::SouthEast
-                                                }
-                                                _ => state.dpad = Direction::East,
-                                            }
-                                        }
+                                    Ordering::Greater => match state.dpad {
+                                        Direction::North => state.dpad = Direction::NorthEast,
+                                        Direction::South => state.dpad = Direction::SouthEast,
+                                        _ => state.dpad = Direction::East,
                                     },
                                 }
                             }
                             if let Some(y) = y {
                                 let value = denormalize_signed_value(y, -1.0, 1.0);
                                 match value.cmp(&0) {
-                                    Ordering::Less => match self.state {
-                                        PackedInputDataReport::Usb(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::East => {
-                                                    state.dpad = Direction::NorthEast
-                                                }
-                                                Direction::West => {
-                                                    state.dpad = Direction::NorthWest
-                                                }
-                                                _ => state.dpad = Direction::North,
-                                            }
-                                        }
-                                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::East => {
-                                                    state.dpad = Direction::NorthEast
-                                                }
-                                                Direction::West => {
-                                                    state.dpad = Direction::NorthWest
-                                                }
-                                                _ => state.dpad = Direction::North,
-                                            }
-                                        }
+                                    Ordering::Less => match state.dpad {
+                                        Direction::East => state.dpad = Direction::NorthEast,
+                                        Direction::West => state.dpad = Direction::NorthWest,
+                                        _ => state.dpad = Direction::North,
                                     },
-                                    Ordering::Equal => match self.state {
-                                        PackedInputDataReport::Usb(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::NorthWest => {
-                                                    state.dpad = Direction::West
-                                                }
-                                                Direction::SouthWest => {
-                                                    state.dpad = Direction::West
-                                                }
-                                                Direction::NorthEast => {
-                                                    state.dpad = Direction::East
-                                                }
-                                                Direction::SouthEast => {
-                                                    state.dpad = Direction::East
-                                                }
-                                                Direction::North => state.dpad = Direction::None,
-                                                Direction::South => state.dpad = Direction::None,
-                                                _ => (),
-                                            }
-                                        }
-                                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::NorthWest => {
-                                                    state.dpad = Direction::West
-                                                }
-                                                Direction::SouthWest => {
-                                                    state.dpad = Direction::West
-                                                }
-                                                Direction::NorthEast => {
-                                                    state.dpad = Direction::East
-                                                }
-                                                Direction::SouthEast => {
-                                                    state.dpad = Direction::East
-                                                }
-                                                Direction::North => state.dpad = Direction::None,
-                                                Direction::South => state.dpad = Direction::None,
-                                                _ => (),
-                                            }
-                                        }
+                                    Ordering::Equal => match state.dpad {
+                                        Direction::NorthWest => state.dpad = Direction::West,
+                                        Direction::SouthWest => state.dpad = Direction::West,
+                                        Direction::NorthEast => state.dpad = Direction::East,
+                                        Direction::SouthEast => state.dpad = Direction::East,
+                                        Direction::North => state.dpad = Direction::None,
+                                        Direction::South => state.dpad = Direction::None,
+                                        _ => (),
                                     },
-                                    Ordering::Greater => match self.state {
-                                        PackedInputDataReport::Usb(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::East => {
-                                                    state.dpad = Direction::SouthEast
-                                                }
-                                                Direction::West => {
-                                                    state.dpad = Direction::SouthWest
-                                                }
-                                                _ => state.dpad = Direction::South,
-                                            }
-                                        }
-                                        PackedInputDataReport::Bluetooth(ref mut state) => {
-                                            match state.dpad {
-                                                Direction::East => {
-                                                    state.dpad = Direction::SouthEast
-                                                }
-                                                Direction::West => {
-                                                    state.dpad = Direction::SouthWest
-                                                }
-                                                _ => state.dpad = Direction::South,
-                                            }
-                                        }
+                                    Ordering::Greater => match state.dpad {
+                                        Direction::East => state.dpad = Direction::SouthEast,
+                                        Direction::West => state.dpad = Direction::SouthWest,
+                                        _ => state.dpad = Direction::South,
                                     },
                                 }
                             }
@@ -1488,14 +1038,7 @@ impl DualSenseDevice {
                     GamepadTrigger::LeftTrigger => {
                         if let InputValue::Float(normal_value) = value {
                             let value = denormalize_unsigned_value(normal_value, TRIGGER_MAX);
-                            match self.state {
-                                PackedInputDataReport::Usb(ref mut state) => {
-                                    state.l2_trigger = value
-                                }
-                                PackedInputDataReport::Bluetooth(ref mut state) => {
-                                    state.l2_trigger = value
-                                }
-                            }
+                            state.l2_trigger = value
                         }
                     }
                     GamepadTrigger::LeftTouchpadForce => (),
@@ -1503,14 +1046,7 @@ impl DualSenseDevice {
                     GamepadTrigger::RightTrigger => {
                         if let InputValue::Float(normal_value) = value {
                             let value = denormalize_unsigned_value(normal_value, TRIGGER_MAX);
-                            match self.state {
-                                PackedInputDataReport::Usb(ref mut state) => {
-                                    state.r2_trigger = value
-                                }
-                                PackedInputDataReport::Bluetooth(ref mut state) => {
-                                    state.r2_trigger = value
-                                }
-                            }
+                            state.r2_trigger = value
                         }
                     }
                     GamepadTrigger::RightTouchpadForce => (),
@@ -1519,62 +1055,26 @@ impl DualSenseDevice {
                 Gamepad::Accelerometer => {
                     if let InputValue::Vector3 { x, y, z } = value {
                         if let Some(x) = x {
-                            match self.state {
-                                PackedInputDataReport::Usb(ref mut state) => {
-                                    state.accel_x =
-                                        Integer::from_primitive(denormalize_accel_value(x))
-                                }
-                                PackedInputDataReport::Bluetooth(_) => (),
-                            }
+                            state.accel_x = Integer::from_primitive(denormalize_accel_value(x))
                         }
                         if let Some(y) = y {
-                            match self.state {
-                                PackedInputDataReport::Usb(ref mut state) => {
-                                    state.accel_y =
-                                        Integer::from_primitive(denormalize_accel_value(y))
-                                }
-                                PackedInputDataReport::Bluetooth(_) => (),
-                            }
+                            state.accel_y = Integer::from_primitive(denormalize_accel_value(y))
                         }
                         if let Some(z) = z {
-                            match self.state {
-                                PackedInputDataReport::Usb(ref mut state) => {
-                                    state.accel_z =
-                                        Integer::from_primitive(denormalize_accel_value(z))
-                                }
-                                PackedInputDataReport::Bluetooth(_) => (),
-                            }
+                            state.accel_z = Integer::from_primitive(denormalize_accel_value(z))
                         }
                     }
                 }
                 Gamepad::Gyro => {
                     if let InputValue::Vector3 { x, y, z } = value {
                         if let Some(x) = x {
-                            match self.state {
-                                PackedInputDataReport::Usb(ref mut state) => {
-                                    state.gyro_x =
-                                        Integer::from_primitive(denormalize_gyro_value(x));
-                                }
-                                PackedInputDataReport::Bluetooth(_) => (),
-                            }
+                            state.gyro_x = Integer::from_primitive(denormalize_gyro_value(x));
                         }
                         if let Some(y) = y {
-                            match self.state {
-                                PackedInputDataReport::Usb(ref mut state) => {
-                                    state.gyro_y =
-                                        Integer::from_primitive(denormalize_gyro_value(y))
-                                }
-                                PackedInputDataReport::Bluetooth(_) => (),
-                            }
+                            state.gyro_y = Integer::from_primitive(denormalize_gyro_value(y))
                         }
                         if let Some(z) = z {
-                            match self.state {
-                                PackedInputDataReport::Usb(ref mut state) => {
-                                    state.gyro_z =
-                                        Integer::from_primitive(denormalize_gyro_value(z))
-                                }
-                                PackedInputDataReport::Bluetooth(_) => (),
-                            }
+                            state.gyro_z = Integer::from_primitive(denormalize_gyro_value(z))
                         }
                     }
                 }
@@ -1597,53 +1097,37 @@ impl DualSenseDevice {
                                     if idx > 1 {
                                         return;
                                     }
-                                    match self.state {
-                                        PackedInputDataReport::Usb(ref mut state) => {
-                                            if let Some(x) = x {
-                                                state.touch_data.touch_finger_data[idx].set_x(
-                                                    denormalize_touch_value(x, DS5_TOUCHPAD_WIDTH),
-                                                );
-                                            }
-                                            if let Some(y) = y {
-                                                state.touch_data.touch_finger_data[idx].set_y(
-                                                    denormalize_touch_value(y, DS5_TOUCHPAD_HEIGHT),
-                                                );
-                                            }
-
-                                            if is_touching {
-                                                state.touch_data.touch_finger_data[idx].context =
-                                                    127;
-                                            } else {
-                                                state.touch_data.touch_finger_data[idx].context =
-                                                    128;
-                                            }
-
-                                            let timestamp = SystemTime::now()
-                                                .duration_since(UNIX_EPOCH)
-                                                .unwrap()
-                                                .as_micros()
-                                                as u8;
-                                            state.touch_data.timestamp = timestamp;
-
-                                            log::trace!(
-                                                "Got new state: {}",
-                                                state.touch_data.touch_finger_data[0]
-                                            );
-                                        }
-                                        PackedInputDataReport::Bluetooth(_) => (),
+                                    if let Some(x) = x {
+                                        state.touch_data.touch_finger_data[idx]
+                                            .set_x(denormalize_touch_value(x, DS5_TOUCHPAD_WIDTH));
                                     }
+                                    if let Some(y) = y {
+                                        state.touch_data.touch_finger_data[idx]
+                                            .set_y(denormalize_touch_value(y, DS5_TOUCHPAD_HEIGHT));
+                                    }
+
+                                    if is_touching {
+                                        state.touch_data.touch_finger_data[idx].context = 127;
+                                    } else {
+                                        state.touch_data.touch_finger_data[idx].context = 128;
+                                    }
+
+                                    let timestamp = SystemTime::now()
+                                        .duration_since(UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_micros()
+                                        as u8;
+                                    state.touch_data.timestamp = timestamp;
+
+                                    log::trace!(
+                                        "Got new state: {}",
+                                        state.touch_data.touch_finger_data[0]
+                                    );
                                 }
                             }
                             Touch::Button(button) => match button {
                                 TouchButton::Touch => (),
-                                TouchButton::Press => match self.state {
-                                    PackedInputDataReport::Usb(ref mut state) => {
-                                        state.touchpad = event.pressed()
-                                    }
-                                    PackedInputDataReport::Bluetooth(ref mut state) => {
-                                        state.touchpad = event.pressed()
-                                    }
-                                },
+                                TouchButton::Press => state.touchpad = event.pressed(),
                             },
                         }
                     }

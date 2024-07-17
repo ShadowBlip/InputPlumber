@@ -1,3 +1,4 @@
+pub mod dualsense;
 pub mod fts3528;
 pub mod lego;
 pub mod opineo;
@@ -22,6 +23,7 @@ const BUFFER_SIZE: usize = 2048;
 /// List of available drivers
 enum DriverType {
     Unknown,
+    DualSense,
     SteamDeck,
     LegionGo,
     OrangePiNeo,
@@ -65,7 +67,18 @@ impl HIDRawDevice {
                 self.info.product_id()
             )
             .into()),
-
+            DriverType::DualSense => {
+                let composite_device = self.composite_device.clone();
+                let rx = self.rx.take().unwrap();
+                let mut driver = dualsense::DualSenseController::new(
+                    self.info.clone(),
+                    composite_device,
+                    rx,
+                    self.get_id(),
+                );
+                driver.run().await?;
+                Ok(())
+            }
             DriverType::SteamDeck => {
                 let composite_device = self.composite_device.clone();
                 let rx = self.rx.take().unwrap();
@@ -140,39 +153,45 @@ impl HIDRawDevice {
             DriverType::LegionGo => Ok(Vec::from(lego::CAPABILITIES)),
             DriverType::OrangePiNeo => Ok(Vec::from(opineo::CAPABILITIES)),
             DriverType::Fts3528Touchscreen => Ok(Vec::from(fts3528::CAPABILITIES)),
+            DriverType::DualSense => Ok(Vec::from(dualsense::CAPABILITIES)),
         }
     }
 
     fn get_driver_type(&self) -> DriverType {
         log::debug!("Finding driver for interface: {:?}", self.info);
+        let vid = self.info.vendor_id();
+        let pid = self.info.product_id();
+
+        // Sony DualSense
+        if vid == dualsense::VID && dualsense::PIDS.contains(&pid) {
+            log::info!("Detected Sony DualSense");
+            return DriverType::DualSense;
+        }
+
         // Steam Deck
-        if self.info.vendor_id() == steam_deck::VID && self.info.product_id() == steam_deck::PID {
+        if vid == steam_deck::VID && pid == steam_deck::PID {
             log::info!("Detected Steam Deck");
             return DriverType::SteamDeck;
         }
 
         // Legion Go
-        if self.info.vendor_id() == drivers::lego::driver::VID
-            && (self.info.product_id() == drivers::lego::driver::PID1
-                || self.info.product_id() == drivers::lego::driver::PID2
-                || self.info.product_id() == drivers::lego::driver::PID3)
+        if vid == drivers::lego::driver::VID
+            && (pid == drivers::lego::driver::PID1
+                || pid == drivers::lego::driver::PID2
+                || pid == drivers::lego::driver::PID3)
         {
             log::info!("Detected Legion Go");
             return DriverType::LegionGo;
         }
 
         // OrangePi NEO
-        if self.info.vendor_id() == drivers::opineo::driver::VID
-            && self.info.product_id() == drivers::opineo::driver::PID
-        {
+        if vid == drivers::opineo::driver::VID && pid == drivers::opineo::driver::PID {
             log::info!("Detected OrangePi NEO");
             return DriverType::OrangePiNeo;
         }
 
         // FTS3528 Touchscreen
-        if self.info.vendor_id() == drivers::fts3528::driver::VID
-            && self.info.product_id() == drivers::fts3528::driver::PID
-        {
+        if vid == drivers::fts3528::driver::VID && pid == drivers::fts3528::driver::PID {
             log::info!("Detected FTS3528 Touchscreen");
             return DriverType::Fts3528Touchscreen;
         }
