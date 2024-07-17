@@ -10,6 +10,7 @@ use crate::constants::BUS_PREFIX;
 use crate::input::manager::Manager;
 use crate::udev::unhide_all;
 
+mod bluetooth;
 mod config;
 mod constants;
 mod dbus;

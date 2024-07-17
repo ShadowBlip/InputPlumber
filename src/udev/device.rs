@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self, read_link},
+    path::Path,
 };
 
 /// Container for system devices
@@ -39,6 +40,38 @@ impl Device {
     /// Returns true if the given device is virtual
     pub fn is_virtual(&self) -> bool {
         self.path.starts_with("/devices/virtual")
+    }
+
+    /// Return the 'uniq' value from input siblings
+    pub fn get_uniq(&self) -> Option<String> {
+        let parent = self.get_parent()?;
+        let input_path_string = format!("/sys{parent}/input");
+        let input_path = Path::new(input_path_string.as_str());
+        if !input_path.exists() {
+            return None;
+        }
+
+        let paths = fs::read_dir(input_path).ok()?;
+
+        for path in paths {
+            let p = path.ok()?;
+            let path = p.path();
+            let uniq_path_string = format!("{}/uniq", path.display());
+            let uniq_path = Path::new(uniq_path_string.as_str());
+            if uniq_path.exists() {
+                let uniq = fs::read_to_string(uniq_path)
+                    .ok()
+                    .map(|s| s.trim().to_string());
+                if let Some(ref str) = uniq {
+                    if str.is_empty() {
+                        return None;
+                    }
+                }
+                return uniq;
+            }
+        }
+
+        None
     }
 
     /// Returns the parent sysfs device path

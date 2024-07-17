@@ -190,6 +190,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 GamepadButton::QuickAccess2 => vec![Action::Quick2],
                 GamepadButton::Keyboard => vec![Action::Keyboard],
                 GamepadButton::Screenshot => vec![Action::Screenshot],
+                GamepadButton::Mute => vec![Action::VolumeMute],
                 GamepadButton::DPadUp => vec![Action::Up],
                 GamepadButton::DPadDown => vec![Action::Down],
                 GamepadButton::DPadLeft => vec![Action::Left],

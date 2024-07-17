@@ -617,6 +617,7 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 GamepadButton::RightTop => vec![],
                 GamepadButton::RightTrigger => vec![KeyCode::BTN_TR2.0],
                 GamepadButton::Screenshot => vec![KeyCode::KEY_RECORD.0],
+                GamepadButton::Mute => vec![],
                 GamepadButton::Select => vec![KeyCode::BTN_SELECT.0],
                 GamepadButton::South => vec![KeyCode::BTN_SOUTH.0],
                 GamepadButton::Start => vec![KeyCode::BTN_START.0],

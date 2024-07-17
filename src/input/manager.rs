@@ -7,9 +7,11 @@ use std::time::Duration;
 use ::procfs::CpuInfo;
 use thiserror::Error;
 use tokio::sync::mpsc;
+use zbus::fdo::ManagedObjects;
 use zbus::zvariant::ObjectPath;
 use zbus::Connection;
 
+use crate::bluetooth::device1::Device1Proxy;
 use crate::config::CapabilityMap;
 use crate::config::CompositeDeviceConfig;
 use crate::config::SourceDevice;
@@ -1089,8 +1091,31 @@ impl Manager {
 
         // Check to see if the device is virtual
         if info.is_virtual() {
-            log::debug!("{} is virtual, skipping consideration.", info.name);
-            return Ok(());
+            // TODO: Remove this after udev refactor
+            // It can take a few CPU cycles for udev to tag devices, so we need
+            // to wait briefly.
+            tokio::time::sleep(Duration::from_millis(200)).await;
+
+            // Look up the connected device using udev
+            let dev_path = format!("/dev/input/{}", handler);
+            let device_info = udev::get_device(dev_path.clone()).await?;
+
+            // Check if the virtual device is using the bluetooth bus
+            let id_bus = device_info.properties.get("ID_BUS");
+            log::debug!("Bus ID for {dev_path}: {id_bus:?}");
+            let is_bluetooth = {
+                if let Some(bus) = id_bus {
+                    bus == "bluetooth"
+                } else {
+                    false
+                }
+            };
+
+            if !is_bluetooth {
+                log::debug!("{} is virtual, skipping consideration.", dev_path);
+                return Ok(());
+            }
+            log::debug!("{} is virtual, but detected as bluetooth", dev_path);
         }
 
         // Signal that a source device was added
@@ -1160,8 +1185,55 @@ impl Manager {
 
         // Check to see if the device is virtual
         if device_info.is_virtual() {
-            log::debug!("{} is virtual, skipping consideration.", dev_path);
-            return Ok(());
+            // Check to see if this virtual device is a bluetooth device
+            let Some(uniq) = device_info.get_uniq() else {
+                log::debug!("{} is virtual, skipping consideration.", dev_path);
+                return Ok(());
+            };
+
+            // Check bluez to see if that uniq is a bluetooth device
+            let object_manager = zbus::fdo::ObjectManagerProxy::builder(&self.dbus)
+                .destination("org.bluez")?
+                .path("/")?
+                .build()
+                .await?;
+            let objects: ManagedObjects = object_manager.get_managed_objects().await?;
+
+            // Check each dbus object for a connected device
+            let mut matches_bluetooth = false;
+            for (path, obj) in objects.iter() {
+                // Only consider device objects
+                if !obj.contains_key("org.bluez.Device1") {
+                    log::trace!("{path} does not have org.bluez.Device1 interface");
+                    continue;
+                }
+
+                // Get a reference to the device
+                let bt_device = Device1Proxy::builder(&self.dbus)
+                    .destination("org.bluez")?
+                    .path(path)?
+                    .build()
+                    .await?;
+
+                // Only consider connected bluetooth devices
+                if !bt_device.connected().await? {
+                    continue;
+                }
+
+                // Check to see if the 'uniq' field matches the bluetooth addr
+                let address = bt_device.address().await?;
+                log::debug!("Checking if virtual device {uniq} is bluetooth device: {address}");
+                if uniq.to_lowercase() == address.to_lowercase() {
+                    matches_bluetooth = true;
+                    break;
+                }
+            }
+
+            if !matches_bluetooth {
+                log::debug!("{} is virtual, skipping consideration.", dev_path);
+                return Ok(());
+            }
+            log::debug!("{} is virtual, but detected as bluetooth", dev_path);
         }
         self.on_source_device_added(id, SourceDeviceInfo::HIDRawDeviceInfo(info))
             .await?;
