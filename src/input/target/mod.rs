@@ -9,7 +9,7 @@ pub mod dualsense;
 pub mod keyboard;
 pub mod mouse;
 pub mod steam_deck;
-pub mod touchscreen_fts3528;
+pub mod touchscreen;
 pub mod xb360;
 pub mod xbox_elite;
 pub mod xbox_series;
@@ -26,7 +26,7 @@ pub enum TargetDeviceType {
     XBoxSeries(xbox_series::XboxSeriesController),
     SteamDeck(steam_deck::SteamDeckDevice),
     DualSense(dualsense::DualSenseDevice),
-    Touchscreen(touchscreen_fts3528::Fts3528TouchscreenDevice),
+    Touchscreen(touchscreen::TouchscreenDevice),
 }
 
 impl TargetDeviceType {

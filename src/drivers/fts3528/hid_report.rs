@@ -28,6 +28,16 @@ pub struct PackedInputDataReport {
     pub contact_count: u8,
 }
 
+impl PackedInputDataReport {
+    /// Returns true if any touches are sensed
+    pub fn is_touching(&self) -> bool {
+        self.touch1.is_touching()
+            || self.touch2.is_touching()
+            || self.touch3.is_touching()
+            || self.touch4.is_touching()
+    }
+}
+
 impl Default for PackedInputDataReport {
     fn default() -> Self {
         Self {
