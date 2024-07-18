@@ -34,7 +34,7 @@ use crate::input::target::dualsense::DualSenseHardware;
 use crate::input::target::keyboard::KeyboardDevice;
 use crate::input::target::mouse::MouseDevice;
 use crate::input::target::steam_deck::SteamDeckDevice;
-use crate::input::target::touchscreen_fts3528::Fts3528TouchscreenDevice;
+use crate::input::target::touchscreen::TouchscreenDevice;
 use crate::input::target::xb360::XBox360Controller;
 use crate::input::target::xbox_elite::XboxEliteController;
 use crate::input::target::xbox_series::XboxSeriesController;
@@ -429,8 +429,8 @@ impl Manager {
             "gamepad" => TargetDeviceType::XBox360(XBox360Controller::new(self.dbus.clone())),
             "keyboard" => TargetDeviceType::Keyboard(KeyboardDevice::new(self.dbus.clone())),
             "mouse" => TargetDeviceType::Mouse(MouseDevice::new(self.dbus.clone())),
-            "touchscreen-fts3528" => {
-                TargetDeviceType::Touchscreen(Fts3528TouchscreenDevice::new(self.dbus.clone()))
+            "touchscreen" => {
+                TargetDeviceType::Touchscreen(TouchscreenDevice::new(self.dbus.clone()))
             }
             "xb360" => TargetDeviceType::XBox360(XBox360Controller::new(self.dbus.clone())),
             "xbox-elite" => {

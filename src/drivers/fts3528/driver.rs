@@ -121,6 +121,11 @@ impl Driver {
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let input_report = PackedInputDataReport::unpack(&buf)?;
 
+        // Print input report for debugging
+        //log::info!("--- Input report ---");
+        //log::info!("{input_report}");
+        //log::info!("---- End Report ----");
+
         // Update the state
         let old_state = self.update_state(input_report);
 
