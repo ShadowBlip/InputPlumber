@@ -54,4 +54,4 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
-  - touchscreen-fts3528
+  #- touchscreen-fts3528
