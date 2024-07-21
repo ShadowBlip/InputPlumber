@@ -1204,7 +1204,9 @@ impl Manager {
 
     async fn on_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
         log::debug!("Device removed: {:?}", device.name());
-        let path = ObjectPath::from_string_unchecked(device.devpath());
+        let sys_name = device.syspath.split('/').last().unwrap();
+        let path =
+            ObjectPath::from_string_unchecked(format!("{BUS_PREFIX}/devices/source/{sys_name}"));
         let conn = self.dbus.clone();
         task::spawn(async move {
             log::debug!("Stopping dbus interface: {path}");
