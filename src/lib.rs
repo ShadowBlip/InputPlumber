@@ -7,3 +7,4 @@ pub mod drivers;
 pub mod iio;
 pub mod input;
 pub mod udev;
+pub mod watcher;

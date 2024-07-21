@@ -1,4 +1,6 @@
-use std::{error::Error, thread, time};
+use std::{error::Error, thread, time::Duration};
+
+use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
     drivers::lego::{
@@ -12,15 +14,19 @@ use crate::{
         },
         composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
+        source::command::SourceCommand,
     },
     udev::device::UdevDevice,
 };
+
+const POLL_RATE: Duration = Duration::from_micros(250);
 
 /// Legion Go implementation of HIDRAW interface
 #[derive(Debug)]
 pub struct LegionController {
     device: UdevDevice,
     composite_device: CompositeDeviceClient,
+    rx: Option<mpsc::Receiver<SourceCommand>>,
     device_id: String,
 }
 
@@ -28,18 +34,21 @@ impl LegionController {
     pub fn new(
         device: UdevDevice,
         composite_device: CompositeDeviceClient,
+        rx: mpsc::Receiver<SourceCommand>,
         device_id: String,
     ) -> Self {
         Self {
             device,
             composite_device,
+            rx: Some(rx),
             device_id,
         }
     }
 
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting Legion Controller driver");
-        let path = self.device.devpath();
+        let rx = self.rx.take().unwrap();
+        let path = self.device.devnode();
         let composite_device = self.composite_device.clone();
 
         // Spawn a blocking task to read the events
@@ -47,6 +56,7 @@ impl LegionController {
         let device_id = self.device_id.clone();
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+                let mut output_handler = LegoOutput::new(rx);
                 let mut driver = Driver::new(device_path.clone())?;
                 loop {
                     let events = driver.poll()?;
@@ -63,10 +73,16 @@ impl LegionController {
                         }
                     }
 
+                    // Receive commands/output events
+                    if let Err(e) = output_handler.receive_commands() {
+                        log::debug!("Error receiving commands: {:?}", e);
+                        break;
+                    }
+
                     // Polling interval is about 4ms so we can sleep a little
-                    let duration = time::Duration::from_micros(250);
-                    thread::sleep(duration);
+                    thread::sleep(POLL_RATE);
                 }
+                Ok(())
             });
 
         // Wait for the task to finish
@@ -77,6 +93,41 @@ impl LegionController {
         log::debug!("Legion Controller driver stopped");
 
         Ok(())
+    }
+}
+
+/// Manages handling output events and source device commands
+#[derive(Debug)]
+struct LegoOutput {
+    rx: mpsc::Receiver<SourceCommand>,
+}
+
+impl LegoOutput {
+    pub fn new(rx: mpsc::Receiver<SourceCommand>) -> Self {
+        Self { rx }
+    }
+
+    /// Read commands sent to this device from the channel until it is
+    /// empty.
+    fn receive_commands(&mut self) -> Result<(), Box<dyn Error>> {
+        const MAX_COMMANDS: u8 = 64;
+        let mut commands_processed = 0;
+        loop {
+            match self.rx.try_recv() {
+                Ok(_) => (),
+                Err(e) => match e {
+                    TryRecvError::Empty => return Ok(()),
+                    TryRecvError::Disconnected => {
+                        log::debug!("Receive channel disconnected");
+                        return Err("Receive channel disconnected".into());
+                    }
+                },
+            };
+            commands_processed += 1;
+            if commands_processed >= MAX_COMMANDS {
+                return Ok(());
+            }
+        }
     }
 }
 

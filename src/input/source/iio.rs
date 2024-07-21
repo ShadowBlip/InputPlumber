@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     config,
-    constants::BUS_PREFIX,
+    constants::BUS_SOURCES_PREFIX,
     input::{capability::Capability, composite_device::client::CompositeDeviceClient},
     udev::device::UdevDevice,
 };
@@ -28,7 +28,7 @@ enum DriverType {
 /// Returns the DBus path for an [IIODevice] from a device id (E.g. iio:device0)
 pub fn get_dbus_path(id: String) -> String {
     let name = id.replace(':', "_");
-    format!("{}/devices/source/{}", BUS_PREFIX, name)
+    format!("{}/{}", BUS_SOURCES_PREFIX, name)
 }
 
 #[derive(Debug)]
@@ -77,7 +77,7 @@ impl IIODevice {
 
     /// Returns a unique identifier for the source device.
     pub fn get_id(&self) -> String {
-        format!("iio://{}", self.device.sysname())
+        self.device.get_id()
     }
 
     /// Returns the full path to the device handler (e.g. /sys/bus/iio/devices/iio:device0)

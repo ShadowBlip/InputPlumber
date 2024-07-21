@@ -48,7 +48,7 @@ impl Fts3528TouchScreen {
         log::debug!("Starting FTS3528 Touchscreen driver");
         let mut rx = self.rx.take().unwrap();
         let composite_device = self.composite_device.clone();
-        let path = self.device.devpath();
+        let path = self.device.devnode();
         let device_path = path.clone();
         let device_id = self.device_id.clone();
 

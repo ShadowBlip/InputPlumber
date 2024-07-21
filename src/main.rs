@@ -19,6 +19,7 @@ mod drivers;
 mod iio;
 mod input;
 mod udev;
+mod watcher;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

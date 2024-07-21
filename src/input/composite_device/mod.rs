@@ -357,7 +357,7 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::SourceDeviceStopped(device) => {
-                        log::debug!("Detected source device stopped: {}", device.name());
+                        log::debug!("Detected source device stopped: {}", device.devnode());
                         if let Err(e) = self.on_source_device_removed(device).await {
                             log::error!("Failed to remove source device: {:?}", e);
                         }
@@ -370,7 +370,7 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::SourceDeviceRemoved(device) => {
-                        log::debug!("Detected source device removed: {}", device.name());
+                        log::debug!("Detected source device removed: {}", device.devnode());
                         if let Err(e) = self.on_source_device_removed(device).await {
                             log::error!("Failed to remove source device: {:?}", e);
                         }
@@ -1266,8 +1266,8 @@ impl CompositeDevice {
 
     /// Executed whenever a source device is removed from this [CompositeDevice]
     async fn on_source_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        let path = device.devpath();
-        let id = device.devnode();
+        let path = device.devnode();
+        let id = device.get_id();
 
         if let Some(idx) = self.source_device_paths.iter().position(|str| str == &path) {
             self.source_device_paths.remove(idx);

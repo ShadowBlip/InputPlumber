@@ -92,9 +92,11 @@ impl HIDRawDevice {
             }
             DriverType::LegionGo => {
                 let composite_device = self.composite_device.clone();
+                let rx = self.rx.take().unwrap();
                 let driver = lego::LegionController::new(
                     self.device.clone(),
                     composite_device,
+                    rx,
                     self.get_id(),
                 );
                 driver.run().await?;
@@ -102,8 +104,9 @@ impl HIDRawDevice {
             }
             DriverType::OrangePiNeo => {
                 let composite_device = self.composite_device.clone();
+                let rx = self.rx.take().unwrap();
                 let driver =
-                    opineo::OrangePiNeoTouchpad::new(self.device.clone(), composite_device);
+                    opineo::OrangePiNeoTouchpad::new(self.device.clone(), composite_device, rx);
                 driver.run().await?;
                 Ok(())
             }
@@ -134,7 +137,7 @@ impl HIDRawDevice {
 
     /// Returns a unique identifier for the source device.
     pub fn get_id(&self) -> String {
-        format!("hidraw://{}", self.device.sysname())
+        self.device.get_id()
     }
 
     /// Returns the full path to the device handler (e.g. /dev/hidraw0)
