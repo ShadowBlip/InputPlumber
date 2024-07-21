@@ -437,7 +437,7 @@ impl CompositeDeviceConfig {
         if let Some(product_id) = hidraw_config.product_id {
             let pid = device.id_product();
             log::trace!("Checking product_id: {product_id} against {pid}");
-            if pid != device.id_product() {
+            if pid != product_id {
                 return false;
             }
         }
@@ -489,7 +489,7 @@ impl CompositeDeviceConfig {
     pub fn has_matching_evdev(&self, device: &UdevDevice, evdev_config: &Evdev) -> bool {
         //TODO: Check if the evdev has no proterties defined, that would always match.
         log::trace!(
-            "Checking iio config: {:?} against {:?}",
+            "Checking evdev config: {:?} against {:?}",
             evdev_config,
             device
         );
