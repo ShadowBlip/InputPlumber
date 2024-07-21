@@ -19,6 +19,7 @@ use crate::config::CapabilityMap;
 use crate::config::CompositeDeviceConfig;
 use crate::config::SourceDevice;
 use crate::constants::BUS_PREFIX;
+use crate::constants::BUS_SOURCES_PREFIX;
 use crate::constants::BUS_TARGETS_PREFIX;
 use crate::dbus::interface::composite_device::CompositeDeviceInterface;
 use crate::dbus::interface::manager::ManagerInterface;
@@ -29,6 +30,9 @@ use crate::dmi::data::DMIData;
 use crate::dmi::get_cpu_info;
 use crate::dmi::get_dmi_data;
 use crate::input::composite_device::CompositeDevice;
+use crate::input::source::evdev;
+use crate::input::source::hidraw;
+use crate::input::source::iio;
 use crate::input::target::dbus::DBusDevice;
 use crate::input::target::dualsense;
 use crate::input::target::dualsense::DualSenseDevice;
@@ -47,6 +51,11 @@ use crate::udev::device::UdevDevice;
 use super::composite_device::client::CompositeDeviceClient;
 use super::target::client::TargetDeviceClient;
 
+use crate::watcher;
+use crate::watcher::WatchEvent;
+
+const DEV_PATH: &str = "/dev";
+const INPUT_PATH: &str = "/dev/input";
 const BUFFER_SIZE: usize = 20480;
 
 #[derive(Error, Debug)]
@@ -286,7 +295,7 @@ impl Manager {
                 }
                 ManagerCommand::DeviceRemoved { device } => {
                     if let Err(e) = self.on_device_removed(device).await {
-                        log::error!("Error removing device: {e:}?");
+                        log::error!("Error removing device: {e:?}");
                     }
                 }
             }
@@ -1029,13 +1038,13 @@ impl Manager {
         let sysname = sys_name.clone();
         let dev = device.clone();
 
-        log::debug!(
-            "Device added: {}",
-            device.devnode.as_deref().unwrap_or(device.syspath.as_str())
-        );
+        log::debug!("Device added: {}", device.devnode());
 
         // Get the device subsystem
         let subsystem = device.subsystem();
+
+        // Get the device id
+        let id = device.get_id();
 
         // Create a DBus interface depending on the device subsystem
         match subsystem.as_str() {
@@ -1054,6 +1063,10 @@ impl Manager {
                     }
                     log::debug!("Finished adding source device on dbus");
                 });
+
+                // Add the device as a source device
+                let path = evdev::get_dbus_path(sys_name.clone());
+                self.source_device_dbus_paths.insert(id.clone(), path);
 
                 // Check to see if the device is virtual
                 if device.is_virtual() {
@@ -1077,13 +1090,15 @@ impl Manager {
                         log::debug!("{} is virtual, skipping consideration.", dev_node);
                         return Ok(());
                     }
-                    log::debug!("{} is virtual, but detected as bluetooth", dev_node)
+                    log::debug!(
+                        "{} is a virtual device node for a bluetooth device. Treating as real.",
+                        dev_node
+                    )
                 } else {
-                    log::trace!("Real device: {}", dev_node);
+                    log::trace!("{} is a real device.", dev_node);
                 }
 
                 // Signal that a source device was added
-                let id = format!("evdev://{}", sys_name);
                 log::debug!("Spawing task to add source device: {id}");
                 self.on_source_device_added(id.clone(), device).await?;
                 log::debug!("Finished adding {id}");
@@ -1100,6 +1115,10 @@ impl Manager {
                     }
                     log::debug!("Finished adding source device on dbus");
                 });
+
+                // Add the device as a source device
+                let path = hidraw::get_dbus_path(sys_name.clone());
+                self.source_device_dbus_paths.insert(id.clone(), path);
 
                 // Check to see if the device is virtual
                 if device.is_virtual() {
@@ -1154,13 +1173,15 @@ impl Manager {
                         log::debug!("{} is virtual, skipping consideration.", dev_node);
                         return Ok(());
                     }
-                    log::debug!("{} is virtual, but detected as bluetooth", dev_node);
+                    log::debug!(
+                        "{} is a virtual device node for a bluetooth device. Treating as real.",
+                        dev_node
+                    );
                 } else {
-                    log::trace!("Real device: {}", dev_node);
+                    log::trace!("{} is a real device.", dev_node);
                 }
 
                 // Signal that a source device was added
-                let id = format!("hidraw://{}", sys_name);
                 log::debug!("Spawing task to add source device: {id}");
                 self.on_source_device_added(id.clone(), device).await?;
                 log::debug!("Finished adding event device {id}");
@@ -1179,6 +1200,11 @@ impl Manager {
                     }
                     log::debug!("Finished adding source device on dbus");
                 });
+
+                // Add the device as a source device
+                let path = iio::get_dbus_path(sys_name.clone());
+                self.source_device_dbus_paths.insert(id.clone(), path);
+
                 // Check to see if the device is virtual
                 if device.is_virtual() {
                     log::debug!("{} is virtual, skipping consideration.", dev_node);
@@ -1188,7 +1214,6 @@ impl Manager {
                 }
 
                 // Signal that a source device was added
-                let id = format!("iio://{}", sys_name);
                 log::debug!("Spawing task to add source device: {id}");
                 self.on_source_device_added(id.clone(), device).await?;
                 log::debug!("Finished adding event device {id}");
@@ -1203,10 +1228,10 @@ impl Manager {
     }
 
     async fn on_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        log::debug!("Device removed: {:?}", device.name());
-        let sys_name = device.syspath.split('/').last().unwrap();
-        let path =
-            ObjectPath::from_string_unchecked(format!("{BUS_PREFIX}/devices/source/{sys_name}"));
+        log::debug!("Device removed: {:?}", device.devnode());
+        let sys_name = device.sysname();
+        let path = ObjectPath::from_string_unchecked(format!("{BUS_SOURCES_PREFIX}/{sys_name}"));
+        log::debug!("Device dbus path: {path}");
         let conn = self.dbus.clone();
         task::spawn(async move {
             log::debug!("Stopping dbus interface: {path}");
@@ -1221,43 +1246,14 @@ impl Manager {
             }
         });
 
-        let id = match device.subsystem().as_str() {
-            "input" => {
-                let handler = device
-                    .devpath()
-                    .strip_prefix("/dev/input/")
-                    .unwrap_or("")
-                    .to_string();
-
-                format!("evdev://{}", handler)
-            }
-            "hidraw" => {
-                let handler = device
-                    .devpath()
-                    .strip_prefix("/dev/")
-                    .unwrap_or("")
-                    .to_string();
-
-                format!("hidraw://{}", handler)
-            }
-            "iio" => {
-                let handler = device
-                    .devpath()
-                    .strip_prefix("/sys/bus/iio/devices/")
-                    .unwrap_or("")
-                    .to_string();
-
-                format!("iio://{}", handler)
-            }
-            _ => "".to_string(),
-        };
+        let id = device.get_id();
 
         if id.is_empty() {
             return Ok(());
         }
+        log::debug!("Device ID: {id}");
 
         // Signal that a source device was removed
-        self.source_device_dbus_paths.remove(&id);
         self.on_source_device_removed(device, id).await?;
 
         Ok(())
@@ -1311,12 +1307,9 @@ impl Manager {
         let iio_devices = iio_devices.into_iter().map(|dev| dev.into()).collect();
         Manager::discover_devices(&cmd_tx, iio_devices).await?;
 
+        // Watch for IIO device events.
         task::spawn_blocking(move || {
-            let mut monitor = MonitorBuilder::new()?
-                .match_subsystem("hidraw")?
-                .match_subsystem("input")?
-                .match_subsystem("iio")?
-                .listen()?;
+            let mut monitor = MonitorBuilder::new()?.match_subsystem("iio")?.listen()?;
 
             let mut poll = Poll::new()?;
             let mut events = Events::with_capacity(1024);
@@ -1358,6 +1351,80 @@ impl Manager {
             }
             #[allow(unreachable_code)]
             Ok::<(), Box<dyn Error + Send + Sync>>(())
+        });
+
+        // Watch for hidraw/evdev inotify events.
+        // TODO: when we reload the udev device it triggers the udev watcher. We do this to break
+        // access to the file descriptor for processes that have already authenticated. Figure out
+        // a way to do this only using the udev events.
+        let cmd_tx = self.tx.clone();
+        let (watcher_tx, mut watcher_rx) = mpsc::channel(BUFFER_SIZE);
+        if std::path::Path::new(DEV_PATH).exists() {
+            let tx = watcher_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                log::info!("Started hidraw device discovery thread");
+                watcher::watch(DEV_PATH.into(), tx)
+            });
+        }
+        if std::path::Path::new(INPUT_PATH).exists() {
+            let tx = watcher_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                log::info!("Started evdev device discovery thread");
+                watcher::watch(INPUT_PATH.into(), tx)
+            });
+        }
+
+        task::spawn(async move {
+            while let Some(event) = watcher_rx.recv().await {
+                match event {
+                    WatchEvent::Create { name, base_path } => {
+                        let subsystem = {
+                            match base_path.as_str() {
+                                "/dev" => {
+                                    if !name.starts_with("hidraw") {
+                                        None
+                                    } else {
+                                        Some("hidraw")
+                                    }
+                                }
+                                "/dev/input" => Some("input"),
+
+                                _ => None,
+                            }
+                        };
+                        let Some(subsystem) = subsystem else {
+                            continue;
+                        };
+                        let Ok(device) = ::udev::Device::from_subsystem_sysname(
+                            subsystem.to_string(),
+                            name.clone(),
+                        ) else {
+                            continue;
+                        };
+                        log::debug!("Got add action for {base_path}/{name}");
+                        let result = cmd_tx
+                            .send(ManagerCommand::DeviceAdded {
+                                device: device.into(),
+                            })
+                            .await;
+                        if let Err(e) = result {
+                            log::error!("Unable to send command: {:?}", e);
+                        }
+                    }
+                    WatchEvent::Delete { name, base_path } => {
+                        let device = UdevDevice::from_devnode(base_path.as_str(), name.as_str());
+                        log::debug!("Got add action for {base_path}/{name}");
+                        let result = cmd_tx.send(ManagerCommand::DeviceRemoved { device }).await;
+                        if let Err(e) = result {
+                            log::error!("Unable to send command: {:?}", e);
+                        }
+                    }
+                    WatchEvent::Modify {
+                        name: _,
+                        base_path: _,
+                    } => (),
+                }
+            }
         });
 
         Ok(())

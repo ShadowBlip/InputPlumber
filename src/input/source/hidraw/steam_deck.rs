@@ -67,7 +67,7 @@ impl DeckController {
         log::debug!("Starting Steam Deck Controller driver");
         let rx = self.rx.take().unwrap();
         let composite_device = self.composite_device.clone();
-        let path = self.device.devpath();
+        let path = self.device.devnode();
         let device_path = path.clone();
         let device_id = self.device_id.clone();
 

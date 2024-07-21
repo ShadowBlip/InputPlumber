@@ -8,7 +8,7 @@ use nix::fcntl::{FcntlArg, OFlag};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
-    constants::BUS_PREFIX,
+    constants::BUS_SOURCES_PREFIX,
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton},
@@ -394,12 +394,7 @@ impl EventDevice {
 
     /// Returns a unique identifier for the source device.
     pub fn get_id(&self) -> String {
-        format!("evdev://{}", self.device.sysname())
-    }
-
-    /// Returns the name of the event handler (e.g. event3)
-    pub fn get_event_handler(&self) -> String {
-        self.device.devnode()
+        self.device.get_id()
     }
 
     /// Returns the full path to the device handler (e.g. /dev/input/event3)
@@ -497,5 +492,5 @@ impl EventDevice {
 
 /// Returns the DBus object path for evdev devices
 pub fn get_dbus_path(handler: String) -> String {
-    format!("{}/devices/source/{}", BUS_PREFIX, handler.clone())
+    format!("{}/{}", BUS_SOURCES_PREFIX, handler.clone())
 }

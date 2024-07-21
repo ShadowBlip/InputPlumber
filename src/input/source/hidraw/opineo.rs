@@ -1,4 +1,6 @@
-use std::{error::Error, thread, time};
+use std::{error::Error, thread, time::Duration};
+
+use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use crate::{
     drivers::opineo::{
@@ -9,9 +11,12 @@ use crate::{
         capability::{Capability, Touch, Touchpad},
         composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue, Event},
+        source::command::SourceCommand,
     },
     udev::device::UdevDevice,
 };
+
+const POLL_RATE: Duration = Duration::from_micros(250);
 
 #[derive(Debug, Clone, Copy)]
 enum TouchpadSide {
@@ -25,18 +30,25 @@ enum TouchpadSide {
 pub struct OrangePiNeoTouchpad {
     device: UdevDevice,
     composite_device: CompositeDeviceClient,
+    rx: Option<mpsc::Receiver<SourceCommand>>,
 }
 
 impl OrangePiNeoTouchpad {
-    pub fn new(device: UdevDevice, composite_device: CompositeDeviceClient) -> Self {
+    pub fn new(
+        device: UdevDevice,
+        composite_device: CompositeDeviceClient,
+        rx: mpsc::Receiver<SourceCommand>,
+    ) -> Self {
         Self {
             device,
             composite_device,
+            rx: Some(rx),
         }
     }
 
-    pub async fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting OrangePi NEO Touchpad driver");
+        let rx = self.rx.take().unwrap();
         let composite_device = self.composite_device.clone();
 
         // Query the udev module to determine if this is the left or right touchpad.
@@ -59,6 +71,7 @@ impl OrangePiNeoTouchpad {
 
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+                let mut output_handler = OpiOutput::new(rx);
                 let mut driver = Driver::new(device.clone())?;
                 loop {
                     let events = driver.poll()?;
@@ -75,10 +88,16 @@ impl OrangePiNeoTouchpad {
                         }
                     }
 
+                    // Receive commands/output events
+                    if let Err(e) = output_handler.receive_commands() {
+                        log::debug!("Error receiving commands: {:?}", e);
+                        break;
+                    }
+
                     // Polling interval is about 4ms so we can sleep a little
-                    let duration = time::Duration::from_micros(250);
-                    thread::sleep(duration);
+                    thread::sleep(POLL_RATE);
                 }
+                Ok(())
             });
 
         // Wait for the task to finish
@@ -89,6 +108,41 @@ impl OrangePiNeoTouchpad {
         log::debug!("OrangePi NEO Touchpad driver stopped");
 
         Ok(())
+    }
+}
+
+/// Manages handling output events and source device commands
+#[derive(Debug)]
+struct OpiOutput {
+    rx: mpsc::Receiver<SourceCommand>,
+}
+
+impl OpiOutput {
+    pub fn new(rx: mpsc::Receiver<SourceCommand>) -> Self {
+        Self { rx }
+    }
+
+    /// Read commands sent to this device from the channel until it is
+    /// empty.
+    fn receive_commands(&mut self) -> Result<(), Box<dyn Error>> {
+        const MAX_COMMANDS: u8 = 64;
+        let mut commands_processed = 0;
+        loop {
+            match self.rx.try_recv() {
+                Ok(_) => (),
+                Err(e) => match e {
+                    TryRecvError::Empty => return Ok(()),
+                    TryRecvError::Disconnected => {
+                        log::debug!("Receive channel disconnected");
+                        return Err("Receive channel disconnected".into());
+                    }
+                },
+            };
+            commands_processed += 1;
+            if commands_processed >= MAX_COMMANDS {
+                return Ok(());
+            }
+        }
     }
 }
 

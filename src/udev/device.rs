@@ -8,12 +8,45 @@ use std::{
 
 #[derive(Debug, Clone, Default)]
 pub struct UdevDevice {
-    pub syspath: String,
-    pub devnode: Option<String>,
+    devnode: String,
+    subsystem: String,
+    syspath: String,
+    sysname: String,
 }
 
 impl UdevDevice {
-    //
+    /// Returns a UdevDevice object from the given base path and name.
+    /// e.g. UdevDevice::from_devnode("/dev", "hidraw0");
+    pub fn from_devnode(base_path: &str, name: &str) -> Self {
+        let devnode = format!("{base_path}/{name}");
+        let subsystem = {
+            match base_path {
+                "/dev" => {
+                    if name.starts_with("hidraw") {
+                        Some("hidraw")
+                    } else if name.starts_with("iio:") {
+                        Some("iio")
+                    } else {
+                        None
+                    }
+                }
+                "/dev/input" => Some("input"),
+
+                _ => None,
+            }
+        }
+        .unwrap_or_default()
+        .to_string();
+
+        Self {
+            devnode,
+            subsystem,
+            syspath: "".to_string(),
+            sysname: name.to_string(),
+        }
+    }
+
+    /// returns a udev::Device from the stored syspath.
     pub fn get_device(&self) -> Result<::udev::Device, Box<dyn Error + Send + Sync>> {
         match ::udev::Device::from_syspath(Path::new(self.syspath.as_str())) {
             Ok(device) => Ok(device),
@@ -46,14 +79,7 @@ impl UdevDevice {
     }
 
     pub fn devnode(&self) -> String {
-        let Ok(device) = self.get_device() else {
-            return "".to_string();
-        };
-        device
-            .devnode()
-            .unwrap_or(Path::new(""))
-            .to_string_lossy()
-            .to_string()
+        self.devnode.clone()
     }
 
     pub fn devpath(&self) -> String {
@@ -186,28 +212,15 @@ impl UdevDevice {
     }
 
     pub fn subsystem(&self) -> String {
-        let Ok(device) = self.get_device() else {
-            return "".to_string();
-        };
-        device
-            .subsystem()
-            .unwrap_or(OsStr::new(""))
-            .to_string_lossy()
-            .to_string()
+        self.subsystem.clone()
     }
 
     pub fn sysname(&self) -> String {
-        let Ok(device) = self.get_device() else {
-            return "".to_string();
-        };
-        device.sysname().to_string_lossy().to_string()
+        self.sysname.clone()
     }
 
     pub fn syspath(&self) -> String {
-        let Ok(device) = self.get_device() else {
-            return "".to_string();
-        };
-        device.syspath().to_string_lossy().to_string()
+        self.syspath.clone()
     }
 
     pub fn uniq(&self) -> String {
@@ -222,6 +235,21 @@ impl UdevDevice {
             return "".to_string();
         };
         attr
+    }
+
+    pub fn get_id(&self) -> String {
+        match self.subsystem().as_str() {
+            "input" => {
+                format!("evdev://{}", self.sysname)
+            }
+            "hidraw" => {
+                format!("hidraw://{}", self.sysname)
+            }
+            "iio" => {
+                format!("iio://{}", self.sysname)
+            }
+            _ => "".to_string(),
+        }
     }
 }
 
@@ -304,12 +332,25 @@ pub fn set_attribute_on_tree(
 }
 
 impl From<::udev::Device> for UdevDevice {
-    fn from(value: ::udev::Device) -> Self {
+    fn from(device: ::udev::Device) -> Self {
+        let devnode = device
+            .devnode()
+            .unwrap_or(Path::new(""))
+            .to_string_lossy()
+            .to_string();
+        let subsystem = device
+            .subsystem()
+            .unwrap_or(OsStr::new(""))
+            .to_string_lossy()
+            .to_string();
+        let sysname = device.sysname().to_string_lossy().to_string();
+        let syspath = device.syspath().to_string_lossy().to_string();
+
         Self {
-            syspath: value.syspath().to_string_lossy().to_string(),
-            devnode: value
-                .devnode()
-                .map(|devn| devn.to_string_lossy().to_string()),
+            devnode,
+            subsystem,
+            sysname,
+            syspath,
         }
     }
 }
