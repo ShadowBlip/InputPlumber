@@ -1,22 +1,19 @@
-use std::{collections::HashMap, error::Error, thread, time::Duration};
+use std::fmt::Debug;
+use std::{collections::HashMap, error::Error};
 
 use evdev::{FFEffectData, FFEffectKind};
-use tokio::sync::mpsc::{self, error::TryRecvError};
 
+use crate::drivers::dualsense::driver::{DS5_EDGE_PID, DS5_PID, DS5_VID};
 use crate::{
-    drivers::dualsense::{
-        self,
-        driver::{Driver, DS5_EDGE_PID, DS5_PID, DS5_VID},
-    },
+    drivers::dualsense::{self, driver::Driver},
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
             Touchpad,
         },
-        composite_device::client::CompositeDeviceClient,
-        event::{native::NativeEvent, value::InputValue, Event},
+        event::{native::NativeEvent, value::InputValue},
         output_event::OutputEvent,
-        source::command::SourceCommand,
+        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -25,153 +22,22 @@ use crate::{
 pub const VID: u16 = DS5_VID;
 /// Product IDs
 pub const PIDS: [u16; 2] = [DS5_EDGE_PID, DS5_PID];
-/// How long to sleep before polling for events.
-const POLL_RATE: Duration = Duration::from_millis(1);
 
-/// Sony DualSense Controller implementation of HIDRaw interface
-#[derive(Debug)]
+/// Sony Playstation DualSense Controller source device implementation
 pub struct DualSenseController {
-    device: UdevDevice,
-    composite_device: CompositeDeviceClient,
-    rx: Option<mpsc::Receiver<SourceCommand>>,
-    device_id: String,
-}
-
-impl DualSenseController {
-    /// Create a new [DualSenseController] source device.
-    pub fn new(
-        device: UdevDevice,
-        composite_device: CompositeDeviceClient,
-        rx: mpsc::Receiver<SourceCommand>,
-        device_id: String,
-    ) -> Self {
-        Self {
-            device,
-            composite_device,
-            rx: Some(rx),
-            device_id,
-        }
-    }
-
-    /// Run the source device.
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting DualSense Controller driver");
-        let rx = self.rx.take().unwrap();
-        let composite_device = self.composite_device.clone();
-        let path = self.device.devnode();
-        let device_path = path.clone();
-        let device_id = self.device_id.clone();
-
-        // Spawn a blocking task to read the events
-        let task =
-            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut output_handler = DualSenseOutput::new(rx);
-                let mut driver = Driver::new(device_path.clone())?;
-
-                loop {
-                    let events = driver.poll()?;
-                    let native_events = translate_events(events);
-                    for event in native_events {
-                        // Don't send un-implemented events
-                        if matches!(event.as_capability(), Capability::NotImplemented) {
-                            continue;
-                        }
-                        let res = composite_device
-                            .blocking_process_event(device_id.clone(), Event::Native(event));
-                        if let Err(e) = res {
-                            return Err(e.to_string().into());
-                        }
-                    }
-
-                    // Receive commands/output events
-                    if let Err(e) = output_handler.receive_commands(&mut driver) {
-                        log::debug!("Error receiving commands: {:?}", e);
-                        break;
-                    }
-
-                    // Polling interval is about 4ms so we can sleep a little
-                    thread::sleep(POLL_RATE);
-                }
-
-                Ok(())
-            });
-
-        // Wait for the task to finish
-        if let Err(e) = task.await? {
-            return Err(e.to_string().into());
-        }
-        Ok(())
-    }
-}
-
-/// Manages handling output events and source device commands
-#[derive(Debug)]
-struct DualSenseOutput {
-    rx: mpsc::Receiver<SourceCommand>,
+    driver: Driver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
 }
 
-impl DualSenseOutput {
-    pub fn new(rx: mpsc::Receiver<SourceCommand>) -> Self {
-        Self {
-            rx,
+impl DualSenseController {
+    /// Create a new DualSense controller source device with the given udev
+    /// device information
+    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let driver = Driver::new(device_info.devnode())?;
+        Ok(Self {
+            driver,
             ff_evdev_effects: HashMap::new(),
-        }
-    }
-
-    /// Read commands sent to this device from the channel until it is
-    /// empty.
-    fn receive_commands(&mut self, driver: &mut Driver) -> Result<(), Box<dyn Error>> {
-        const MAX_COMMANDS: u8 = 64;
-        let mut commands_processed = 0;
-        loop {
-            match self.rx.try_recv() {
-                Ok(cmd) => match cmd {
-                    SourceCommand::UploadEffect(data, composite_dev) => {
-                        self.upload_ff_effect(data, composite_dev);
-                    }
-                    SourceCommand::UpdateEffect(id, data) => {
-                        self.update_ff_effect(id, data);
-                    }
-                    SourceCommand::EraseEffect(id, composite_dev) => {
-                        self.erase_ff_effect(id, composite_dev);
-                    }
-                    SourceCommand::WriteEvent(event) => {
-                        log::trace!("Received output event: {:?}", event);
-                        match event {
-                            OutputEvent::Evdev(input_event) => {
-                                if let Err(e) = self.process_evdev_ff(driver, input_event) {
-                                    log::error!("Failed to write output event: {:?}", e);
-                                }
-                            }
-                            OutputEvent::DualSense(report) => {
-                                log::debug!("Received DualSense output report");
-                                if let Err(e) = driver.write(report) {
-                                    log::error!(
-                                        "Failed to process dualsense output report: {:?}",
-                                        e
-                                    );
-                                }
-                            }
-                            OutputEvent::Uinput(_) => (),
-                        }
-                    }
-                    SourceCommand::Stop => return Err("Device stopped".into()),
-                },
-                Err(e) => match e {
-                    TryRecvError::Empty => return Ok(()),
-                    TryRecvError::Disconnected => {
-                        log::debug!("Receive channel disconnected");
-                        return Err("Receive channel disconnected".into());
-                    }
-                },
-            };
-
-            commands_processed += 1;
-            if commands_processed >= MAX_COMMANDS {
-                return Ok(());
-            }
-        }
+        })
     }
 
     /// Returns the next available evdev effect id
@@ -189,55 +55,8 @@ impl DualSenseOutput {
         }
     }
 
-    /// Upload the given effect data to the device and send the result to
-    /// the composite device.
-    fn upload_ff_effect(
-        &mut self,
-        data: evdev::FFEffectData,
-        composite_dev: std::sync::mpsc::Sender<Result<i16, Box<dyn Error + Send + Sync>>>,
-    ) {
-        log::debug!("Uploading FF effect data");
-        let id = self.next_ff_effect_id();
-        if id == -1 {
-            if let Err(e) = composite_dev.send(Err("Maximum FF effects uploaded".into())) {
-                log::error!("Failed to send upload result: {:?}", e);
-            }
-            return;
-        }
-
-        self.ff_evdev_effects.insert(id, data);
-        if let Err(e) = composite_dev.send(Ok(id)) {
-            log::error!("Failed to send upload result: {:?}", e);
-        }
-    }
-
-    /// Update the effect with the given id using the given effect data.
-    fn update_ff_effect(&mut self, id: i16, data: FFEffectData) {
-        log::debug!("Updating FF effect data with id {id}");
-        self.ff_evdev_effects.insert(id, data);
-    }
-
-    /// Erase the effect from the device with the given effect id and send the
-    /// result to the composite device.
-    fn erase_ff_effect(
-        &mut self,
-        id: i16,
-        composite_dev: std::sync::mpsc::Sender<Result<(), Box<dyn Error + Send + Sync>>>,
-    ) {
-        log::debug!("Erasing FF effect data");
-        self.ff_evdev_effects.remove(&id);
-        if let Err(err) = composite_dev.send(Ok(())) {
-            log::error!("Failed to send erase result: {:?}", err);
-        }
-    }
-
-    /// Process evdev force feedback events. Evdev events will send events with
-    /// the effect id set in the 'code' field.
-    fn process_evdev_ff(
-        &self,
-        device: &mut Driver,
-        input_event: evdev::InputEvent,
-    ) -> Result<(), Box<dyn Error>> {
+    /// Process the given evdev force feedback event.
+    fn process_evdev_ff(&mut self, input_event: evdev::InputEvent) -> Result<(), Box<dyn Error>> {
         // Get the code (effect id) and value of the event
         let (code, value) =
             if let evdev::EventSummary::ForceFeedback(_, code, value) = input_event.destructure() {
@@ -257,7 +76,7 @@ impl DualSenseOutput {
         // The value determines if the effect should be playing or not.
         if value == 0 {
             log::trace!("Stopping rumble");
-            if let Err(e) = device.rumble(0, 0) {
+            if let Err(e) = self.driver.rumble(0, 0) {
                 log::debug!("Failed to stop rumble: {:?}", e);
                 return Ok(());
             }
@@ -299,7 +118,7 @@ impl DualSenseOutput {
                 let right_speed = right_speed.round() as u8;
 
                 // Do rumble
-                if let Err(e) = device.rumble(left_speed, right_speed) {
+                if let Err(e) = self.driver.rumble(left_speed, right_speed) {
                     let err = format!("Failed to do rumble: {:?}", e);
                     return Err(err.into());
                 }
@@ -307,6 +126,73 @@ impl DualSenseOutput {
         }
 
         Ok(())
+    }
+}
+
+impl SourceInputDevice for DualSenseController {
+    /// Poll the given input device for input events
+    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        let events = self.driver.poll()?;
+        let native_events = translate_events(events);
+
+        Ok(native_events)
+    }
+
+    /// Returns the possible input events this device is capable of emitting
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
+        Ok(CAPABILITIES.into())
+    }
+}
+
+impl SourceOutputDevice for DualSenseController {
+    /// Write the given output event to the source device. Output events are
+    /// events that flow from an application (like a game) to the physical
+    /// input device, such as force feedback events.
+    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+        log::trace!("Received output event: {:?}", event);
+        match event {
+            OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
+            OutputEvent::DualSense(report) => {
+                log::debug!("Received DualSense output report");
+                Ok(self.driver.write(report)?)
+            }
+            OutputEvent::Uinput(_) => Ok(()),
+        }
+    }
+
+    /// Upload the given force feedback effect data to the source device. Returns
+    /// a device-specific id of the uploaded effect if it is successful.
+    fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
+        log::debug!("Uploading FF effect data");
+        let id = self.next_ff_effect_id();
+        if id == -1 {
+            return Err("Maximum FF effects uploaded".into());
+        }
+        self.ff_evdev_effects.insert(id, effect);
+
+        Ok(id)
+    }
+
+    /// Update the effect with the given id using the given effect data.
+    fn update_effect(&mut self, effect_id: i16, effect: FFEffectData) -> Result<(), OutputError> {
+        log::debug!("Updating FF effect data with id {effect_id}");
+        self.ff_evdev_effects.insert(effect_id, effect);
+        Ok(())
+    }
+
+    /// Erase the effect with the given id from the source device.
+    fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
+        log::debug!("Erasing FF effect data");
+        self.ff_evdev_effects.remove(&effect_id);
+        Ok(())
+    }
+}
+
+impl Debug for DualSenseController {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DualSenseController")
+            .field("ff_evdev_effects", &self.ff_evdev_effects)
+            .finish()
     }
 }
 
