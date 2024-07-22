@@ -1,14 +1,13 @@
-//! The Deck implementation has been largly based off of the OpenSD project:
-//! https://gitlab.com/open-sd/opensd/
 use std::{
     collections::HashMap,
     error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
     thread,
-    time::{self, Duration},
+    time::Duration,
 };
 
-use evdev::{FFEffectData, FFEffectKind};
-use tokio::sync::mpsc::{self, error::TryRecvError};
+use evdev::{FFEffectData, FFEffectKind, InputEvent};
 
 use crate::{
     drivers::{
@@ -24,10 +23,9 @@ use crate::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
             Touchpad,
         },
-        composite_device::client::CompositeDeviceClient,
-        event::{native::NativeEvent, value::InputValue, Event},
+        event::{native::NativeEvent, value::InputValue},
         output_event::OutputEvent,
-        source::SourceCommand,
+        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -36,174 +34,54 @@ use crate::{
 pub const VID: u16 = 0x28de;
 /// Product ID
 pub const PID: u16 = 0x1205;
-/// How long to sleep before polling for events.
-const POLL_RATE: Duration = Duration::from_micros(250);
 
-/// Steam Deck Controller implementation of HIDRaw interface
-#[derive(Debug)]
 pub struct DeckController {
-    device: UdevDevice,
-    composite_device: CompositeDeviceClient,
-    rx: Option<mpsc::Receiver<SourceCommand>>,
-    device_id: String,
-}
-
-impl DeckController {
-    pub fn new(
-        device: UdevDevice,
-        composite_device: CompositeDeviceClient,
-        rx: mpsc::Receiver<SourceCommand>,
-        device_id: String,
-    ) -> Self {
-        Self {
-            device,
-            composite_device,
-            rx: Some(rx),
-            device_id,
-        }
-    }
-
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting Steam Deck Controller driver");
-        let rx = self.rx.take().unwrap();
-        let composite_device = self.composite_device.clone();
-        let path = self.device.devnode();
-        let device_path = path.clone();
-        let device_id = self.device_id.clone();
-
-        // Spawn a blocking task to handle lizard mode
-        let lizard_task =
-            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let driver = Driver::new(path.clone())?;
-                loop {
-                    // Keep the lizard asleep
-                    driver.handle_lizard_mode()?;
-
-                    // Polling interval is about 4ms so we can sleep a little
-                    let duration = time::Duration::from_secs(LIZARD_SLEEP_SEC as u64);
-                    thread::sleep(duration);
-                }
-            });
-
-        // Spawn a blocking task to read the events
-        let task =
-            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut output_handler = DeckOutput::new(rx);
-                let mut driver = Driver::new(device_path.clone())?;
-                loop {
-                    let events = driver.poll()?;
-                    let native_events = translate_events(events);
-                    for event in native_events {
-                        // Don't send un-implemented events
-                        if matches!(event.as_capability(), Capability::NotImplemented) {
-                            continue;
-                        }
-                        let res = composite_device
-                            .blocking_process_event(device_id.clone(), Event::Native(event));
-                        if let Err(e) = res {
-                            return Err(e.to_string().into());
-                        }
-                    }
-
-                    // Receive commands/output events
-                    if let Err(e) = output_handler.receive_commands(&mut driver) {
-                        log::debug!("Error receiving commands: {:?}", e);
-                        break;
-                    }
-
-                    // Polling interval is about 4ms so we can sleep a little
-                    thread::sleep(POLL_RATE);
-                }
-
-                Ok(())
-            });
-
-        // Wait for the task to finish
-        if let Err(e) = task.await? {
-            return Err(e.to_string().into());
-        }
-        if let Err(e) = lizard_task.await? {
-            return Err(e.to_string().into());
-        }
-
-        log::debug!("Steam Deck Controller driver stopped");
-
-        Ok(())
-    }
-}
-
-/// Manages handling output events and source device commands
-#[derive(Debug)]
-struct DeckOutput {
-    rx: mpsc::Receiver<SourceCommand>,
+    driver: Driver,
+    device_info: UdevDevice,
+    lizard_mode_started: bool,
+    lizard_mode_running: Arc<Mutex<bool>>,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
 }
 
-impl DeckOutput {
-    pub fn new(rx: mpsc::Receiver<SourceCommand>) -> Self {
-        Self {
-            rx,
+impl DeckController {
+    /// Create a new Deck Controller source device with the given udev
+    /// device information
+    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let driver = Driver::new(device_info.devnode())?;
+
+        Ok(Self {
+            driver,
+            device_info,
+            lizard_mode_started: false,
+            lizard_mode_running: Arc::new(Mutex::new(false)),
             ff_evdev_effects: HashMap::new(),
-        }
+        })
     }
 
-    /// Read commands sent to this device from the channel until it is
-    /// empty.
-    fn receive_commands(&mut self, driver: &mut Driver) -> Result<(), Box<dyn Error>> {
-        const MAX_COMMANDS: u8 = 64;
-        let mut commands_processed = 0;
-        loop {
-            match self.rx.try_recv() {
-                Ok(cmd) => match cmd {
-                    SourceCommand::UploadEffect(data, composite_dev) => {
-                        self.upload_ff_effect(data, composite_dev);
-                    }
-                    SourceCommand::UpdateEffect(id, data) => {
-                        self.update_ff_effect(id, data);
-                    }
-                    SourceCommand::EraseEffect(id, composite_dev) => {
-                        self.erase_ff_effect(id, composite_dev);
-                    }
-                    SourceCommand::WriteEvent(event) => {
-                        log::trace!("Received output event: {:?}", event);
-                        match event {
-                            OutputEvent::Evdev(input_event) => {
-                                if let Err(e) = self.process_evdev_ff(driver, input_event) {
-                                    log::error!("Failed to write output event: {:?}", e);
-                                }
-                            }
-                            OutputEvent::DualSense(report) => {
-                                log::debug!("Received DualSense output report");
-                                if report.use_rumble_not_haptics
-                                    || report.enable_improved_rumble_emulation
-                                {
-                                    if let Err(e) = self.process_dualsense_ff(driver, report) {
-                                        log::error!(
-                                            "Failed to process dualsense output report: {:?}",
-                                            e
-                                        );
-                                    }
-                                }
-                            }
-                            OutputEvent::Uinput(_) => (),
-                        }
-                    }
-                    SourceCommand::Stop => return Err("Device stopped".into()),
-                },
-                Err(e) => match e {
-                    TryRecvError::Empty => return Ok(()),
-                    TryRecvError::Disconnected => {
-                        log::debug!("Receive channel disconnected");
-                        return Err("Receive channel disconnected".into());
-                    }
-                },
-            };
+    /// Start lizard mode task to keep lizard mode asleep.
+    fn start_lizard_task(&mut self) {
+        let path = self.device_info.devnode();
+        let lizard_mode_running = self.lizard_mode_running.clone();
+        tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+            let driver = Driver::new(path)?;
+            *lizard_mode_running.lock().unwrap() = true;
+            loop {
+                // Check if lizard mode needs to stop
+                if !*lizard_mode_running.lock().unwrap() {
+                    break;
+                }
 
-            commands_processed += 1;
-            if commands_processed >= MAX_COMMANDS {
-                return Ok(());
+                // Keep the lizard asleep
+                driver.handle_lizard_mode()?;
+
+                // Polling interval is about 4ms so we can sleep a little
+                let duration = Duration::from_secs(LIZARD_SLEEP_SEC as u64);
+                thread::sleep(duration);
             }
-        }
+
+            Ok(())
+        });
+        self.lizard_mode_started = true;
     }
 
     /// Returns the next available evdev effect id
@@ -221,55 +99,8 @@ impl DeckOutput {
         }
     }
 
-    /// Upload the given effect data to the device and send the result to
-    /// the composite device.
-    fn upload_ff_effect(
-        &mut self,
-        data: evdev::FFEffectData,
-        composite_dev: std::sync::mpsc::Sender<Result<i16, Box<dyn Error + Send + Sync>>>,
-    ) {
-        log::debug!("Uploading FF effect data");
-        let id = self.next_ff_effect_id();
-        if id == -1 {
-            if let Err(e) = composite_dev.send(Err("Maximum FF effects uploaded".into())) {
-                log::error!("Failed to send upload result: {:?}", e);
-            }
-            return;
-        }
-
-        self.ff_evdev_effects.insert(id, data);
-        if let Err(e) = composite_dev.send(Ok(id)) {
-            log::error!("Failed to send upload result: {:?}", e);
-        }
-    }
-
-    /// Update the effect with the given id using the given effect data.
-    fn update_ff_effect(&mut self, id: i16, data: FFEffectData) {
-        log::debug!("Updating FF effect data with id {id}");
-        self.ff_evdev_effects.insert(id, data);
-    }
-
-    /// Erase the effect from the device with the given effect id and send the
-    /// result to the composite device.
-    fn erase_ff_effect(
-        &mut self,
-        id: i16,
-        composite_dev: std::sync::mpsc::Sender<Result<(), Box<dyn Error + Send + Sync>>>,
-    ) {
-        log::debug!("Erasing FF effect data");
-        self.ff_evdev_effects.remove(&id);
-        if let Err(err) = composite_dev.send(Ok(())) {
-            log::error!("Failed to send erase result: {:?}", err);
-        }
-    }
-
-    /// Process evdev force feedback events. Evdev events will send events with
-    /// the effect id set in the 'code' field.
-    fn process_evdev_ff(
-        &self,
-        device: &mut Driver,
-        input_event: evdev::InputEvent,
-    ) -> Result<(), Box<dyn Error>> {
+    /// Process the given evdev force feedback event.
+    fn process_evdev_ff(&mut self, input_event: InputEvent) -> Result<(), Box<dyn Error>> {
         // Get the code (effect id) and value of the event
         let (code, value) =
             if let evdev::EventSummary::ForceFeedback(_, code, value) = input_event.destructure() {
@@ -288,12 +119,10 @@ impl DeckOutput {
 
         // The value determines if the effect should be playing or not.
         if value == 0 {
-            log::trace!("Stopping haptic rumble");
-            if let Err(e) = device.haptic_rumble(0, 0, 0, 0, 0) {
+            if let Err(e) = self.driver.haptic_rumble(0, 0, 0, 0, 0) {
                 log::debug!("Failed to stop haptic rumble: {:?}", e);
                 return Ok(());
             }
-            return Ok(());
         }
 
         // Perform the rumble based on the effect
@@ -338,9 +167,13 @@ impl DeckOutput {
                 }
 
                 // Do rumble
-                if let Err(e) =
-                    device.haptic_rumble(intensity, left_speed, right_speed, left_gain, right_gain)
-                {
+                if let Err(e) = self.driver.haptic_rumble(
+                    intensity,
+                    left_speed,
+                    right_speed,
+                    left_gain,
+                    right_gain,
+                ) {
                     let err = format!("Failed to do haptic rumble: {:?}", e);
                     return Err(err.into());
                 }
@@ -353,7 +186,6 @@ impl DeckOutput {
     /// Process dualsense force feedback output reports
     fn process_dualsense_ff(
         &mut self,
-        driver: &mut Driver,
         report: SetStatePackedOutputData,
     ) -> Result<(), Box<dyn Error>> {
         // Set the rumble values based on the DualSense output report
@@ -370,13 +202,104 @@ impl DeckOutput {
         }
 
         if let Err(e) =
-            driver.haptic_rumble(intensity, left_speed, right_speed, left_gain, right_gain)
+            self.driver
+                .haptic_rumble(intensity, left_speed, right_speed, left_gain, right_gain)
         {
             let err = format!("Failed to do haptic rumble: {:?}", e);
             return Err(err.into());
         }
 
         Ok(())
+    }
+}
+
+impl SourceInputDevice for DeckController {
+    /// Poll the given input device for input events
+    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        // Spawn a blocking task to handle lizard mode
+        if !self.lizard_mode_started {
+            self.start_lizard_task();
+        }
+
+        let events = self.driver.poll()?;
+        let native_events = translate_events(events);
+        Ok(native_events)
+    }
+
+    /// Returns the possible input events this device is capable of emitting
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
+        Ok(CAPABILITIES.into())
+    }
+}
+
+impl SourceOutputDevice for DeckController {
+    /// Write the given output event to the source device. Output events are
+    /// events that flow from an application (like a game) to the physical
+    /// input device, such as force feedback events.
+    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+        log::trace!("Received output event: {:?}", event);
+        match event {
+            OutputEvent::Evdev(input_event) => {
+                self.process_evdev_ff(input_event)?;
+            }
+            OutputEvent::DualSense(report) => {
+                log::debug!("Received DualSense output report");
+                if report.use_rumble_not_haptics || report.enable_improved_rumble_emulation {
+                    self.process_dualsense_ff(report)?;
+                }
+            }
+            OutputEvent::Uinput(_) => (),
+        }
+
+        Ok(())
+    }
+
+    /// Upload the given force feedback effect data to the source device. Returns
+    /// a device-specific id of the uploaded effect if it is successful.
+    fn upload_effect(&mut self, effect: evdev::FFEffectData) -> Result<i16, OutputError> {
+        log::debug!("Uploading FF effect data");
+        let id = self.next_ff_effect_id();
+        if id == -1 {
+            return Err("Maximum FF effects uploaded".into());
+        }
+        self.ff_evdev_effects.insert(id, effect);
+
+        Ok(id)
+    }
+
+    /// Update the effect with the given id using the given effect data.
+    fn update_effect(
+        &mut self,
+        effect_id: i16,
+        effect: evdev::FFEffectData,
+    ) -> Result<(), OutputError> {
+        log::debug!("Updating FF effect data with id {effect_id}");
+        self.ff_evdev_effects.insert(effect_id, effect);
+        Ok(())
+    }
+
+    /// Erase the effect with the given id from the source device.
+    fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
+        log::debug!("Erasing FF effect data");
+        self.ff_evdev_effects.remove(&effect_id);
+        Ok(())
+    }
+
+    /// Stop the source device and terminate the lizard mode task
+    fn stop(&mut self) -> Result<(), OutputError> {
+        *self.lizard_mode_running.lock().unwrap() = false;
+        Ok(())
+    }
+}
+
+impl Debug for DeckController {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeckController")
+            .field("device_info", &self.device_info)
+            .field("lizard_mode_started", &self.lizard_mode_started)
+            .field("lizard_mode_running", &self.lizard_mode_running)
+            .field("ff_evdev_effects", &self.ff_evdev_effects)
+            .finish()
     }
 }
 

@@ -1,6 +1,4 @@
-use std::{error::Error, thread, time::Duration};
-
-use tokio::sync::mpsc::{self, error::TryRecvError};
+use std::{error::Error, fmt::Debug};
 
 use crate::{
     drivers::fts3528::{
@@ -11,100 +9,45 @@ use crate::{
     },
     input::{
         capability::{Capability, Touch},
-        composite_device::client::CompositeDeviceClient,
-        event::{native::NativeEvent, value::InputValue, Event},
-        source::SourceCommand,
+        event::{native::NativeEvent, value::InputValue},
+        source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
 
-/// How long to sleep before polling for events.
-const POLL_RATE: Duration = Duration::from_millis(1);
-
-#[derive(Debug)]
-pub struct Fts3528TouchScreen {
-    device: UdevDevice,
-    composite_device: CompositeDeviceClient,
-    rx: Option<mpsc::Receiver<SourceCommand>>,
-    device_id: String,
+/// FTS3528 Touchscreen source device implementation
+pub struct Fts3528Touchscreen {
+    driver: Driver,
 }
 
-impl Fts3528TouchScreen {
-    pub fn new(
-        device: UdevDevice,
-        composite_device: CompositeDeviceClient,
-        rx: mpsc::Receiver<SourceCommand>,
-        device_id: String,
-    ) -> Self {
-        Self {
-            device,
-            composite_device,
-            rx: Some(rx),
-            device_id,
-        }
+impl Fts3528Touchscreen {
+    /// Create a new FTS3528 touchscreen source device with the given udev
+    /// device information
+    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let driver = Driver::new(device_info.devnode())?;
+        Ok(Self { driver })
+    }
+}
+
+impl SourceInputDevice for Fts3528Touchscreen {
+    /// Poll the given input device for input events
+    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        let events = self.driver.poll()?;
+        let native_events = translate_events(events);
+        Ok(native_events)
     }
 
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting FTS3528 Touchscreen driver");
-        let mut rx = self.rx.take().unwrap();
-        let composite_device = self.composite_device.clone();
-        let path = self.device.devnode();
-        let device_path = path.clone();
-        let device_id = self.device_id.clone();
+    /// Returns the possible input events this device is capable of emitting
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
+        Ok(CAPABILITIES.into())
+    }
+}
 
-        // Spawn a blocking task to read the events
-        let task =
-            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut driver = Driver::new(device_path.clone())?;
-                loop {
-                    // Process events
-                    let events = driver.poll()?;
-                    let native_events = translate_events(events);
-                    for event in native_events {
-                        // Don't send un-implemented events
-                        if matches!(event.as_capability(), Capability::NotImplemented) {
-                            continue;
-                        }
-                        let res = composite_device
-                            .blocking_process_event(device_id.clone(), Event::Native(event));
-                        if let Err(e) = res {
-                            return Err(e.to_string().into());
-                        }
-                    }
+impl SourceOutputDevice for Fts3528Touchscreen {}
 
-                    // Receive commands/output events
-                    match rx.try_recv() {
-                        Ok(cmd) => {
-                            if let SourceCommand::Stop = cmd {
-                                log::debug!("Received stop command");
-                                break;
-                            }
-                        }
-                        Err(e) => match e {
-                            TryRecvError::Empty => (),
-                            TryRecvError::Disconnected => {
-                                log::debug!("Receive channel disconnected");
-                                break;
-                            }
-                        },
-                    }
-
-                    // Polling interval is about 4ms so we can sleep a little
-                    thread::sleep(POLL_RATE);
-                }
-
-                Ok(())
-            });
-
-        // Wait for the task to finish
-        if let Err(e) = task.await? {
-            log::error!("Error running driver: {e:?}");
-            return Err(e.to_string().into());
-        }
-
-        log::debug!("FTS3528 Touchscreen driver stopped");
-
-        Ok(())
+impl Debug for Fts3528Touchscreen {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Fts3528Touchscreen").finish()
     }
 }
 

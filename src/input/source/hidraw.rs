@@ -4,21 +4,19 @@ pub mod lego;
 pub mod opineo;
 pub mod steam_deck;
 
-use std::error::Error;
-
-use tokio::sync::mpsc;
+use std::{error::Error, time::Duration};
 
 use crate::{
-    constants::BUS_SOURCES_PREFIX,
-    drivers,
-    input::{capability::Capability, composite_device::client::CompositeDeviceClient},
+    constants::BUS_SOURCES_PREFIX, drivers, input::composite_device::client::CompositeDeviceClient,
     udev::device::UdevDevice,
 };
 
-use super::{client::SourceDeviceClient, SourceCommand};
+use self::{
+    dualsense::DualSenseController, fts3528::Fts3528Touchscreen, lego::LegionController,
+    opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
+};
 
-/// Size of the [SourceCommand] buffer for receiving output events
-const BUFFER_SIZE: usize = 2048;
+use super::{SourceDriver, SourceDriverOptions};
 
 /// List of available drivers
 enum DriverType {
@@ -30,142 +28,66 @@ enum DriverType {
     Fts3528Touchscreen,
 }
 
-/// [HIDRawDevice] represents an input device using the input subsystem.
+/// [HidRawDevice] represents an input device using the hidraw subsystem.
 #[derive(Debug)]
-pub struct HIDRawDevice {
-    device: UdevDevice,
-    composite_device: CompositeDeviceClient,
-    tx: mpsc::Sender<SourceCommand>,
-    rx: Option<mpsc::Receiver<SourceCommand>>,
+pub enum HidRawDevice {
+    DualSense(SourceDriver<DualSenseController>),
+    SteamDeck(SourceDriver<DeckController>),
+    LegionGo(SourceDriver<LegionController>),
+    OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
+    Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
 }
 
-impl HIDRawDevice {
-    pub fn new(device: UdevDevice, composite_device: CompositeDeviceClient) -> Self {
-        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
-        Self {
-            device,
-            composite_device,
-            tx,
-            rx: Some(rx),
-        }
-    }
+impl HidRawDevice {
+    /// Create a new [HidRawDevice] associated with the given device and
+    /// composite device. The appropriate driver will be selected based on
+    /// the provided device.
+    pub fn new(
+        device_info: UdevDevice,
+        composite_device: CompositeDeviceClient,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let driver_type = HidRawDevice::get_driver_type(&device_info);
 
-    /// Returns a transmitter channel that can be used to send events to this device
-    pub fn client(&self) -> SourceDeviceClient {
-        self.tx.clone().into()
-    }
-
-    /// Run the source device handler. HIDRaw devices require device-specific
-    /// implementations. If one does not exist, an error will be returned.
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        // Run the appropriate HIDRaw driver
-        match self.get_driver_type() {
-            DriverType::Unknown => Err(format!(
-                "No driver for hidraw interface found. VID: {}, PID: {}",
-                self.device.id_vendor(),
-                self.device.id_product()
-            )
-            .into()),
+        match driver_type {
+            DriverType::Unknown => Err("No driver for hidraw interface found".into()),
             DriverType::DualSense => {
-                let composite_device = self.composite_device.clone();
-                let rx = self.rx.take().unwrap();
-                let mut driver = dualsense::DualSenseController::new(
-                    self.device.clone(),
-                    composite_device,
-                    rx,
-                    self.get_id(),
-                );
-                driver.run().await?;
-                Ok(())
+                let device = DualSenseController::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::DualSense(source_device))
             }
             DriverType::SteamDeck => {
-                let composite_device = self.composite_device.clone();
-                let rx = self.rx.take().unwrap();
-                let mut driver = steam_deck::DeckController::new(
-                    self.device.clone(),
-                    composite_device,
-                    rx,
-                    self.get_id(),
-                );
-                driver.run().await?;
-                Ok(())
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(1),
+                    buffer_size: 2048,
+                };
+                let device = DeckController::new(device_info.clone())?;
+                let source_device =
+                    SourceDriver::new_with_options(composite_device, device, device_info, options);
+                Ok(Self::SteamDeck(source_device))
             }
             DriverType::LegionGo => {
-                let composite_device = self.composite_device.clone();
-                let rx = self.rx.take().unwrap();
-                let driver = lego::LegionController::new(
-                    self.device.clone(),
-                    composite_device,
-                    rx,
-                    self.get_id(),
-                );
-                driver.run().await?;
-                Ok(())
+                let device = LegionController::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::LegionGo(source_device))
             }
             DriverType::OrangePiNeo => {
-                let composite_device = self.composite_device.clone();
-                let rx = self.rx.take().unwrap();
-                let driver =
-                    opineo::OrangePiNeoTouchpad::new(self.device.clone(), composite_device, rx);
-                driver.run().await?;
-                Ok(())
+                let device = OrangePiNeoTouchpad::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::OrangePiNeo(source_device))
             }
             DriverType::Fts3528Touchscreen => {
-                let composite_device = self.composite_device.clone();
-                let rx = self.rx.take().unwrap();
-                let mut driver = fts3528::Fts3528TouchScreen::new(
-                    self.device.clone(),
-                    composite_device,
-                    rx,
-                    self.get_id(),
-                );
-                driver.run().await?;
-                Ok(())
+                let device = Fts3528Touchscreen::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::Fts3528Touchscreen(source_device))
             }
         }
     }
 
-    /// Returns a copy of the UdevDevice
-    pub fn get_device(&self) -> UdevDevice {
-        self.device.clone()
-    }
-
-    /// Returns a refrence to the UdevDevice
-    pub fn get_device_ref(&self) -> &UdevDevice {
-        &self.device
-    }
-
-    /// Returns a unique identifier for the source device.
-    pub fn get_id(&self) -> String {
-        self.device.get_id()
-    }
-
-    /// Returns the full path to the device handler (e.g. /dev/hidraw0)
-    pub fn get_device_path(&self) -> String {
-        self.device.devnode()
-    }
-
-    /// Returns capabilities of this input device
-    pub fn get_capabilities(&self) -> Result<Vec<Capability>, Box<dyn Error>> {
-        match self.get_driver_type() {
-            DriverType::Unknown => Err(format!(
-                "No capabilities for interface found. VID: {}, PID: {}",
-                self.device.id_vendor(),
-                self.device.id_product()
-            )
-            .into()),
-            DriverType::SteamDeck => Ok(Vec::from(steam_deck::CAPABILITIES)),
-            DriverType::LegionGo => Ok(Vec::from(lego::CAPABILITIES)),
-            DriverType::OrangePiNeo => Ok(Vec::from(opineo::CAPABILITIES)),
-            DriverType::Fts3528Touchscreen => Ok(Vec::from(fts3528::CAPABILITIES)),
-            DriverType::DualSense => Ok(Vec::from(dualsense::CAPABILITIES)),
-        }
-    }
-
-    fn get_driver_type(&self) -> DriverType {
-        log::debug!("Finding driver for interface: {:?}", self.device);
-        let vid = self.device.id_vendor();
-        let pid = self.device.id_product();
+    /// Return the driver type for the given vendor and product
+    fn get_driver_type(device: &UdevDevice) -> DriverType {
+        log::debug!("Finding driver for interface: {:?}", device);
+        let vid = device.id_vendor();
+        let pid = device.id_product();
 
         // Sony DualSense
         if vid == dualsense::VID && dualsense::PIDS.contains(&pid) {
@@ -199,6 +121,7 @@ impl HIDRawDevice {
         }
 
         // Unknown
+        log::warn!("No driver for hidraw interface found. VID: {vid}, PID: {pid}");
         DriverType::Unknown
     }
 }

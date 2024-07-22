@@ -14,6 +14,10 @@ pub mod xb360;
 pub mod xbox_elite;
 pub mod xbox_series;
 
+//trait TargetDevice {
+//    fn run()
+//}
+
 /// A [TargetDevice] is any virtual input device that emits input events
 #[derive(Debug)]
 pub enum TargetDeviceType {

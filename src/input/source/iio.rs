@@ -1,19 +1,20 @@
 pub mod accel_gyro_3d;
+pub mod accel_gyro_3d_new;
 pub mod bmi_imu;
+pub mod bmi_imu_new;
 
 use std::error::Error;
 
 use glob_match::glob_match;
-use tokio::sync::mpsc;
 
 use crate::{
-    config,
-    constants::BUS_SOURCES_PREFIX,
-    input::{capability::Capability, composite_device::client::CompositeDeviceClient},
+    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
     udev::device::UdevDevice,
 };
 
-use super::{client::SourceDeviceClient, SourceCommand};
+use self::{accel_gyro_3d_new::AccelGyro3dImu, bmi_imu_new::BmiImu};
+
+use super::SourceDriver;
 
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
@@ -25,106 +26,43 @@ enum DriverType {
     AccelGryo3D,
 }
 
-/// Returns the DBus path for an [IIODevice] from a device id (E.g. iio:device0)
-pub fn get_dbus_path(id: String) -> String {
-    let name = id.replace(':', "_");
-    format!("{}/{}", BUS_SOURCES_PREFIX, name)
-}
-
+/// [IioDevice] represents an input device using the iio subsystem.
 #[derive(Debug)]
-pub struct IIODevice {
-    device: UdevDevice,
-    config: Option<config::IIO>,
-    composite_device: CompositeDeviceClient,
-    tx: mpsc::Sender<SourceCommand>,
-    rx: Option<mpsc::Receiver<SourceCommand>>,
+pub enum IioDevice {
+    BmiImu(SourceDriver<BmiImu>),
+    AccelGryo3D(SourceDriver<AccelGyro3dImu>),
 }
 
-impl IIODevice {
+impl IioDevice {
+    /// Create a new [IioDevice] associated with the given device and
+    /// composite device. The appropriate driver will be selected based on
+    /// the provided device.
     pub fn new(
-        device: UdevDevice,
-        config: Option<config::IIO>,
+        device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
-    ) -> Self {
-        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
-        Self {
-            device,
-            config,
-            composite_device,
-            tx,
-            rx: Some(rx),
-        }
-    }
+        config: Option<config::IIO>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let driver_type = IioDevice::get_driver_type(&device_info);
 
-    /// Returns a transmitter channel that can be used to send events to this device
-    pub fn client(&self) -> SourceDeviceClient {
-        self.tx.clone().into()
-    }
-
-    pub fn get_capabilities(&self) -> Result<Vec<Capability>, Box<dyn Error>> {
-        Ok(vec![])
-    }
-
-    /// Returns a copy of the UdevDevice
-    pub fn get_device(&self) -> UdevDevice {
-        self.device.clone()
-    }
-
-    /// Returns a copy of the UdevDevice
-    pub fn get_device_ref(&self) -> &UdevDevice {
-        &self.device
-    }
-
-    /// Returns a unique identifier for the source device.
-    pub fn get_id(&self) -> String {
-        self.device.get_id()
-    }
-
-    /// Returns the full path to the device handler (e.g. /sys/bus/iio/devices/iio:device0)
-    pub fn get_device_path(&self) -> String {
-        self.device.devnode()
-    }
-
-    /// Run the source IIO device
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        // Run the appropriate IIO driver
-        let name = self.device.name();
-
-        match self.get_driver_type(&name) {
-            DriverType::Unknown => Err(format!("No driver for IMU found. {}", name).into()),
+        match driver_type {
+            DriverType::Unknown => Err("No driver for iio interface found".into()),
             DriverType::BmiImu => {
-                log::info!("Detected BMI_IMU: {name}");
-                let composite_device = self.composite_device.clone();
-                let rx = self.rx.take().unwrap();
-                let mut driver = bmi_imu::IMU::new(
-                    self.device.clone(),
-                    self.config.clone(),
-                    composite_device,
-                    rx,
-                    self.get_id(),
-                );
-                driver.run().await?;
-                Ok(())
+                let device = BmiImu::new(device_info.clone(), config)?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::BmiImu(source_device))
             }
-
             DriverType::AccelGryo3D => {
-                log::info!("Detected IMU: {name}");
-                let composite_device = self.composite_device.clone();
-                let rx = self.rx.take().unwrap();
-                let mut driver = accel_gyro_3d::IMU::new(
-                    self.device.clone(),
-                    self.config.clone(),
-                    composite_device,
-                    rx,
-                    self.get_id(),
-                );
-                driver.run().await?;
-                Ok(())
+                let device = AccelGyro3dImu::new(device_info.clone(), config)?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::AccelGryo3D(source_device))
             }
         }
     }
 
-    fn get_driver_type(&self, name: &str) -> DriverType {
+    /// Return the driver type for the given device info
+    fn get_driver_type(device: &UdevDevice) -> DriverType {
+        let device_name = device.name();
+        let name = device_name.as_str();
         log::debug!("Finding driver for IIO interface: {name}");
         // BMI_IMU
         if glob_match("{i2c-10EC5280*,i2c-BMI*,bmi*-imu}", name) {
@@ -141,4 +79,10 @@ impl IIODevice {
         // Unknown
         DriverType::Unknown
     }
+}
+
+/// Returns the DBus path for an [IIODevice] from a device id (E.g. iio:device0)
+pub fn get_dbus_path(id: String) -> String {
+    let name = id.replace(':', "_");
+    format!("{}/{}", BUS_SOURCES_PREFIX, name)
 }
