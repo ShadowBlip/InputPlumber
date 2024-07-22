@@ -26,7 +26,7 @@ use crate::{
             Event,
         },
         output_event::UinputOutputEvent,
-        source::{self, SourceDevice},
+        source::{evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, SourceDevice},
     },
     udev::{device::UdevDevice, hide_device, unhide_device},
 };
@@ -219,7 +219,9 @@ impl CompositeDevice {
             }
         }
 
-        device.add_source_device(device_info)?;
+        if let Err(e) = device.add_source_device(device_info) {
+            return Err(e.to_string().into());
+        }
 
         Ok(device)
     }
@@ -543,7 +545,7 @@ impl CompositeDevice {
         log::debug!("Starting new source devices");
         // Start listening for events from all source devices
         let sources = self.source_devices_discovered.drain(..);
-        for mut source_device in sources {
+        for source_device in sources {
             let device_id = source_device.get_id();
             // If the source device is blocked, don't bother running it
             if self.source_devices_blocked.contains(&device_id) {
@@ -557,8 +559,8 @@ impl CompositeDevice {
 
             // Add the IIO IMU Dbus interface. We do this here because it needs the source
             // device transmitter and this is the only place we can refrence it at the moment.
-            if let SourceDevice::Iio(ref device) = source_device {
-                let device = device.get_device();
+            let device = source_device.get_device();
+            if let SourceDevice::Iio(_) = source_device {
                 SourceIioImuInterface::listen_on_dbus(self.conn.clone(), device.clone()).await?;
             }
 
@@ -567,12 +569,7 @@ impl CompositeDevice {
                     log::error!("Failed running device: {:?}", e);
                 }
                 log::debug!("Source device closed");
-                if let Err(e) = tx
-                    .send(CompositeCommand::SourceDeviceStopped(
-                        source_device.get_device(),
-                    ))
-                    .await
-                {
+                if let Err(e) = tx.send(CompositeCommand::SourceDeviceStopped(device)).await {
                     log::error!("Failed to send device stop command: {:?}", e);
                 }
             });
@@ -1251,7 +1248,9 @@ impl CompositeDevice {
 
     /// Executed whenever a source device is added to this [CompositeDevice].
     async fn on_source_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        self.add_source_device(device)?;
+        if let Err(e) = self.add_source_device(device) {
+            return Err(e.to_string().into());
+        }
         self.run_source_devices().await?;
 
         // Signal to DBus that source devices have changed
@@ -1294,9 +1293,13 @@ impl CompositeDevice {
     }
 
     /// Creates and adds a source device using the given [SourceDeviceInfo]
-    fn add_source_device(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
+    fn add_source_device(
+        &mut self,
+        device: UdevDevice,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Check to see if this source device should be blocked.
         let mut is_blocked = false;
+        let mut is_blocked_evdev = false;
         if let Some(source_config) = self.config.get_matching_device(&device) {
             if let Some(blocked) = source_config.blocked {
                 is_blocked = blocked;
@@ -1307,15 +1310,17 @@ impl CompositeDevice {
 
         let source_device = match subsystem.as_str() {
             "input" => {
-                // Create an instance of the device
                 log::debug!("Adding source device: {:?}", device.name());
-                let device = source::evdev::EventDevice::new(device, self.client());
+                if is_blocked {
+                    is_blocked_evdev = true;
+                }
+                let device = EventDevice::new(device, self.client(), is_blocked)?;
                 SourceDevice::Event(device)
             }
             "hidraw" => {
                 log::debug!("Adding source device: {:?}", device.name());
-                let device = source::hidraw::HIDRawDevice::new(device, self.client());
-                SourceDevice::HIDRaw(device)
+                let device = HidRawDevice::new(device, self.client())?;
+                SourceDevice::HidRaw(device)
             }
             "iio" => {
                 // Get any defined config for the IIO device
@@ -1326,7 +1331,7 @@ impl CompositeDevice {
                 };
 
                 log::debug!("Adding source device: {:?}", device.name());
-                let device = source::iio::IIODevice::new(device, config, self.client());
+                let device = IioDevice::new(device, self.client(), config)?;
                 SourceDevice::Iio(device)
             }
             _ => {
@@ -1337,6 +1342,7 @@ impl CompositeDevice {
                 .into())
             }
         };
+
         // Get the capabilities of the source device.
         // TODO: When we *remove* a source device, we also need to remove
         // capabilities
@@ -1357,7 +1363,9 @@ impl CompositeDevice {
             .get_matching_device(source_device.get_device_ref())
         {
             if let Some(blocked) = device_config.blocked {
-                if blocked {
+                // Blocked event devices should still be run so they can be
+                // EVIOGRAB'd
+                if blocked && !is_blocked_evdev {
                     self.source_devices_blocked.insert(id.clone());
                 }
             }
