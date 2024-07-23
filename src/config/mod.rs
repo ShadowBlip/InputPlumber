@@ -384,9 +384,8 @@ impl CompositeDeviceConfig {
 
     /// Returns a [SourceDevice] if it matches the given [UdevDevice].
     pub fn get_matching_device(&self, udevice: &UdevDevice) -> Option<SourceDevice> {
-        let device = udevice.get_device().unwrap();
-        let subsystem = device.subsystem().unwrap().to_str().unwrap_or_default();
-        match subsystem {
+        let subsystem = udevice.subsystem();
+        match subsystem.as_str() {
             "input" => {
                 for config in self.source_devices.iter() {
                     if let Some(evdev_config) = config.evdev.as_ref() {
