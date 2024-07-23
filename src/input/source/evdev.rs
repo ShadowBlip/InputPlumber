@@ -1,7 +1,7 @@
 pub mod blocked;
 pub mod gamepad;
 
-use std::error::Error;
+use std::{error::Error, time::Duration};
 
 use crate::{
     constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
@@ -10,7 +10,7 @@ use crate::{
 
 use self::{blocked::BlockedEventDevice, gamepad::GamepadEventDevice};
 
-use super::SourceDriver;
+use super::{SourceDriver, SourceDriverOptions};
 
 /// List of available drivers
 enum DriverType {
@@ -35,8 +35,13 @@ impl EventDevice {
 
         match driver_type {
             DriverType::Blocked => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(200),
+                    buffer_size: 4096,
+                };
                 let device = BlockedEventDevice::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device =
+                    SourceDriver::new_with_options(composite_device, device, device_info, options);
                 Ok(Self::Blocked(source_device))
             }
             DriverType::Gamepad => {

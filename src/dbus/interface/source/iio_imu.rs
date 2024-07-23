@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::udev::device::{get_attribute_from_tree, set_attribute_on_tree, UdevDevice};
+use crate::udev::device::{AttributeGetter, AttributeSetter, UdevDevice};
 use zbus::{fdo, Connection};
 use zbus_macros::interface;
 
@@ -60,7 +60,8 @@ impl SourceIioImuInterface {
         let Ok(dev) = self.device.get_device() else {
             return Ok(0.0);
         };
-        Ok(get_attribute_from_tree(&dev, "in_accel_sampling_frequency")
+        Ok(dev
+            .get_attribute_from_tree("in_accel_sampling_frequency")
             .parse()
             .unwrap_or_default())
     }
@@ -70,7 +71,7 @@ impl SourceIioImuInterface {
         let Ok(dev) = self.device.get_device() else {
             return Ok(vec![0.0]);
         };
-        let v = get_attribute_from_tree(&dev, "in_accel_sampling_frequency_available");
+        let v = dev.get_attribute_from_tree("in_accel_sampling_frequency_available");
 
         let mut all_scales = Vec::new();
         for val in v.split_whitespace() {
@@ -85,11 +86,10 @@ impl SourceIioImuInterface {
         let Ok(dev) = self.device.get_device() else {
             return Ok(0.0);
         };
-        Ok(
-            get_attribute_from_tree(&dev, "in_anglvel_sampling_frequency")
-                .parse()
-                .unwrap_or_default(),
-        )
+        Ok(dev
+            .get_attribute_from_tree("in_anglvel_sampling_frequency")
+            .parse()
+            .unwrap_or_default())
     }
 
     #[zbus(property)]
@@ -97,7 +97,7 @@ impl SourceIioImuInterface {
         let Ok(dev) = self.device.get_device() else {
             return Ok(vec![0.0]);
         };
-        let v = get_attribute_from_tree(&dev, "in_anglvel_sampling_frequency_available");
+        let v = dev.get_attribute_from_tree("in_anglvel_sampling_frequency_available");
 
         let mut all_scales = Vec::new();
         for val in v.split_whitespace() {
@@ -112,8 +112,7 @@ impl SourceIioImuInterface {
         let Ok(mut dev) = self.device.get_device() else {
             return Ok(());
         };
-        match set_attribute_on_tree(
-            &mut dev,
+        match dev.set_attribute_on_tree(
             "in_accel_sampling_frequency",
             sample_rate.to_string().as_str(),
         ) {
@@ -127,8 +126,7 @@ impl SourceIioImuInterface {
         let Ok(mut dev) = self.device.get_device() else {
             return Ok(());
         };
-        match set_attribute_on_tree(
-            &mut dev,
+        match dev.set_attribute_on_tree(
             "in_anglvel_sampling_frequency",
             sample_rate.to_string().as_str(),
         ) {
@@ -142,7 +140,8 @@ impl SourceIioImuInterface {
         let Ok(dev) = self.device.get_device() else {
             return Ok(0.0);
         };
-        Ok(get_attribute_from_tree(&dev, "in_accel_scale")
+        Ok(dev
+            .get_attribute_from_tree("in_accel_scale")
             .parse()
             .unwrap_or_default())
     }
@@ -152,7 +151,7 @@ impl SourceIioImuInterface {
         let Ok(dev) = self.device.get_device() else {
             return Ok(vec![0.0]);
         };
-        let v = get_attribute_from_tree(&dev, "in_accel_scale_available");
+        let v = dev.get_attribute_from_tree("in_accel_scale_available");
 
         let mut all_scales = Vec::new();
         for val in v.split_whitespace() {
@@ -167,7 +166,8 @@ impl SourceIioImuInterface {
         let Ok(dev) = self.device.get_device() else {
             return Ok(0.0);
         };
-        Ok(get_attribute_from_tree(&dev, "in_anglvel_scale")
+        Ok(dev
+            .get_attribute_from_tree("in_anglvel_scale")
             .parse()
             .unwrap_or_default())
     }
@@ -177,7 +177,7 @@ impl SourceIioImuInterface {
         let Ok(dev) = self.device.get_device() else {
             return Ok(vec![0.0]);
         };
-        let v = get_attribute_from_tree(&dev, "in_anglvel_scale_available");
+        let v = dev.get_attribute_from_tree("in_anglvel_scale_available");
 
         let mut all_scales = Vec::new();
         for val in v.split_whitespace() {
@@ -192,7 +192,7 @@ impl SourceIioImuInterface {
         let Ok(mut dev) = self.device.get_device() else {
             return Ok(());
         };
-        match set_attribute_on_tree(&mut dev, "in_accel_scale", scale.to_string().as_str()) {
+        match dev.set_attribute_on_tree("in_accel_scale", scale.to_string().as_str()) {
             Ok(result) => Ok(result),
             Err(e) => Err(zbus::Error::Failure(e.to_string())),
         }
@@ -203,7 +203,7 @@ impl SourceIioImuInterface {
         let Ok(mut dev) = self.device.get_device() else {
             return Ok(());
         };
-        match set_attribute_on_tree(&mut dev, "in_anglvel_scale", scale.to_string().as_str()) {
+        match dev.set_attribute_on_tree("in_anglvel_scale", scale.to_string().as_str()) {
             Ok(result) => Ok(result),
             Err(e) => Err(zbus::Error::Failure(e.to_string())),
         }

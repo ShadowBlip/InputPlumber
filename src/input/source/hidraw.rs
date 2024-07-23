@@ -51,8 +51,13 @@ impl HidRawDevice {
         match driver_type {
             DriverType::Unknown => Err("No driver for hidraw interface found".into()),
             DriverType::DualSense => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(1),
+                    buffer_size: 2048,
+                };
                 let device = DualSenseController::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device =
+                    SourceDriver::new_with_options(composite_device, device, device_info, options);
                 Ok(Self::DualSense(source_device))
             }
             DriverType::SteamDeck => {
