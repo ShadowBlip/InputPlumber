@@ -142,6 +142,10 @@ impl Default for TouchFingerData {
 }
 
 impl TouchFingerData {
+    pub fn is_touching(&self) -> bool {
+        self.context != 128
+    }
+
     pub fn get_x(&self) -> u16 {
         let x_hi = self.x_hi.to_primitive() as u16;
         let x_hi = x_hi.rotate_left(8);
@@ -171,6 +175,13 @@ pub struct TouchData {
     #[packed_field(element_size_bytes = "4")]
     pub touch_finger_data: [TouchFingerData; 2],
     pub timestamp: u8,
+}
+
+impl TouchData {
+    /// Returns true if any touches are detected
+    pub fn has_touches(&self) -> bool {
+        self.touch_finger_data[0].is_touching() || self.touch_finger_data[1].is_touching()
+    }
 }
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]

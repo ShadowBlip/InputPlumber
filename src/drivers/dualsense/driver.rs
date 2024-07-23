@@ -1,5 +1,9 @@
 use packed_struct::prelude::*;
-use std::{error::Error, ffi::CString};
+use std::{
+    error::Error,
+    ffi::CString,
+    time::{Duration, Instant},
+};
 
 use hidapi::HidDevice;
 
@@ -55,6 +59,9 @@ pub const DS5_TOUCHPAD_HEIGHT: f64 = 1080.0;
 /// PS5 Dualsense controller driver for reading gamepad input
 pub struct Driver {
     state: Option<PackedInputDataReport>,
+    touch_state: [bool; 2],
+    /// Timestamp of the last touch event.
+    last_touch: Instant,
     device: HidDevice,
     leds_initialized: bool,
 }
@@ -76,6 +83,8 @@ impl Driver {
         Ok(Self {
             device,
             state: None,
+            touch_state: [false, false],
+            last_touch: Instant::now(),
             leds_initialized: false,
         })
     }
@@ -198,7 +207,7 @@ impl Driver {
     }
 
     /// Translate the current state into events
-    fn translate(&self, old_state: Option<PackedInputDataReport>) -> Vec<Event> {
+    fn translate(&mut self, old_state: Option<PackedInputDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
         let Some(report) = self.state else {
             return events;
@@ -445,25 +454,55 @@ impl Driver {
         }
 
         // Touch events
-        let finger_data_0 = state.touch_data.touch_finger_data[0];
-        let old_finger_data_0 = old_state.touch_data.touch_finger_data[0];
-        if finger_data_0 != old_finger_data_0 {
-            events.push(Event::Axis(AxisEvent::Pad(TouchAxisInput {
-                index: 0,
-                is_touching: finger_data_0.context == 127, // Set to 127 when touching
-                x: finger_data_0.get_x(),
-                y: finger_data_0.get_y(),
-            })))
-        }
-        let finger_data_1 = state.touch_data.touch_finger_data[1];
-        let old_finger_data_1 = old_state.touch_data.touch_finger_data[1];
-        if finger_data_1 != old_finger_data_1 {
-            events.push(Event::Axis(AxisEvent::Pad(TouchAxisInput {
-                index: 1,
-                is_touching: finger_data_1.context == 127, // Set to 127 when touching
-                x: finger_data_1.get_x(),
-                y: finger_data_1.get_y(),
-            })))
+        if state.touch_data != old_state.touch_data {
+            // Timestamp changes indicate that touches are happening
+            self.last_touch = Instant::now();
+            let finger_data_0 = state.touch_data.touch_finger_data[0];
+            let old_finger_data_0 = old_state.touch_data.touch_finger_data[0];
+            if finger_data_0 != old_finger_data_0 {
+                let is_touching = finger_data_0.context != 128; // Set to 128 when not touching
+                self.touch_state[0] = is_touching;
+                events.push(Event::Axis(AxisEvent::Pad(TouchAxisInput {
+                    index: 0,
+                    is_touching,
+                    x: finger_data_0.get_x(),
+                    y: finger_data_0.get_y(),
+                })))
+            }
+            let finger_data_1 = state.touch_data.touch_finger_data[1];
+            let old_finger_data_1 = old_state.touch_data.touch_finger_data[1];
+            if finger_data_1 != old_finger_data_1 {
+                let is_touching = finger_data_1.context != 128; // Set to 128 when not touching
+                self.touch_state[1] = is_touching;
+                events.push(Event::Axis(AxisEvent::Pad(TouchAxisInput {
+                    index: 1,
+                    is_touching,
+                    x: finger_data_1.get_x(),
+                    y: finger_data_1.get_y(),
+                })))
+            }
+        } else if (self.touch_state[0] || self.touch_state[1])
+            && (self.last_touch.elapsed() > Duration::from_millis(200))
+        {
+            // Lack of timestamp updates mean that all touches have lifted
+            if self.touch_state[0] {
+                self.touch_state[0] = false;
+                events.push(Event::Axis(AxisEvent::Pad(TouchAxisInput {
+                    index: 0,
+                    is_touching: false,
+                    x: 0,
+                    y: 0,
+                })));
+            }
+            if self.touch_state[1] {
+                self.touch_state[1] = false;
+                events.push(Event::Axis(AxisEvent::Pad(TouchAxisInput {
+                    index: 1,
+                    is_touching: false,
+                    x: 0,
+                    y: 0,
+                })));
+            }
         }
 
         // Accelerometer events
