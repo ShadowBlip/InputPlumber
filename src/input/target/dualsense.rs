@@ -129,6 +129,7 @@ pub struct DualSenseDevice {
     tx: mpsc::Sender<TargetCommand>,
     rx: mpsc::Receiver<TargetCommand>,
     state: PackedInputDataReport,
+    timestamp: u8,
     composite_device: Option<CompositeDeviceClient>,
     hardware: DualSenseHardware,
 }
@@ -142,6 +143,7 @@ impl DualSenseDevice {
             tx,
             rx,
             state: PackedInputDataReport::Usb(USBPackedInputDataReport::new()),
+            timestamp: 0,
             composite_device: None,
             hardware,
         }
@@ -211,6 +213,12 @@ impl DualSenseDevice {
             if let Err(e) = self.poll(&mut device).await {
                 log::debug!("Error polling UHID device: {:?}", e);
                 break;
+            }
+
+            // Check if the timestamp needs to be updated
+            if self.state.state().touch_data.has_touches() {
+                self.timestamp = self.timestamp.wrapping_add(3); // TODO: num?
+                self.state.state_mut().touch_data.timestamp = self.timestamp;
             }
 
             // Write the state to the device
@@ -1092,6 +1100,9 @@ impl DualSenseDevice {
                                     y,
                                 } = value
                                 {
+                                    // Check to see if this is the start of any touch
+                                    let was_touching = state.touch_data.has_touches();
+
                                     let idx = index as usize;
                                     // TouchData has an array size of 2, ignore more than 2 touch events.
                                     if idx > 1 {
@@ -1112,17 +1123,12 @@ impl DualSenseDevice {
                                         state.touch_data.touch_finger_data[idx].context = 128;
                                     }
 
-                                    let timestamp = SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_micros()
-                                        as u8;
-                                    state.touch_data.timestamp = timestamp;
-
-                                    log::trace!(
-                                        "Got new state: {}",
-                                        state.touch_data.touch_finger_data[0]
-                                    );
+                                    // Reset the timestamp back to zero when all touches
+                                    // have completed
+                                    let now_touching = state.touch_data.has_touches();
+                                    if was_touching && !now_touching {
+                                        self.timestamp = 0;
+                                    }
                                 }
                             }
                             Touch::Button(button) => match button {
@@ -1174,6 +1180,9 @@ impl DualSenseDevice {
             Capability::Gamepad(Gamepad::Gyro),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+            Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Press))),
+            Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Touch))),
+            Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
         ]
     }
 }
