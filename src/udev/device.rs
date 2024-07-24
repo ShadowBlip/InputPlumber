@@ -300,7 +300,7 @@ impl UdevDevice {
 
     /// Returns true if this device is virtual
     pub fn is_virtual(&self) -> bool {
-        self.syspath().contains("/devices/virtual")
+        self.syspath().contains("/devices/virtual") || self.syspath().contains("vhci_hcd")
     }
 
     /// Returns the devnode of the device. The devnode is the full path to the
