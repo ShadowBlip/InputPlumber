@@ -452,9 +452,9 @@ impl VirtualDeckController {
                 Reply::from_xfer(xfer, &[])
             }
             HidRequest::GetReport(req) => {
-                log::trace!("GetReport: {req}");
+                //log::trace!("GetReport: {req}");
                 let interface = req.interface.to_primitive();
-                log::trace!("Got GetReport data for iface {interface}");
+                //log::trace!("Got GetReport data for iface {interface}");
                 let report_type = req.report_type;
 
                 // Handle GetReport
@@ -577,7 +577,7 @@ impl VirtualDeckController {
     /// Out transfers do not have any replies.
     fn handle_xfer_out(&mut self, xfer: Xfer) {
         // OUT transfers (host -> device) are generally always to ep 0
-        log::trace!("Got OUT transfer for endpoint: {}", xfer.ep);
+        //log::trace!("Got OUT transfer for endpoint: {}", xfer.ep);
 
         let Some(setup) = xfer.header() else {
             log::debug!("No setup request in OUT xfer");
@@ -598,14 +598,14 @@ impl VirtualDeckController {
                 log::warn!("Unknown HID request!");
             }
             HidRequest::SetIdle(req) => {
-                log::trace!("SetIdle: {req}");
+                //log::trace!("SetIdle: {req}");
             }
             // The host wants to set the given report on the device
             HidRequest::SetReport(req) => {
-                log::trace!("SetReport: {req}");
+                //log::trace!("SetReport: {req}");
                 let interface = req.interface.to_primitive();
                 let data = xfer.data;
-                log::trace!("Got SetReport data for iface {interface}: {data:?}");
+                //log::trace!("Got SetReport data for iface {interface}: {data:?}");
 
                 // The first byte contains the report type
                 let Some(first_byte) = data.first() else {
@@ -625,7 +625,7 @@ impl VirtualDeckController {
                     // ClearMappings gets called to take the controller out of lizard
                     // mode so that Steam can control it directly.
                     ReportType::ClearMappings => {
-                        log::trace!("Disabling lizard mode");
+                        //log::trace!("Disabling lizard mode");
                         self.lizard_mode_enabled = false;
                     }
                     ReportType::GetMappings => (),
@@ -685,10 +685,7 @@ impl VirtualDeckController {
                     GamepadButton::West => self.state.y = event.pressed(),
                     GamepadButton::Start => self.state.menu = event.pressed(),
                     GamepadButton::Select => self.state.options = event.pressed(),
-                    GamepadButton::Guide => {
-                        log::debug!("Got GUIDE button: {}", event.pressed());
-                        self.state.steam = event.pressed()
-                    }
+                    GamepadButton::Guide => self.state.steam = event.pressed(),
                     GamepadButton::QuickAccess => self.state.quick_access = event.pressed(),
                     GamepadButton::DPadUp => self.state.up = event.pressed(),
                     GamepadButton::DPadDown => self.state.down = event.pressed(),
@@ -851,18 +848,21 @@ impl VirtualDeckController {
                     Touch::Motion => {
                         if let InputValue::Touch {
                             index: _,
-                            is_touching: _,
+                            is_touching,
                             pressure: _,
                             x,
                             y,
                         } = value
                         {
+                            self.state.l_pad_touch = is_touching;
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, PAD_X_MIN, PAD_X_MAX);
+                                let value =
+                                    denormalize_unsigned_to_signed_value(x, PAD_X_MIN, PAD_X_MAX);
                                 self.state.l_pad_x = Integer::from_primitive(value);
                             };
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, PAD_Y_MIN, PAD_Y_MAX);
+                                let value =
+                                    denormalize_unsigned_to_signed_value(y, PAD_Y_MIN, PAD_Y_MAX);
                                 self.state.l_pad_y = Integer::from_primitive(value);
                             };
                         }
@@ -876,18 +876,21 @@ impl VirtualDeckController {
                     Touch::Motion => {
                         if let InputValue::Touch {
                             index: _,
-                            is_touching: _,
+                            is_touching,
                             pressure: _,
                             x,
                             y,
                         } = value
                         {
+                            self.state.r_pad_touch = is_touching;
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, PAD_X_MIN, PAD_X_MAX);
+                                let value =
+                                    denormalize_unsigned_to_signed_value(x, PAD_X_MIN, PAD_X_MAX);
                                 self.state.r_pad_x = Integer::from_primitive(value);
                             };
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, PAD_Y_MIN, PAD_Y_MAX);
+                                let value =
+                                    denormalize_unsigned_to_signed_value(y, PAD_Y_MIN, PAD_Y_MAX);
                                 self.state.r_pad_y = Integer::from_primitive(value);
                             };
                         }
@@ -905,7 +908,7 @@ impl VirtualDeckController {
     }
 }
 
-/// Convert the given normalized value to the real value based on the given
+/// Convert the given normalized signed value to the real value based on the given
 /// minimum and maximum axis range.
 fn denormalize_signed_value(normal_value: f64, min: f64, max: f64) -> i16 {
     let mid = (max + min) / 2.0;
@@ -919,6 +922,13 @@ fn denormalize_signed_value(normal_value: f64, min: f64, max: f64) -> i16 {
         let value = normal_value_abs * minimum + mid;
         value as i16
     }
+}
+
+/// Convert the given normalized unsigned value to the real value based on the given
+/// minimum and maximum axis range.
+fn denormalize_unsigned_to_signed_value(normal_value: f64, min: f64, max: f64) -> i16 {
+    let normal_value = (normal_value * 2.0) - 1.0;
+    denormalize_signed_value(normal_value, min, max)
 }
 
 /// De-normalizes the given value from 0.0 - 1.0 into a real value based on

@@ -2,14 +2,7 @@
 //! The DualSense implementation is based on the great work done by NeroReflex
 //! and the ROGueENEMY project:
 //! https://github.com/NeroReflex/ROGueENEMY/
-use std::{
-    cmp::Ordering,
-    error::Error,
-    fmt::Debug,
-    fs::File,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-    usize,
-};
+use std::{cmp::Ordering, error::Error, fs::File, time::Duration};
 
 use packed_struct::prelude::*;
 use rand::{self, Rng};

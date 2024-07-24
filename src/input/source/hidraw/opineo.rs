@@ -87,11 +87,14 @@ fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
 /// Normalize the value to something between -1.0 and 1.0 based on the Deck's
 /// minimum and maximum axis ranges.
 fn normalize_axis_value(event: event::TouchAxisInput) -> InputValue {
+    let x = event.x;
+    let y = event.y;
+    log::trace!("Got axis to normalize: {x}, {y}");
     let max = driver::PAD_X_MAX;
-    let x = normalize_unsigned_value(event.x as f64, max);
+    let x = normalize_unsigned_value(x as f64, max);
 
     let max = driver::PAD_Y_MAX;
-    let y = normalize_unsigned_value(event.y as f64, max);
+    let y = normalize_unsigned_value(y as f64, max);
 
     // If this is an UP event, don't override the position of X/Y
     let (x, y) = if !event.is_touching {
@@ -100,6 +103,7 @@ fn normalize_axis_value(event: event::TouchAxisInput) -> InputValue {
         (Some(x), Some(y))
     };
 
+    log::trace!("Normalized axis: {x:?}, {y:?}");
     InputValue::Touch {
         index: event.index,
         is_touching: event.is_touching,
