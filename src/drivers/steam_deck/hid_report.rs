@@ -57,6 +57,37 @@ pub enum ReportType {
     TriggerRumbleCommand = 0xeb,
 }
 
+impl TryFrom<u8> for ReportType {
+    type Error = &'static str;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x09 => Ok(Self::InputData),
+            0x80 => Ok(Self::SetMappings),
+            0x81 => Ok(Self::ClearMappings),
+            0x82 => Ok(Self::GetMappings),
+            0x83 => Ok(Self::GetAttrib),
+            0x84 => Ok(Self::GetAttribLabel),
+            0x85 => Ok(Self::DefaultMappings),
+            0x86 => Ok(Self::FactoryReset),
+            0x87 => Ok(Self::WriteRegister),
+            0x88 => Ok(Self::ClearRegister),
+            0x89 => Ok(Self::ReadRegister),
+            0x8a => Ok(Self::GetRegisterLabel),
+            0x8b => Ok(Self::GetRegisterMax),
+            0x8c => Ok(Self::GetRegisterDefault),
+            0x8d => Ok(Self::SetMode),
+            0x8e => Ok(Self::DefaultMouse),
+            0x8f => Ok(Self::TriggerHapticPulse),
+            0xb4 => Ok(Self::RequestCommStatus),
+            0xae => Ok(Self::GetSerial),
+            0xea => Ok(Self::TriggerHapticCommand),
+            0xeb => Ok(Self::TriggerRumbleCommand),
+            _ => Err("Invalid report type"),
+        }
+    }
+}
+
 pub enum Register {
     LPadMode = 0x07,
     RPadMode = 0x08,

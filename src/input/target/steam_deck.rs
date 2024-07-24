@@ -1,26 +1,41 @@
-use std::{cmp::Ordering, error::Error, fs::File, thread, time};
+use std::convert::TryFrom;
+use std::time::Duration;
+use std::{cmp::Ordering, error::Error, thread};
 
 use packed_struct::{
     types::{Integer, SizedInteger},
     PackedStruct,
 };
 use tokio::sync::mpsc::{self, error::TryRecvError};
-use uhid_virt::{Bus, CreateParams, OutputEvent, StreamError, UHIDDevice};
-use zbus::{fdo, Connection};
-use zbus_macros::dbus_interface;
+use virtual_usb::vhci_hcd::load_vhci_hcd;
+use virtual_usb::{
+    usb::{
+        hid::{HidInterfaceBuilder, HidReportType, HidRequest, HidSubclass, InterfaceProtocol},
+        ConfigurationBuilder, DeviceClass, Direction, EndpointBuilder, LangId, SynchronizationType,
+        TransferType, Type, UsageType,
+    },
+    usbip::UsbIpDirection,
+    virtual_usb::{Reply, VirtualUSBDevice, VirtualUSBDeviceBuilder, Xfer},
+};
+use zbus::Connection;
 
+use crate::drivers::steam_deck::hid_report::{
+    PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX, TRIGG_MAX,
+};
+use crate::input::capability::GamepadTrigger;
 use crate::{
     dbus::interface::target::gamepad::TargetGamepadInterface,
     drivers::steam_deck::{
         driver::{PID, VID},
-        hid_report::{PackedInputDataReport, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN},
-        report_descriptor::CONTROLLER_DESCRIPTOR,
+        hid_report::{
+            PackedInputDataReport, ReportType, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
+        },
+        report_descriptor::{CONTROLLER_DESCRIPTOR, KEYBOARD_DESCRIPTOR, MOUSE_DESCRIPTOR},
     },
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, Touch, TouchButton, Touchpad,
         },
-        composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue},
         source::hidraw::steam_deck::CAPABILITIES,
     },
@@ -28,36 +43,15 @@ use crate::{
 
 use super::{client::TargetDeviceClient, command::TargetCommand};
 
-const POLL_INTERVAL_MS: u64 = 4;
+const POLL_INTERVAL: Duration = Duration::from_millis(1);
 const BUFFER_SIZE: usize = 2048;
-
-/// The [DBusInterface] provides a DBus interface that can be exposed for managing
-/// a [SteamDeckDevice].
-pub struct DBusInterface {}
-
-impl DBusInterface {
-    fn new() -> DBusInterface {
-        DBusInterface {}
-    }
-}
-
-#[dbus_interface(name = "org.shadowblip.Input.Gamepad")]
-impl DBusInterface {
-    /// Name of the DBus device
-    #[dbus_interface(property)]
-    async fn name(&self) -> fdo::Result<String> {
-        Ok("Steam Deck Controller".into())
-    }
-}
 
 #[derive(Debug)]
 pub struct SteamDeckDevice {
     conn: Connection,
     dbus_path: Option<String>,
     tx: mpsc::Sender<TargetCommand>,
-    rx: mpsc::Receiver<TargetCommand>,
-    state: PackedInputDataReport,
-    composite_device: Option<CompositeDeviceClient>,
+    rx: Option<mpsc::Receiver<TargetCommand>>,
 }
 
 impl SteamDeckDevice {
@@ -67,9 +61,7 @@ impl SteamDeckDevice {
             conn,
             dbus_path: None,
             tx,
-            rx,
-            state: PackedInputDataReport::new(),
-            composite_device: None,
+            rx: Some(rx),
         }
     }
 
@@ -78,19 +70,14 @@ impl SteamDeckDevice {
         self.tx.clone().into()
     }
 
-    /// Configures the device to send output events to the given composite device
-    /// channel.
-    pub fn set_composite_device(&mut self, composite_device: CompositeDeviceClient) {
-        self.composite_device = Some(composite_device);
-    }
-
     /// Creates a new instance of the dbus device interface on DBus.
     pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         let conn = self.conn.clone();
         self.dbus_path = Some(path.clone());
         tokio::spawn(async move {
             log::debug!("Starting dbus interface: {path}");
-            let iface = DBusInterface::new();
+            let name = "Steam Deck Controller".to_string();
+            let iface = TargetGamepadInterface::new(name);
             if let Err(e) = conn.object_server().at(path.clone(), iface).await {
                 log::debug!("Failed to start dbus interface {path}: {e:?}");
             } else {
@@ -102,135 +89,83 @@ impl SteamDeckDevice {
 
     /// Creates and runs the target device
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        // Ensure the vhci_hcd kernel module is loaded
+        log::debug!("Ensuring vhci_hcd kernel module is loaded");
+        if let Err(e) = load_vhci_hcd() {
+            return Err(e.to_string().into());
+        }
+
+        // Create the virtual USB device
         log::debug!("Creating virtual deck controller");
-        let (device_tx, mut device_rx) = mpsc::channel::<PackedInputDataReport>(BUFFER_SIZE);
-        let mut device = self.create_virtual_device()?;
+        let Some(mut rx) = self.rx.take() else {
+            return Err("No target command receiver exists".to_string().into());
+        };
+        let mut device = VirtualDeckController::new();
+        let mut _composite_device = None;
 
         // Spawn the device in its own blocking thread
-        tokio::task::spawn_blocking(move || {
-            let mut frame: u32 = 0;
-            let mut state = PackedInputDataReport::new();
-            loop {
-                // Handle reading from the device
-                // https://www.kernel.org/doc/html/latest/hid/uhid.html#read
-                let result = device.read();
-                match result {
-                    Ok(event) => {
-                        match event {
-                            OutputEvent::Start { dev_flags: _ } => {
-                                log::debug!("Start event received");
-                            }
-                            OutputEvent::Stop => {
-                                log::debug!("Stop event received");
-                            }
-                            OutputEvent::Open => {
-                                log::debug!("Open event received");
-                            }
-                            OutputEvent::Close => {
-                                log::debug!("Close event received");
-                            }
-                            OutputEvent::Output { data } => {
-                                log::debug!("Got output data: {:?}", data);
-                            }
-                            OutputEvent::GetReport {
-                                id,
-                                report_number,
-                                report_type,
-                            } => {
-                                log::debug!("Received GetReport event: id: {id}, num: {report_number}, type: {:?}", report_type);
-                                let _ = device.write_get_report_reply(
-                                    id,
-                                    0,
-                                    CONTROLLER_DESCRIPTOR.to_vec(),
-                                );
-                            }
-                            OutputEvent::SetReport {
-                                id,
-                                report_number,
-                                report_type,
-                                data,
-                            } => {
-                                log::debug!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
-                                let _ = device.write_set_report_reply(id, 0);
-                            }
-                        };
-                    }
-                    Err(err) => match err {
-                        StreamError::Io(_e) => (),
-                        StreamError::UnknownEventType(e) => {
-                            log::debug!("Unknown event type: {:?}", e);
+        let task = tokio::task::spawn_blocking(move || {
+            if let Err(e) = device.start() {
+                log::error!("Error starting USB device: {e:?}");
+                return;
+            }
+            const MAX_COMMANDS: u16 = 1024;
+            'main: loop {
+                // Process any target commands
+                if !rx.is_empty() {
+                    let mut commands_processed = 0;
+                    loop {
+                        match rx.try_recv() {
+                            Ok(command) => match command {
+                                TargetCommand::WriteEvent(event) => {
+                                    // Update device state with input events
+                                    device.update_state(event);
+                                }
+                                TargetCommand::SetCompositeDevice(composite_dev) => {
+                                    _composite_device = Some(composite_dev);
+                                }
+                                TargetCommand::GetCapabilities(tx) => {
+                                    let caps = CAPABILITIES.to_vec();
+                                    if let Err(e) = tx.blocking_send(caps) {
+                                        log::error!("Failed to send target capabilities: {e:?}");
+                                    }
+                                }
+                                TargetCommand::GetType(tx) => {
+                                    if let Err(e) = tx.blocking_send("steam-deck".to_string()) {
+                                        log::error!("Failed to send target type: {e:?}");
+                                    }
+                                }
+                                TargetCommand::Stop => break 'main,
+                            },
+                            Err(e) => match e {
+                                TryRecvError::Empty => break,
+                                TryRecvError::Disconnected => break 'main,
+                            },
                         }
-                    },
-                };
 
-                // Try to receive input events from the channel
-                match device_rx.try_recv() {
-                    Ok(new_state) => {
-                        state = new_state;
+                        // Only process MAX_COMMANDS messages at a time
+                        commands_processed += 1;
+                        if commands_processed >= MAX_COMMANDS {
+                            break;
+                        }
                     }
-                    Err(e) => match e {
-                        TryRecvError::Empty => (),
-                        TryRecvError::Disconnected => break,
-                    },
-                };
-
-                // Update the frame counter every iteration
-                frame += 1;
-                state.frame = Integer::from_primitive(frame);
-
-                // Pack the state into a binary array
-                let data = state.pack();
-                if let Err(e) = data {
-                    log::debug!("Failed to pack input report: {:?}", e);
-                    continue;
                 }
-                let data = data.unwrap();
 
-                // Write the state to the virtual HID
-                if let Err(e) = device.write(&data) {
-                    log::error!("Failed to write input data report: {:?}", e);
+                // Read/write from the device
+                if let Err(e) = device.update() {
+                    log::error!("Error updating device: {e:?}");
                     break;
                 }
 
-                let duration = time::Duration::from_millis(POLL_INTERVAL_MS);
-                thread::sleep(duration);
+                thread::sleep(POLL_INTERVAL);
             }
 
-            log::debug!("Destroying HID device");
-            if let Err(e) = device.destroy() {
-                log::error!("Failed to destroy device: {:?}", e);
-            }
+            log::debug!("Destroying Virtual USB device");
+            device.stop();
         });
 
-        // Listen for send events
-        log::debug!("Started listening for events to send");
-        while let Some(command) = self.rx.recv().await {
-            match command {
-                TargetCommand::SetCompositeDevice(composite_device) => {
-                    self.set_composite_device(composite_device);
-                }
-                TargetCommand::WriteEvent(event) => {
-                    // Update internal state
-                    self.update_state(event);
-
-                    // Send the state to the device
-                    device_tx.send(self.state).await?;
-                }
-                TargetCommand::GetCapabilities(tx) => {
-                    let caps = CAPABILITIES.to_vec();
-                    if let Err(e) = tx.send(caps).await {
-                        log::error!("Failed to send target capabilities: {e:?}");
-                    }
-                }
-                TargetCommand::GetType(tx) => {
-                    if let Err(e) = tx.send("steam-deck".to_string()).await {
-                        log::error!("Failed to send target type: {e:?}");
-                    }
-                }
-                TargetCommand::Stop => break,
-            };
-        }
-        log::debug!("Stopped listening for events");
+        // Wait for the task to complete
+        task.await?;
 
         // Remove the DBus interface
         if let Some(path) = self.dbus_path.clone() {
@@ -252,22 +187,408 @@ impl SteamDeckDevice {
 
         Ok(())
     }
+}
+
+/// Virtual USB implementation of the Steam Deck Controller
+struct VirtualDeckController {
+    device: VirtualUSBDevice,
+    state: PackedInputDataReport,
+    /// Steam will send 'SetReport' commands with a report type, so it can fetch
+    /// a particular result with 'GetReport'
+    current_report: ReportType,
+    lizard_mode_enabled: bool,
+    serial_number: String,
+}
+
+impl VirtualDeckController {
+    fn new() -> Self {
+        Self {
+            device: VirtualDeckController::create_virtual_device().unwrap(),
+            state: PackedInputDataReport::default(),
+            current_report: ReportType::InputData,
+            lizard_mode_enabled: false,
+            serial_number: "INPU7PLUMB3R".to_string(),
+        }
+    }
 
     /// Create the virtual device to emulate
-    fn create_virtual_device(&self) -> Result<UHIDDevice<File>, Box<dyn Error>> {
-        let device = UHIDDevice::create(CreateParams {
-            name: String::from("Valve Software Steam Controller"),
-            phys: String::from(""),
-            uniq: String::from(""),
-            bus: Bus::USB,
-            vendor: VID as u32,
-            product: PID as u32,
-            version: 0,
-            country: 0,
-            rd_data: CONTROLLER_DESCRIPTOR.to_vec(),
-        })?;
+    fn create_virtual_device() -> Result<VirtualUSBDevice, Box<dyn Error>> {
+        // Configuration values can be obtained from a real device with "sudo lsusb -v"
+        let virtual_device = VirtualUSBDeviceBuilder::new(VID, PID)
+            .class(DeviceClass::UseInterface)
+            .supported_langs(vec![LangId::EnglishUnitedStates])
+            .manufacturer("Valve Software")
+            .product("Steam Controller")
+            .max_packet_size(64)
+            .configuration(
+                ConfigurationBuilder::new()
+                    .max_power(500)
+                    // Mouse (iface 0)
+                    .interface(
+                        HidInterfaceBuilder::new()
+                            .country_code(0)
+                            .protocol(InterfaceProtocol::Mouse)
+                            .subclass(HidSubclass::None)
+                            .report_descriptor(&MOUSE_DESCRIPTOR)
+                            .endpoint_descriptor(
+                                EndpointBuilder::new()
+                                    .address_num(1)
+                                    .direction(Direction::In)
+                                    .transfer_type(TransferType::Interrupt)
+                                    .sync_type(SynchronizationType::NoSynchronization)
+                                    .usage_type(UsageType::Data)
+                                    .max_packet_size(0x0008)
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    // Keyboard (iface 1)
+                    .interface(
+                        HidInterfaceBuilder::new()
+                            .country_code(33)
+                            .protocol(InterfaceProtocol::Keyboard)
+                            .subclass(HidSubclass::Boot)
+                            .report_descriptor(&KEYBOARD_DESCRIPTOR)
+                            .endpoint_descriptor(
+                                EndpointBuilder::new()
+                                    .address_num(2)
+                                    .direction(Direction::In)
+                                    .transfer_type(TransferType::Interrupt)
+                                    .sync_type(SynchronizationType::NoSynchronization)
+                                    .usage_type(UsageType::Data)
+                                    .max_packet_size(0x0008)
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    // Controller (iface 2)
+                    .interface(
+                        HidInterfaceBuilder::new()
+                            .country_code(33)
+                            .protocol(InterfaceProtocol::None)
+                            .subclass(HidSubclass::None)
+                            .report_descriptor(&CONTROLLER_DESCRIPTOR)
+                            .endpoint_descriptor(
+                                EndpointBuilder::new()
+                                    .address_num(3)
+                                    .direction(Direction::In)
+                                    .transfer_type(TransferType::Interrupt)
+                                    .sync_type(SynchronizationType::NoSynchronization)
+                                    .usage_type(UsageType::Data)
+                                    .max_packet_size(0x0040)
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    // CDC
+                    //.interface(HidInterfaceBuilder::new().build())
+                    // CDC Data
+                    //.interface(HidInterfaceBuilder::new().build())
+                    .build(),
+            )
+            .build();
 
-        Ok(device)
+        Ok(virtual_device)
+    }
+
+    /// Start the read/write threads
+    fn start(&mut self) -> Result<(), Box<dyn Error>> {
+        self.device.start()
+    }
+
+    /// Stop the read/write threads
+    fn stop(&mut self) {
+        self.device.stop()
+    }
+
+    /// Update the virtual device with its current state, and read unhandled
+    /// USB transfers.
+    fn update(&mut self) -> Result<(), Box<dyn Error>> {
+        // Increment the frame
+        let frame = self.state.frame.to_primitive();
+        self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
+
+        // Read from the device
+        let xfer = self.device.blocking_read()?;
+
+        // Handle any non-standard transfers
+        if let Some(xfer) = xfer {
+            let reply = self.handle_xfer(xfer);
+
+            // Write to the device if a reply is necessary
+            if let Some(reply) = reply {
+                self.device.write(reply)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle any non-standard transfers
+    fn handle_xfer(&mut self, xfer: Xfer) -> Option<Reply> {
+        match xfer.direction() {
+            UsbIpDirection::Out => {
+                self.handle_xfer_out(xfer);
+                None
+            }
+            UsbIpDirection::In => self.handle_xfer_in(xfer),
+        }
+    }
+
+    /// Handle any non-standard IN transfers (device -> host) for the gamepad iface
+    fn handle_xfer_in(&self, xfer: Xfer) -> Option<Reply> {
+        // IN transfers do not have a setup request.
+        let endpoint = xfer.ep;
+
+        // If a setup header exists, we need to reply to it.
+        if xfer.header().is_some() {
+            return self.handle_xfer_in_request(xfer);
+        };
+
+        // Create a reply based on the endpoint
+        let reply = match endpoint {
+            // Gamepad
+            3 => self.handle_xfer_in_gamepad(xfer),
+            // All other endpoints, write empty data for now
+            _ => Reply::from_xfer(xfer, &[]),
+        };
+
+        Some(reply)
+    }
+
+    // Handle IN transfers (device -> host) for feature requests
+    fn handle_xfer_in_request(&self, xfer: Xfer) -> Option<Reply> {
+        let setup = xfer.header()?;
+
+        // Only handle Class requests
+        if setup.request_type() != Type::Class {
+            log::warn!("Unknown request type");
+            return Some(Reply::from_xfer(xfer, &[]));
+        }
+
+        // Interpret the setup request as an HID request
+        let request = HidRequest::from(setup);
+
+        let reply = match request {
+            HidRequest::Unknown => {
+                log::warn!("Unknown HID request!");
+                Reply::from_xfer(xfer, &[])
+            }
+            HidRequest::GetReport(req) => {
+                log::trace!("GetReport: {req}");
+                let interface = req.interface.to_primitive();
+                log::trace!("Got GetReport data for iface {interface}");
+                let report_type = req.report_type;
+
+                // Handle GetReport
+                match report_type {
+                    HidReportType::Input => Reply::from_xfer(xfer, &[]),
+                    HidReportType::Output => Reply::from_xfer(xfer, &[]),
+                    HidReportType::Feature => {
+                        // Reply based on the currently set report
+                        match self.current_report {
+                            ReportType::GetAttrib => {
+                                log::debug!("Sending attribute data");
+                                // No idea what these bytes mean, but this is
+                                // what is sent from the real device.
+                                let data = [
+                                    ReportType::GetAttrib as u8,
+                                    0x2d,
+                                    0x01,
+                                    0x05,
+                                    0x12,
+                                    0x00,
+                                    0x00,
+                                    0x02,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x0a,
+                                    0x2b,
+                                    0x12,
+                                    0xa9,
+                                    0x62,
+                                    0x04,
+                                    0xad,
+                                    0xf1,
+                                    0xe4,
+                                    0x65,
+                                    0x09,
+                                    0x2e,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x0b,
+                                    0xa0,
+                                    0x0f,
+                                    0x00,
+                                    0x00,
+                                    0x0d,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x0c,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x0e,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                ];
+                                Reply::from_xfer(xfer, &data)
+                            }
+                            ReportType::GetSerial => {
+                                // Reply with the serial number
+                                // [ReportType::GetSerial, 0x14, 0x01, ..serial?]?
+                                log::debug!("Sending serial number: {}", self.serial_number);
+                                let mut data = vec![ReportType::GetSerial as u8, 0x14, 0x01];
+                                let mut serial_data = self.serial_number.as_bytes().to_vec();
+                                data.append(&mut serial_data);
+                                data.resize(64, 0);
+                                Reply::from_xfer(xfer, data.as_slice())
+                            }
+                            // Don't care about other types
+                            _ => Reply::from_xfer(xfer, &[]),
+                        }
+                    }
+                }
+            }
+            // Ignore other types of requests
+            _ => Reply::from_xfer(xfer, &[]),
+        };
+
+        Some(reply)
+    }
+
+    // Handle IN transfers (device -> host) for the gamepad interface
+    fn handle_xfer_in_gamepad(&self, xfer: Xfer) -> Reply {
+        // Pack the state
+        let report_data = match self.state.pack() {
+            Ok(data) => data,
+            Err(e) => {
+                log::error!("Failed to pack input data report: {e:?}");
+                return Reply::from_xfer(xfer, &[]);
+            }
+        };
+
+        Reply::from_xfer(xfer, &report_data)
+    }
+
+    /// Handle any non-standard OUT transfers (host -> device) for the gamepad iface.
+    /// Out transfers do not have any replies.
+    fn handle_xfer_out(&mut self, xfer: Xfer) {
+        // OUT transfers (host -> device) are generally always to ep 0
+        log::trace!("Got OUT transfer for endpoint: {}", xfer.ep);
+
+        let Some(setup) = xfer.header() else {
+            log::debug!("No setup request in OUT xfer");
+            return;
+        };
+
+        // Only handle Class requests
+        if setup.request_type() != Type::Class {
+            log::debug!("Unknown request type");
+            return;
+        }
+
+        // Interpret the setup request as an HID request
+        let request = HidRequest::from(setup);
+
+        match request {
+            HidRequest::Unknown => {
+                log::warn!("Unknown HID request!");
+            }
+            HidRequest::SetIdle(req) => {
+                log::trace!("SetIdle: {req}");
+            }
+            // The host wants to set the given report on the device
+            HidRequest::SetReport(req) => {
+                log::trace!("SetReport: {req}");
+                let interface = req.interface.to_primitive();
+                let data = xfer.data;
+                log::trace!("Got SetReport data for iface {interface}: {data:?}");
+
+                // The first byte contains the report type
+                let Some(first_byte) = data.first() else {
+                    log::debug!("Unable to determine report type from empty report");
+                    return;
+                };
+
+                let Ok(report_type) = ReportType::try_from(*first_byte) else {
+                    log::debug!("Invalid report type: {first_byte}");
+                    return;
+                };
+
+                // https://github.com/libsdl-org/SDL/blob/f0363a0466f72655a1081fb96a90e1b9602ee571/src/joystick/hidapi/SDL_hidapi_steamdeck.c
+                match report_type {
+                    ReportType::InputData => (),
+                    ReportType::SetMappings => (),
+                    // ClearMappings gets called to take the controller out of lizard
+                    // mode so that Steam can control it directly.
+                    ReportType::ClearMappings => {
+                        log::trace!("Disabling lizard mode");
+                        self.lizard_mode_enabled = false;
+                    }
+                    ReportType::GetMappings => (),
+                    ReportType::GetAttrib => {
+                        log::debug!("Attribute requested");
+                        self.current_report = ReportType::GetAttrib;
+                    }
+                    ReportType::GetAttribLabel => (),
+                    // DefaultMappings sets the device in lizard mode, so it can run
+                    // without Steam.
+                    ReportType::DefaultMappings => {
+                        log::debug!("Setting lizard mode enabled");
+                        self.lizard_mode_enabled = true;
+                    }
+                    ReportType::FactoryReset => (),
+                    // When Steam boots up, it writes to a register with this data:
+                    // Got SetReport data: [135, 3, 8, 7, 0, 0, 0, ...]
+                    ReportType::WriteRegister => (),
+                    ReportType::ClearRegister => (),
+                    ReportType::ReadRegister => (),
+                    ReportType::GetRegisterLabel => (),
+                    ReportType::GetRegisterMax => (),
+                    ReportType::GetRegisterDefault => (),
+                    ReportType::SetMode => (),
+                    ReportType::DefaultMouse => (),
+                    ReportType::TriggerHapticPulse => (),
+                    ReportType::RequestCommStatus => (),
+                    // Configure the next GET_REPORT call to return the serial
+                    // number.
+                    ReportType::GetSerial => {
+                        log::debug!("Serial number requested");
+                        self.current_report = ReportType::GetSerial;
+                    }
+                    ReportType::TriggerHapticCommand => (),
+                    ReportType::TriggerRumbleCommand => (),
+                }
+            }
+            // Ignore other types of requests
+            _ => {}
+        }
     }
 
     /// Update the internal controller state when events are emitted.
@@ -310,57 +631,32 @@ impl SteamDeckDevice {
                     _ => (),
                 },
                 Gamepad::Axis(axis) => match axis {
-                    GamepadAxis::LeftStick => match value {
-                        InputValue::None => (),
-                        InputValue::Bool(_) => (),
-                        InputValue::Float(_) => (),
-                        InputValue::Vector2 { x, y } => {
+                    GamepadAxis::LeftStick => {
+                        if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
                                 let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
                                 self.state.l_stick_x = Integer::from_primitive(value);
                             }
                             if let Some(y) = y {
                                 let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
-                                self.state.l_stick_y = Integer::from_primitive(-value);
+                                self.state.l_stick_y = Integer::from_primitive(value);
                             }
                         }
-                        InputValue::Vector3 { x, y, z } => (),
-                        InputValue::Touch {
-                            index,
-                            is_touching: pressed,
-                            pressure: _,
-                            x,
-                            y,
-                        } => todo!(),
-                    },
-                    GamepadAxis::RightStick => match value {
-                        InputValue::None => (),
-                        InputValue::Bool(_) => (),
-                        InputValue::Float(_) => (),
-                        InputValue::Vector2 { x, y } => {
+                    }
+                    GamepadAxis::RightStick => {
+                        if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
                                 let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
                                 self.state.r_stick_x = Integer::from_primitive(value);
                             }
                             if let Some(y) = y {
                                 let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
-                                self.state.r_stick_y = Integer::from_primitive(-value);
+                                self.state.r_stick_y = Integer::from_primitive(value);
                             }
                         }
-                        InputValue::Vector3 { x, y, z } => (),
-                        InputValue::Touch {
-                            index,
-                            is_touching: pressed,
-                            pressure: _,
-                            x,
-                            y,
-                        } => (),
-                    },
-                    GamepadAxis::Hat0 => match value {
-                        InputValue::None => (),
-                        InputValue::Bool(_) => (),
-                        InputValue::Float(_) => (),
-                        InputValue::Vector2 { x, y } => {
+                    }
+                    GamepadAxis::Hat0 => {
+                        if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
                                 let value = denormalize_signed_value(x, -1.0, 1.0);
                                 match value.cmp(&0) {
@@ -396,81 +692,126 @@ impl SteamDeckDevice {
                                 }
                             }
                         }
-                        InputValue::Vector3 { x: _, y: _, z: _ } => (),
-                        InputValue::Touch {
-                            index: _,
-                            is_touching: _,
-                            pressure: _,
-                            x: _,
-                            y: _,
-                        } => (),
-                    },
+                    }
                     GamepadAxis::Hat1 => (),
                     GamepadAxis::Hat2 => (),
                     GamepadAxis::Hat3 => (),
                 },
-                Gamepad::Trigger(_) => (),
-                Gamepad::Accelerometer => (),
-                Gamepad::Gyro => (),
+                Gamepad::Trigger(trigger) => match trigger {
+                    GamepadTrigger::LeftTrigger => {
+                        if let InputValue::Float(value) = value {
+                            self.state.l2 = value > 0.8;
+                            let value = denormalize_unsigned_value(value, TRIGG_MAX);
+                            self.state.l_trigg = Integer::from_primitive(value);
+                        }
+                    }
+                    GamepadTrigger::LeftTouchpadForce => {
+                        if let InputValue::Float(value) = value {
+                            let value = denormalize_unsigned_value(value, PAD_FORCE_MAX);
+                            self.state.l_pad_force = Integer::from_primitive(value);
+                        }
+                    }
+                    GamepadTrigger::LeftStickForce => {
+                        if let InputValue::Float(value) = value {
+                            let value = denormalize_unsigned_value(value, STICK_FORCE_MAX);
+                            self.state.l_stick_force = Integer::from_primitive(value);
+                        }
+                    }
+                    GamepadTrigger::RightTrigger => {
+                        if let InputValue::Float(value) = value {
+                            self.state.r2 = value > 0.8;
+                            let value = denormalize_unsigned_value(value, TRIGG_MAX);
+                            self.state.r_trigg = Integer::from_primitive(value);
+                        }
+                    }
+                    GamepadTrigger::RightTouchpadForce => {
+                        if let InputValue::Float(value) = value {
+                            let value = denormalize_unsigned_value(value, PAD_FORCE_MAX);
+                            self.state.r_pad_force = Integer::from_primitive(value);
+                        }
+                    }
+                    GamepadTrigger::RightStickForce => {
+                        if let InputValue::Float(value) = value {
+                            let value = denormalize_unsigned_value(value, STICK_FORCE_MAX);
+                            self.state.r_stick_force = Integer::from_primitive(value);
+                        }
+                    }
+                },
+                Gamepad::Accelerometer => {
+                    if let InputValue::Vector3 { x, y, z } = value {
+                        if let Some(x) = x {
+                            self.state.accel_x = Integer::from_primitive(x as i16);
+                        }
+                        if let Some(y) = y {
+                            self.state.accel_y = Integer::from_primitive(y as i16);
+                        }
+                        if let Some(z) = z {
+                            self.state.accel_z = Integer::from_primitive(z as i16);
+                        }
+                    }
+                }
+                Gamepad::Gyro => {
+                    if let InputValue::Vector3 { x, y, z } = value {
+                        if let Some(x) = x {
+                            self.state.pitch = Integer::from_primitive(x as i16);
+                        }
+                        if let Some(y) = y {
+                            self.state.yaw = Integer::from_primitive(y as i16);
+                        }
+                        if let Some(z) = z {
+                            self.state.roll = Integer::from_primitive(z as i16);
+                        }
+                    }
+                }
             },
             Capability::Mouse(_) => (),
             Capability::Keyboard(_) => (),
             Capability::Touchpad(touch) => match touch {
                 Touchpad::LeftPad(touch_event) => match touch_event {
-                    Touch::Motion => match value {
-                        InputValue::None => (),
-                        InputValue::Bool(_) => (),
-                        InputValue::Float(_) => (),
-                        InputValue::Vector2 { x: _, y: _ } => (),
-                        InputValue::Vector3 { x: _, y: _, z: _ } => (),
-                        InputValue::Touch {
+                    Touch::Motion => {
+                        if let InputValue::Touch {
                             index: _,
                             is_touching: _,
                             pressure: _,
                             x,
                             y,
-                        } => {
+                        } = value
+                        {
                             if let Some(x) = x {
-                                let value = denormalize_unsigned_value(x, 1.0);
-                                let value = value as i16;
+                                let value = denormalize_signed_value(x, PAD_X_MIN, PAD_X_MAX);
                                 self.state.l_pad_x = Integer::from_primitive(value);
                             };
                             if let Some(y) = y {
-                                let value = denormalize_unsigned_value(y, 1.0);
-                                let value = value as i16;
+                                let value = denormalize_signed_value(y, PAD_Y_MIN, PAD_Y_MAX);
                                 self.state.l_pad_y = Integer::from_primitive(value);
                             };
                         }
-                    },
+                    }
                     Touch::Button(button) => match button {
                         TouchButton::Touch => self.state.l_pad_touch = event.pressed(),
                         TouchButton::Press => self.state.l_pad_press = event.pressed(),
                     },
                 },
                 Touchpad::RightPad(touch_event) => match touch_event {
-                    Touch::Motion => match value {
-                        InputValue::None => (),
-                        InputValue::Bool(_) => (),
-                        InputValue::Float(_) => (),
-                        InputValue::Vector2 { x: _, y: _ } => (),
-                        InputValue::Vector3 { x: _, y: _, z: _ } => (),
-                        InputValue::Touch {
+                    Touch::Motion => {
+                        if let InputValue::Touch {
                             index: _,
                             is_touching: _,
                             pressure: _,
                             x,
                             y,
-                        } => {
+                        } = value
+                        {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, 0.0, 1.0);
+                                let value = denormalize_signed_value(x, PAD_X_MIN, PAD_X_MAX);
                                 self.state.r_pad_x = Integer::from_primitive(value);
                             };
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, 0.0, 1.0);
+                                let value = denormalize_signed_value(y, PAD_Y_MIN, PAD_Y_MAX);
                                 self.state.r_pad_y = Integer::from_primitive(value);
                             };
                         }
-                    },
+                    }
                     Touch::Button(button) => match button {
                         TouchButton::Touch => self.state.r_pad_touch = event.pressed(),
                         TouchButton::Press => self.state.r_pad_press = event.pressed(),
