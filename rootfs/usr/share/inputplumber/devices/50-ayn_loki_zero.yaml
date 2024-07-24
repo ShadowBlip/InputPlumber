@@ -16,7 +16,7 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: Loki MiniPro
+      product_name: Loki Zero
       sys_vendor: ayn
 
 # One or more source devices to combine into a single virtual device. The events
