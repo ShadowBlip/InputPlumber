@@ -1,5 +1,6 @@
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{cmp::Ordering, error::Error, thread};
 
 use packed_struct::{
@@ -110,14 +111,90 @@ impl SteamDeckDevice {
                 return;
             }
             const MAX_COMMANDS: u16 = 1024;
+
+            // The minimum amount of time that button up events must wait after
+            // a button down event.
+            const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
+
+            // In some cases, a button down and button up event can happen within
+            // the same "frame", which would result in no net state change. This queue
+            // allows us to process up events at a later time.
+            let mut queued_events = HashMap::new();
+
+            // Keep track of any button press events. This is
+            // used to detect if a button "up" event happened in the
+            // same frame as a "down" event.
+            let mut pressed_events: HashMap<Capability, Instant> = HashMap::new();
+
             'main: loop {
+                // Process any queued events
+                let mut queued_events_to_emit: Vec<Capability> =
+                    Vec::with_capacity(pressed_events.len());
+                for cap in queued_events.keys() {
+                    // Check to see if this event should be processed
+                    if let Some(last_pressed) = pressed_events.get(cap) {
+                        // Emit events that are ready
+                        if last_pressed.elapsed() > MIN_FRAME_TIME {
+                            queued_events_to_emit.push(cap.clone());
+                        }
+                    } else {
+                        // No pressed event was found for up event
+                        queued_events_to_emit.push(cap.clone());
+                    }
+                }
+                for cap in queued_events_to_emit.drain(..) {
+                    if let Some(event) = queued_events.remove(&cap) {
+                        log::trace!("Emitting queued event: {cap:?}");
+                        device.update_state(event);
+                    }
+                    if let Some(last_pressed) = pressed_events.remove(&cap) {
+                        log::trace!(
+                            "Emitted up event {:?} after down event",
+                            last_pressed.elapsed()
+                        );
+                    }
+                }
+
                 // Process any target commands
                 if !rx.is_empty() {
+                    // Only process MAX_COMMANDS at a time in a single "frame"
                     let mut commands_processed = 0;
+
+                    // Keep reading commands from the queue
                     loop {
                         match rx.try_recv() {
                             Ok(command) => match command {
                                 TargetCommand::WriteEvent(event) => {
+                                    // Check to see if this is a button event
+                                    let cap = event.as_capability();
+                                    if let Capability::Gamepad(Gamepad::Button(_)) = cap {
+                                        if event.pressed() {
+                                            log::trace!("Button down: {cap:?}");
+                                            // Keep track of button down events
+                                            pressed_events.insert(cap.clone(), Instant::now());
+                                        } else {
+                                            log::trace!("Button up: {cap:?}");
+                                            // If the event is a button up event, check to
+                                            // see if we received a down event in the same
+                                            // frame.
+                                            if let Some(last_pressed) = pressed_events.get(&cap) {
+                                                log::trace!(
+                                                    "Button was pressed {:?} ago",
+                                                    last_pressed.elapsed()
+                                                );
+                                                if last_pressed.elapsed() < MIN_FRAME_TIME {
+                                                    log::trace!("Button up & down event received in the same frame. Queueing event for the next frame.");
+                                                    queued_events.insert(cap.clone(), event);
+                                                    continue;
+                                                } else {
+                                                    log::trace!("Removing button from pressed");
+                                                    // Button up event should be processed now
+                                                    pressed_events.remove(&cap);
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     // Update device state with input events
                                     device.update_state(event);
                                 }
@@ -608,7 +685,10 @@ impl VirtualDeckController {
                     GamepadButton::West => self.state.y = event.pressed(),
                     GamepadButton::Start => self.state.menu = event.pressed(),
                     GamepadButton::Select => self.state.options = event.pressed(),
-                    GamepadButton::Guide => self.state.steam = event.pressed(),
+                    GamepadButton::Guide => {
+                        log::debug!("Got GUIDE button: {}", event.pressed());
+                        self.state.steam = event.pressed()
+                    }
                     GamepadButton::QuickAccess => self.state.quick_access = event.pressed(),
                     GamepadButton::DPadUp => self.state.up = event.pressed(),
                     GamepadButton::DPadDown => self.state.down = event.pressed(),
