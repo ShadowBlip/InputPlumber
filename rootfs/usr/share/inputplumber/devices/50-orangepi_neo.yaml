@@ -22,24 +22,24 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  ## Touch Devices
-  #- group: mouse
-  #  unique: false
-  #  hidraw:
-  #    vendor_id: 0x0911
-  #    product_id: 0x5288
-  #- group: mouse
-  #  blocked: true
-  #  evdev:
-  #    name: OPI0001:00 0911:5288 Touchpad
-  #    phys_path: i2c-OPI0001:00
-  #    handler: event*
-  #- group: mouse
-  #  blocked: true
-  #  evdev:
-  #    name: OPI0002:00 0911:5288 Touchpad
-  #    phys_path: i2c-OPI0002:00
-  #    handler: event*
+  # Touch Devices
+  - group: mouse
+    unique: false
+    hidraw:
+      vendor_id: 0x0911
+      product_id: 0x5288
+  - group: mouse
+    blocked: true
+    evdev:
+      name: OPI0001:00 0911:5288 Touchpad
+      phys_path: i2c-OPI0001:00
+      handler: event*
+  - group: mouse
+    blocked: true
+    evdev:
+      name: OPI0002:00 0911:5288 Touchpad
+      phys_path: i2c-OPI0002:00
+      handler: event*
 
   ## Gamepad Devices
   - group: gamepad
@@ -67,7 +67,7 @@ source_devices:
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - xb360
+  - deck
   - mouse
   - keyboard
 

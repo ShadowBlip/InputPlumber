@@ -41,15 +41,15 @@ pub struct TouchpadDataReport {
     // BYTE 2-3
     #[packed_field(bytes = "2..=3", endian = "lsb")]
     pub touch_x: Integer<u16, packed_bits::Bits<16>>,
-    // BYTE 4
-    #[packed_field(bytes = "4")]
-    pub unk_4: u8,
-    // BYTE 5-6
-    #[packed_field(bytes = "5..=6", endian = "lsb")]
+    // BYTE 4-5
+    #[packed_field(bytes = "4..=5", endian = "lsb")]
     pub touch_y: Integer<u16, packed_bits::Bits<16>>,
-    // BYTE 7-8
-    #[packed_field(bytes = "7..=8", endian = "lsb")]
+    // BYTE 6-7
+    #[packed_field(bytes = "6..=7", endian = "lsb")]
     pub scan_time: Integer<u16, packed_bits::Bits<16>>,
+    // BYTE 8
+    #[packed_field(bytes = "8")]
+    pub contact_count: u8,
     // BYTE 9
     #[packed_field(bytes = "9")]
     pub unk_9: u8,
@@ -61,9 +61,9 @@ impl Default for TouchpadDataReport {
             report_id: Default::default(),
             confidence: Default::default(),
             touch_x: Default::default(),
-            unk_4: Default::default(),
             touch_y: Default::default(),
             scan_time: Default::default(),
+            contact_count: Default::default(),
             unk_9: Default::default(),
         }
     }
