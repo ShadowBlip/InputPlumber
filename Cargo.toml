@@ -49,6 +49,7 @@ thiserror = "1.0.61"
 tokio = { version = "*", features = ["full"] }
 udev = { version = "^0.8", features = ["mio"] }
 uhid-virt = "0.0.7"
+virtual-usb = { git = "https://github.com/ShadowBlip/virtual-usb-rs.git", rev = "5a7a96a6aedc54f339d9ebff78bf484e5b17728d" }
 zbus = { version = "4.3.1", default-features = false, features = ["tokio"] }
 zbus_macros = "4.3.1"
 
