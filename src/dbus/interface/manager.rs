@@ -4,7 +4,10 @@ use tokio::sync::mpsc;
 use zbus::fdo;
 use zbus_macros::interface;
 
-use crate::{config::CompositeDeviceConfig, input::manager::ManagerCommand};
+use crate::{
+    config::CompositeDeviceConfig,
+    input::{manager::ManagerCommand, target::TargetDeviceTypeId},
+};
 
 /// The [ManagerInterface] provides a DBus interface that can be exposed for managing
 /// a [Manager]. It works by sending command messages to a channel that the
@@ -24,6 +27,21 @@ impl ManagerInterface {
     #[zbus(property)]
     async fn intercept_mode(&self) -> fdo::Result<String> {
         Ok("InputPlumber".to_string())
+    }
+
+    /// Returns a list of supported target device names. E.g. ["InputPlumber Mouse", "Microsoft
+    /// XBox 360 Gamepad"]
+    #[zbus(property)]
+    fn supported_target_devices(&self) -> fdo::Result<Vec<String>> {
+        let supported = TargetDeviceTypeId::supported_types();
+        Ok(supported.iter().map(|id| id.name().to_string()).collect())
+    }
+
+    /// Returns a list of supported target device ids. E.g. ["xb360", "deck"]
+    #[zbus(property)]
+    fn supported_target_device_ids(&self) -> fdo::Result<Vec<String>> {
+        let supported = TargetDeviceTypeId::supported_types();
+        Ok(supported.iter().map(|id| id.to_string()).collect())
     }
 
     /// Create a composite device using the give composite device config. The
