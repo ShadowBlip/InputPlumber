@@ -45,6 +45,7 @@ use crate::input::target::xb360::XBox360Controller;
 use crate::input::target::xbox_elite::XboxEliteController;
 use crate::input::target::xbox_series::XboxSeriesController;
 use crate::input::target::TargetDeviceType;
+use crate::input::target::TargetDeviceTypeId;
 use crate::udev;
 use crate::udev::device::UdevDevice;
 
@@ -360,47 +361,13 @@ impl Manager {
         kind: &str,
     ) -> Result<TargetDeviceType, Box<dyn Error>> {
         log::trace!("Creating target device: {kind}");
-        // Create the target device to emulate based on the kind
-        let device = match kind {
-            "dbus" => TargetDeviceType::DBus(DBusDevice::new(self.dbus.clone())),
-            "deck" => TargetDeviceType::SteamDeck(SteamDeckDevice::new(self.dbus.clone())),
-            "ds5" | "ds5-usb" | "ds5-bt" | "ds5-edge" | "ds5-edge-usb" | "ds5-edge-bt" => {
-                let hw = match kind {
-                    "ds5" | "ds5-usb" => DualSenseHardware::new(
-                        dualsense::ModelType::Normal,
-                        dualsense::BusType::Usb,
-                    ),
-                    "ds5-bt" => DualSenseHardware::new(
-                        dualsense::ModelType::Normal,
-                        dualsense::BusType::Bluetooth,
-                    ),
-                    "ds5-edge" | "ds5-edge-usb" => {
-                        DualSenseHardware::new(dualsense::ModelType::Edge, dualsense::BusType::Usb)
-                    }
-                    "ds5-edge-bt" => DualSenseHardware::new(
-                        dualsense::ModelType::Edge,
-                        dualsense::BusType::Bluetooth,
-                    ),
-                    _ => DualSenseHardware::default(),
-                };
-                TargetDeviceType::DualSense(DualSenseDevice::new(self.dbus.clone(), hw))
-            }
-            // Deprecated, retained for backwards compatibility
-            "gamepad" => TargetDeviceType::XBox360(XBox360Controller::new(self.dbus.clone())),
-            "keyboard" => TargetDeviceType::Keyboard(KeyboardDevice::new(self.dbus.clone())),
-            "mouse" => TargetDeviceType::Mouse(MouseDevice::new(self.dbus.clone())),
-            "touchscreen" => {
-                TargetDeviceType::Touchscreen(TouchscreenDevice::new(self.dbus.clone()))
-            }
-            "xb360" => TargetDeviceType::XBox360(XBox360Controller::new(self.dbus.clone())),
-            "xbox-elite" => {
-                TargetDeviceType::XBoxElite(XboxEliteController::new(self.dbus.clone()))
-            }
-            "xbox-series" => {
-                TargetDeviceType::XBoxSeries(XboxSeriesController::new(self.dbus.clone()))
-            }
-            _ => TargetDeviceType::Null,
+        let Ok(target_id) = TargetDeviceTypeId::try_from(kind) else {
+            return Err("Invalid target device ID".to_string().into());
         };
+
+        // Create the target device to emulate based on the kind
+        let device = TargetDeviceType::from_type_id(target_id, self.dbus.clone());
+
         Ok(device)
     }
 
