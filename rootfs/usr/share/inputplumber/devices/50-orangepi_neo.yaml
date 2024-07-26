@@ -31,14 +31,14 @@ source_devices:
   - group: mouse
     blocked: true
     evdev:
-      name: { OPI0001:00 0911:5288 Touchpad, SYNA3602:00 0911:5288 Touchpad }
-      phys_path: { i2c-OPI0001:00, i2c-SYNA3602:00 }
+      name: "{OPI0001:00 0911:5288 Touchpad,SYNA3602:00 0911:5288 Touchpad}"
+      phys_path: "{i2c-OPI0001:00,i2c-SYNA3602:00}"
       handler: event*
   - group: mouse
     blocked: true
     evdev:
-      name: { OPI0002:00 0911:5288 Touchpad, SYNA3602:01 0911:5288 Touchpad }
-      phys_path: { i2c-OPI0002:00, i2c-SYNA3602:01 }
+      name: "{OPI0002:00 0911:5288 Touchpad,SYNA3602:01 0911:5288 Touchpad}"
+      phys_path: "{i2c-OPI0002:00,i2c-SYNA3602:01}"
       handler: event*
 
   ## Gamepad Devices

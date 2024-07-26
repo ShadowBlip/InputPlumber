@@ -33,18 +33,7 @@ use crate::input::composite_device::CompositeDevice;
 use crate::input::source::evdev;
 use crate::input::source::hidraw;
 use crate::input::source::iio;
-use crate::input::target::dbus::DBusDevice;
-use crate::input::target::dualsense;
-use crate::input::target::dualsense::DualSenseDevice;
-use crate::input::target::dualsense::DualSenseHardware;
-use crate::input::target::keyboard::KeyboardDevice;
-use crate::input::target::mouse::MouseDevice;
-use crate::input::target::steam_deck::SteamDeckDevice;
-use crate::input::target::touchscreen::TouchscreenDevice;
-use crate::input::target::xb360::XBox360Controller;
-use crate::input::target::xbox_elite::XboxEliteController;
-use crate::input::target::xbox_series::XboxSeriesController;
-use crate::input::target::TargetDeviceType;
+use crate::input::target::TargetDevice;
 use crate::input::target::TargetDeviceTypeId;
 use crate::udev;
 use crate::udev::device::UdevDevice;
@@ -356,17 +345,14 @@ impl Manager {
     }
 
     /// Create target input device to emulate based on the given device type.
-    async fn create_target_device(
-        &mut self,
-        kind: &str,
-    ) -> Result<TargetDeviceType, Box<dyn Error>> {
+    async fn create_target_device(&mut self, kind: &str) -> Result<TargetDevice, Box<dyn Error>> {
         log::trace!("Creating target device: {kind}");
         let Ok(target_id) = TargetDeviceTypeId::try_from(kind) else {
             return Err("Invalid target device ID".to_string().into());
         };
 
         // Create the target device to emulate based on the kind
-        let device = TargetDeviceType::from_type_id(target_id, self.dbus.clone());
+        let device = TargetDevice::from_type_id(target_id, self.dbus.clone())?;
 
         Ok(device)
     }
@@ -375,10 +361,10 @@ impl Manager {
     /// to send events to the given targets.
     async fn start_target_devices(
         &mut self,
-        targets: Vec<TargetDeviceType>,
+        targets: Vec<TargetDevice>,
     ) -> Result<HashMap<String, TargetDeviceClient>, Box<dyn Error>> {
         let mut target_devices = HashMap::new();
-        for mut target in targets {
+        for target in targets {
             // Get the target device class to determine the DBus path to use for
             // the device.
             let device_class = target.dbus_device_class();
@@ -391,11 +377,10 @@ impl Manager {
             };
             target_devices.insert(path.clone(), client.clone());
             self.target_devices.insert(path.clone(), client.clone());
-            target.listen_on_dbus(path.clone()).await?;
 
             // Run the target device
             tokio::spawn(async move {
-                if let Err(e) = target.run().await {
+                if let Err(e) = target.run(path.clone()).await {
                     log::error!("Failed to run target device {path}: {e:?}");
                 }
                 log::debug!("Target device closed at: {path}");
@@ -967,7 +952,7 @@ impl Manager {
         device: UdevDevice,
         id: String,
     ) -> Result<(), Box<dyn Error>> {
-        log::debug!("Source device removed: {}", device.name());
+        log::debug!("Source device removed: {}", device.devnode());
         let Some(composite_device_path) = self.source_devices_used.get(&id) else {
             log::debug!("Source device not being managed by a composite device");
             return Ok(());
@@ -1206,15 +1191,32 @@ impl Manager {
     async fn on_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
         log::debug!("Device removed: {:?}", device.devnode());
         let sys_name = device.sysname();
+        let subsystem = device.subsystem();
         let path = ObjectPath::from_string_unchecked(format!("{BUS_SOURCES_PREFIX}/{sys_name}"));
         log::debug!("Device dbus path: {path}");
         let conn = self.dbus.clone();
         task::spawn(async move {
             log::debug!("Stopping dbus interface: {path}");
-            let result = conn
-                .object_server()
-                .remove::<SourceEventDeviceInterface, ObjectPath>(path.clone())
-                .await;
+            let result = match subsystem.as_str() {
+                "input" => {
+                    conn.object_server()
+                        .remove::<SourceEventDeviceInterface, ObjectPath>(path.clone())
+                        .await
+                }
+                "hidraw" => {
+                    conn.object_server()
+                        .remove::<SourceHIDRawInterface, ObjectPath>(path.clone())
+                        .await
+                }
+                "iio" => {
+                    conn.object_server()
+                        .remove::<SourceIioImuInterface, ObjectPath>(path.clone())
+                        .await
+                }
+                _ => Err(zbus::Error::Failure(format!(
+                    "Invalid subsystem: '{subsystem}'"
+                ))),
+            };
             if let Err(e) = result {
                 log::error!("Failed to remove dbus interface {path}: {e:?}");
             } else {
@@ -1382,7 +1384,7 @@ impl Manager {
                                     name.clone(),
                                 ) else {
                                     log::warn!(
-                                        "Unable to create UdevDevice from {base_path}/{name}"
+                                        "Unable to create UdevDevice from {base_path}/{name} to check initialization"
                                     );
                                     continue 'outer;
                                 };
@@ -1418,7 +1420,7 @@ impl Manager {
                     }
                     WatchEvent::Delete { name, base_path } => {
                         let device = UdevDevice::from_devnode(base_path.as_str(), name.as_str());
-                        log::debug!("Got add action for {base_path}/{name}");
+                        log::debug!("Got remove action for {base_path}/{name}");
                         let result = cmd_tx.send(ManagerCommand::DeviceRemoved { device }).await;
                         if let Err(e) = result {
                             log::error!("Unable to send command: {:?}", e);
@@ -1535,7 +1537,8 @@ impl Manager {
                         CompositeDeviceConfig::from_yaml_file(file.path().display().to_string());
                     if device.is_err() {
                         log::warn!(
-                            "Failed to parse composite device config: {}",
+                            "Failed to parse composite device config '{}': {}",
+                            file.path().display(),
                             device.unwrap_err()
                         );
                         continue;

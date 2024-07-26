@@ -1,14 +1,14 @@
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::time::{Duration, Instant};
-use std::{cmp::Ordering, error::Error, thread};
-
 use packed_struct::{
     types::{Integer, SizedInteger},
     PackedStruct,
 };
-use tokio::sync::mpsc::{self, error::TryRecvError};
-use virtual_usb::vhci_hcd::load_vhci_hcd;
+use std::{
+    cmp::Ordering,
+    collections::HashMap,
+    error::Error,
+    fmt::Debug,
+    time::{Duration, Instant},
+};
 use virtual_usb::{
     usb::{
         hid::{HidInterfaceBuilder, HidReportType, HidRequest, HidSubclass, InterfaceProtocol},
@@ -16,258 +16,41 @@ use virtual_usb::{
         TransferType, Type, UsageType,
     },
     usbip::UsbIpDirection,
+    vhci_hcd::load_vhci_hcd,
     virtual_usb::{Reply, VirtualUSBDevice, VirtualUSBDeviceBuilder, Xfer},
 };
-use zbus::Connection;
 
-use crate::drivers::steam_deck::hid_report::{
-    PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX, TRIGG_MAX,
-};
-use crate::input::capability::GamepadTrigger;
 use crate::{
-    dbus::interface::target::gamepad::TargetGamepadInterface,
     drivers::steam_deck::{
         driver::{PID, VID},
         hid_report::{
-            PackedInputDataReport, ReportType, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
+            PackedInputDataReport, ReportType, PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX,
+            PAD_Y_MIN, STICK_FORCE_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
+            TRIGG_MAX,
         },
         report_descriptor::{CONTROLLER_DESCRIPTOR, KEYBOARD_DESCRIPTOR, MOUSE_DESCRIPTOR},
     },
     input::{
         capability::{
-            Capability, Gamepad, GamepadAxis, GamepadButton, Touch, TouchButton, Touchpad,
+            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
+            Touchpad,
         },
-        event::{native::NativeEvent, value::InputValue},
-        source::hidraw::steam_deck::CAPABILITIES,
+        composite_device::client::CompositeDeviceClient,
+        event::{
+            native::{NativeEvent, ScheduledNativeEvent},
+            value::InputValue,
+        },
+        output_event::OutputEvent,
     },
 };
 
-use super::{client::TargetDeviceClient, command::TargetCommand};
+use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
-const POLL_INTERVAL: Duration = Duration::from_millis(1);
-const BUFFER_SIZE: usize = 2048;
+// The minimum amount of time that button up events must wait after
+// a button down event.
+const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
 
-#[derive(Debug)]
 pub struct SteamDeckDevice {
-    conn: Connection,
-    dbus_path: Option<String>,
-    tx: mpsc::Sender<TargetCommand>,
-    rx: Option<mpsc::Receiver<TargetCommand>>,
-}
-
-impl SteamDeckDevice {
-    pub fn new(conn: Connection) -> Self {
-        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
-        Self {
-            conn,
-            dbus_path: None,
-            tx,
-            rx: Some(rx),
-        }
-    }
-
-    /// Returns a client channel that can be used to send events to this device
-    pub fn client(&self) -> TargetDeviceClient {
-        self.tx.clone().into()
-    }
-
-    /// Creates a new instance of the dbus device interface on DBus.
-    pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
-        let conn = self.conn.clone();
-        self.dbus_path = Some(path.clone());
-        tokio::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let name = "Steam Deck Controller".to_string();
-            let iface = TargetGamepadInterface::new(name);
-            if let Err(e) = conn.object_server().at(path.clone(), iface).await {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started dbus interface on {path}");
-            }
-        });
-        Ok(())
-    }
-
-    /// Creates and runs the target device
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        // Ensure the vhci_hcd kernel module is loaded
-        log::debug!("Ensuring vhci_hcd kernel module is loaded");
-        if let Err(e) = load_vhci_hcd() {
-            return Err(e.to_string().into());
-        }
-
-        // Create the virtual USB device
-        log::debug!("Creating virtual deck controller");
-        let Some(mut rx) = self.rx.take() else {
-            return Err("No target command receiver exists".to_string().into());
-        };
-        let mut device = VirtualDeckController::new();
-        let mut _composite_device = None;
-
-        // Spawn the device in its own blocking thread
-        let task = tokio::task::spawn_blocking(move || {
-            if let Err(e) = device.start() {
-                log::error!("Error starting USB device: {e:?}");
-                return;
-            }
-            const MAX_COMMANDS: u16 = 1024;
-
-            // The minimum amount of time that button up events must wait after
-            // a button down event.
-            const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
-
-            // In some cases, a button down and button up event can happen within
-            // the same "frame", which would result in no net state change. This queue
-            // allows us to process up events at a later time.
-            let mut queued_events = HashMap::new();
-
-            // Keep track of any button press events. This is
-            // used to detect if a button "up" event happened in the
-            // same frame as a "down" event.
-            let mut pressed_events: HashMap<Capability, Instant> = HashMap::new();
-
-            'main: loop {
-                // Process any queued events
-                let mut queued_events_to_emit: Vec<Capability> =
-                    Vec::with_capacity(pressed_events.len());
-                for cap in queued_events.keys() {
-                    // Check to see if this event should be processed
-                    if let Some(last_pressed) = pressed_events.get(cap) {
-                        // Emit events that are ready
-                        if last_pressed.elapsed() > MIN_FRAME_TIME {
-                            queued_events_to_emit.push(cap.clone());
-                        }
-                    } else {
-                        // No pressed event was found for up event
-                        queued_events_to_emit.push(cap.clone());
-                    }
-                }
-                for cap in queued_events_to_emit.drain(..) {
-                    if let Some(event) = queued_events.remove(&cap) {
-                        log::trace!("Emitting queued event: {cap:?}");
-                        device.update_state(event);
-                    }
-                    if let Some(last_pressed) = pressed_events.remove(&cap) {
-                        log::trace!(
-                            "Emitted up event {:?} after down event",
-                            last_pressed.elapsed()
-                        );
-                    }
-                }
-
-                // Process any target commands
-                if !rx.is_empty() {
-                    // Only process MAX_COMMANDS at a time in a single "frame"
-                    let mut commands_processed = 0;
-
-                    // Keep reading commands from the queue
-                    loop {
-                        match rx.try_recv() {
-                            Ok(command) => match command {
-                                TargetCommand::WriteEvent(event) => {
-                                    // Check to see if this is a button event
-                                    let cap = event.as_capability();
-                                    if let Capability::Gamepad(Gamepad::Button(_)) = cap {
-                                        if event.pressed() {
-                                            log::trace!("Button down: {cap:?}");
-                                            // Keep track of button down events
-                                            pressed_events.insert(cap.clone(), Instant::now());
-                                        } else {
-                                            log::trace!("Button up: {cap:?}");
-                                            // If the event is a button up event, check to
-                                            // see if we received a down event in the same
-                                            // frame.
-                                            if let Some(last_pressed) = pressed_events.get(&cap) {
-                                                log::trace!(
-                                                    "Button was pressed {:?} ago",
-                                                    last_pressed.elapsed()
-                                                );
-                                                if last_pressed.elapsed() < MIN_FRAME_TIME {
-                                                    log::trace!("Button up & down event received in the same frame. Queueing event for the next frame.");
-                                                    queued_events.insert(cap.clone(), event);
-                                                    continue;
-                                                } else {
-                                                    log::trace!("Removing button from pressed");
-                                                    // Button up event should be processed now
-                                                    pressed_events.remove(&cap);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Update device state with input events
-                                    device.update_state(event);
-                                }
-                                TargetCommand::SetCompositeDevice(composite_dev) => {
-                                    _composite_device = Some(composite_dev);
-                                }
-                                TargetCommand::GetCapabilities(tx) => {
-                                    let caps = CAPABILITIES.to_vec();
-                                    if let Err(e) = tx.blocking_send(caps) {
-                                        log::error!("Failed to send target capabilities: {e:?}");
-                                    }
-                                }
-                                TargetCommand::GetType(tx) => {
-                                    if let Err(e) = tx.blocking_send("steam-deck".to_string()) {
-                                        log::error!("Failed to send target type: {e:?}");
-                                    }
-                                }
-                                TargetCommand::Stop => break 'main,
-                            },
-                            Err(e) => match e {
-                                TryRecvError::Empty => break,
-                                TryRecvError::Disconnected => break 'main,
-                            },
-                        }
-
-                        // Only process MAX_COMMANDS messages at a time
-                        commands_processed += 1;
-                        if commands_processed >= MAX_COMMANDS {
-                            break;
-                        }
-                    }
-                }
-
-                // Read/write from the device
-                if let Err(e) = device.update() {
-                    log::error!("Error updating device: {e:?}");
-                    break;
-                }
-
-                thread::sleep(POLL_INTERVAL);
-            }
-
-            log::debug!("Destroying Virtual USB device");
-            device.stop();
-        });
-
-        // Wait for the task to complete
-        task.await?;
-
-        // Remove the DBus interface
-        if let Some(path) = self.dbus_path.clone() {
-            let conn = self.conn.clone();
-            let path = path.clone();
-            tokio::task::spawn(async move {
-                log::debug!("Stopping dbus interface for {path}");
-                let result = conn
-                    .object_server()
-                    .remove::<TargetGamepadInterface, String>(path.clone())
-                    .await;
-                if let Err(e) = result {
-                    log::error!("Failed to stop dbus interface {path}: {e:?}");
-                } else {
-                    log::debug!("Stopped dbus interface for {path}");
-                }
-            });
-        }
-
-        Ok(())
-    }
-}
-
-/// Virtual USB implementation of the Steam Deck Controller
-struct VirtualDeckController {
     device: VirtualUSBDevice,
     state: PackedInputDataReport,
     /// Steam will send 'SetReport' commands with a report type, so it can fetch
@@ -275,17 +58,31 @@ struct VirtualDeckController {
     current_report: ReportType,
     lizard_mode_enabled: bool,
     serial_number: String,
+    queued_events: Vec<ScheduledNativeEvent>,
+    pressed_events: HashMap<Capability, Instant>,
 }
 
-impl VirtualDeckController {
-    fn new() -> Self {
-        Self {
-            device: VirtualDeckController::create_virtual_device().unwrap(),
+impl SteamDeckDevice {
+    pub fn new() -> Result<Self, Box<dyn Error>> {
+        // Ensure the vhci_hcd kernel module is loaded
+        log::debug!("Ensuring vhci_hcd kernel module is loaded");
+        if let Err(e) = load_vhci_hcd() {
+            return Err(e.to_string().into());
+        }
+
+        // Create and start the virtual USB device
+        let mut device = SteamDeckDevice::create_virtual_device()?;
+        device.start()?;
+
+        Ok(Self {
+            device,
             state: PackedInputDataReport::default(),
             current_report: ReportType::InputData,
             lizard_mode_enabled: false,
             serial_number: "INPU7PLUMB3R".to_string(),
-        }
+            queued_events: vec![],
+            pressed_events: HashMap::new(),
+        })
     }
 
     /// Create the virtual device to emulate
@@ -368,39 +165,6 @@ impl VirtualDeckController {
         Ok(virtual_device)
     }
 
-    /// Start the read/write threads
-    fn start(&mut self) -> Result<(), Box<dyn Error>> {
-        self.device.start()
-    }
-
-    /// Stop the read/write threads
-    fn stop(&mut self) {
-        self.device.stop()
-    }
-
-    /// Update the virtual device with its current state, and read unhandled
-    /// USB transfers.
-    fn update(&mut self) -> Result<(), Box<dyn Error>> {
-        // Increment the frame
-        let frame = self.state.frame.to_primitive();
-        self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
-
-        // Read from the device
-        let xfer = self.device.blocking_read()?;
-
-        // Handle any non-standard transfers
-        if let Some(xfer) = xfer {
-            let reply = self.handle_xfer(xfer);
-
-            // Write to the device if a reply is necessary
-            if let Some(reply) = reply {
-                self.device.write(reply)?;
-            }
-        }
-
-        Ok(())
-    }
-
     /// Handle any non-standard transfers
     fn handle_xfer(&mut self, xfer: Xfer) -> Option<Reply> {
         match xfer.direction() {
@@ -453,7 +217,7 @@ impl VirtualDeckController {
             }
             HidRequest::GetReport(req) => {
                 //log::trace!("GetReport: {req}");
-                let interface = req.interface.to_primitive();
+                let _interface = req.interface.to_primitive();
                 //log::trace!("Got GetReport data for iface {interface}");
                 let report_type = req.report_type;
 
@@ -597,13 +361,13 @@ impl VirtualDeckController {
             HidRequest::Unknown => {
                 log::warn!("Unknown HID request!");
             }
-            HidRequest::SetIdle(req) => {
+            HidRequest::SetIdle(_req) => {
                 //log::trace!("SetIdle: {req}");
             }
             // The host wants to set the given report on the device
             HidRequest::SetReport(req) => {
                 //log::trace!("SetReport: {req}");
-                let interface = req.interface.to_primitive();
+                let _interface = req.interface.to_primitive();
                 let data = xfer.data;
                 //log::trace!("Got SetReport data for iface {interface}: {data:?}");
 
@@ -905,6 +669,144 @@ impl VirtualDeckController {
             },
             Capability::Touchscreen(_) => (),
         };
+    }
+}
+
+impl TargetInputDevice for SteamDeckDevice {
+    fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
+        log::trace!("Received event: {event:?}");
+
+        // Check to see if this is a button event
+        // In some cases, a button down and button up event can happen within
+        // the same "frame", which would result in no net state change. This
+        // allows us to process up events at a later time.
+        let cap = event.as_capability();
+        if let Capability::Gamepad(Gamepad::Button(_)) = cap {
+            if event.pressed() {
+                log::trace!("Button down: {cap:?}");
+                // Keep track of button down events
+                self.pressed_events.insert(cap.clone(), Instant::now());
+            } else {
+                log::trace!("Button up: {cap:?}");
+                // If the event is a button up event, check to
+                // see if we received a down event in the same
+                // frame.
+                if let Some(last_pressed) = self.pressed_events.get(&cap) {
+                    log::trace!("Button was pressed {:?} ago", last_pressed.elapsed());
+                    if last_pressed.elapsed() < MIN_FRAME_TIME {
+                        log::trace!("Button up & down event received in the same frame. Queueing event for the next frame.");
+                        let scheduled_event = ScheduledNativeEvent::new_with_time(
+                            event,
+                            *last_pressed,
+                            MIN_FRAME_TIME,
+                        );
+                        self.queued_events.push(scheduled_event);
+                        return Ok(());
+                    } else {
+                        log::trace!("Removing button from pressed");
+                        // Button up event should be processed now
+                        self.pressed_events.remove(&cap);
+                    }
+                }
+            }
+        }
+
+        // Update device state with input events
+        self.update_state(event);
+
+        Ok(())
+    }
+
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
+        Ok(vec![
+            Capability::Gamepad(Gamepad::Accelerometer),
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
+            Capability::Gamepad(Gamepad::Gyro),
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Touch))),
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
+            Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
+            Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Touch))),
+            Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
+        ])
+    }
+
+    fn scheduled_events(&mut self) -> Option<Vec<ScheduledNativeEvent>> {
+        if self.queued_events.is_empty() {
+            return None;
+        }
+        Some(self.queued_events.drain(..).collect())
+    }
+
+    /// Stop the virtual USB read/write threads
+    fn stop(&mut self) -> Result<(), InputError> {
+        self.device.stop();
+        Ok(())
+    }
+}
+
+impl TargetOutputDevice for SteamDeckDevice {
+    /// Update the virtual device with its current state, and read unhandled
+    /// USB transfers.
+    fn poll(&mut self, _: &Option<CompositeDeviceClient>) -> Result<Vec<OutputEvent>, OutputError> {
+        // Increment the frame
+        let frame = self.state.frame.to_primitive();
+        self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
+
+        // Read from the device
+        let xfer = self.device.blocking_read()?;
+
+        // Handle any non-standard transfers
+        if let Some(xfer) = xfer {
+            let reply = self.handle_xfer(xfer);
+
+            // Write to the device if a reply is necessary
+            if let Some(reply) = reply {
+                self.device.write(reply)?;
+            }
+        }
+
+        Ok(vec![])
+    }
+}
+
+impl Debug for SteamDeckDevice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SteamDeckDevice")
+            .field("device", &self.device)
+            .field("state", &self.state)
+            .field("lizard_mode_enabled", &self.lizard_mode_enabled)
+            .field("serial_number", &self.serial_number)
+            .field("queued_events", &self.queued_events)
+            .field("pressed_events", &self.pressed_events)
+            .finish()
     }
 }
 

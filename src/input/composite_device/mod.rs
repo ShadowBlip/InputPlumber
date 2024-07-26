@@ -460,11 +460,13 @@ impl CompositeDevice {
         // Stop all target devices
         log::debug!("Stopping target devices");
         for (path, target) in &self.target_devices {
+            log::debug!("Stopping target device: {path}");
             if let Err(e) = target.stop().await {
                 log::error!("Failed to stop target device {path}: {e:?}");
             }
         }
         for (path, target) in &self.target_dbus_devices {
+            log::debug!("Stopping target dbus device: {path}");
             if let Err(e) = target.stop().await {
                 log::error!("Failed to stop dbus device {path}: {e:?}");
             }
@@ -484,6 +486,7 @@ impl CompositeDevice {
 
         // Send stop command to all source devices
         for (path, source) in &self.source_devices {
+            log::debug!("Stopping source device: {path}");
             if let Err(e) = source.stop().await {
                 log::debug!("Failed to stop source device {path}: {e:?}");
             }
