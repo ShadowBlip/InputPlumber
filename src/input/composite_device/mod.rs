@@ -255,12 +255,6 @@ impl CompositeDevice {
 
         // Keep track of all target devices
         for (path, target) in targets.iter() {
-            if let Err(e) = target.set_composite_device(self.client()).await {
-                return Err(
-                    format!("Failed to set composite device for target device: {:?}", e).into(),
-                );
-            }
-
             // Query the target device for its capabilities
             let caps = match target.get_capabilities().await {
                 Ok(caps) => caps,
@@ -268,19 +262,14 @@ impl CompositeDevice {
                     return Err(format!("Failed to get target capabilities: {e:?}").into());
                 }
             };
+            let caps = HashSet::from_iter(caps.into_iter());
+            self.update_target_capabilities(path.clone(), caps);
 
-            // Track the target device by capabilities it has
-            for cap in caps {
-                self.target_devices_by_capability
-                    .entry(cap)
-                    .and_modify(|devices| {
-                        devices.insert(path.clone());
-                    })
-                    .or_insert_with(|| {
-                        let mut devices = HashSet::new();
-                        devices.insert(path.clone());
-                        devices
-                    });
+            // Set the composite device on the target device
+            if let Err(e) = target.set_composite_device(self.client()).await {
+                return Err(
+                    format!("Failed to set composite device for target device: {:?}", e).into(),
+                );
             }
         }
         self.target_devices = targets;
@@ -436,6 +425,13 @@ impl CompositeDevice {
                         if let Err(e) = sender.send(result).await {
                             log::error!("Failed to send load profile result: {:?}", e);
                         }
+                    }
+                    CompositeCommand::UpdateSourceCapabilities(_device_id, _capabilities) => (),
+                    CompositeCommand::UpdateTargetCapabilities(dbus_path, capabilities) => {
+                        log::error!(
+                            "Updating target capabilities for '{dbus_path}': {capabilities:?}"
+                        );
+                        self.update_target_capabilities(dbus_path, capabilities);
                     }
                     CompositeCommand::WriteEvent(event) => {
                         if let Err(e) = self.write_event(event).await {
@@ -1819,7 +1815,7 @@ impl CompositeDevice {
         Ok(false)
     }
 
-    // Get the capabilities of all target devices
+    /// Get the capabilities of all target devices
     async fn get_target_capabilities(&self) -> Result<HashSet<Capability>, Box<dyn Error>> {
         let mut target_caps = HashSet::new();
         for target in self.target_devices.values() {
@@ -1848,6 +1844,23 @@ impl CompositeDevice {
         Ok(target_caps)
     }
 
+    /// Update the target capabilities of the given target device
+    fn update_target_capabilities(&mut self, dbus_path: String, capabilities: HashSet<Capability>) {
+        // Track the target device by capabilities it has
+        for cap in capabilities.into_iter() {
+            self.target_devices_by_capability
+                .entry(cap)
+                .and_modify(|devices| {
+                    devices.insert(dbus_path.clone());
+                })
+                .or_insert_with(|| {
+                    let mut devices = HashSet::new();
+                    devices.insert(dbus_path.clone());
+                    devices
+                });
+        }
+    }
+
     /// Attach the given target devices to the composite device
     async fn attach_target_devices(
         &mut self,
@@ -1855,6 +1868,19 @@ impl CompositeDevice {
     ) -> Result<(), Box<dyn Error>> {
         // Keep track of all target devices
         for (path, target) in targets.into_iter() {
+            // Query the target device for its capabilities
+            let caps = match target.get_capabilities().await {
+                Ok(caps) => caps,
+                Err(e) => {
+                    return Err(format!("Failed to get target capabilities: {e:?}").into());
+                }
+            };
+
+            // Track the target device by capabilities it has
+            let caps = HashSet::from_iter(caps.into_iter());
+            self.update_target_capabilities(path.clone(), caps);
+
+            // Set the composite device on the target device
             log::debug!("Attaching target device: {path}");
             if let Err(e) = target.set_composite_device(self.client()).await {
                 return Err(
@@ -1866,31 +1892,9 @@ impl CompositeDevice {
                 self.dbus_path.as_ref().unwrap_or(&"".to_string())
             );
 
-            // Query the target device for its capabilities
-            let caps = match target.get_capabilities().await {
-                Ok(caps) => caps,
-                Err(e) => {
-                    return Err(format!("Failed to get target capabilities: {e:?}").into());
-                }
-            };
-
             // Add the target device
             self.target_devices_queued.remove(&path);
             self.target_devices.insert(path.clone(), target);
-
-            // Track the target device by capabilities it has
-            for cap in caps {
-                self.target_devices_by_capability
-                    .entry(cap)
-                    .and_modify(|devices| {
-                        devices.insert(path.clone());
-                    })
-                    .or_insert_with(|| {
-                        let mut devices = HashSet::new();
-                        devices.insert(path.clone());
-                        devices
-                    });
-            }
         }
         // TODO: check this
         //self.signal_targets_changed().await;

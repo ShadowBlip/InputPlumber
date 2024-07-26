@@ -8,6 +8,7 @@ use std::{
 
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
+use unified_gamepad::UnifiedGamepadDevice;
 
 use crate::dbus::interface::target::gamepad::TargetGamepadInterface;
 
@@ -46,6 +47,7 @@ pub mod mouse;
 pub mod steam_deck;
 pub mod touchpad;
 pub mod touchscreen;
+pub mod unified_gamepad;
 pub mod xb360;
 pub mod xbox_elite;
 pub mod xbox_series;
@@ -192,6 +194,10 @@ impl TargetDeviceTypeId {
                 id: "xbox-series",
                 name: "Microsoft Xbox Series S|X Controller",
             },
+            TargetDeviceTypeId {
+                id: "unified-gamepad",
+                name: "InputPlumber Unified Gamepad",
+            },
         ]
     }
 
@@ -245,6 +251,11 @@ pub trait TargetInputDevice {
             };
         });
     }
+
+    /// Invoked when a composite device is attached to the target device. This
+    /// method can be used to call [CompositeDeviceClient] methods from the
+    /// target input device.
+    fn composite_device_attached(&mut self, _composite_device: CompositeDeviceClient) {}
 
     /// Write the given input event to the virtual device
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
@@ -486,7 +497,9 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                         implementation.write_event(event)?;
                     }
                     TargetCommand::SetCompositeDevice(device) => {
+                        let device_copy = device.clone();
                         *composite_device = Some(device);
+                        implementation.composite_device_attached(device_copy);
                     }
                     TargetCommand::GetCapabilities(sender) => {
                         let capabilities = implementation.get_capabilities().unwrap_or_default();
@@ -535,6 +548,7 @@ pub enum TargetDevice {
     XBox360(TargetDriver<XBox360Controller>),
     XBoxElite(TargetDriver<XboxEliteController>),
     XBoxSeries(TargetDriver<XboxSeriesController>),
+    UnifiedGamepad(TargetDriver<UnifiedGamepadDevice>),
 }
 
 impl TargetDevice {
@@ -629,6 +643,11 @@ impl TargetDevice {
                 let driver = TargetDriver::new(id, device, dbus);
                 Ok(Self::XBoxSeries(driver))
             }
+            "unified-gamepad" => {
+                let device = UnifiedGamepadDevice::new()?;
+                let driver = TargetDriver::new(id, device, dbus);
+                Ok(Self::UnifiedGamepad(driver))
+            }
             "null" => Ok(Self::Null),
             _ => Ok(Self::Null),
         }
@@ -659,6 +678,7 @@ impl TargetDevice {
             }
             TargetDevice::XBoxElite(_) => vec!["xbox-elite".try_into().unwrap()],
             TargetDevice::XBoxSeries(_) => vec!["xbox-series".try_into().unwrap()],
+            TargetDevice::UnifiedGamepad(_) => vec!["unified-gamepad".try_into().unwrap()],
         }
     }
 
@@ -678,6 +698,7 @@ impl TargetDevice {
             TargetDevice::XBox360(_) => "gamepad",
             TargetDevice::XBoxElite(_) => "gamepad",
             TargetDevice::XBoxSeries(_) => "gamepad",
+            TargetDevice::UnifiedGamepad(_) => "gamepad",
         }
     }
 
@@ -695,6 +716,7 @@ impl TargetDevice {
             TargetDevice::XBox360(device) => Some(device.client()),
             TargetDevice::XBoxElite(device) => Some(device.client()),
             TargetDevice::XBoxSeries(device) => Some(device.client()),
+            TargetDevice::UnifiedGamepad(device) => Some(device.client()),
         }
     }
 
@@ -712,6 +734,7 @@ impl TargetDevice {
             TargetDevice::XBox360(device) => device.run(dbus_path).await,
             TargetDevice::XBoxElite(device) => device.run(dbus_path).await,
             TargetDevice::XBoxSeries(device) => device.run(dbus_path).await,
+            TargetDevice::UnifiedGamepad(device) => device.run(dbus_path).await,
         }
     }
 }
