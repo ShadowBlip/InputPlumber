@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use evdev::AbsoluteAxisCode;
 
 use crate::input::capability::{Capability, Gamepad, GamepadButton};
@@ -128,5 +130,47 @@ impl From<EvdevEvent> for NativeEvent {
             value,
             source_capability: None,
         }
+    }
+}
+
+impl From<ScheduledNativeEvent> for NativeEvent {
+    fn from(value: ScheduledNativeEvent) -> Self {
+        value.event
+    }
+}
+
+/// A scheduled event represents an input event that should be sent sometime in
+/// the future.
+#[derive(Debug, Clone)]
+pub struct ScheduledNativeEvent {
+    event: NativeEvent,
+    scheduled_time: Instant,
+    wait_time: Duration,
+}
+
+impl ScheduledNativeEvent {
+    /// Create a new scheduled event with the given time to wait before being
+    /// emitted.
+    pub fn new(event: NativeEvent, wait_time: Duration) -> Self {
+        Self {
+            event,
+            scheduled_time: Instant::now(),
+            wait_time,
+        }
+    }
+
+    /// Create a new scheduled event with the given timestamp and wait time before
+    /// being emitted
+    pub fn new_with_time(event: NativeEvent, timestamp: Instant, wait_time: Duration) -> Self {
+        Self {
+            event,
+            scheduled_time: timestamp,
+            wait_time,
+        }
+    }
+
+    /// Returns true when the scheduled event is ready to be emitted
+    pub fn is_ready(&self) -> bool {
+        self.scheduled_time.elapsed() > self.wait_time
     }
 }

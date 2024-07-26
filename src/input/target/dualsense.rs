@@ -2,16 +2,13 @@
 //! The DualSense implementation is based on the great work done by NeroReflex
 //! and the ROGueENEMY project:
 //! https://github.com/NeroReflex/ROGueENEMY/
-use std::{cmp::Ordering, error::Error, fs::File, time::Duration};
+use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File};
 
 use packed_struct::prelude::*;
-use rand::{self, Rng};
-use tokio::sync::mpsc::{self, error::TryRecvError};
-use uhid_virt::{Bus, CreateParams, OutputEvent, StreamError, UHIDDevice};
-use zbus::Connection;
+use rand::Rng;
+use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
-    dbus::interface::target::gamepad::TargetGamepadInterface,
     drivers::dualsense::{
         driver::{
             DS5_ACC_RES_PER_G, DS5_EDGE_NAME, DS5_EDGE_PID, DS5_EDGE_VERSION, DS5_EDGE_VID,
@@ -35,15 +32,16 @@ use crate::{
             Touchpad,
         },
         composite_device::client::CompositeDeviceClient,
-        event::{native::NativeEvent, value::InputValue},
-        output_event,
+        event::{
+            native::{NativeEvent, ScheduledNativeEvent},
+            value::InputValue,
+        },
+        output_capability::{OutputCapability, LED},
+        output_event::OutputEvent,
     },
 };
 
-use super::{client::TargetDeviceClient, command::TargetCommand};
-
-const POLL_INTERVAL_MS: u64 = 4;
-const BUFFER_SIZE: usize = 2048;
+use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
 /// The type of DualSense device to emulate. Currently two models are supported:
 /// DualSense and DualSense Edge.
@@ -115,180 +113,66 @@ impl Default for DualSenseHardware {
 
 /// The [DualSenseDevice] is a target input device implementation that emulates
 /// a Playstation DualSense controller using uhid.
-#[derive(Debug)]
 pub struct DualSenseDevice {
-    conn: Connection,
-    dbus_path: Option<String>,
-    tx: mpsc::Sender<TargetCommand>,
-    rx: mpsc::Receiver<TargetCommand>,
+    device: UHIDDevice<File>,
     state: PackedInputDataReport,
     timestamp: u8,
-    composite_device: Option<CompositeDeviceClient>,
     hardware: DualSenseHardware,
 }
 
 impl DualSenseDevice {
-    pub fn new(conn: Connection, hardware: DualSenseHardware) -> Self {
-        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
-        Self {
-            conn,
-            dbus_path: None,
-            tx,
-            rx,
+    pub fn new(hardware: DualSenseHardware) -> Result<Self, Box<dyn Error>> {
+        let device = DualSenseDevice::create_virtual_device(&hardware)?;
+        Ok(Self {
+            device,
             state: PackedInputDataReport::Usb(USBPackedInputDataReport::new()),
             timestamp: 0,
-            composite_device: None,
             hardware,
-        }
-    }
-
-    /// Returns a client channel that can be used to send events to this device
-    pub fn client(&self) -> TargetDeviceClient {
-        self.tx.clone().into()
-    }
-
-    /// Configures the device to send output events to the given composite device
-    /// channel.
-    pub fn set_composite_device(&mut self, composite_device: CompositeDeviceClient) {
-        self.composite_device = Some(composite_device);
-    }
-
-    /// Creates a new instance of the dbus device interface on DBus.
-    pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting dbus interface on {path}");
-        let conn = self.conn.clone();
-        self.dbus_path = Some(path.clone());
-
-        let name = match self.hardware.model {
-            ModelType::Edge => match self.hardware.bus_type {
-                BusType::Bluetooth => "DualSense Edge (bluetooth)".to_string(),
-                BusType::Usb => "DualSense Edge".to_string(),
-            },
-            ModelType::Normal => match self.hardware.bus_type {
-                BusType::Bluetooth => "DualSense (bluetooth)".to_string(),
-                BusType::Usb => "DualSense".to_string(),
-            },
-        };
-
-        tokio::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let iface = TargetGamepadInterface::new(name);
-            if let Err(e) = conn.object_server().at(path.clone(), iface).await {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started dbus interface on {path}");
-            }
-        });
-
-        Ok(())
-    }
-
-    /// Creates and runs the target device
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Creating virtual dualsense controller");
-        let mut device = self.create_virtual_device()?;
-
-        // Start the main run loop
-        log::debug!("Starting run loop");
-        let duration = Duration::from_millis(POLL_INTERVAL_MS);
-        let mut interval = tokio::time::interval(duration);
-        loop {
-            // Sleep for the given polling interval
-            interval.tick().await;
-
-            // Receive commands/events and update local state
-            if let Err(e) = self.receive_commands().await {
-                log::debug!("Error receiving commands: {:?}", e);
-                break;
-            }
-
-            // Poll the HIDRaw device
-            if let Err(e) = self.poll(&mut device).await {
-                log::debug!("Error polling UHID device: {:?}", e);
-                break;
-            }
-
-            // Check if the timestamp needs to be updated
-            if self.state.state().touch_data.has_touches() {
-                self.timestamp = self.timestamp.wrapping_add(3); // TODO: num?
-                self.state.state_mut().touch_data.timestamp = self.timestamp;
-            }
-
-            // Write the state to the device
-            if let Err(e) = self.write_state(&mut device) {
-                log::debug!("Error writing state to device: {:?}", e);
-                break;
-            }
-        }
-        log::debug!("Stopped listening for events");
-
-        // Remove the DBus interface
-        if let Some(path) = self.dbus_path.clone() {
-            let conn = self.conn.clone();
-            let path = path.clone();
-            tokio::task::spawn(async move {
-                log::debug!("Stopping dbus interface for {path}");
-                let result = conn
-                    .object_server()
-                    .remove::<TargetGamepadInterface, String>(path.clone())
-                    .await;
-                if let Err(e) = result {
-                    log::error!("Failed to stop dbus interface {path}: {e:?}");
-                } else {
-                    log::debug!("Stopped dbus interface for {path}");
-                }
-            });
-        }
-
-        log::debug!("Destroying device");
-        if let Err(e) = device.destroy() {
-            log::error!("Error destroying device: {e:?}");
-        }
-        log::debug!("Destroyed device");
-
-        Ok(())
+        })
     }
 
     /// Create the virtual device to emulate
-    fn create_virtual_device(&self) -> Result<UHIDDevice<File>, Box<dyn Error>> {
+    fn create_virtual_device(
+        hardware: &DualSenseHardware,
+    ) -> Result<UHIDDevice<File>, Box<dyn Error>> {
         let device = UHIDDevice::create(CreateParams {
-            name: match self.hardware.model {
+            name: match hardware.model {
                 ModelType::Edge => String::from(DS5_EDGE_NAME),
                 ModelType::Normal => String::from(DS5_NAME),
             },
             phys: String::from(""),
             uniq: format!(
                 "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                self.hardware.mac_addr[5],
-                self.hardware.mac_addr[4],
-                self.hardware.mac_addr[3],
-                self.hardware.mac_addr[2],
-                self.hardware.mac_addr[1],
-                self.hardware.mac_addr[0],
+                hardware.mac_addr[5],
+                hardware.mac_addr[4],
+                hardware.mac_addr[3],
+                hardware.mac_addr[2],
+                hardware.mac_addr[1],
+                hardware.mac_addr[0],
             ),
-            bus: match self.hardware.bus_type {
+            bus: match hardware.bus_type {
                 BusType::Bluetooth => Bus::BLUETOOTH,
                 BusType::Usb => Bus::USB,
             },
-            vendor: match self.hardware.model {
+            vendor: match hardware.model {
                 ModelType::Edge => DS5_EDGE_VID as u32,
                 ModelType::Normal => DS5_VID as u32,
             },
-            product: match self.hardware.model {
+            product: match hardware.model {
                 ModelType::Edge => DS5_EDGE_PID as u32,
                 ModelType::Normal => DS5_PID as u32,
             },
-            version: match self.hardware.model {
+            version: match hardware.model {
                 ModelType::Edge => DS5_EDGE_VERSION as u32,
                 ModelType::Normal => DS5_VERSION as u32,
             },
             country: 0,
-            rd_data: match self.hardware.model {
-                ModelType::Edge => match self.hardware.bus_type {
+            rd_data: match hardware.model {
+                ModelType::Edge => match hardware.bus_type {
                     BusType::Bluetooth => DS_EDGE_BT_DESCRIPTOR.to_vec(),
                     BusType::Usb => DS_EDGE_USB_DESCRIPTOR.to_vec(),
                 },
-                ModelType::Normal => match self.hardware.bus_type {
+                ModelType::Normal => match hardware.bus_type {
                     BusType::Bluetooth => DS_BT_DESCRIPTOR.to_vec(),
                     BusType::Usb => DS_USB_DESCRIPTOR.to_vec(),
                 },
@@ -298,421 +182,14 @@ impl DualSenseDevice {
         Ok(device)
     }
 
-    /// Read commands and events sent to this device
-    async fn receive_commands(&mut self) -> Result<(), Box<dyn Error>> {
-        // Read commands sent to this device from the channel until it is
-        // empty.
-        loop {
-            match self.rx.try_recv() {
-                Ok(cmd) => {
-                    match cmd {
-                        TargetCommand::SetCompositeDevice(composite_device) => {
-                            log::trace!("Recieved command to set composite device");
-                            self.set_composite_device(composite_device.clone());
-                        }
-                        TargetCommand::WriteEvent(event) => {
-                            log::trace!("Recieved event to write: {:?}", event);
-                            // Update internal state
-                            self.update_state(event);
-                        }
-                        TargetCommand::GetCapabilities(tx) => {
-                            let caps = self.get_capabilities();
-                            if let Err(e) = tx.send(caps).await {
-                                log::error!("Failed to send target capabilities: {e:?}");
-                            }
-                        }
-                        TargetCommand::GetType(tx) => {
-                            if let Err(e) = tx.send("ds5-edge".to_string()).await {
-                                log::error!("Failed to send target type: {e:?}");
-                            }
-                        }
-
-                        TargetCommand::Stop => return Err("Device stopped".into()),
-                    }
-                }
-                Err(e) => match e {
-                    TryRecvError::Empty => break,
-                    TryRecvError::Disconnected => {
-                        return Err("Receive channel disconnected".into());
-                    }
-                },
-            };
-        }
-
-        Ok(())
-    }
-
-    /// Handle reading from the device and processing input events from source
-    /// devices over the event channel
-    /// https://www.kernel.org/doc/html/latest/hid/uhid.html#read
-    async fn poll(&mut self, device: &mut UHIDDevice<File>) -> Result<(), Box<dyn Error>> {
-        let result = device.read();
-        match result {
-            Ok(event) => {
-                match event {
-                    // This is sent when the HID device is started. Consider this as an answer to
-                    // UHID_CREATE. This is always the first event that is sent.
-                    OutputEvent::Start { dev_flags: _ } => {
-                        log::debug!("Start event received");
-                    }
-                    // This is sent when the HID device is stopped. Consider this as an answer to
-                    // UHID_DESTROY.
-                    OutputEvent::Stop => {
-                        log::debug!("Stop event received");
-                    }
-                    // This is sent when the HID device is opened. That is, the data that the HID
-                    // device provides is read by some other process. You may ignore this event but
-                    // it is useful for power-management. As long as you haven't received this event
-                    // there is actually no other process that reads your data so there is no need to
-                    // send UHID_INPUT events to the kernel.
-                    OutputEvent::Open => {
-                        log::debug!("Open event received");
-                    }
-                    // This is sent when there are no more processes which read the HID data. It is
-                    // the counterpart of UHID_OPEN and you may as well ignore this event.
-                    OutputEvent::Close => {
-                        log::debug!("Close event received");
-                    }
-                    // This is sent if the HID device driver wants to send raw data to the I/O
-                    // device. You should read the payload and forward it to the device.
-                    OutputEvent::Output { data } => {
-                        log::trace!("Got output data: {:?}", data);
-                        let result = self.handle_output(data).await;
-                        if let Err(e) = result {
-                            let err = format!("Failed process output event: {:?}", e);
-                            return Err(err.into());
-                        }
-                    }
-                    // This event is sent if the kernel driver wants to perform a GET_REPORT request
-                    // on the control channel as described in the HID specs. The report-type and
-                    // report-number are available in the payload.
-                    // The kernel serializes GET_REPORT requests so there will never be two in
-                    // parallel. However, if you fail to respond with a UHID_GET_REPORT_REPLY, the
-                    // request might silently time out.
-                    // Once you read a GET_REPORT request, you shall forward it to the HID device and
-                    // remember the "id" field in the payload. Once your HID device responds to the
-                    // GET_REPORT (or if it fails), you must send a UHID_GET_REPORT_REPLY to the
-                    // kernel with the exact same "id" as in the request. If the request already
-                    // timed out, the kernel will ignore the response silently. The "id" field is
-                    // never re-used, so conflicts cannot happen.
-                    OutputEvent::GetReport {
-                        id,
-                        report_number,
-                        report_type,
-                    } => {
-                        log::trace!(
-                            "Received GetReport event: id: {id}, num: {report_number}, type: {:?}",
-                            report_type
-                        );
-                        let result = self.handle_get_report(device, id, report_number, report_type);
-                        if let Err(e) = result {
-                            let err = format!("Failed to process GetReport event: {:?}", e);
-                            return Err(err.into());
-                        }
-                    }
-                    // This is the SET_REPORT equivalent of UHID_GET_REPORT. On receipt, you shall
-                    // send a SET_REPORT request to your HID device. Once it replies, you must tell
-                    // the kernel about it via UHID_SET_REPORT_REPLY.
-                    // The same restrictions as for UHID_GET_REPORT apply.
-                    OutputEvent::SetReport {
-                        id,
-                        report_number,
-                        report_type,
-                        data,
-                    } => {
-                        log::trace!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
-                    }
-                };
-            }
-            Err(err) => match err {
-                StreamError::Io(_e) => (),
-                StreamError::UnknownEventType(e) => {
-                    log::debug!("Unknown event type: {:?}", e);
-                }
-            },
-        };
-
-        Ok(())
-    }
-
-    /// Handle [OutputEvent::Output] events from the HIDRAW device. These are
-    /// events which should be forwarded back to source devices.
-    async fn handle_output(&mut self, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
-        // Validate the output report size
-        let _expected_report_size = match self.hardware.bus_type {
-            BusType::Bluetooth => OUTPUT_REPORT_BT_SIZE,
-            BusType::Usb => OUTPUT_REPORT_USB_SIZE,
-        };
-
-        // The first byte should be the report id
-        let Some(report_id) = data.first() else {
-            log::warn!("Received empty output report.");
-            return Ok(());
-        };
-
-        log::debug!("Got output report with ID: {report_id}");
-
-        match *report_id {
-            OUTPUT_REPORT_USB => {
-                log::debug!("Received USB output report with length: {}", data.len());
-                let state = match data.len() {
-                    OUTPUT_REPORT_USB_SIZE => {
-                        let buf: [u8; OUTPUT_REPORT_USB_SIZE] = data.try_into().unwrap();
-                        let report = UsbPackedOutputReport::unpack(&buf)?;
-                        report.state
-                    }
-                    OUTPUT_REPORT_USB_SHORT_SIZE => {
-                        let buf: [u8; OUTPUT_REPORT_USB_SHORT_SIZE] = data.try_into().unwrap();
-                        let report = UsbPackedOutputReportShort::unpack(&buf)?;
-
-                        // NOTE: Hack for supporting Steam Input rumble
-                        let mut state = report.state;
-                        if !state.allow_audio_control
-                            && !state.allow_mic_volume
-                            && !state.allow_speaker_volume
-                            && !state.allow_headphone_volume
-                            && !state.allow_left_trigger_ffb
-                            && !state.allow_right_trigger_ffb
-                            && !state.use_rumble_not_haptics
-                            && !state.enable_rumble_emulation
-                        {
-                            state.use_rumble_not_haptics = true;
-                        }
-                        state
-                    }
-                    _ => {
-                        log::warn!("Failed to unpack output report. Expected size {OUTPUT_REPORT_USB_SIZE} or {OUTPUT_REPORT_USB_SHORT_SIZE}, got {}.", data.len());
-                        return Ok(());
-                    }
-                };
-
-                log::trace!("{}", state);
-
-                // Send the output report to the composite device so it can
-                // be processed by source devices.
-                let Some(composite_device) = self.composite_device.as_ref() else {
-                    log::warn!("No composite device to handle output reports");
-                    return Ok(());
-                };
-
-                let event = output_event::OutputEvent::DualSense(state);
-                composite_device.process_output_event(event).await?;
-            }
-            OUTPUT_REPORT_BT => {
-                log::debug!(
-                    "Received Bluetooth output report with length: {}",
-                    data.len()
-                );
-                //
-            }
-            _ => {
-                log::debug!("Unknown output report: {report_id}");
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Handle [OutputEvent::GetReport] events from the HIDRAW device
-    fn handle_get_report(
-        &mut self,
-        device: &mut UHIDDevice<File>,
-        id: u32,
-        report_number: u8,
-        _report_type: uhid_virt::ReportType,
-    ) -> Result<(), Box<dyn Error>> {
-        // Handle report pairing requests
-        let data = match report_number {
-            // Pairing information report
-            FEATURE_REPORT_PAIRING_INFO => {
-                log::debug!("Got report pairing report request");
-                // TODO: Can we define this somewhere as a const?
-                let data = vec![
-                    FEATURE_REPORT_PAIRING_INFO,
-                    self.hardware.mac_addr[0],
-                    self.hardware.mac_addr[1],
-                    self.hardware.mac_addr[2],
-                    self.hardware.mac_addr[3],
-                    self.hardware.mac_addr[4],
-                    self.hardware.mac_addr[5],
-                    0x08,
-                    0x25,
-                    0x00,
-                    0x1e,
-                    0x00,
-                    0xee,
-                    0x74,
-                    0xd0,
-                    0xbc,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                ];
-
-                // If this is a bluetooth gamepad, include the crc
-                if self.hardware.bus_type == BusType::Bluetooth {
-                    // TODO: Handle bluetooth CRC32
-                }
-
-                data
-            }
-            // Firmware information report
-            FEATURE_REPORT_FIRMWARE_INFO => {
-                log::debug!("Got report firmware info request");
-                // TODO: Can we define this somewhere as a const?
-                let data = vec![
-                    FEATURE_REPORT_FIRMWARE_INFO,
-                    0x4a,
-                    0x75,
-                    0x6e,
-                    0x20,
-                    0x31,
-                    0x39,
-                    0x20,
-                    0x32,
-                    0x30,
-                    0x32,
-                    0x33,
-                    0x31,
-                    0x34,
-                    0x3a,
-                    0x34,
-                    0x37,
-                    0x3a,
-                    0x33,
-                    0x34,
-                    0x03,
-                    0x00,
-                    0x44,
-                    0x00,
-                    0x08,
-                    0x02,
-                    0x00,
-                    0x01,
-                    0x36,
-                    0x00,
-                    0x00,
-                    0x01,
-                    0xc1,
-                    0xc8,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x54,
-                    0x01,
-                    0x00,
-                    0x00,
-                    0x14,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x0b,
-                    0x00,
-                    0x01,
-                    0x00,
-                    0x06,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                ];
-
-                // If this is a bluetooth gamepad, include the crc
-                if self.hardware.bus_type == BusType::Bluetooth {
-                    // TODO: Handle bluetooth CRC32
-                }
-
-                data
-            }
-            // Calibration report
-            FEATURE_REPORT_CALIBRATION => {
-                log::debug!("Got report request for calibration");
-                // TODO: Can we define this somewhere as a const?
-                let data = vec![
-                    FEATURE_REPORT_CALIBRATION,
-                    0xff,
-                    0xfc,
-                    0xff,
-                    0xfe,
-                    0xff,
-                    0x83,
-                    0x22,
-                    0x78,
-                    0xdd,
-                    0x92,
-                    0x22,
-                    0x5f,
-                    0xdd,
-                    0x95,
-                    0x22,
-                    0x6d,
-                    0xdd,
-                    0x1c,
-                    0x02,
-                    0x1c,
-                    0x02,
-                    0xf2,
-                    0x1f,
-                    0xed,
-                    0xdf,
-                    0xe3,
-                    0x20,
-                    0xda,
-                    0xe0,
-                    0xee,
-                    0x1f,
-                    0xdf,
-                    0xdf,
-                    0x0b,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                ];
-
-                // If this is a bluetooth gamepad, include the crc
-                if self.hardware.bus_type == BusType::Bluetooth {
-                    // TODO: Handle bluetooth CRC32
-                }
-
-                data
-            }
-            _ => {
-                let err = format!("Unknown get report request with report number: {report_number}");
-                return Err(err.into());
-            }
-        };
-
-        // Write the report reply to the HIDRAW device
-        if let Err(e) = device.write_get_report_reply(id, 0, data) {
-            log::warn!("Failed to write get report reply: {:?}", e);
-            return Err(e.to_string().into());
-        }
-
-        Ok(())
-    }
-
     /// Write the current device state to the device
-    fn write_state(&self, device: &mut UHIDDevice<File>) -> Result<(), Box<dyn Error>> {
+    fn write_state(&mut self) -> Result<(), Box<dyn Error>> {
         match self.state {
             PackedInputDataReport::Usb(state) => {
                 let data = state.pack()?;
 
                 // Write the state to the virtual HID
-                if let Err(e) = device.write(&data) {
+                if let Err(e) = self.device.write(&data) {
                     let err = format!("Failed to write input data report: {:?}", e);
                     return Err(err.into());
                 }
@@ -721,7 +198,7 @@ impl DualSenseDevice {
                 let data = state.pack()?;
 
                 // Write the state to the virtual HID
-                if let Err(e) = device.write(&data) {
+                if let Err(e) = self.device.write(&data) {
                     let err = format!("Failed to write input data report: {:?}", e);
                     return Err(err.into());
                 }
@@ -1143,9 +620,287 @@ impl DualSenseDevice {
         };
     }
 
-    /// Returns capabilities of the target device
-    fn get_capabilities(&self) -> Vec<Capability> {
-        vec![
+    /// Handle [OutputEvent::Output] events from the HIDRAW device. These are
+    /// events which should be forwarded back to source devices.
+    fn handle_output(&mut self, data: Vec<u8>) -> Result<Vec<OutputEvent>, Box<dyn Error>> {
+        // Validate the output report size
+        let _expected_report_size = match self.hardware.bus_type {
+            BusType::Bluetooth => OUTPUT_REPORT_BT_SIZE,
+            BusType::Usb => OUTPUT_REPORT_USB_SIZE,
+        };
+
+        // The first byte should be the report id
+        let Some(report_id) = data.first() else {
+            log::warn!("Received empty output report.");
+            return Ok(vec![]);
+        };
+
+        log::debug!("Got output report with ID: {report_id}");
+
+        match *report_id {
+            OUTPUT_REPORT_USB => {
+                log::debug!("Received USB output report with length: {}", data.len());
+                let state = match data.len() {
+                    OUTPUT_REPORT_USB_SIZE => {
+                        let buf: [u8; OUTPUT_REPORT_USB_SIZE] = data.try_into().unwrap();
+                        let report = UsbPackedOutputReport::unpack(&buf)?;
+                        report.state
+                    }
+                    OUTPUT_REPORT_USB_SHORT_SIZE => {
+                        let buf: [u8; OUTPUT_REPORT_USB_SHORT_SIZE] = data.try_into().unwrap();
+                        let report = UsbPackedOutputReportShort::unpack(&buf)?;
+
+                        // NOTE: Hack for supporting Steam Input rumble
+                        let mut state = report.state;
+                        if !state.allow_audio_control
+                            && !state.allow_mic_volume
+                            && !state.allow_speaker_volume
+                            && !state.allow_headphone_volume
+                            && !state.allow_left_trigger_ffb
+                            && !state.allow_right_trigger_ffb
+                            && !state.use_rumble_not_haptics
+                            && !state.enable_rumble_emulation
+                        {
+                            state.use_rumble_not_haptics = true;
+                        }
+                        state
+                    }
+                    _ => {
+                        log::warn!("Failed to unpack output report. Expected size {OUTPUT_REPORT_USB_SIZE} or {OUTPUT_REPORT_USB_SHORT_SIZE}, got {}.", data.len());
+                        return Ok(vec![]);
+                    }
+                };
+
+                log::trace!("{}", state);
+
+                // Send the output report to the composite device so it can
+                // be processed by source devices.
+                let event = OutputEvent::DualSense(state);
+                return Ok(vec![event]);
+            }
+            OUTPUT_REPORT_BT => {
+                log::debug!(
+                    "Received Bluetooth output report with length: {}",
+                    data.len()
+                );
+                //
+            }
+            _ => {
+                log::debug!("Unknown output report: {report_id}");
+            }
+        }
+
+        Ok(vec![])
+    }
+
+    /// Handle [OutputEvent::GetReport] events from the HIDRAW device
+    fn handle_get_report(
+        &mut self,
+        id: u32,
+        report_number: u8,
+        _report_type: uhid_virt::ReportType,
+    ) -> Result<(), Box<dyn Error>> {
+        // Handle report pairing requests
+        let data = match report_number {
+            // Pairing information report
+            FEATURE_REPORT_PAIRING_INFO => {
+                log::debug!("Got report pairing report request");
+                // TODO: Can we define this somewhere as a const?
+                let data = vec![
+                    FEATURE_REPORT_PAIRING_INFO,
+                    self.hardware.mac_addr[0],
+                    self.hardware.mac_addr[1],
+                    self.hardware.mac_addr[2],
+                    self.hardware.mac_addr[3],
+                    self.hardware.mac_addr[4],
+                    self.hardware.mac_addr[5],
+                    0x08,
+                    0x25,
+                    0x00,
+                    0x1e,
+                    0x00,
+                    0xee,
+                    0x74,
+                    0xd0,
+                    0xbc,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ];
+
+                // If this is a bluetooth gamepad, include the crc
+                if self.hardware.bus_type == BusType::Bluetooth {
+                    // TODO: Handle bluetooth CRC32
+                }
+
+                data
+            }
+            // Firmware information report
+            FEATURE_REPORT_FIRMWARE_INFO => {
+                log::debug!("Got report firmware info request");
+                // TODO: Can we define this somewhere as a const?
+                let data = vec![
+                    FEATURE_REPORT_FIRMWARE_INFO,
+                    0x4a,
+                    0x75,
+                    0x6e,
+                    0x20,
+                    0x31,
+                    0x39,
+                    0x20,
+                    0x32,
+                    0x30,
+                    0x32,
+                    0x33,
+                    0x31,
+                    0x34,
+                    0x3a,
+                    0x34,
+                    0x37,
+                    0x3a,
+                    0x33,
+                    0x34,
+                    0x03,
+                    0x00,
+                    0x44,
+                    0x00,
+                    0x08,
+                    0x02,
+                    0x00,
+                    0x01,
+                    0x36,
+                    0x00,
+                    0x00,
+                    0x01,
+                    0xc1,
+                    0xc8,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x54,
+                    0x01,
+                    0x00,
+                    0x00,
+                    0x14,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0b,
+                    0x00,
+                    0x01,
+                    0x00,
+                    0x06,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ];
+
+                // If this is a bluetooth gamepad, include the crc
+                if self.hardware.bus_type == BusType::Bluetooth {
+                    // TODO: Handle bluetooth CRC32
+                }
+
+                data
+            }
+            // Calibration report
+            FEATURE_REPORT_CALIBRATION => {
+                log::debug!("Got report request for calibration");
+                // TODO: Can we define this somewhere as a const?
+                let data = vec![
+                    FEATURE_REPORT_CALIBRATION,
+                    0xff,
+                    0xfc,
+                    0xff,
+                    0xfe,
+                    0xff,
+                    0x83,
+                    0x22,
+                    0x78,
+                    0xdd,
+                    0x92,
+                    0x22,
+                    0x5f,
+                    0xdd,
+                    0x95,
+                    0x22,
+                    0x6d,
+                    0xdd,
+                    0x1c,
+                    0x02,
+                    0x1c,
+                    0x02,
+                    0xf2,
+                    0x1f,
+                    0xed,
+                    0xdf,
+                    0xe3,
+                    0x20,
+                    0xda,
+                    0xe0,
+                    0xee,
+                    0x1f,
+                    0xdf,
+                    0xdf,
+                    0x0b,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ];
+
+                // If this is a bluetooth gamepad, include the crc
+                if self.hardware.bus_type == BusType::Bluetooth {
+                    // TODO: Handle bluetooth CRC32
+                }
+
+                data
+            }
+            _ => {
+                let err = format!("Unknown get report request with report number: {report_number}");
+                return Err(err.into());
+            }
+        };
+
+        // Write the report reply to the HIDRAW device
+        if let Err(e) = self.device.write_get_report_reply(id, 0, data) {
+            log::warn!("Failed to write get report reply: {:?}", e);
+            return Err(e.to_string().into());
+        }
+
+        Ok(())
+    }
+}
+
+impl TargetInputDevice for DualSenseDevice {
+    fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
+        log::trace!("Received event: {event:?}");
+        self.update_state(event);
+
+        // Check if the timestamp needs to be updated
+        if self.state.state().touch_data.has_touches() {
+            self.timestamp = self.timestamp.wrapping_add(3); // TODO: num?
+            self.state.state_mut().touch_data.timestamp = self.timestamp;
+        }
+
+        Ok(())
+    }
+
+    fn get_capabilities(&self) -> Result<Vec<crate::input::capability::Capability>, InputError> {
+        Ok(vec![
             Capability::Gamepad(Gamepad::Accelerometer),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
@@ -1176,7 +931,149 @@ impl DualSenseDevice {
             Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Touch))),
             Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
-        ]
+        ])
+    }
+
+    fn scheduled_events(&mut self) -> Option<Vec<ScheduledNativeEvent>> {
+        None
+    }
+
+    fn stop(&mut self) -> Result<(), InputError> {
+        let _ = self.device.destroy();
+        Ok(())
+    }
+}
+
+impl TargetOutputDevice for DualSenseDevice {
+    /// Handle reading from the device and processing input events from source
+    /// devices.
+    /// https://www.kernel.org/doc/html/latest/hid/uhid.html#read
+    fn poll(&mut self, _: &Option<CompositeDeviceClient>) -> Result<Vec<OutputEvent>, OutputError> {
+        // Read output events
+        let event = match self.device.read() {
+            Ok(event) => event,
+            Err(err) => match err {
+                StreamError::Io(_e) => {
+                    //log::error!("Error reading from UHID device: {e:?}");
+                    // Write the current state
+                    self.write_state()?;
+                    return Ok(vec![]);
+                }
+                StreamError::UnknownEventType(e) => {
+                    log::debug!("Unknown event type: {:?}", e);
+                    // Write the current state
+                    self.write_state()?;
+                    return Ok(vec![]);
+                }
+            },
+        };
+
+        // Match the type of UHID output event
+        let output_events = match event {
+            // This is sent when the HID device is started. Consider this as an answer to
+            // UHID_CREATE. This is always the first event that is sent.
+            uhid_virt::OutputEvent::Start { dev_flags: _ } => {
+                log::debug!("Start event received");
+                Ok(vec![])
+            }
+            // This is sent when the HID device is stopped. Consider this as an answer to
+            // UHID_DESTROY.
+            uhid_virt::OutputEvent::Stop => {
+                log::debug!("Stop event received");
+                Ok(vec![])
+            }
+            // This is sent when the HID device is opened. That is, the data that the HID
+            // device provides is read by some other process. You may ignore this event but
+            // it is useful for power-management. As long as you haven't received this event
+            // there is actually no other process that reads your data so there is no need to
+            // send UHID_INPUT events to the kernel.
+            uhid_virt::OutputEvent::Open => {
+                log::debug!("Open event received");
+                Ok(vec![])
+            }
+            // This is sent when there are no more processes which read the HID data. It is
+            // the counterpart of UHID_OPEN and you may as well ignore this event.
+            uhid_virt::OutputEvent::Close => {
+                log::debug!("Close event received");
+                Ok(vec![])
+            }
+            // This is sent if the HID device driver wants to send raw data to the I/O
+            // device. You should read the payload and forward it to the device.
+            uhid_virt::OutputEvent::Output { data } => {
+                log::trace!("Got output data: {:?}", data);
+                let result = self.handle_output(data);
+                match result {
+                    Ok(events) => Ok(events),
+                    Err(e) => {
+                        let err = format!("Failed process output event: {:?}", e);
+                        Err(err.into())
+                    }
+                }
+            }
+            // This event is sent if the kernel driver wants to perform a GET_REPORT request
+            // on the control channel as described in the HID specs. The report-type and
+            // report-number are available in the payload.
+            // The kernel serializes GET_REPORT requests so there will never be two in
+            // parallel. However, if you fail to respond with a UHID_GET_REPORT_REPLY, the
+            // request might silently time out.
+            // Once you read a GET_REPORT request, you shall forward it to the HID device and
+            // remember the "id" field in the payload. Once your HID device responds to the
+            // GET_REPORT (or if it fails), you must send a UHID_GET_REPORT_REPLY to the
+            // kernel with the exact same "id" as in the request. If the request already
+            // timed out, the kernel will ignore the response silently. The "id" field is
+            // never re-used, so conflicts cannot happen.
+            uhid_virt::OutputEvent::GetReport {
+                id,
+                report_number,
+                report_type,
+            } => {
+                log::trace!(
+                    "Received GetReport event: id: {id}, num: {report_number}, type: {:?}",
+                    report_type
+                );
+                let result = self.handle_get_report(id, report_number, report_type);
+                if let Err(e) = result {
+                    let err = format!("Failed to process GetReport event: {:?}", e);
+                    return Err(err.into());
+                }
+                Ok(vec![])
+            }
+            // This is the SET_REPORT equivalent of UHID_GET_REPORT. On receipt, you shall
+            // send a SET_REPORT request to your HID device. Once it replies, you must tell
+            // the kernel about it via UHID_SET_REPORT_REPLY.
+            // The same restrictions as for UHID_GET_REPORT apply.
+            uhid_virt::OutputEvent::SetReport {
+                id,
+                report_number,
+                report_type,
+                data,
+            } => {
+                log::debug!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
+                Ok(vec![])
+            }
+        };
+
+        // Write the current state
+        self.write_state()?;
+
+        output_events
+    }
+
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![
+            OutputCapability::ForceFeedback,
+            OutputCapability::LED(LED::Color),
+        ])
+    }
+}
+
+impl Debug for DualSenseDevice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DualSenseDevice")
+            .field("state", &self.state)
+            .field("timestamp", &self.timestamp)
+            .field("hardware", &self.hardware)
+            .finish()
     }
 }
 

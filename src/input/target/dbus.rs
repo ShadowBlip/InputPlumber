@@ -1,13 +1,11 @@
 use std::error::Error;
 
-use tokio::sync::mpsc;
 use zbus::Connection;
 
 use crate::{
     dbus::interface::target::dbus::TargetDBusInterface,
     input::{
         capability::{Capability, Gamepad},
-        composite_device::client::CompositeDeviceClient,
         event::{
             dbus::{Action, DBusEvent},
             native::NativeEvent,
@@ -16,10 +14,8 @@ use crate::{
     },
 };
 
-use super::{client::TargetDeviceClient, command::TargetCommand};
+use super::{client::TargetDeviceClient, TargetInputDevice, TargetOutputDevice};
 
-/// Size of the channel buffer for events
-const BUFFER_SIZE: usize = 2048;
 /// The threshold for axis inputs to be considered "pressed"
 const AXIS_THRESHOLD: f64 = 0.35;
 
@@ -40,114 +36,16 @@ pub struct DBusDevice {
     state: State,
     conn: Connection,
     dbus_path: Option<String>,
-    tx: mpsc::Sender<TargetCommand>,
-    rx: mpsc::Receiver<TargetCommand>,
-    composite_device: Option<CompositeDeviceClient>,
 }
 
 impl DBusDevice {
     // Create a new [DBusDevice] instance.
     pub fn new(conn: Connection) -> Self {
-        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         Self {
             state: State::default(),
             conn,
             dbus_path: None,
-            composite_device: None,
-            tx,
-            rx,
         }
-    }
-
-    /// Returns the DBus path of this device
-    #[allow(dead_code)]
-    pub fn get_dbus_path(&self) -> Option<String> {
-        self.dbus_path.clone()
-    }
-
-    /// Returns a client channel that can be used to send events to this device
-    pub fn client(&self) -> TargetDeviceClient {
-        self.tx.clone().into()
-    }
-
-    /// Configures the device to send output events to the given composite device
-    /// channel.
-    pub fn set_composite_device(&mut self, composite_device: CompositeDeviceClient) {
-        self.composite_device = Some(composite_device);
-    }
-
-    /// Creates a new instance of the dbus device interface on DBus.
-    pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
-        let conn = self.conn.clone();
-        self.dbus_path = Some(path.clone());
-
-        tokio::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let iface = TargetDBusInterface::new();
-            if let Err(e) = conn.object_server().at(path.clone(), iface).await {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started dbus interface on {path}");
-            }
-        });
-
-        Ok(())
-    }
-
-    /// Creates and runs the target device
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Creating virtual dbus device");
-
-        // Listen for send events
-        log::debug!("Started listening for events to send");
-        while let Some(command) = self.rx.recv().await {
-            match command {
-                TargetCommand::SetCompositeDevice(composite_device) => {
-                    self.set_composite_device(composite_device);
-                }
-                TargetCommand::WriteEvent(event) => {
-                    log::trace!("Got event to emit: {:?}", event);
-                    let dbus_events = self.translate_event(event);
-                    for dbus_event in dbus_events {
-                        log::trace!("Writing DBus event: {dbus_event:?}");
-                        self.write_dbus_event(dbus_event).await?;
-                    }
-                }
-                TargetCommand::GetCapabilities(tx) => {
-                    let caps = self.get_capabilities();
-                    if let Err(e) = tx.send(caps).await {
-                        log::error!("Failed to send target capabilities: {e:?}");
-                    }
-                }
-                TargetCommand::GetType(tx) => {
-                    if let Err(e) = tx.send("dbus".to_string()).await {
-                        log::error!("Failed to send target type: {e:?}");
-                    }
-                }
-                TargetCommand::Stop => break,
-            };
-        }
-        log::debug!("Stopping device");
-
-        // Remove the DBus interface
-        if let Some(path) = self.dbus_path.clone() {
-            let conn = self.conn.clone();
-            let path = path.clone();
-            tokio::task::spawn(async move {
-                log::debug!("Stopping dbus interface for {path}");
-                let result = conn
-                    .object_server()
-                    .remove::<TargetDBusInterface, String>(path.clone())
-                    .await;
-                if let Err(e) = result {
-                    log::error!("Failed to stop dbus interface {path}: {e:?}");
-                } else {
-                    log::debug!("Stopped dbus interface for {path}");
-                }
-            });
-        }
-
-        Ok(())
     }
 
     /// Translate the given native event into one or more dbus events
@@ -236,7 +134,7 @@ impl DBusDevice {
     }
 
     /// Writes the given event to DBus
-    async fn write_dbus_event(&self, event: DBusEvent) -> Result<(), Box<dyn Error>> {
+    fn write_dbus_event(&self, event: DBusEvent) -> Result<(), Box<dyn Error>> {
         // Only send valid events
         let valid = !matches!(event.action, Action::None);
         if !valid {
@@ -248,64 +146,110 @@ impl DBusDevice {
             return Err("No dbus path exists to send events to".into());
         };
 
-        let conn = self.conn.clone();
-        // Get the object instance at the given path so we can send DBus signal
-        // updates
-        let iface_ref = conn
-            .object_server()
-            .interface::<_, TargetDBusInterface>(path.as_str())
-            .await?;
-
         // Send the input event signal based on the type of value
-        match event.value {
-            InputValue::Bool(value) => {
-                let value = match value {
-                    true => 1.0,
-                    false => 0.0,
-                };
-                TargetDBusInterface::input_event(
-                    iface_ref.signal_context(),
-                    event.action.as_string(),
-                    value,
-                )
-                .await?;
-            }
-            InputValue::Float(value) => {
-                TargetDBusInterface::input_event(
-                    iface_ref.signal_context(),
-                    event.action.as_string(),
-                    value,
-                )
-                .await?;
-            }
-            InputValue::Touch {
-                index,
-                is_touching,
-                pressure,
-                x,
-                y,
-            } => {
-                // Send the input event signal
-                TargetDBusInterface::touch_event(
-                    iface_ref.signal_context(),
-                    event.action.as_string(),
-                    index as u32,
+        let conn = self.conn.clone();
+        tokio::task::spawn(async move {
+            // Get the object instance at the given path so we can send DBus signal
+            // updates
+            let iface_ref = match conn
+                .object_server()
+                .interface::<_, TargetDBusInterface>(path.as_str())
+                .await
+            {
+                Ok(refr) => refr,
+                Err(e) => {
+                    log::error!("Failed to get interface: {e:?}");
+                    return;
+                }
+            };
+            let result = match event.value {
+                InputValue::Bool(value) => {
+                    let value = match value {
+                        true => 1.0,
+                        false => 0.0,
+                    };
+                    TargetDBusInterface::input_event(
+                        iface_ref.signal_context(),
+                        event.action.as_string(),
+                        value,
+                    )
+                    .await
+                }
+                InputValue::Float(value) => {
+                    TargetDBusInterface::input_event(
+                        iface_ref.signal_context(),
+                        event.action.as_string(),
+                        value,
+                    )
+                    .await
+                }
+                InputValue::Touch {
+                    index,
                     is_touching,
-                    pressure.unwrap_or(1.0),
-                    x.unwrap_or(0.0),
-                    y.unwrap_or(0.0),
-                )
-                .await?;
+                    pressure,
+                    x,
+                    y,
+                } => {
+                    // Send the input event signal
+                    TargetDBusInterface::touch_event(
+                        iface_ref.signal_context(),
+                        event.action.as_string(),
+                        index as u32,
+                        is_touching,
+                        pressure.unwrap_or(1.0),
+                        x.unwrap_or(0.0),
+                        y.unwrap_or(0.0),
+                    )
+                    .await
+                }
+                _ => Ok(()),
+            };
+            if let Err(e) = result {
+                log::error!("Failed to send event: {e:?}");
             }
-            _ => (),
+        });
+
+        Ok(())
+    }
+}
+
+impl TargetInputDevice for DBusDevice {
+    fn start_dbus_interface(
+        &mut self,
+        dbus: Connection,
+        path: String,
+        _client: TargetDeviceClient,
+    ) {
+        log::debug!("Starting dbus interface: {path}");
+        self.dbus_path = Some(path.clone());
+        tokio::task::spawn(async move {
+            let iface = TargetDBusInterface::new();
+            if let Err(e) = dbus.object_server().at(path.clone(), iface).await {
+                log::debug!("Failed to start dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Started dbus interface on {path}");
+            };
+        });
+    }
+
+    fn write_event(
+        &mut self,
+        event: crate::input::event::native::NativeEvent,
+    ) -> Result<(), super::InputError> {
+        log::trace!("Got event to emit: {:?}", event);
+        let dbus_events = self.translate_event(event);
+        for dbus_event in dbus_events {
+            log::trace!("Writing DBus event: {dbus_event:?}");
+            self.write_dbus_event(dbus_event)?;
         }
 
         Ok(())
     }
 
-    /// Returns capabilities of the target device
-    fn get_capabilities(&self) -> Vec<Capability> {
-        vec![
+    fn get_capabilities(
+        &self,
+    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+        let capabilities = vec![
             Capability::DBus(Action::Guide),
             Capability::DBus(Action::Quick),
             Capability::DBus(Action::Quick2),
@@ -331,6 +275,25 @@ impl DBusDevice {
             Capability::DBus(Action::Keyboard),
             Capability::DBus(Action::Screenshot),
             Capability::DBus(Action::Touch),
-        ]
+        ];
+
+        Ok(capabilities)
+    }
+
+    fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
+        log::debug!("Stopping dbus interface for {path}");
+        tokio::task::spawn(async move {
+            let result = dbus
+                .object_server()
+                .remove::<TargetDBusInterface, String>(path.clone())
+                .await;
+            if let Err(e) = result {
+                log::error!("Failed to stop dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Stopped dbus interface for {path}");
+            };
+        });
     }
 }
+
+impl TargetOutputDevice for DBusDevice {}
