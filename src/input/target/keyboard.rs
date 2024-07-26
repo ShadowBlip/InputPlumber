@@ -2,155 +2,47 @@ use std::{collections::HashMap, error::Error};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
-    AbsInfo, AbsoluteAxisCode, AttributeSet, InputEvent, KeyCode, SynchronizationCode,
-    SynchronizationEvent,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, InputEvent, KeyCode,
 };
-use tokio::sync::mpsc;
 use zbus::Connection;
 
 use crate::{
     dbus::interface::target::keyboard::TargetKeyboardInterface,
     input::{
         capability::{Capability, Keyboard},
-        composite_device::client::CompositeDeviceClient,
         event::{evdev::EvdevEvent, native::NativeEvent},
     },
 };
 
-use super::{client::TargetDeviceClient, command::TargetCommand};
-
-const BUFFER_SIZE: usize = 2048;
+use super::{client::TargetDeviceClient, InputError, TargetInputDevice, TargetOutputDevice};
 
 #[derive(Debug)]
 pub struct KeyboardDevice {
-    conn: Connection,
-    dbus_path: Option<String>,
-    tx: mpsc::Sender<TargetCommand>,
-    rx: mpsc::Receiver<TargetCommand>,
-    composite_device: Option<CompositeDeviceClient>,
+    device: VirtualDevice,
+    axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
 }
 
 impl KeyboardDevice {
-    pub fn new(conn: Connection) -> Self {
-        let (tx, rx) = mpsc::channel(BUFFER_SIZE);
-        Self {
-            conn,
-            dbus_path: None,
-            composite_device: None,
-            tx,
-            rx,
-        }
+    pub fn new() -> Result<Self, Box<dyn Error>> {
+        let device = KeyboardDevice::create_virtual_device()?;
+        Ok(Self {
+            device,
+            axis_map: HashMap::new(),
+        })
     }
+}
 
-    /// Returns the DBus path of this device
-    pub fn _get_dbus_path(&self) -> Option<String> {
-        self.dbus_path.clone()
-    }
-
-    /// Returns a client channel that can be used to send events to this device
-    pub fn client(&self) -> TargetDeviceClient {
-        self.tx.clone().into()
-    }
-
-    /// Configures the device to send output events to the given composite device
-    /// channel.
-    pub fn set_composite_device(&mut self, composite_device: CompositeDeviceClient) {
-        self.composite_device = Some(composite_device);
-    }
-
-    /// Creates a new instance of the device interface on DBus.
-    pub async fn listen_on_dbus(&mut self, path: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting dbus interface on {path}");
-        let conn = self.conn.clone();
-        self.dbus_path = Some(path.clone());
-        let client = self.client();
-        tokio::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let iface = TargetKeyboardInterface::new(client);
-            if let Err(e) = conn.object_server().at(path.clone(), iface).await {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started dbus interface on {path}");
-            }
-        });
-        Ok(())
-    }
-
-    /// Creates and runs the target device
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Creating virtual keyboard");
-        let mut device = self.create_virtual_device()?;
-        let axis_map = HashMap::new();
-
-        // Listen for send events
-        log::debug!("Started listening for events to send");
-        while let Some(command) = self.rx.recv().await {
-            match command {
-                TargetCommand::SetCompositeDevice(composite_device) => {
-                    self.set_composite_device(composite_device);
-                }
-                TargetCommand::WriteEvent(event) => {
-                    //log::debug!("Got event to emit: {:?}", event);
-                    let evdev_events = self.translate_event(event, axis_map.clone());
-                    device.emit(evdev_events.as_slice())?;
-                    device.emit(&[SynchronizationEvent::new(
-                        SynchronizationCode::SYN_REPORT,
-                        0,
-                    )
-                    .into()])?;
-                }
-                TargetCommand::GetCapabilities(tx) => {
-                    let caps = self.get_capabilities();
-                    if let Err(e) = tx.send(caps).await {
-                        log::error!("Failed to send target capabilities: {e:?}");
-                    }
-                }
-                TargetCommand::GetType(tx) => {
-                    if let Err(e) = tx.send("keyboard".to_string()).await {
-                        log::error!("Failed to send target type: {e:?}");
-                    }
-                }
-                TargetCommand::Stop => break,
-            };
-        }
-
-        log::debug!("Stopping device");
-
-        // Remove the DBus interface
-        if let Some(path) = self.dbus_path.clone() {
-            let conn = self.conn.clone();
-            let path = path.clone();
-            tokio::task::spawn(async move {
-                log::debug!("Stopping dbus interface for {path}");
-                let result = conn
-                    .object_server()
-                    .remove::<TargetKeyboardInterface, String>(path.clone())
-                    .await;
-                if let Err(e) = result {
-                    log::error!("Failed to stop dbus interface {path}: {e:?}");
-                } else {
-                    log::debug!("Stopped dbus interface for {path}");
-                }
-            });
-        }
-
-        Ok(())
-    }
-
+impl KeyboardDevice {
     /// Translate the given native event into an evdev event
-    fn translate_event(
-        &self,
-        event: NativeEvent,
-        axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
-    ) -> Vec<InputEvent> {
-        EvdevEvent::from_native_event(event, axis_map)
+    fn translate_event(&self, event: NativeEvent) -> Vec<InputEvent> {
+        EvdevEvent::from_native_event(event, self.axis_map.clone())
             .into_iter()
             .map(|event| event.as_input_event())
             .collect()
     }
 
     /// Create the virtual device to emulate
-    fn create_virtual_device(&self) -> Result<VirtualDevice, Box<dyn Error>> {
+    fn create_virtual_device() -> Result<VirtualDevice, Box<dyn Error>> {
         let mut keys = AttributeSet::<KeyCode>::new();
         keys.insert(KeyCode::KEY_ESC);
         keys.insert(KeyCode::KEY_1);
@@ -321,9 +213,33 @@ impl KeyboardDevice {
 
         Ok(device)
     }
+}
 
-    fn get_capabilities(&self) -> Vec<Capability> {
-        vec![
+impl TargetInputDevice for KeyboardDevice {
+    fn start_dbus_interface(&mut self, dbus: Connection, path: String, client: TargetDeviceClient) {
+        log::debug!("Starting dbus interface: {path}");
+        tokio::task::spawn(async move {
+            let iface = TargetKeyboardInterface::new(client);
+            if let Err(e) = dbus.object_server().at(path.clone(), iface).await {
+                log::debug!("Failed to start dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Started dbus interface on {path}");
+            };
+        });
+    }
+
+    fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
+        log::trace!("Received event: {event:?}");
+        let evdev_events = self.translate_event(event);
+        if let Err(e) = self.device.emit(evdev_events.as_slice()) {
+            return Err(e.to_string().into());
+        }
+
+        Ok(())
+    }
+
+    fn get_capabilities(&self) -> Result<Vec<crate::input::capability::Capability>, InputError> {
+        Ok(vec![
             Capability::Keyboard(Keyboard::KeyEsc),
             Capability::Keyboard(Keyboard::Key1),
             Capability::Keyboard(Keyboard::Key2),
@@ -485,6 +401,23 @@ impl KeyboardDevice {
             Capability::Keyboard(Keyboard::KeyF23),
             Capability::Keyboard(Keyboard::KeyF24),
             Capability::Keyboard(Keyboard::KeyProg1),
-        ]
+        ])
+    }
+
+    fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
+        log::debug!("Stopping dbus interface for {path}");
+        tokio::task::spawn(async move {
+            let result = dbus
+                .object_server()
+                .remove::<TargetKeyboardInterface, String>(path.clone())
+                .await;
+            if let Err(e) = result {
+                log::error!("Failed to stop dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Stopped dbus interface for {path}");
+            };
+        });
     }
 }
+
+impl TargetOutputDevice for KeyboardDevice {}
