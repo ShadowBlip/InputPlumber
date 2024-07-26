@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Debug};
 
 use crate::{
     drivers::opineo::{
-        driver::{self, Driver},
+        driver::{self, Driver, LPAD_NAMES, RPAD_NAMES},
         event,
     },
     input::{
@@ -34,10 +34,10 @@ impl OrangePiNeoTouchpad {
         // Query the udev module to determine if this is the left or right touchpad.
         let name = device_info.name();
         let touchpad_side = {
-            if name == "OPI0001:00" {
+            if LPAD_NAMES.contains(&name.as_str()) {
                 log::debug!("Detected left pad.");
                 TouchpadSide::Left
-            } else if name == "OPI0002:00" {
+            } else if RPAD_NAMES.contains(&name.as_str()) {
                 log::debug!("Detected right pad.");
                 TouchpadSide::Right
             } else {
