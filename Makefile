@@ -115,6 +115,10 @@ setup: /usr/share/dbus-1/system.d/$(DBUS_NAME).conf ## Install dbus policies
 		/usr/share/dbus-1/system.d/$(DBUS_NAME).conf
 	sudo systemctl reload dbus
 
+.PHONY: example
+example:
+	CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER='sudo -E' cargo run --example unified_gamepad
+
 ##@ Distribution
 
 .PHONY: dist

@@ -42,6 +42,8 @@ pub enum CompositeCommand {
     SourceDeviceAdded(UdevDevice),
     SourceDeviceRemoved(UdevDevice),
     SourceDeviceStopped(UdevDevice),
+    UpdateSourceCapabilities(String, HashSet<Capability>),
+    UpdateTargetCapabilities(String, HashSet<Capability>),
     WriteChordEvent(Vec<NativeEvent>),
     WriteEvent(NativeEvent),
     WriteSendEvent(NativeEvent),

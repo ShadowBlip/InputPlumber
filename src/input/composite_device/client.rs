@@ -98,6 +98,17 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+    /// Get capabilities from all source devices (blocking)
+    pub fn blocking_get_capabilities(&self) -> Result<HashSet<Capability>, ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx
+            .blocking_send(CompositeCommand::GetCapabilities(tx))?;
+        if let Some(capabilities) = rx.blocking_recv() {
+            return Ok(capabilities);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
     /// Get the [CompositeDeviceConfig] from the [CompositeDevice]
     pub async fn get_config(&self) -> Result<CompositeDeviceConfig, ClientError> {
         let (tx, mut rx) = channel(1);
@@ -272,6 +283,63 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+    /// Update the input capabilities for the given source device
+    pub async fn update_source_capabilities(
+        &self,
+        device_id: String,
+        capabilities: HashSet<Capability>,
+    ) -> Result<(), ClientError> {
+        self.tx
+            .send(CompositeCommand::UpdateSourceCapabilities(
+                device_id,
+                capabilities,
+            ))
+            .await?;
+        Ok(())
+    }
+
+    /// Update the input capabilities for the given source device (blocking)
+    pub fn blocking_update_source_capabilities(
+        &self,
+        device_id: String,
+        capabilities: HashSet<Capability>,
+    ) -> Result<(), ClientError> {
+        self.tx
+            .blocking_send(CompositeCommand::UpdateSourceCapabilities(
+                device_id,
+                capabilities,
+            ))?;
+        Ok(())
+    }
+
+    /// Update the input capabilities for the given target device
+    pub async fn update_target_capabilities(
+        &self,
+        dbus_path: String,
+        capabilities: HashSet<Capability>,
+    ) -> Result<(), ClientError> {
+        self.tx
+            .send(CompositeCommand::UpdateTargetCapabilities(
+                dbus_path,
+                capabilities,
+            ))
+            .await?;
+        Ok(())
+    }
+
+    /// Update the input capabilities for the given target device (blocking)
+    pub fn blocking_update_target_capabilities(
+        &self,
+        dbus_path: String,
+        capabilities: HashSet<Capability>,
+    ) -> Result<(), ClientError> {
+        self.tx
+            .blocking_send(CompositeCommand::UpdateTargetCapabilities(
+                dbus_path,
+                capabilities,
+            ))?;
+        Ok(())
+    }
     /// Write the given event to the appropriate target device.
     pub async fn write_event(&self, event: NativeEvent) -> Result<(), ClientError> {
         self.tx.send(CompositeCommand::WriteEvent(event)).await?;
