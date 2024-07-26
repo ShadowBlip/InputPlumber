@@ -9,6 +9,7 @@ use std::{
 use horipad_steam::HoripadSteamDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
+use unified_gamepad::UnifiedGamepadDevice;
 
 use crate::dbus::interface::target::{gamepad::TargetGamepadInterface, TargetInterface};
 
@@ -48,6 +49,7 @@ pub mod mouse;
 pub mod steam_deck;
 pub mod touchpad;
 pub mod touchscreen;
+pub mod unified_gamepad;
 pub mod xb360;
 pub mod xbox_elite;
 pub mod xbox_series;
@@ -203,6 +205,10 @@ impl TargetDeviceTypeId {
             TargetDeviceTypeId {
                 id: "xbox-series",
                 name: "Microsoft Xbox Series S|X Controller",
+            },
+            TargetDeviceTypeId {
+                id: "unified-gamepad",
+                name: "InputPlumber Unified Gamepad",
             },
         ]
     }
@@ -586,6 +592,7 @@ pub enum TargetDevice {
     XBox360(TargetDriver<XBox360Controller>),
     XBoxElite(TargetDriver<XboxEliteController>),
     XBoxSeries(TargetDriver<XboxSeriesController>),
+    UnifiedGamepad(TargetDriver<UnifiedGamepadDevice>),
 }
 
 impl TargetDevice {
@@ -689,6 +696,11 @@ impl TargetDevice {
                 let driver = TargetDriver::new(id, device, dbus);
                 Ok(Self::XBoxSeries(driver))
             }
+            "unified-gamepad" => {
+                let device = UnifiedGamepadDevice::new()?;
+                let driver = TargetDriver::new(id, device, dbus);
+                Ok(Self::UnifiedGamepad(driver))
+            }
             "null" => Ok(Self::Null),
             _ => Ok(Self::Null),
         }
@@ -720,6 +732,7 @@ impl TargetDevice {
             }
             TargetDevice::XBoxElite(_) => vec!["xbox-elite".try_into().unwrap()],
             TargetDevice::XBoxSeries(_) => vec!["xbox-series".try_into().unwrap()],
+            TargetDevice::UnifiedGamepad(_) => vec!["unified-gamepad".try_into().unwrap()],
         }
     }
 
@@ -740,6 +753,7 @@ impl TargetDevice {
             TargetDevice::XBox360(_) => "gamepad",
             TargetDevice::XBoxElite(_) => "gamepad",
             TargetDevice::XBoxSeries(_) => "gamepad",
+            TargetDevice::UnifiedGamepad(_) => "gamepad",
         }
     }
 
@@ -758,6 +772,7 @@ impl TargetDevice {
             TargetDevice::XBox360(device) => Some(device.client()),
             TargetDevice::XBoxElite(device) => Some(device.client()),
             TargetDevice::XBoxSeries(device) => Some(device.client()),
+            TargetDevice::UnifiedGamepad(device) => Some(device.client()),
         }
     }
 
@@ -776,6 +791,7 @@ impl TargetDevice {
             TargetDevice::XBox360(device) => device.run(dbus_path).await,
             TargetDevice::XBoxElite(device) => device.run(dbus_path).await,
             TargetDevice::XBoxSeries(device) => device.run(dbus_path).await,
+            TargetDevice::UnifiedGamepad(device) => device.run(dbus_path).await,
         }
     }
 }
