@@ -51,7 +51,7 @@ pub mod xbox_series;
 /// Possible errors for a target device client
 #[derive(Error, Debug)]
 pub enum InputError {
-    #[error("error occurred running device")]
+    #[error("error occurred running device: `{0}`")]
     DeviceError(String),
 }
 
@@ -91,7 +91,7 @@ pub enum OutputError {
     #[allow(dead_code)]
     #[error("behavior is not implemented")]
     NotImplemented,
-    #[error("error occurred running device")]
+    #[error("error occurred running device: `{0}`")]
     DeviceError(String),
 }
 

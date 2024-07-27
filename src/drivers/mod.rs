@@ -4,3 +4,4 @@ pub mod iio_imu;
 pub mod lego;
 pub mod opineo;
 pub mod steam_deck;
+pub mod switch;

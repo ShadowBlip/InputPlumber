@@ -19,13 +19,17 @@ matches: []
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  - group: gamepad
-    evdev:
-      name: Nintendo Co., Ltd. Pro Controller
-      handler: event*
+  #- group: gamepad
+  #  evdev:
+  #    name: Nintendo Co., Ltd. Pro Controller
+  #    handler: event*
   #- group: imu
   #  evdev:
   #    name: Nintendo Co., Ltd. Pro Controller (IMU)
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x057e
+      product_id: 0x2009
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
