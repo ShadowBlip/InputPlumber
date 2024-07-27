@@ -2,7 +2,7 @@
 //! The DualSense implementation is based on the great work done by NeroReflex
 //! and the ROGueENEMY project:
 //! https://github.com/NeroReflex/ROGueENEMY/
-use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File};
+use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
 
 use packed_struct::prelude::*;
 use rand::Rng;
@@ -118,6 +118,7 @@ pub struct DualSenseDevice {
     state: PackedInputDataReport,
     timestamp: u8,
     hardware: DualSenseHardware,
+    queued_events: Vec<ScheduledNativeEvent>,
 }
 
 impl DualSenseDevice {
@@ -128,6 +129,7 @@ impl DualSenseDevice {
             state: PackedInputDataReport::Usb(USBPackedInputDataReport::new()),
             timestamp: 0,
             hardware,
+            queued_events: Vec::new(),
         })
     }
 
@@ -888,6 +890,33 @@ impl DualSenseDevice {
 impl TargetInputDevice for DualSenseDevice {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
+        // Check for QuickAccess, create chord for event.
+        let cap = event.as_capability();
+        if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
+            let pressed = event.pressed();
+            let guide = NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+                event.get_value(),
+            );
+            let south = NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+                event.get_value(),
+            );
+
+            let (guide, south) = if pressed {
+                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
+                let south = ScheduledNativeEvent::new(south, Duration::from_millis(80));
+                (guide, south)
+            } else {
+                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(160));
+                let south = ScheduledNativeEvent::new(south, Duration::from_millis(80));
+                (guide, south)
+            };
+
+            self.queued_events.push(guide);
+            self.queued_events.push(south);
+            return Ok(());
+        }
         self.update_state(event);
 
         // Check if the timestamp needs to be updated
@@ -916,6 +945,7 @@ impl TargetInputDevice for DualSenseDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
@@ -934,8 +964,12 @@ impl TargetInputDevice for DualSenseDevice {
         ])
     }
 
+    /// Returns any events in the queue up to the [TargetDriver]
     fn scheduled_events(&mut self) -> Option<Vec<ScheduledNativeEvent>> {
-        None
+        if self.queued_events.is_empty() {
+            return None;
+        }
+        Some(self.queued_events.drain(..).collect())
     }
 
     fn stop(&mut self) -> Result<(), InputError> {

@@ -67,7 +67,7 @@ source_devices:
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - deck
+  - xbox-elite
   - mouse
   - keyboard
 

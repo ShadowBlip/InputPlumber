@@ -16,15 +16,6 @@ name: Default
 
 # Profile mappings
 mapping:
-  - name: QuickAccess
-    source_event:
-      gamepad:
-        button: QuickAccess
-    target_events:
-      - gamepad:
-          button: Guide
-      - gamepad:
-          button: South
   - name: LeftTop
     source_event:
       gamepad:

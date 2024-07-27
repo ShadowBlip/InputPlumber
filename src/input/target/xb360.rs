@@ -13,7 +13,7 @@ use nix::fcntl::{FcntlArg, OFlag};
 use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger};
 use crate::input::composite_device::client::CompositeDeviceClient;
 use crate::input::event::evdev::EvdevEvent;
-use crate::input::event::native::NativeEvent;
+use crate::input::event::native::{NativeEvent, ScheduledNativeEvent};
 use crate::input::output_capability::OutputCapability;
 use crate::input::output_event::{OutputEvent, UinputOutputEvent};
 
@@ -23,13 +23,18 @@ use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 pub struct XBox360Controller {
     device: VirtualDevice,
     axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
+    queued_events: Vec<ScheduledNativeEvent>,
 }
 
 impl XBox360Controller {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let axis_map = XBox360Controller::get_abs_info();
         let device = XBox360Controller::create_virtual_device(&axis_map)?;
-        Ok(Self { device, axis_map })
+        Ok(Self {
+            device,
+            axis_map,
+            queued_events: Vec::new(),
+        })
     }
 
     /// Return a hashmap of ABS information for this virtual device. This information
@@ -145,6 +150,35 @@ impl XBox360Controller {
 impl TargetInputDevice for XBox360Controller {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
+
+        // Check for QuickAccess, create chord for event.
+        let cap = event.as_capability();
+        if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
+            let pressed = event.pressed();
+            let guide = NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+                event.get_value(),
+            );
+            let south = NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+                event.get_value(),
+            );
+
+            let (guide, south) = if pressed {
+                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
+                let south = ScheduledNativeEvent::new(south, Duration::from_millis(80));
+                (guide, south)
+            } else {
+                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(160));
+                let south = ScheduledNativeEvent::new(south, Duration::from_millis(80));
+                (guide, south)
+            };
+
+            self.queued_events.push(guide);
+            self.queued_events.push(south);
+            return Ok(());
+        }
+
         let evdev_events = self.translate_event(event);
         self.device.emit(evdev_events.as_slice())?;
         Ok(())
@@ -164,6 +198,7 @@ impl TargetInputDevice for XBox360Controller {
             Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
@@ -174,6 +209,14 @@ impl TargetInputDevice for XBox360Controller {
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
         ])
+    }
+
+    /// Returns any events in the queue up to the [TargetDriver]
+    fn scheduled_events(&mut self) -> Option<Vec<ScheduledNativeEvent>> {
+        if self.queued_events.is_empty() {
+            return None;
+        }
+        Some(self.queued_events.drain(..).collect())
     }
 }
 
