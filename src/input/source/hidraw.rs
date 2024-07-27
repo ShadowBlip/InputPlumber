@@ -3,6 +3,7 @@ pub mod fts3528;
 pub mod lego;
 pub mod opineo;
 pub mod steam_deck;
+pub mod switch;
 
 use std::{error::Error, time::Duration};
 
@@ -13,7 +14,7 @@ use crate::{
 
 use self::{
     dualsense::DualSenseController, fts3528::Fts3528Touchscreen, lego::LegionController,
-    opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
+    opineo::OrangePiNeoTouchpad, steam_deck::DeckController, switch::SwitchController,
 };
 
 use super::{SourceDriver, SourceDriverOptions};
@@ -26,6 +27,7 @@ enum DriverType {
     LegionGo,
     OrangePiNeo,
     Fts3528Touchscreen,
+    SwitchProController,
 }
 
 /// [HidRawDevice] represents an input device using the hidraw subsystem.
@@ -36,6 +38,7 @@ pub enum HidRawDevice {
     LegionGo(SourceDriver<LegionController>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
     Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
+    SwitchProController(SourceDriver<SwitchController>),
 }
 
 impl HidRawDevice {
@@ -85,6 +88,11 @@ impl HidRawDevice {
                 let source_device = SourceDriver::new(composite_device, device, device_info);
                 Ok(Self::Fts3528Touchscreen(source_device))
             }
+            DriverType::SwitchProController => {
+                let device = SwitchController::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::SwitchProController(source_device))
+            }
         }
     }
 
@@ -123,6 +131,12 @@ impl HidRawDevice {
         if vid == drivers::fts3528::driver::VID && pid == drivers::fts3528::driver::PID {
             log::info!("Detected FTS3528 Touchscreen");
             return DriverType::Fts3528Touchscreen;
+        }
+
+        // Nintendo Switch Pro Controller
+        if vid == drivers::switch::driver::VID && pid == drivers::switch::driver::PID {
+            log::info!("Detected Nintendo Switch Controller");
+            return DriverType::SwitchProController;
         }
 
         // Unknown
