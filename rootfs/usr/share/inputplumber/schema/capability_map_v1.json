@@ -260,7 +260,6 @@
         "button": {
           "type": "string",
           "enum": [
-            "C",
             "DPadDown",
             "DPadLeft",
             "DPadRight",
@@ -295,8 +294,7 @@
             "Select",
             "South",
             "Start",
-            "West",
-            "Z"
+            "West"
           ]
         },
         "trigger": {
