@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Microsoft X-Box One pad
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty,then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: gamepad
+    blocked: true
+    evdev:
+      vendor_id: "045e"
+      product_id: "0b13"
+      handler: event*
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x045e
+      product_id: 0x0b13
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - xbox-series
+  - mouse
+  - keyboard
