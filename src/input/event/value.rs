@@ -208,7 +208,9 @@ impl InputValue {
                             // Trigger -> Button
                             Gamepad::Button(_) => self.translate_trigger_to_button(source_config),
                             // Trigger -> Axis
-                            Gamepad::Axis(_) => Err(TranslationError::NotImplemented),
+                            Gamepad::Axis(_) => {
+                                self.translate_trigger_to_axis(source_config, target_config)
+                            }
                             // Trigger -> Trigger
                             Gamepad::Trigger(_) => Ok(self.clone()),
                             // Trigger -> Accelerometer
@@ -669,6 +671,94 @@ impl InputValue {
             Err(TranslationError::InvalidSourceConfig(
                 "No gamepad config to translate button to axis".to_string(),
             ))
+        }
+    }
+
+    /// Translate the trigger value into an axis value based on the given config
+    fn translate_trigger_to_axis(
+        &self,
+        source_config: &CapabilityConfig,
+        target_config: &CapabilityConfig,
+    ) -> Result<InputValue, TranslationError> {
+        // Get the source config
+        let Some(gamepad_config) = source_config.gamepad.as_ref() else {
+            return Err(TranslationError::InvalidSourceConfig(
+                "No gamepad config to translate trigger to axis".to_string(),
+            ));
+        };
+
+        // TODO: Handle trigger properties like 'threshold'
+        let Some(_trigger) = gamepad_config.trigger.as_ref() else {
+            return Err(TranslationError::InvalidSourceConfig(
+                "No trigger config to translate trigger to axis".to_string(),
+            ));
+        };
+
+        // Get the target config
+        let Some(target_gamepad) = target_config.gamepad.as_ref() else {
+            return Err(TranslationError::InvalidTargetConfig(
+                "No gamepad config to translate trigger to axis".to_string(),
+            ));
+        };
+
+        // Get the target axis config
+        let Some(axis) = target_gamepad.axis.as_ref() else {
+            return Err(TranslationError::InvalidTargetConfig(
+                "No axis config to translate trigger to axis".to_string(),
+            ));
+        };
+
+        // Get the target axis direction
+        let Some(axis_direction) = axis.direction.as_ref() else {
+            return Err(TranslationError::InvalidTargetConfig(
+                "Direction required in axis config to translate trigger to axis".to_string(),
+            ));
+        };
+
+        // Get the input value as a float
+        let InputValue::Float(value) = self else {
+            return Err(TranslationError::ImpossibleTranslation(
+                "Only float values can be translated from trigger to axis input".into(),
+            ));
+        };
+
+        // Convert the value based on the defined direction
+        match axis_direction.as_str() {
+            "horizontal" => {
+                // Normalize unsigned to signed value (from 0.0 -> 1.0 to -1.0 -> 1.0)
+                let value = (*value * 2.0) - 1.0;
+                Ok(InputValue::Vector2 {
+                    x: Some(value),
+                    y: None,
+                })
+            }
+            "vertical" => {
+                // Normalize unsigned to signed value (from 0.0 -> 1.0 to -1.0 -> 1.0)
+                let value = (*value * 2.0) - 1.0;
+                Ok(InputValue::Vector2 {
+                    x: None,
+                    y: Some(value),
+                })
+            }
+            "left" => Ok(InputValue::Vector2 {
+                x: Some(-*value),
+                y: None,
+            }),
+            "right" => Ok(InputValue::Vector2 {
+                x: Some(*value),
+                y: None,
+            }),
+            "up" => Ok(InputValue::Vector2 {
+                x: None,
+                y: Some(-*value),
+            }),
+            "down" => Ok(InputValue::Vector2 {
+                x: None,
+                y: Some(*value),
+            }),
+            _ => Err(TranslationError::InvalidTargetConfig(
+                "Invalid or unsupported direction".into(),
+            )),
         }
     }
 }

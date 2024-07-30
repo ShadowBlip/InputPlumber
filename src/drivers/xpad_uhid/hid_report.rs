@@ -203,7 +203,7 @@ pub struct DInputDataReport {
 impl Default for DInputDataReport {
     fn default() -> Self {
         Self {
-            report_id: Default::default(),
+            report_id: 0x11,
             l_stick_x: Default::default(),
             l_stick_y: Default::default(),
             r_stick_x: Default::default(),
@@ -224,6 +224,109 @@ impl Default for DInputDataReport {
         }
     }
 }
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq, Default)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "3")]
+pub struct ButtonState {
+    // byte 1
+    #[packed_field(bits = "0")]
+    pub rb: bool,
+    #[packed_field(bits = "1")]
+    pub lb: bool,
+    #[packed_field(bits = "2")]
+    pub _unkn2: bool,
+    #[packed_field(bits = "3")]
+    pub y: bool,
+    #[packed_field(bits = "4")]
+    pub x: bool,
+    #[packed_field(bits = "5")]
+    pub _unkn5: bool,
+    #[packed_field(bits = "6")]
+    pub b: bool,
+    #[packed_field(bits = "7")]
+    pub a: bool,
+
+    // byte 2 0001 0000
+    #[packed_field(bits = "9")]
+    pub thumb_r: bool,
+    #[packed_field(bits = "10")]
+    pub thumb_l: bool,
+    #[packed_field(bits = "11")]
+    pub guide: bool,
+    #[packed_field(bits = "12")]
+    pub menu: bool,
+    #[packed_field(bits = "13")]
+    pub view: bool,
+
+    // byte 3
+    #[packed_field(bits = "23")]
+    pub share: bool,
+}
+
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
+pub enum DPadDirection {
+    #[default]
+    None = 0,
+    Up = 1,
+    UpRight = 2,
+    Right = 3,
+    DownRight = 4,
+    Down = 5,
+    DownLeft = 6,
+    Left = 7,
+    UpLeft = 8,
+}
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "17")]
+pub struct XBoxSeriesInputDataReport {
+    // BYTE 0
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+
+    // Axes
+    // BYTES 1-2
+    #[packed_field(bytes = "1..=2", endian = "lsb")]
+    pub l_stick_x: u16,
+    // BYTES 3-4
+    #[packed_field(bytes = "3..=4", endian = "lsb")]
+    pub l_stick_y: u16,
+    // BYTES 5-6
+    #[packed_field(bytes = "5..=6", endian = "lsb")]
+    pub r_stick_x: u16,
+    // BYTES 7-8
+    #[packed_field(bytes = "7..=8", endian = "lsb")]
+    pub r_stick_y: u16,
+    // BYTES 9-10
+    #[packed_field(bytes = "9..=10", endian = "lsb")]
+    pub trigger_l: u16,
+    // BYTES 11-12
+    #[packed_field(bytes = "11..=12", endian = "lsb")]
+    pub trigger_r: u16,
+
+    #[packed_field(bytes = "13", ty = "enum")]
+    pub dpad_state: DPadDirection,
+
+    #[packed_field(bytes = "14..=16")]
+    pub button_state: ButtonState,
+}
+
+impl Default for XBoxSeriesInputDataReport {
+    fn default() -> Self {
+        Self {
+            report_id: 0x01,
+            l_stick_x: Default::default(),
+            l_stick_y: Default::default(),
+            r_stick_x: Default::default(),
+            r_stick_y: Default::default(),
+            trigger_l: Default::default(),
+            trigger_r: Default::default(),
+            button_state: Default::default(),
+            dpad_state: Default::default(),
+        }
+    }
+}
+
 /// State data can be emitted from Output events to change data such as rumble.
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq, Default)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "47")]

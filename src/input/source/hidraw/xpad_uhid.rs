@@ -288,6 +288,10 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
                 InputValue::Bool(value.pressed),
             ),
+            event::ButtonEvent::Guide(value) => NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+                InputValue::Bool(value.pressed),
+            ),
             event::ButtonEvent::DPadDown(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
                 InputValue::Bool(value.pressed),

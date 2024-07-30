@@ -3,22 +3,25 @@ use std::{error::Error, ffi::CString};
 use hidapi::HidDevice;
 use packed_struct::PackedStruct;
 
-use crate::udev::device::UdevDevice;
+use crate::{
+    drivers::xpad_uhid::hid_report::{DPadDirection, XBoxSeriesInputDataReport},
+    udev::device::UdevDevice,
+};
 
 use super::{
     event::{AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, TriggerEvent, TriggerInput},
-    hid_report::{DInputDataReport, XpadUhidOutputData, XpadUhidOutputReport},
+    hid_report::{XpadUhidOutputData, XpadUhidOutputReport},
 };
 
 // Hardware ID's
-pub const VIDS: [u16; 1] = [0x0000];
-pub const PIDS: [u16; 1] = [0x0000];
+pub const VIDS: [u16; 1] = [0x045e];
+pub const PIDS: [u16; 1] = [0x0b13];
 
 // Report ID
-pub const DATA: u8 = 11;
+pub const DATA: u8 = 0x01;
 
 // Input report size
-const PACKET_SIZE: usize = 16;
+const PACKET_SIZE: usize = 17;
 
 // HID buffer read timeout
 const HID_TIMEOUT: i32 = 10;
@@ -28,11 +31,21 @@ pub const JOY_AXIS_MAX: f64 = 65535.0;
 pub const JOY_AXIS_MIN: f64 = 0.0;
 pub const TRIGGER_AXIS_MAX: f64 = 1023.0;
 
+#[derive(Debug, Clone, Default)]
+struct DPadState {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+}
+
 pub struct Driver {
     /// HIDRAW device instance
     device: HidDevice,
-    /// State for the touchpad device
-    state: Option<DInputDataReport>,
+    /// State for the device
+    state: Option<XBoxSeriesInputDataReport>,
+    /// Last DPad state
+    dpad: DPadState,
 }
 
 impl Driver {
@@ -48,6 +61,7 @@ impl Driver {
         Ok(Self {
             device,
             state: None,
+            dpad: Default::default(),
         })
     }
 
@@ -67,8 +81,8 @@ impl Driver {
     /// Rumble the gamepad
     pub fn rumble(
         &self,
-        left_speed: u8,
-        right_speed: u8,
+        _left_speed: u8,
+        _right_speed: u8,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let state = XpadUhidOutputData {
             ..Default::default()
@@ -115,7 +129,7 @@ impl Driver {
         &mut self,
         buf: [u8; PACKET_SIZE],
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let input_report = DInputDataReport::unpack(&buf)?;
+        let input_report = XBoxSeriesInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
         log::debug!("--- Input report ---");
@@ -132,14 +146,17 @@ impl Driver {
     }
 
     /// Update touchinput state
-    fn update_state(&mut self, input_report: DInputDataReport) -> Option<DInputDataReport> {
+    fn update_state(
+        &mut self,
+        input_report: XBoxSeriesInputDataReport,
+    ) -> Option<XBoxSeriesInputDataReport> {
         let old_state = self.state;
         self.state = Some(input_report);
         old_state
     }
 
     /// Translate the state into individual events
-    fn translate_events(&mut self, old_state: Option<DInputDataReport>) -> Vec<Event> {
+    fn translate_events(&mut self, old_state: Option<XBoxSeriesInputDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
         let Some(state) = self.state else {
             return events;
@@ -148,187 +165,115 @@ impl Driver {
         // Translate state changes into events if they have changed
         if let Some(old_state) = old_state {
             // Binary Events
-            if state.a != old_state.a {
+            if state.button_state.a != old_state.button_state.a {
                 events.push(Event::Button(ButtonEvent::A(BinaryInput {
-                    pressed: state.a,
+                    pressed: state.button_state.a,
                 })));
             }
-            if state.b != old_state.b {
+            if state.button_state.b != old_state.button_state.b {
                 events.push(Event::Button(ButtonEvent::B(BinaryInput {
-                    pressed: state.b,
+                    pressed: state.button_state.b,
                 })));
             }
-            if state.x != old_state.x {
+            if state.button_state.x != old_state.button_state.x {
                 events.push(Event::Button(ButtonEvent::X(BinaryInput {
-                    pressed: state.x,
+                    pressed: state.button_state.x,
                 })));
             }
-            if state.y != old_state.y {
+            if state.button_state.y != old_state.button_state.y {
                 events.push(Event::Button(ButtonEvent::Y(BinaryInput {
-                    pressed: state.y,
+                    pressed: state.button_state.y,
                 })));
             }
-            if state.rb != old_state.rb {
+            if state.button_state.rb != old_state.button_state.rb {
                 events.push(Event::Button(ButtonEvent::RB(BinaryInput {
-                    pressed: state.rb,
+                    pressed: state.button_state.rb,
                 })));
             }
-            if state.lb != old_state.lb {
+            if state.button_state.lb != old_state.button_state.lb {
                 events.push(Event::Button(ButtonEvent::LB(BinaryInput {
-                    pressed: state.lb,
+                    pressed: state.button_state.lb,
                 })));
             }
-            if state.view != old_state.view {
+            if state.button_state.view != old_state.button_state.view {
                 events.push(Event::Button(ButtonEvent::View(BinaryInput {
-                    pressed: state.view,
+                    pressed: state.button_state.view,
                 })));
             }
-            if state.menu != old_state.menu {
+            if state.button_state.menu != old_state.button_state.menu {
                 events.push(Event::Button(ButtonEvent::Menu(BinaryInput {
-                    pressed: state.menu,
+                    pressed: state.button_state.menu,
                 })));
             }
-            if state.thumb_l != old_state.thumb_l {
+            if state.button_state.guide != old_state.button_state.guide {
+                events.push(Event::Button(ButtonEvent::Guide(BinaryInput {
+                    pressed: state.button_state.guide,
+                })));
+            }
+            if state.button_state.thumb_l != old_state.button_state.thumb_l {
                 events.push(Event::Button(ButtonEvent::ThumbL(BinaryInput {
-                    pressed: state.thumb_l,
+                    pressed: state.button_state.thumb_l,
                 })));
             }
-            if state.thumb_r != old_state.thumb_r {
+            if state.button_state.thumb_r != old_state.button_state.thumb_r {
                 events.push(Event::Button(ButtonEvent::ThumbR(BinaryInput {
-                    pressed: state.thumb_r,
+                    pressed: state.button_state.thumb_r,
                 })));
             }
             if state.dpad_state != old_state.dpad_state {
-                match state.dpad_state {
-                    0 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })));
-                    }
-                    1 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: true,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })));
-                    }
-                    2 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: true,
-                        })));
-
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: true,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })));
-                    }
-                    3 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: true,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })));
-                    }
-                    4 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: true,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: true,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })));
-                    }
-                    5 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: true,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })));
-                    }
-                    6 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: true,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: true,
-                        })));
-                    }
-                    7 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: true,
-                        })));
-                    }
-                    8 => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: true,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: true,
-                        })));
-                    }
-                    _ => {}
+                let up = [
+                    DPadDirection::Up,
+                    DPadDirection::UpRight,
+                    DPadDirection::UpLeft,
+                ]
+                .contains(&state.dpad_state);
+                let down = [
+                    DPadDirection::Down,
+                    DPadDirection::DownRight,
+                    DPadDirection::DownLeft,
+                ]
+                .contains(&state.dpad_state);
+                let left = [
+                    DPadDirection::Left,
+                    DPadDirection::DownLeft,
+                    DPadDirection::DownRight,
+                ]
+                .contains(&state.dpad_state);
+                let right = [
+                    DPadDirection::Right,
+                    DPadDirection::DownRight,
+                    DPadDirection::UpRight,
+                ]
+                .contains(&state.dpad_state);
+                let dpad_state = DPadState {
+                    up,
+                    down,
+                    left,
+                    right,
                 };
+
+                if up != self.dpad.up {
+                    events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
+                        pressed: up,
+                    })));
+                }
+                if down != self.dpad.down {
+                    events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
+                        pressed: down,
+                    })));
+                }
+                if left != self.dpad.left {
+                    events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
+                        pressed: left,
+                    })));
+                }
+                if right != self.dpad.right {
+                    events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
+                        pressed: right,
+                    })));
+                }
+
+                self.dpad = dpad_state;
             }
 
             // Axis events

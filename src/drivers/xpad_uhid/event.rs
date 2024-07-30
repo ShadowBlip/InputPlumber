@@ -44,6 +44,8 @@ pub enum ButtonEvent {
     View(BinaryInput),
     /// Menu (☰) button
     Menu(BinaryInput),
+    /// Guide button
+    Guide(BinaryInput),
     /// Z-axis button on the left stick
     ThumbL(BinaryInput),
     /// Z-axis button on the right stick

@@ -547,6 +547,8 @@
           "type": "string",
           "description": "Optional direction of the axis. Used when converting axis events into button events.",
           "enum": [
+            "horizontal",
+            "vertical",
             "left",
             "right",
             "up",
