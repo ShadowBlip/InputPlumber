@@ -36,7 +36,7 @@ pub struct DeviceProfile {
 
 impl DeviceProfile {
     /// Load a [CapabilityProfile] from the given YAML string
-    pub fn _from_yaml(content: String) -> Result<DeviceProfile, LoadError> {
+    pub fn from_yaml(content: String) -> Result<DeviceProfile, LoadError> {
         let device: DeviceProfile = serde_yaml::from_str(content.as_str())?;
         Ok(device)
     }

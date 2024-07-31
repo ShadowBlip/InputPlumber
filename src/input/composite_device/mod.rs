@@ -201,15 +201,9 @@ impl CompositeDevice {
         // Load the default profile
         let profile_dir = get_profiles_path();
         let profile_path = profile_dir.join("default.yaml");
-        if let Err(error) = device
-            .load_device_profile_from_path(profile_path.as_os_str().to_string_lossy().to_string())
-        {
-            log::warn!(
-                "Unable to load default profile at {:?}. {}",
-                profile_path,
-                error
-            );
-        };
+        let profile_path = profile_path.to_string_lossy().to_string();
+        let profile = DeviceProfile::from_yaml_file(profile_path)?;
+        device.load_device_profile(profile)?;
 
         // If a capability map is defined, add those target capabilities to
         // the hashset of implemented capabilities.
@@ -410,9 +404,37 @@ impl CompositeDevice {
                             log::error!("Failed to send profile name: {:?}", e);
                         }
                     }
+                    CompositeCommand::LoadProfileFromYaml(profile, sender) => {
+                        log::debug!("Loading profile from yaml: {profile}");
+                        let profile = match DeviceProfile::from_yaml(profile) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                if let Err(er) = sender.send(Err(e.to_string().into())).await {
+                                    log::error!("Failed to send failed to load profile: {er:?}");
+                                }
+                                continue;
+                            }
+                        };
+                        let result = match self.load_device_profile(profile) {
+                            Ok(_) => Ok(()),
+                            Err(e) => Err(e.to_string()),
+                        };
+                        if let Err(e) = sender.send(result).await {
+                            log::error!("Failed to send load profile result: {:?}", e);
+                        }
+                    }
                     CompositeCommand::LoadProfilePath(path, sender) => {
                         log::debug!("Loading profile from path: {path}");
-                        let result = match self.load_device_profile_from_path(path.clone()) {
+                        let profile = match DeviceProfile::from_yaml_file(path) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                if let Err(er) = sender.send(Err(e.to_string().into())).await {
+                                    log::error!("Failed to send failed to load profile: {er:?}");
+                                }
+                                continue;
+                            }
+                        };
+                        let result = match self.load_device_profile(profile) {
                             Ok(_) => Ok(()),
                             Err(e) => Err(e.to_string()),
                         };
@@ -1397,14 +1419,13 @@ impl CompositeDevice {
     }
 
     /// Load the given device profile from the given path
-    pub fn load_device_profile_from_path(&mut self, path: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("Loading device profile from path: {path}");
+    pub fn load_device_profile(&mut self, profile: DeviceProfile) -> Result<(), Box<dyn Error>> {
+        log::debug!("Loading device profile {}", profile.name);
         // Remove all outdated capability mappings.
         log::debug!("Clearing old device profile mappings");
         self.device_profile_config_map.clear();
 
         // Load and parse the device profile
-        let profile = DeviceProfile::from_yaml_file(path.clone())?;
         self.device_profile = Some(profile.name.clone());
 
         // Loop through every mapping in the profile, extract the source and target events,

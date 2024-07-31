@@ -79,6 +79,8 @@ impl InputValue {
         }
     }
 
+    // TODO: Implement all possible translations. We're currently missing many difficult but
+    // posible translations.
     /// Translates the input value based on the source and target capabilities
     pub fn translate(
         &self,
@@ -92,12 +94,16 @@ impl InputValue {
             Capability::None => Err(TranslationError::ImpossibleTranslation(
                 "None events cannot be translated".to_string(),
             )),
+
             // NotImplemented values cannot be translated
             Capability::NotImplemented => Ok(InputValue::None),
+
             // Sync values can only be translated to '0'
             Capability::Sync => Ok(InputValue::Bool(false)),
+
             // DBus -> ...
             Capability::DBus(_) => Ok(self.clone()),
+
             // Gamepad -> ...
             Capability::Gamepad(gamepad) => {
                 match gamepad {
@@ -242,8 +248,10 @@ impl InputValue {
                     Gamepad::Gyro => Err(TranslationError::NotImplemented),
                 }
             }
+
             // Mouse -> ...
             Capability::Mouse(_) => Err(TranslationError::NotImplemented),
+
             // Keyboard -> ...
             Capability::Keyboard(_) => match target_cap {
                 // Keyboard Key -> None
@@ -274,8 +282,176 @@ impl InputValue {
                 // Keyboard Key -> Touchscreen
                 Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
             },
+
             // Touchpad -> ...
-            Capability::Touchpad(_) => Err(TranslationError::NotImplemented),
+            Capability::Touchpad(touch) => match touch {
+                // LeftPad -> ...
+                Touchpad::LeftPad(touch) => match touch {
+                    Touch::Motion => match target_cap {
+                        // Touchpad Motion -> None
+                        Capability::None => Ok(InputValue::None),
+                        // Touchpad Motion -> NotImplemented
+                        Capability::NotImplemented => Ok(InputValue::None),
+                        // Touchpad Motion -> Sync
+                        Capability::Sync => Ok(InputValue::Bool(false)),
+                        // Touchpad Motion -> DBus
+                        Capability::DBus(action) => match action {
+                            Action::Touch => Ok(self.clone()),
+                            _ => Err(TranslationError::NotImplemented),
+                        },
+                        // Touchpad Motion -> Gamepad
+                        Capability::Gamepad(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Mouse
+                        Capability::Mouse(mouse) => match mouse {
+                            // TODO:
+                            // Touchscreen Motion -> Mouse Motion
+                            Mouse::Motion => Err(TranslationError::NotImplemented),
+                            Mouse::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                        Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Touchpad
+                        Capability::Touchpad(touchpad) => match touchpad {
+                            Touchpad::LeftPad(target_touch) => match target_touch {
+                                // Touchdpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchpad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                            Touchpad::RightPad(target_touch) => match target_touch {
+                                // Touchpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchpad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                            Touchpad::CenterPad(target_touch) => match target_touch {
+                                // Touchpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchspad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                        },
+                        // Touchpad Motion -> Touchscreen ...
+                        Capability::Touchscreen(target_touch) => match target_touch {
+                            // Touchpad Motion -> Touchscreen Motion
+                            Touch::Motion => Ok(self.clone()),
+                            // Touchpad Motion -> Touchscreen Button
+                            Touch::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                    },
+                    Touch::Button(_) => Err(TranslationError::NotImplemented),
+                },
+                // RightPad -> ...
+                Touchpad::RightPad(touch) => match touch {
+                    Touch::Motion => match target_cap {
+                        // Touchpad Motion -> None
+                        Capability::None => Ok(InputValue::None),
+                        // Touchpad Motion -> NotImplemented
+                        Capability::NotImplemented => Ok(InputValue::None),
+                        // Touchpad Motion -> Sync
+                        Capability::Sync => Ok(InputValue::Bool(false)),
+                        // Touchpad Motion -> DBus
+                        Capability::DBus(action) => match action {
+                            Action::Touch => Ok(self.clone()),
+                            _ => Err(TranslationError::NotImplemented),
+                        },
+                        // Touchpad Motion -> Gamepad
+                        Capability::Gamepad(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Mouse
+                        Capability::Mouse(mouse) => match mouse {
+                            // TODO:
+                            // Touchscreen Motion -> Mouse Motion
+                            Mouse::Motion => Err(TranslationError::NotImplemented),
+                            Mouse::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                        Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Touchpad
+                        Capability::Touchpad(touchpad) => match touchpad {
+                            Touchpad::LeftPad(target_touch) => match target_touch {
+                                // Touchdpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchpad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                            Touchpad::RightPad(target_touch) => match target_touch {
+                                // Touchpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchpad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                            Touchpad::CenterPad(target_touch) => match target_touch {
+                                // Touchpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchspad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                        },
+                        // Touchpad Motion -> Touchscreen ...
+                        Capability::Touchscreen(target_touch) => match target_touch {
+                            // Touchpad Motion -> Touchscreen Motion
+                            Touch::Motion => Ok(self.clone()),
+                            // Touchpad Motion -> Touchscreen Button
+                            Touch::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                    },
+                    Touch::Button(_) => Err(TranslationError::NotImplemented),
+                },
+                // CenterPad -> ...
+                Touchpad::CenterPad(touch) => match touch {
+                    Touch::Motion => match target_cap {
+                        // Touchpad Motion -> None
+                        Capability::None => Ok(InputValue::None),
+                        // Touchpad Motion -> NotImplemented
+                        Capability::NotImplemented => Ok(InputValue::None),
+                        // Touchpad Motion -> Sync
+                        Capability::Sync => Ok(InputValue::Bool(false)),
+                        // Touchpad Motion -> DBus
+                        Capability::DBus(action) => match action {
+                            Action::Touch => Ok(self.clone()),
+                            _ => Err(TranslationError::NotImplemented),
+                        },
+                        // Touchpad Motion -> Gamepad
+                        Capability::Gamepad(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Mouse
+                        Capability::Mouse(mouse) => match mouse {
+                            // TODO:
+                            // Touchscreen Motion -> Mouse Motion
+                            Mouse::Motion => Err(TranslationError::NotImplemented),
+                            Mouse::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                        Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Touchpad
+                        Capability::Touchpad(touchpad) => match touchpad {
+                            Touchpad::LeftPad(target_touch) => match target_touch {
+                                // Touchdpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchpad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                            Touchpad::RightPad(target_touch) => match target_touch {
+                                // Touchpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchpad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                            Touchpad::CenterPad(target_touch) => match target_touch {
+                                // Touchpad Motion -> Touchpad Motion
+                                Touch::Motion => Ok(self.clone()),
+                                // Touchspad Motion -> Touchpad Button
+                                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                            },
+                        },
+                        // Touchpad Motion -> Touchscreen ...
+                        Capability::Touchscreen(target_touch) => match target_touch {
+                            // Touchpad Motion -> Touchscreen Motion
+                            Touch::Motion => Ok(self.clone()),
+                            // Touchpad Motion -> Touchscreen Button
+                            Touch::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                    },
+                    Touch::Button(_) => Err(TranslationError::NotImplemented),
+                },
+            },
+
             // Touchscreen -> ...
             Capability::Touchscreen(touch) => match touch {
                 // Touchscreen Motion -> ...
@@ -295,6 +471,7 @@ impl InputValue {
                     Capability::Gamepad(_) => Err(TranslationError::NotImplemented),
                     // Touchscreen Motion -> Mouse
                     Capability::Mouse(mouse) => match mouse {
+                        // TODO:
                         // Touchscreen Motion -> Mouse Motion
                         Mouse::Motion => Err(TranslationError::NotImplemented),
                         // Touchscreen Motion -> Mouse Button

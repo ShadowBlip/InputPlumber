@@ -31,6 +31,7 @@ use self::dualsense::{DualSenseDevice, DualSenseHardware};
 use self::keyboard::KeyboardDevice;
 use self::mouse::MouseDevice;
 use self::steam_deck::SteamDeckDevice;
+use self::touchpad::TouchpadDevice;
 use self::touchscreen::TouchscreenDevice;
 use self::xb360::XBox360Controller;
 use self::xbox_elite::XboxEliteController;
@@ -43,6 +44,7 @@ pub mod dualsense;
 pub mod keyboard;
 pub mod mouse;
 pub mod steam_deck;
+pub mod touchpad;
 pub mod touchscreen;
 pub mod xb360;
 pub mod xbox_elite;
@@ -147,6 +149,18 @@ impl TargetDeviceTypeId {
                 name: "DBus Device",
             },
             TargetDeviceTypeId {
+                id: "deck",
+                name: "Valve Steam Deck Controller",
+            },
+            TargetDeviceTypeId {
+                id: "ds5",
+                name: "Sony Interactive Entertainment DualSense Wireless Controller",
+            },
+            TargetDeviceTypeId {
+                id: "ds5-edge",
+                name: "Sony Interactive Entertainment DualSense Edge Wireless Controller",
+            },
+            TargetDeviceTypeId {
                 id: "keyboard",
                 name: "InputPlumber Keyboard",
             },
@@ -157,6 +171,10 @@ impl TargetDeviceTypeId {
             TargetDeviceTypeId {
                 id: "gamepad",
                 name: "InputPlumber Gamepad",
+            },
+            TargetDeviceTypeId {
+                id: "touchpad",
+                name: "InputPlumber Touchpad",
             },
             TargetDeviceTypeId {
                 id: "touchscreen",
@@ -173,18 +191,6 @@ impl TargetDeviceTypeId {
             TargetDeviceTypeId {
                 id: "xbox-series",
                 name: "Microsoft Xbox Series S|X Controller",
-            },
-            TargetDeviceTypeId {
-                id: "deck",
-                name: "Valve Steam Deck Controller",
-            },
-            TargetDeviceTypeId {
-                id: "ds5",
-                name: "Sony Interactive Entertainment DualSense Wireless Controller",
-            },
-            TargetDeviceTypeId {
-                id: "ds5-edge",
-                name: "Sony Interactive Entertainment DualSense Edge Wireless Controller",
             },
         ]
     }
@@ -290,9 +296,9 @@ pub trait TargetOutputDevice {
     /// output events can be sent directly using the provided composite device.
     fn poll(
         &mut self,
-        composite_device: &Option<CompositeDeviceClient>,
+        _composite_device: &Option<CompositeDeviceClient>,
     ) -> Result<Vec<OutputEvent>, OutputError> {
-        log::trace!("Polling with composite device: {composite_device:?}");
+        //log::trace!("Polling with composite device: {composite_device:?}");
         Ok(vec![])
     }
 
@@ -512,14 +518,15 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
 pub enum TargetDevice {
     Null,
     DBus(TargetDriver<DBusDevice>),
+    DualSense(TargetDriver<DualSenseDevice>),
     Keyboard(TargetDriver<KeyboardDevice>),
     Mouse(TargetDriver<MouseDevice>),
+    SteamDeck(TargetDriver<SteamDeckDevice>),
+    Touchpad(TargetDriver<TouchpadDevice>),
+    Touchscreen(TargetDriver<TouchscreenDevice>),
     XBox360(TargetDriver<XBox360Controller>),
     XBoxElite(TargetDriver<XboxEliteController>),
     XBoxSeries(TargetDriver<XboxSeriesController>),
-    SteamDeck(TargetDriver<SteamDeckDevice>),
-    DualSense(TargetDriver<DualSenseDevice>),
-    Touchscreen(TargetDriver<TouchscreenDevice>),
 }
 
 impl TargetDevice {
@@ -581,6 +588,15 @@ impl TargetDevice {
                 let driver = TargetDriver::new_with_options(id, device, dbus, options);
                 Ok(Self::Mouse(driver))
             }
+            "touchpad" => {
+                let device = TouchpadDevice::new()?;
+                let options = TargetDriverOptions {
+                    poll_rate: Duration::from_micros(13605),
+                    buffer_size: 2048,
+                };
+                let driver = TargetDriver::new_with_options(id, device, dbus, options);
+                Ok(Self::Touchpad(driver))
+            }
             "touchscreen" => {
                 let device = TouchscreenDevice::new()?;
                 let options = TargetDriverOptions {
@@ -617,14 +633,6 @@ impl TargetDevice {
         match self {
             TargetDevice::Null => vec!["null".try_into().unwrap()],
             TargetDevice::DBus(_) => vec!["dbus".try_into().unwrap()],
-            TargetDevice::Keyboard(_) => vec!["keyboard".try_into().unwrap()],
-            TargetDevice::Mouse(_) => vec!["mouse".try_into().unwrap()],
-            TargetDevice::XBox360(_) => {
-                vec!["xb360".try_into().unwrap(), "gamepad".try_into().unwrap()]
-            }
-            TargetDevice::XBoxElite(_) => vec!["xbox-elite".try_into().unwrap()],
-            TargetDevice::XBoxSeries(_) => vec!["xbox-series".try_into().unwrap()],
-            TargetDevice::SteamDeck(_) => vec!["deck".try_into().unwrap()],
             TargetDevice::DualSense(_) => vec![
                 "ds5".try_into().unwrap(),
                 "ds5-usb".try_into().unwrap(),
@@ -633,7 +641,16 @@ impl TargetDevice {
                 "ds5-edge-usb".try_into().unwrap(),
                 "ds5-edge-bt".try_into().unwrap(),
             ],
+            TargetDevice::Keyboard(_) => vec!["keyboard".try_into().unwrap()],
+            TargetDevice::Mouse(_) => vec!["mouse".try_into().unwrap()],
+            TargetDevice::SteamDeck(_) => vec!["deck".try_into().unwrap()],
+            TargetDevice::Touchpad(_) => vec!["touchpad".try_into().unwrap()],
             TargetDevice::Touchscreen(_) => vec!["touchscreen".try_into().unwrap()],
+            TargetDevice::XBox360(_) => {
+                vec!["xb360".try_into().unwrap(), "gamepad".try_into().unwrap()]
+            }
+            TargetDevice::XBoxElite(_) => vec!["xbox-elite".try_into().unwrap()],
+            TargetDevice::XBoxSeries(_) => vec!["xbox-series".try_into().unwrap()],
         }
     }
 
@@ -644,14 +661,15 @@ impl TargetDevice {
         match self {
             TargetDevice::Null => "null",
             TargetDevice::DBus(_) => "dbus",
+            TargetDevice::DualSense(_) => "gamepad",
             TargetDevice::Keyboard(_) => "keyboard",
             TargetDevice::Mouse(_) => "mouse",
+            TargetDevice::SteamDeck(_) => "gamepad",
+            TargetDevice::Touchpad(_) => "touchpad",
+            TargetDevice::Touchscreen(_) => "touchscreen",
             TargetDevice::XBox360(_) => "gamepad",
             TargetDevice::XBoxElite(_) => "gamepad",
             TargetDevice::XBoxSeries(_) => "gamepad",
-            TargetDevice::SteamDeck(_) => "gamepad",
-            TargetDevice::DualSense(_) => "gamepad",
-            TargetDevice::Touchscreen(_) => "touchscreen",
         }
     }
 
@@ -660,14 +678,15 @@ impl TargetDevice {
         match self {
             TargetDevice::Null => None,
             TargetDevice::DBus(device) => Some(device.client()),
+            TargetDevice::DualSense(device) => Some(device.client()),
             TargetDevice::Keyboard(device) => Some(device.client()),
             TargetDevice::Mouse(device) => Some(device.client()),
+            TargetDevice::SteamDeck(device) => Some(device.client()),
+            TargetDevice::Touchpad(device) => Some(device.client()),
+            TargetDevice::Touchscreen(device) => Some(device.client()),
             TargetDevice::XBox360(device) => Some(device.client()),
             TargetDevice::XBoxElite(device) => Some(device.client()),
             TargetDevice::XBoxSeries(device) => Some(device.client()),
-            TargetDevice::SteamDeck(device) => Some(device.client()),
-            TargetDevice::DualSense(device) => Some(device.client()),
-            TargetDevice::Touchscreen(device) => Some(device.client()),
         }
     }
 
@@ -676,14 +695,15 @@ impl TargetDevice {
         match self {
             TargetDevice::Null => Ok(()),
             TargetDevice::DBus(device) => device.run(dbus_path).await,
+            TargetDevice::DualSense(device) => device.run(dbus_path).await,
             TargetDevice::Keyboard(device) => device.run(dbus_path).await,
             TargetDevice::Mouse(device) => device.run(dbus_path).await,
+            TargetDevice::SteamDeck(device) => device.run(dbus_path).await,
+            TargetDevice::Touchpad(device) => device.run(dbus_path).await,
+            TargetDevice::Touchscreen(device) => device.run(dbus_path).await,
             TargetDevice::XBox360(device) => device.run(dbus_path).await,
             TargetDevice::XBoxElite(device) => device.run(dbus_path).await,
             TargetDevice::XBoxSeries(device) => device.run(dbus_path).await,
-            TargetDevice::SteamDeck(device) => device.run(dbus_path).await,
-            TargetDevice::DualSense(device) => device.run(dbus_path).await,
-            TargetDevice::Touchscreen(device) => device.run(dbus_path).await,
         }
     }
 }

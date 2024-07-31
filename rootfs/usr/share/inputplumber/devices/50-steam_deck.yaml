@@ -57,3 +57,4 @@ target_devices:
   - mouse
   - keyboard
   - touchscreen
+  - touchpad

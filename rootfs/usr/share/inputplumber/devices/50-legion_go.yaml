@@ -154,3 +154,4 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
+  - touchpad

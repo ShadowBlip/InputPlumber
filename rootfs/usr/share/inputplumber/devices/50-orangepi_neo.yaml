@@ -70,6 +70,7 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
+  - touchpad
 
 # The ID of a device event mapping in the 'event_maps' folder
 capability_map_id: opi1
