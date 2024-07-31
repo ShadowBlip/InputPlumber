@@ -27,17 +27,23 @@ source_devices:
       vendor_id: 0x0b05
       product_id: 0x1b4c
       interface_num: 2
+  - group: gamepad # Used for setting attributes on load
+    hidraw:
+      vendor_id: 0x0b05
+      product_id: 0x1b4c
+      interface_num: 5
   - group: gamepad
     evdev:
-      name: "ASUS ROG Ally X Gamepad"
-      vendor_id: "0b05"
-      product_id: "1b4c"
+      name: ASUS ROG Ally X Gamepad
+      vendor_id: 0b05
+      product_id: 1b4c
       handler: event*
   - group: keyboard
     unique: false
     evdev:
-      name: "Asus Keyboard"
-      phys_path: usb-0000:64:00.3-2/input[2-3]
+      name: Asus Keyboard
+      vendor_id: 0b05
+      product_id: 1b4c
       handler: event*
   - group: imu
     iio:

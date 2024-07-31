@@ -2,7 +2,7 @@ use std::{error::Error, ffi::OsStr};
 
 use udev::Device;
 
-use crate::udev::device::{AttributeSetter, UdevDevice};
+use crate::udev::device::{AttributeGetter, AttributeSetter, UdevDevice};
 
 // Hardware ID's
 const ALLY_PID: u16 = 0x1abe;
@@ -30,20 +30,38 @@ impl Driver {
         let Some(driver) = parent.driver() else {
             return Err("Failed to identify device driver".into());
         };
-        if driver.to_str().unwrap() == "asus" {
-            set_attribute(device.clone(), "btn_m1/remap", "kb_f15")?;
-            set_attribute(device.clone(), "btn_m2/remap", "kb_f14")?;
-            set_attribute(device, "gamepad_mode", "1")?;
-            //TODO: Figure out why this fails and manually running the same thing
-            //doesn't.
-            //set_attribute(device, "apply", "1")?;
-            let result = parent.set_attribute_value(OsStr::new("apply"), OsStr::new("1"));
-            match result {
-                Ok(_) => log::debug!("set apply to 1"),
-                Err(e) => return Err(format!("Could set apply to 1: {e:?}").into()),
+        // Apply settings for the controller
+        if driver.to_str().unwrap() == "asus_rog_ally" {
+            let if_num = device.get_attribute_from_tree("bInterfaceNumber");
+            let if_num = if_num.as_str();
+            match if_num {
+                "02" => {
+                    // Ally and Ally X, map back buttons and ensure it is in gamepad mode.
+                    log::debug!("Setting buttons and gamepad mode.");
+                    set_attribute(device.clone(), "btn_m1/remap", "kb_f15")?;
+                    set_attribute(device.clone(), "btn_m2/remap", "kb_f14")?;
+                    set_attribute(device, "gamepad_mode", "1")?;
+                    //TODO: Figure out why this fails and manually running the same thing
+                    //doesn't.
+                    //set_attribute(device, "apply", "1")?;
+                    let result =
+                        parent.set_attribute_value(OsStr::new("apply_all"), OsStr::new("1"));
+                    match result {
+                        Ok(_) => log::debug!("set apply_all to 1"),
+                        Err(e) => return Err(format!("Could set apply_all to 1: {e:?}").into()),
+                    };
+                }
+                "05" => {
+                    // Ally X only, switch from driver emiting a BTN_MODE with CC and a
+                    // BTN_MODE/BTN_SOUTH chord with AC to the same events as original
+                    // Ally so we can capture them as the Guide and QuickAccess Capabilities.
+                    log::debug!("Setting qam mode.");
+                    set_attribute(device, "qam_mode", "0")?;
+                }
+                _ => return Err(format!("Invalid interface number {if_num} provided.").into()),
             };
         } else {
-            return Err("Device is not an asus device.".into());
+            return Err("Device is not using the asus_rog_ally driver.".into());
         }
 
         Ok(Self { _device: udevice })

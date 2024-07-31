@@ -30,13 +30,21 @@ source_devices:
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:0[8-a]:00.3-2/input0
+      vendor_id: 045e
+      product_id: 028e
+      handler: event*
+  - group: keyboard
+    evdev:
+      name: ASUS ROG Ally Config
+      vendor_id: 0b05
+      product_id: 1abe
       handler: event*
   - group: keyboard
     unique: false
     evdev:
       name: Asus Keyboard
-      phys_path: usb-0000:0[8-a]:00.3-3/input[0-2]
+      vendor_id: 0b05
+      product_id: 1abe
       handler: event*
   - group: imu
     iio:
