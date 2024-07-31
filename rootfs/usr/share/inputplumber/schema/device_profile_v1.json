@@ -27,16 +27,17 @@
           "items": {
             "type": "string",
             "enum": [
-              "mouse",
-              "keyboard",
-              "gamepad",
-              "xb360",
-              "xbox-elite",
-              "xbox-series",
               "deck",
               "ds5",
               "ds5-edge",
-              "touchscreen"
+              "gamepad",
+              "keyboard",
+              "mouse",
+              "touchpad",
+              "touchscreen",
+              "xb360",
+              "xbox-elite",
+              "xbox-series"
             ]
           }
         },

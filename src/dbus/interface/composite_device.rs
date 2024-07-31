@@ -61,6 +61,14 @@ impl CompositeDeviceInterface {
             .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
+    /// Load the device profile from the given YAML/JSON string
+    async fn load_profile_from_yaml(&self, profile: String) -> fdo::Result<()> {
+        self.composite_device
+            .load_profile_from_yaml(profile)
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))
+    }
+
     /// Set the target input device types the composite device should emulate,
     /// such as ["gamepad", "mouse", "keyboard"]. This method will stop all
     /// current virtual devices for the composite device and create and attach

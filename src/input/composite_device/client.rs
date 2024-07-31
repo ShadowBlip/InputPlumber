@@ -225,6 +225,21 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+    /// Load the device profile from the given path
+    pub async fn load_profile_from_yaml(&self, profile: String) -> Result<(), ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx
+            .send(CompositeCommand::LoadProfileFromYaml(profile, tx))
+            .await?;
+        if let Some(result) = rx.recv().await {
+            return match result {
+                Ok(_) => Ok(()),
+                Err(e) => Err(ClientError::ServiceError(e.into())),
+            };
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
     /// Write the given event to the appropriate target device.
     pub async fn write_event(&self, event: NativeEvent) -> Result<(), ClientError> {
         self.tx.send(CompositeCommand::WriteEvent(event)).await?;
