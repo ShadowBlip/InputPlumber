@@ -647,7 +647,9 @@ impl CompositeDevice {
                                 continue;
                             };
                             log::debug!("Updating effect {source_effect_id} from {source_id}");
-                            source.update_effect(*source_effect_id, *data).await?;
+                            if let Err(e) = source.update_effect(*source_effect_id, *data).await {
+                                log::error!("Error updating effect '{id}' on {source_id}: {e:?}");
+                            }
                         }
                         target_dev.send(Some(*id))?;
                         return Ok(());
@@ -659,11 +661,16 @@ impl CompositeDevice {
                         log::debug!("Uploading effect to {source_id}");
                         match source.upload_effect(*data).await {
                             Ok(source_effect_id) => {
-                                log::debug!("Successfully uploaded effect with source effect id {source_effect_id}");
+                                // An effect ID of -1 indicates the device does not support
+                                // FF events.
+                                if source_effect_id == -1 {
+                                    continue;
+                                }
+                                log::debug!("Successfully uploaded effect to {source_id} with source effect id {source_effect_id}");
                                 source_effect_ids.insert(source_id.clone(), source_effect_id);
                             }
                             Err(e) => {
-                                log::error!("Error uploading effect: {:?}", e);
+                                log::error!("Error uploading effect to {source_id}: {e:?}");
                             }
                         }
                     }
@@ -696,7 +703,7 @@ impl CompositeDevice {
                             };
                             log::debug!("Erasing effect from {source_id}");
                             if let Err(e) = source.erase_effect(*source_effect_id).await {
-                                log::debug!("Failed to erase FF effect from {source_id}: {:?}", e);
+                                log::warn!("Failed to erase FF effect from {source_id}: {:?}", e);
                             }
                         }
                     }

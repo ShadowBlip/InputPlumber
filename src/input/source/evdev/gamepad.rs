@@ -325,6 +325,10 @@ impl SourceOutputDevice for GamepadEventDevice {
     /// a device-specific id of the uploaded effect if it is successful.
     fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
         log::debug!("Uploading FF effect data");
+        if self.device.supported_ff().is_none() {
+            log::debug!("Device does not support FF effects");
+            return Ok(-1);
+        }
         match self.device.upload_ff_effect(effect) {
             Ok(effect) => {
                 let id = effect.id() as i16;
@@ -338,6 +342,10 @@ impl SourceOutputDevice for GamepadEventDevice {
     /// Update the effect with the given id using the given effect data.
     fn update_effect(&mut self, effect_id: i16, effect: FFEffectData) -> Result<(), OutputError> {
         log::debug!("Update FF effect {effect_id}");
+        if self.device.supported_ff().is_none() {
+            log::debug!("Device does not support FF effects");
+            return Ok(());
+        }
         let Some(current_effect) = self.ff_effects.get_mut(&effect_id) else {
             log::warn!("Unable to find existing FF effect with id {effect_id}");
             return Ok(());
@@ -353,6 +361,10 @@ impl SourceOutputDevice for GamepadEventDevice {
     /// Erase the effect with the given id from the source device.
     fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
         log::debug!("Erasing FF effect data");
+        if self.device.supported_ff().is_none() {
+            log::debug!("Device does not support FF effects");
+            return Ok(());
+        }
         self.ff_effects.remove(&effect_id);
         Ok(())
     }

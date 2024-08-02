@@ -121,11 +121,12 @@ pub trait SourceOutputDevice {
     }
 
     /// Upload the given force feedback effect data to the source device. Returns
-    /// a device-specific id of the uploaded effect if it is successful.
+    /// a device-specific id of the uploaded effect if it is successful. Return
+    /// -1 if this device does not support FF events.
     fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
         //log::trace!("Received upload effect: {effect:?}");
         let _ = effect;
-        Err(OutputError::NotImplemented)
+        Ok(-1)
     }
 
     /// Update the effect with the given id using the given effect data.

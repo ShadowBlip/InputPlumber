@@ -66,7 +66,7 @@ impl SourceDeviceClient {
     pub async fn upload_effect(&self, effect: FFEffectData) -> Result<i16, ClientError> {
         let (tx, rx) = channel();
         self.tx.try_send(SourceCommand::UploadEffect(effect, tx))?;
-        match rx.recv_timeout(Duration::from_secs(1)) {
+        match rx.recv_timeout(Duration::from_millis(200)) {
             Ok(result) => match result {
                 Ok(id) => Ok(id),
                 Err(err) => Err(ClientError::ServiceError(err)),
