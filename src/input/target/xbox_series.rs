@@ -257,7 +257,7 @@ impl TargetOutputDevice for XboxSeriesController {
                     let Some(composite_device) = composite_device else {
                         log::debug!("No composite device to upload effect to!");
                         event.set_retval(-1);
-                        return Ok(vec![]);
+                        continue;
                     };
 
                     // Send the effect data to be uploaded to the device and wait
@@ -276,7 +276,8 @@ impl TargetOutputDevice for XboxSeriesController {
                         Ok(id) => id,
                         Err(e) => {
                             event.set_retval(-1);
-                            return Err(e.to_string().into());
+                            log::error!("Failed to receive FF upload response: {e:?}");
+                            continue;
                         }
                     };
 
