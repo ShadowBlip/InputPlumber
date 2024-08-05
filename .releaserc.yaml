@@ -30,16 +30,16 @@ plugins:
           #    numReplacements: 1
           #countMatches: true
 
+  # Execute commands to build the project
+  - - "@semantic-release/exec"
+    - shell: true
+      prepareCmd: "make in-docker TARGET='dist'"
+
   # Commit the following changes to git after other plugins have run
   - - "@semantic-release/git"
     - assets:
         - Cargo.toml
         - Cargo.lock
-
-  # Execute commands to build the project
-  - - "@semantic-release/exec"
-    - shell: true
-      prepareCmd: "make in-docker TARGET='dist'"
 
   # Publish artifacts as a GitHub release
   - - "@semantic-release/github"
