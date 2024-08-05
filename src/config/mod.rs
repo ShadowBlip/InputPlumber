@@ -1,3 +1,5 @@
+pub mod path;
+
 use std::io;
 
 use ::procfs::CpuInfo;

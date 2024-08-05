@@ -15,6 +15,8 @@ use zbus::zvariant::ObjectPath;
 use zbus::Connection;
 
 use crate::bluetooth::device1::Device1Proxy;
+use crate::config::path::get_capability_maps_paths;
+use crate::config::path::get_devices_paths;
 use crate::config::CapabilityMap;
 use crate::config::CompositeDeviceConfig;
 use crate::config::SourceDevice;
@@ -1454,17 +1456,13 @@ impl Manager {
     /// of the CapabilityMap ID and the [CapabilityMap].
     pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMap> {
         let mut mappings = HashMap::new();
-        let paths = vec![
-            "./rootfs/usr/share/inputplumber/capability_maps",
-            "/etc/inputplumber/capability_maps.d",
-            "/usr/share/inputplumber/capability_maps",
-        ];
+        let paths = get_capability_maps_paths();
 
         // Look for capability mappings in all known locations
-        for path in paths {
+        for path in paths.iter() {
             let files = fs::read_dir(path);
             if files.is_err() {
-                log::trace!("Failed to load directory {}: {}", path, files.unwrap_err());
+                log::trace!("Failed to load directory {path:?}: {}", files.unwrap_err());
                 continue;
             }
             let mut files: Vec<_> = files.unwrap().map(|r| r.unwrap()).collect();
@@ -1504,18 +1502,14 @@ impl Manager {
     pub async fn load_device_configs(&self) -> Vec<CompositeDeviceConfig> {
         let task = task::spawn_blocking(move || {
             let mut devices: Vec<CompositeDeviceConfig> = Vec::new();
-            let paths = vec![
-                "./rootfs/usr/share/inputplumber/devices",
-                "/etc/inputplumber/devices.d",
-                "/usr/share/inputplumber/devices",
-            ];
+            let paths = get_devices_paths();
 
             // Look for composite device profiles in all known locations
-            for path in paths {
-                log::trace!("Checking {path} for composite device configs");
+            for path in paths.iter() {
+                log::trace!("Checking {path:?} for composite device configs");
                 let files = fs::read_dir(path);
                 if files.is_err() {
-                    log::debug!("Failed to load directory {}: {}", path, files.unwrap_err());
+                    log::debug!("Failed to load directory {path:?}: {}", files.unwrap_err());
                     continue;
                 }
                 let mut files: Vec<_> = files.unwrap().map(|r| r.unwrap()).collect();

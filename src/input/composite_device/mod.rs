@@ -13,7 +13,8 @@ use zbus::Connection;
 
 use crate::{
     config::{
-        CapabilityMap, CapabilityMapping, CompositeDeviceConfig, DeviceProfile, ProfileMapping,
+        path::get_profiles_path, CapabilityMap, CapabilityMapping, CompositeDeviceConfig,
+        DeviceProfile, ProfileMapping,
     },
     dbus::interface::{
         composite_device::CompositeDeviceInterface, source::iio_imu::SourceIioImuInterface,
@@ -198,10 +199,13 @@ impl CompositeDevice {
         }
 
         // Load the default profile
-        let profile_path = "/usr/share/inputplumber/profiles/default.yaml";
-        if let Err(error) = device.load_device_profile_from_path(profile_path.to_string()) {
+        let profile_dir = get_profiles_path();
+        let profile_path = profile_dir.join("default.yaml");
+        if let Err(error) = device
+            .load_device_profile_from_path(profile_path.as_os_str().to_string_lossy().to_string())
+        {
             log::warn!(
-                "Unable to load default profile at {}. {}",
+                "Unable to load default profile at {:?}. {}",
                 profile_path,
                 error
             );
