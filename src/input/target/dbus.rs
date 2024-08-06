@@ -5,7 +5,7 @@ use zbus::Connection;
 use crate::{
     dbus::interface::target::dbus::TargetDBusInterface,
     input::{
-        capability::{Capability, Gamepad},
+        capability::{Capability, Gamepad, GamepadButton},
         event::{
             dbus::{Action, DBusEvent},
             native::NativeEvent,
@@ -18,6 +18,8 @@ use super::{client::TargetDeviceClient, TargetInputDevice, TargetOutputDevice};
 
 /// The threshold for axis inputs to be considered "pressed"
 const AXIS_THRESHOLD: f64 = 0.35;
+/// The threshold for trigger inputs to be considered "pressed"
+const TRIGGER_THRESHOLD: f64 = 0.75;
 
 /// The internal emulated device state for tracking analog input
 #[derive(Debug, Clone, Default)]
@@ -26,6 +28,10 @@ struct State {
     pressed_right: bool,
     pressed_up: bool,
     pressed_down: bool,
+    pressed_l2: bool,
+    l2_value: Option<f64>,
+    pressed_r2: bool,
+    r2_value: Option<f64>,
 }
 
 /// The [DBusDevice] is a virtual input device that can emit input events. It
@@ -53,76 +59,124 @@ impl DBusDevice {
         // Check to see if this is an axis event, which requires special
         // handling.
         let source_cap = event.as_capability();
-        let is_axis_event = match source_cap {
-            Capability::Gamepad(gamepad) => matches!(gamepad, Gamepad::Axis(_)),
-            _ => false,
-        };
 
         let mut translated = vec![];
         let events = DBusEvent::from_native_event(event);
         for mut event in events {
-            if !is_axis_event {
-                translated.push(event);
-                continue;
-            }
-
             // Axis input is a special case, where we need to keep track of the
             // current state of the axis, and only emit events whenever the axis
             // passes or falls below the defined threshold.
-            let include_event = match event.action {
-                Action::Left => {
-                    if self.state.pressed_left && event.as_f64() < AXIS_THRESHOLD {
-                        event.value = InputValue::Float(0.0);
-                        self.state.pressed_left = false;
-                        true
-                    } else if !self.state.pressed_left && event.as_f64() > AXIS_THRESHOLD {
-                        event.value = InputValue::Float(1.0);
-                        self.state.pressed_left = true;
-                        true
-                    } else {
-                        false
+            let include_event = if matches!(&source_cap, Capability::Gamepad(Gamepad::Axis(_))) {
+                match event.action {
+                    Action::Left => {
+                        if self.state.pressed_left && event.as_f64() < AXIS_THRESHOLD {
+                            event.value = InputValue::Float(0.0);
+                            self.state.pressed_left = false;
+                            true
+                        } else if !self.state.pressed_left && event.as_f64() > AXIS_THRESHOLD {
+                            event.value = InputValue::Float(1.0);
+                            self.state.pressed_left = true;
+                            true
+                        } else {
+                            false
+                        }
                     }
-                }
-                Action::Right => {
-                    if self.state.pressed_right && event.as_f64() < AXIS_THRESHOLD {
-                        event.value = InputValue::Float(0.0);
-                        self.state.pressed_right = false;
-                        true
-                    } else if !self.state.pressed_right && event.as_f64() > AXIS_THRESHOLD {
-                        event.value = InputValue::Float(1.0);
-                        self.state.pressed_right = true;
-                        true
-                    } else {
-                        false
+                    Action::Right => {
+                        if self.state.pressed_right && event.as_f64() < AXIS_THRESHOLD {
+                            event.value = InputValue::Float(0.0);
+                            self.state.pressed_right = false;
+                            true
+                        } else if !self.state.pressed_right && event.as_f64() > AXIS_THRESHOLD {
+                            event.value = InputValue::Float(1.0);
+                            self.state.pressed_right = true;
+                            true
+                        } else {
+                            false
+                        }
                     }
-                }
-                Action::Up => {
-                    if self.state.pressed_up && event.as_f64() < AXIS_THRESHOLD {
-                        event.value = InputValue::Float(0.0);
-                        self.state.pressed_up = false;
-                        true
-                    } else if !self.state.pressed_up && event.as_f64() > AXIS_THRESHOLD {
-                        event.value = InputValue::Float(1.0);
-                        self.state.pressed_up = true;
-                        true
-                    } else {
-                        false
+                    Action::Up => {
+                        if self.state.pressed_up && event.as_f64() < AXIS_THRESHOLD {
+                            event.value = InputValue::Float(0.0);
+                            self.state.pressed_up = false;
+                            true
+                        } else if !self.state.pressed_up && event.as_f64() > AXIS_THRESHOLD {
+                            event.value = InputValue::Float(1.0);
+                            self.state.pressed_up = true;
+                            true
+                        } else {
+                            false
+                        }
                     }
-                }
-                Action::Down => {
-                    if self.state.pressed_down && event.as_f64() < AXIS_THRESHOLD {
-                        event.value = InputValue::Float(0.0);
-                        self.state.pressed_down = false;
-                        true
-                    } else if !self.state.pressed_down && event.as_f64() > AXIS_THRESHOLD {
-                        event.value = InputValue::Float(1.0);
-                        self.state.pressed_down = true;
-                        true
-                    } else {
-                        false
+                    Action::Down => {
+                        if self.state.pressed_down && event.as_f64() < AXIS_THRESHOLD {
+                            event.value = InputValue::Float(0.0);
+                            self.state.pressed_down = false;
+                            true
+                        } else if !self.state.pressed_down && event.as_f64() > AXIS_THRESHOLD {
+                            event.value = InputValue::Float(1.0);
+                            self.state.pressed_down = true;
+                            true
+                        } else {
+                            false
+                        }
                     }
+                    _ => true,
                 }
-                _ => true,
+            }
+            // Trigger input is also a special case, where we need to keep track of the
+            // current state of the trigger, and only emit events whenever the trigger
+            // passes or falls below the defined threshold.
+            else if matches!(&source_cap, Capability::Gamepad(Gamepad::Trigger(_))) {
+                match event.action {
+                    Action::L2 => {
+                        let value = event.as_f64();
+                        self.state.l2_value = Some(value);
+                        if self.state.pressed_l2 && value < TRIGGER_THRESHOLD {
+                            event.value = InputValue::Float(0.0);
+                            self.state.pressed_l2 = false;
+                            true
+                        } else if !self.state.pressed_l2 && value > TRIGGER_THRESHOLD {
+                            event.value = InputValue::Float(1.0);
+                            self.state.pressed_l2 = true;
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    Action::R2 => {
+                        let value = event.as_f64();
+                        self.state.r2_value = Some(value);
+                        if self.state.pressed_r2 && value < TRIGGER_THRESHOLD {
+                            event.value = InputValue::Float(0.0);
+                            self.state.pressed_r2 = false;
+                            true
+                        } else if !self.state.pressed_r2 && value > TRIGGER_THRESHOLD {
+                            event.value = InputValue::Float(1.0);
+                            self.state.pressed_r2 = true;
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    _ => true,
+                }
+            }
+            // Trigger buttons should be ignored if analog trigger input is
+            // detected.
+            else if matches!(
+                &source_cap,
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger))
+            ) {
+                self.state.l2_value.is_none()
+            } else if matches!(
+                &source_cap,
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger))
+            ) {
+                self.state.r2_value.is_none()
+            }
+            // All other translated events should be emitted
+            else {
+                true
             };
 
             if include_event {

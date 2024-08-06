@@ -1,6 +1,8 @@
 use std::str::FromStr;
 
-use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, Keyboard, Touch};
+use crate::input::capability::{
+    Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard, Touch,
+};
 
 use super::{native::NativeEvent, value::InputValue};
 
@@ -221,6 +223,14 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 }
                 _ => vec![Action::None],
             },
+            Gamepad::Trigger(trigger) => match trigger {
+                GamepadTrigger::LeftTrigger => vec![Action::L2],
+                GamepadTrigger::LeftTouchpadForce => vec![Action::None],
+                GamepadTrigger::LeftStickForce => vec![Action::None],
+                GamepadTrigger::RightTrigger => vec![Action::R2],
+                GamepadTrigger::RightTouchpadForce => vec![Action::None],
+                GamepadTrigger::RightStickForce => vec![Action::None],
+            },
             _ => vec![Action::None],
         },
         Capability::Mouse(_) => vec![Action::None],
@@ -431,9 +441,7 @@ fn dbus_event_from_value(action: Action, input_value: InputValue) -> Option<DBus
             y: _,
         } => Some(input_value),
     };
-    let Some(value) = value else {
-        return None;
-    };
+    let value = value?;
 
     Some(DBusEvent { action, value })
 }
