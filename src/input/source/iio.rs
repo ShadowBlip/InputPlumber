@@ -16,9 +16,6 @@ use self::{accel_gyro_3d_new::AccelGyro3dImu, bmi_imu_new::BmiImu};
 
 use super::SourceDriver;
 
-/// Size of the [SourceCommand] buffer for receiving output events
-const BUFFER_SIZE: usize = 2048;
-
 /// List of available drivers
 enum DriverType {
     Unknown,
