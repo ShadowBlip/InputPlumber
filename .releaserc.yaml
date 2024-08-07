@@ -23,12 +23,10 @@ plugins:
             - Cargo.toml
           from: '^version = .*"$'
           to: 'version = "${nextRelease.version}"'
-          #results:
-          #  - file: Cargo.toml
-          #    hasChanged: true
-          #    numMatches: 1
-          #    numReplacements: 1
-          #countMatches: true
+        - files:
+            - pkg/rpm/inputplumber.spec
+          from: '^Version:        .*$'
+          to: 'Version:        ${nextRelease.version}'
 
   # Execute commands to build the project
   - - "@semantic-release/exec"
@@ -40,6 +38,7 @@ plugins:
     - assets:
         - Cargo.toml
         - Cargo.lock
+        - pkg/rpm/inputplumber.spec
 
   # Publish artifacts as a GitHub release
   - - "@semantic-release/github"
