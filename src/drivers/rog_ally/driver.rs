@@ -38,8 +38,8 @@ impl Driver {
                 "02" => {
                     // Ally and Ally X, map back buttons and ensure it is in gamepad mode.
                     log::debug!("Setting buttons and gamepad mode.");
-                    set_attribute(device.clone(), "btn_m1/remap", "kb_f15")?;
-                    set_attribute(device.clone(), "btn_m2/remap", "kb_f14")?;
+                    set_attribute(device.clone(), "btn_m1/remap", "KB_F15")?;
+                    set_attribute(device.clone(), "btn_m2/remap", "KB_F14")?;
                     set_attribute(device, "gamepad_mode", "1")?;
                     //TODO: Figure out why this fails and manually running the same thing
                     //doesn't.
