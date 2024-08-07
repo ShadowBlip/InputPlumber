@@ -36,7 +36,6 @@ plugins:
   - - "@semantic-release/exec"
     - shell: true
       prepareCmd: "make in-docker TARGET='dist update-pkgbuild-hash'"
-    - shell: true
       publishCmd: "echo '${nextRelease.version}' > .version.txt"
 
   # Commit the following changes to git after other plugins have run
