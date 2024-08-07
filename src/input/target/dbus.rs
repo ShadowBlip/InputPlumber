@@ -17,7 +17,7 @@ use crate::{
 use super::{client::TargetDeviceClient, TargetInputDevice, TargetOutputDevice};
 
 /// The threshold for axis inputs to be considered "pressed"
-const AXIS_THRESHOLD: f64 = 0.35;
+const AXIS_THRESHOLD: f64 = 0.60;
 /// The threshold for trigger inputs to be considered "pressed"
 const TRIGGER_THRESHOLD: f64 = 0.75;
 
