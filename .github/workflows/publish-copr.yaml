@@ -1,9 +1,9 @@
 name: "🟤 Publish to COPR"
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types:
+      - published
 
 # Jobs to run
 jobs:
