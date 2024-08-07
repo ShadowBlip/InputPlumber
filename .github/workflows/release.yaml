@@ -1,4 +1,4 @@
-# Build and publish a release of Gamescope DBus using semantic-release whenever
+# Build and publish a release of InputPlumber using semantic-release whenever
 # changes are merged into main.
 name: "🎉 Release"
 
@@ -35,27 +35,63 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make sem-release
 
+      # In ".releaserc.yaml" a step is defined to write the release version to
+      # ".version.txt" upon successful release. This step checks to see if that
+      # exists to determine if the other jobs need to run.
+      - id: status
+        name: Set release status
+        shell: bash
+        run: |
+          if [ -f .version.txt ]; then
+            echo "was_released=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "was_released=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Upload the package build for the AUR publish step
+      - name: Upload PKGBUILD
+        uses: actions/upload-artifact@v4
+        if: steps.status.outputs.was_released == 'yes'
+        with:
+          name: PKGBUILD
+          path: ./pkg/archlinux/PKGBUILD
+          if-no-files-found: error
+
+    outputs:
+      should_publish: ${{ steps.status.outputs.was_released }}
+
+
   publish-to-copr:
     name: 🟤 Publish to COPR
     needs: release
+    if: needs.release.outputs.should_publish == 'yes'
     runs-on: ubuntu-latest
 
     steps:
       - name: Trigger COPR Build
         run: curl -X POST ${{ secrets.COPR_WEBHOOK_URL }}
 
+
   publish-to-aur:
     name: 🐧 Publish to AUR
     needs: release
+    if: needs.release.outputs.should_publish == 'yes'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout AUR git
-        uses: actions/checkout@v4
+      - name: Download PKGBUILD
+        uses: actions/download-artifact@v4
         with:
-          repository: ssh://aur@aur.archlinux.org/inputplumber-git.git
-          path: inputplumber-git
-          ssh-key: ${{ secrets.AUR_SSH_KEY }}
+          name: PKGBUILD
+
+      - name: Setup SSH
+        uses: MrSquaare/ssh-setup-action@v3
+        with:
+          host: aur.archlinux.org
+          private-key: ${{ secrets.AUR_SSH_KEY }}
+
+      - name: Checkout AUR git
+        run: git clone ssh://aur@aur.archlinux.org/inputplumber-git.git
 
       - name: Build git package
         working-directory: inputplumber-git
@@ -71,20 +107,11 @@ jobs:
           git commit -m "Update to $(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)"
           git push origin master
 
-      - name: Checkout InputPlumber
-        uses: actions/checkout@v4
-        with:
-          path: InputPlumber
-
       - name: Checkout AUR bin
-        uses: actions/checkout@v4
-        with:
-          repository: ssh://aur@aur.archlinux.org/inputplumber-bin.git
-          path: inputplumber-bin
-          ssh-key: ${{ secrets.AUR_SSH_KEY }}
+        run: git clone ssh://aur@aur.archlinux.org/inputplumber-bin.git
 
       - name: Copy PKGBUILD to bin repo
-        run: cp ./InputPlumber/pkg/archlinux/PKGBUILD inputplumber-bin/
+        run: cp ./PKGBUILD inputplumber-bin/
 
       - name: Build bin package
         working-directory: inputplumber-bin
