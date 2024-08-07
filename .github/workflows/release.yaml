@@ -15,7 +15,7 @@ on:
 # Jobs to run
 jobs:
   release:
-    name: Publish
+    name: 🎉 Publish to GitHub
     runs-on: ubuntu-latest
 
     steps:
@@ -34,3 +34,69 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make sem-release
+
+  publish-to-copr:
+    name: 🟤 Publish to COPR
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger COPR Build
+        run: curl -X POST ${{ secrets.COPR_WEBHOOK_URL }}
+
+  publish-to-aur:
+    name: 🐧 Publish to AUR
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout AUR git
+        uses: actions/checkout@v4
+        with:
+          repository: ssh://aur@aur.archlinux.org/inputplumber-git.git
+          path: inputplumber-git
+          ssh-key: ${{ secrets.AUR_SSH_KEY }}
+
+      - name: Build git package
+        working-directory: inputplumber-git
+        run: make in-docker
+
+      - name: Commit and publish git package
+        shell: bash
+        working-directory: inputplumber-git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "shadowblip+github-actions[bot]@users.noreply.github.com"
+          git add .SRCINFO PKGBUILD
+          git commit -m "Update to $(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)"
+          git push origin master
+
+      - name: Checkout InputPlumber
+        uses: actions/checkout@v4
+        with:
+          path: InputPlumber
+
+      - name: Checkout AUR bin
+        uses: actions/checkout@v4
+        with:
+          repository: ssh://aur@aur.archlinux.org/inputplumber-bin.git
+          path: inputplumber-bin
+          ssh-key: ${{ secrets.AUR_SSH_KEY }}
+
+      - name: Copy PKGBUILD to bin repo
+        run: cp ./InputPlumber/pkg/archlinux/PKGBUILD inputplumber-bin/
+
+      - name: Build bin package
+        working-directory: inputplumber-bin
+        run: make in-docker
+
+      - name: Commit and publish bin package
+        shell: bash
+        working-directory: inputplumber-bin
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "shadowblip+github-actions[bot]@users.noreply.github.com"
+          git add .SRCINFO PKGBUILD
+          git commit -m "Update to $(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)"
+          git push origin master
+
