@@ -179,6 +179,11 @@ $(CACHE_DIR)/libserialport:
 	mkdir -p $(CACHE_DIR)/libserialport
 	tar xvf $(CACHE_DIR)/libserialport.tar -C $(CACHE_DIR)/libserialport
 
+.PHONY: update-pkgbuild-hash
+update-pkgbuild-hash: dist/$(NAME).tar.gz ## Update the PKGBUILD hash
+	sed -i "s#^sha256sums=.*#sha256sums=('$$(cat dist/$(NAME).tar.gz.sha256.txt | cut -d' ' -f1)')#g" \
+		pkg/archlinux/PKGBUILD
+
 .PHONY: dbus-xml
 dbus-xml: ## Generate DBus XML spec from running InputPlumber
 	busctl introspect org.shadowblip.InputPlumber \
