@@ -18,6 +18,7 @@ mod dmi;
 mod drivers;
 mod iio;
 mod input;
+mod polkit;
 mod udev;
 mod watcher;
 

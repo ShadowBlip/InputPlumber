@@ -104,8 +104,9 @@ impl MouseDevice {
 impl TargetInputDevice for MouseDevice {
     fn start_dbus_interface(&mut self, dbus: Connection, path: String, client: TargetDeviceClient) {
         log::debug!("Starting dbus interface: {path}");
+        let conn = dbus.clone();
         tokio::task::spawn(async move {
-            let iface = TargetMouseInterface::new(client);
+            let iface = TargetMouseInterface::new(conn, client);
             if let Err(e) = dbus.object_server().at(path.clone(), iface).await {
                 log::debug!("Failed to start dbus interface {path}: {e:?}");
             } else {

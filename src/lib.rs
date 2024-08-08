@@ -6,5 +6,6 @@ pub mod dmi;
 pub mod drivers;
 pub mod iio;
 pub mod input;
+pub mod polkit;
 pub mod udev;
 pub mod watcher;
