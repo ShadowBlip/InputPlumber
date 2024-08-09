@@ -1,4 +1,4 @@
-use std::{error::Error, ffi::OsStr};
+use std::{error::Error, ffi::OsStr, time::Duration};
 
 use udev::Device;
 
@@ -21,6 +21,11 @@ impl Driver {
         if VID != vid || !PIDS.contains(&pid) {
             return Err(format!("'{}' is not an ROG Ally controller", udevice.devnode()).into());
         }
+        // TODO: When resuming from sleep, if mcu_powersave is set, the device init takes longer.
+        // inotify will trigger this driver before the attribute tree is fully built and the driver
+        // will error and exit, leaving some controls unusable. We should find a way to only
+        // trigger this driver or continue processing once we know the driver has fully init.
+        std::thread::sleep(Duration::from_millis(300));
 
         // Set the controller buttons to the correct values at startup
         let device = udevice.get_device()?;
