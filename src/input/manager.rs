@@ -28,6 +28,7 @@ use crate::dbus::interface::manager::ManagerInterface;
 use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
 use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
 use crate::dbus::interface::source::iio_imu::SourceIioImuInterface;
+use crate::dbus::interface::source::led::SourceLedInterface;
 use crate::dmi::data::DMIData;
 use crate::dmi::get_cpu_info;
 use crate::dmi::get_dmi_data;
@@ -35,6 +36,7 @@ use crate::input::composite_device::CompositeDevice;
 use crate::input::source::evdev;
 use crate::input::source::hidraw;
 use crate::input::source::iio;
+use crate::input::source::led;
 use crate::input::target::TargetDevice;
 use crate::input::target::TargetDeviceTypeId;
 use crate::udev;
@@ -991,10 +993,8 @@ impl Manager {
     async fn on_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
         // We REQUIRE a dev node
         let dev_node = device.devnode();
-        if dev_node.is_empty() {
-            return Ok(());
-        }
         let sys_name = device.sysname();
+        log::debug!("sysname is empty for {:?}", device.syspath());
         if sys_name.is_empty() {
             return Ok(());
         }
@@ -1012,6 +1012,10 @@ impl Manager {
         // Create a DBus interface depending on the device subsystem
         match subsystem.as_str() {
             "input" => {
+                if dev_node.is_empty() {
+                    log::debug!("devnode is empty for {:?}", device.syspath());
+                    return Ok(());
+                }
                 log::debug!("Event device added");
 
                 // Create a DBus interface for the event device
@@ -1067,6 +1071,10 @@ impl Manager {
                 log::debug!("Finished adding {id}");
             }
             "hidraw" => {
+                if dev_node.is_empty() {
+                    log::debug!("devnode is empty for {:?}", device.syspath());
+                    return Ok(());
+                }
                 log::debug!("hidraw device added");
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
@@ -1151,6 +1159,10 @@ impl Manager {
             }
 
             "iio" => {
+                if dev_node.is_empty() {
+                    log::debug!("devnode is empty for {:?}", device.syspath());
+                    return Ok(());
+                }
                 log::debug!("iio device added");
 
                 // Create a DBus interface for the event device
@@ -1166,6 +1178,36 @@ impl Manager {
 
                 // Add the device as a source device
                 let path = iio::get_dbus_path(sys_name.clone());
+                self.source_device_dbus_paths.insert(id.clone(), path);
+
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    log::debug!("{} is virtual, skipping consideration.", dev_node);
+                    return Ok(());
+                } else {
+                    log::trace!("Real device: {}", dev_node);
+                }
+
+                // Signal that a source device was added
+                log::debug!("Spawing task to add source device: {id}");
+                self.on_source_device_added(id.clone(), device).await?;
+                log::debug!("Finished adding event device {id}");
+            }
+            "leds" => {
+                log::debug!("LED device added");
+                // Create a DBus interface for the event device
+                let conn = self.dbus.clone();
+                log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
+                task::spawn(async move {
+                    let result = SourceLedInterface::listen_on_dbus(conn, dev).await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source evdev dbus interface: {e:?}");
+                    }
+                    log::debug!("Finished adding source device on dbus");
+                });
+
+                // Add the device as a source device
+                let path = led::get_dbus_path(sys_name.clone());
                 self.source_device_dbus_paths.insert(id.clone(), path);
 
                 // Check to see if the device is virtual
@@ -1286,6 +1328,9 @@ impl Manager {
         let iio_devices = udev::discover_devices("iio")?;
         let iio_devices = iio_devices.into_iter().map(|dev| dev.into()).collect();
         Manager::discover_devices(&cmd_tx, iio_devices).await?;
+        let led_devices = udev::discover_devices("leds")?;
+        let led_devices = led_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(&cmd_tx, led_devices).await?;
 
         // Watch for IIO device events.
         task::spawn_blocking(move || {
