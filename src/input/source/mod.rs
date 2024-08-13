@@ -28,6 +28,7 @@ pub mod command;
 pub mod evdev;
 pub mod hidraw;
 pub mod iio;
+pub mod led;
 
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;

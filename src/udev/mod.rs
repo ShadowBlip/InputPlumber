@@ -224,9 +224,9 @@ pub fn discover_devices(subsystem: &str) -> Result<Vec<udev::Device>, Box<dyn Er
     let mut node_devices = Vec::new();
     let devices = enumerator.scan_devices()?;
     for device in devices {
-        let Some(_) = device.devnode() else {
-            log::trace!("No devnode found for device: {:?}", device);
-            continue;
+        if device.devnode().is_none() {
+            log::debug!("No devnode found for device: {:?}", device.sysname());
+            //   continue;
         };
 
         let name = device.sysname();
