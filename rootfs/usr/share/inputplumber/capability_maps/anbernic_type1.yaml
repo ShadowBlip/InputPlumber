@@ -13,19 +13,20 @@ id: anb1
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  #TODO: Figure out how to use this and also Windows, Keyboard.
-  #- name: Home (Short Press)
-  #  source_events:
-  #    - keyboard: KeyLeftMeta
-  #  target_event:
-  #    gamepad:
-  #      button: QuickAccess2
+  - name: Home (Short Press)
+    source_events:
+      - keyboard: KeyG
+      - keyboard: KeyLeftMeta
+    target_event:
+      gamepad:
+        button: Guide
+# Workaround to enable Guide chording.
   - name: Home (Long Press)
     source_events:
       - keyboard: KeyEsc
     target_event:
       gamepad:
-        button: QuickAccess
+        button: Guide
   - name: Keyboard
     source_events:
       - keyboard: KeyO
@@ -34,13 +35,21 @@ mapping:
     target_event:
       gamepad:
         button: Keyboard
-  - name: Windows
+# Windows short press seems to break things currently, so disabled for now.
+#  - name: Windows (Short Press)
+#    source_events:
+#      - keyboard: KeyLeftMeta
+#    target_event:
+#      gamepad:
+#        button: QuickAccess
+  - name: Windows (Long Press)
     source_events:
-      - keyboard: KeyD
-      - keyboard: KeyLeftMeta
+      - keyboard: KeyEsc
+      - keyboard: KeyLeftShift
+      - keyboard: KeyLeftCtrl
     target_event:
       gamepad:
-        button: Guide
+        button: QuickAccess
 
 # List of events to filter from the source devices
 filtered_events: []
