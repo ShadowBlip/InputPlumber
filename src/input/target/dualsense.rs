@@ -431,6 +431,8 @@ impl DualSenseDevice {
                     GamepadButton::RightStickTouch => (),
                     GamepadButton::LeftPaddle3 => (),
                     GamepadButton::RightPaddle3 => (),
+                    GamepadButton::Mute => state.mute = event.pressed(),
+                    GamepadButton::Screenshot => state.mute = event.pressed(),
                     _ => (),
                 },
                 Gamepad::Axis(axis) => match axis {
@@ -951,6 +953,7 @@ impl TargetInputDevice for DualSenseDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
