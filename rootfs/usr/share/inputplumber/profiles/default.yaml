@@ -22,18 +22,14 @@ mapping:
         button: LeftTop
     target_events:
       - gamepad:
-          button: Guide
-      - gamepad:
-          button: North
+          button: LeftPaddle1
   - name: RightTop
     source_event:
       gamepad:
         button: RightTop
     target_events:
       - gamepad:
-          button: Guide
-      - gamepad:
-          button: East
+          button: RightPaddle1
   - name: Keyboard
     source_event:
       gamepad:
@@ -49,6 +45,4 @@ mapping:
         button: QuickAccess2
     target_events:
       - gamepad:
-          button: Guide
-      - gamepad:
-          button: East
+          button: Screenshot
