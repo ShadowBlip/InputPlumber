@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: ONEXPLAYER X1
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches:
+  - dmi_data:
+      product_name: ONEXPLAYER X1 A
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
+      product_name: ONEXPLAYER X1 i
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
+      product_name: ONEXPLAYER X1 mini
+      sys_vendor: ONE-NETBOOK
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c4:00.3-4/input0
+      handler: event*
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
+      handler: event*
+  - group: keyboard
+    evdev:
+      name: HID 1a86:fe00
+      phys_path: usb-0000:c4:00.3-2.2/input0
+      handler: event*
+  - group: gamepad
+    udev:
+      attributes:
+        - name: idVendor
+          value: "1a86"
+        - name: idProduct
+          value: "7523"
+        - name: bInterfaceNumber
+          value: "00"
+      sys_name: "ttyUSB*"
+      subsystem: tty
+  - group: imu
+    iio:
+      name: i2c-BMI0260:00
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - xb360
+  - mouse
+  - keyboard
+
+# The ID of a device event mapping in the 'event_maps' folder
+capability_map_id: oxp5
