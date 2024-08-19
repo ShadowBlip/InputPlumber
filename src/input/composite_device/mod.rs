@@ -294,6 +294,7 @@ impl CompositeDevice {
                 log::warn!("Unable to receive more commands. Channel closed.");
                 break;
             }
+            let mut devices_removed = false;
             //log::trace!("Received {num} command(s)");
             for cmd in buffer.drain(..) {
                 log::trace!("Received command: {:?}", cmd);
@@ -371,15 +372,9 @@ impl CompositeDevice {
                     }
                     CompositeCommand::SourceDeviceRemoved(device) => {
                         log::debug!("Detected source device removed: {}", device.devnode());
+                        devices_removed = true;
                         if let Err(e) = self.on_source_device_removed(device).await {
                             log::error!("Failed to remove source device: {:?}", e);
-                        }
-                        if self.source_devices_used.is_empty() {
-                            log::debug!(
-                                "No source devices remain. Stopping CompositeDevice {:?}",
-                                self.dbus_path
-                            );
-                            break 'main;
                         }
                     }
                     CompositeCommand::SetTargetDevices(target_types) => {
@@ -476,6 +471,16 @@ impl CompositeDevice {
                         break 'main;
                     }
                 }
+            }
+
+            // If no source devices remain after processing the queue, stop
+            // the device.
+            if devices_removed && self.source_devices_used.is_empty() {
+                log::debug!(
+                    "No source devices remain. Stopping CompositeDevice {:?}",
+                    self.dbus_path
+                );
+                break 'main;
             }
         }
         log::info!(
