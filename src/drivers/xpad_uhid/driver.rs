@@ -84,9 +84,7 @@ impl Driver {
         _left_speed: u8,
         _right_speed: u8,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let state = XpadUhidOutputData {
-            ..Default::default()
-        };
+        let state = XpadUhidOutputData {};
 
         self.write(state)
     }
@@ -104,7 +102,7 @@ impl Driver {
 
         let events = match report_id {
             DATA => {
-                log::debug!("Got input data.");
+                log::trace!("Got input data.");
                 if bytes_read != PACKET_SIZE {
                     return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
                 }
@@ -300,7 +298,7 @@ impl Driver {
                     value: state.trigger_r,
                 })));
             }
-            log::debug!("Got events: {events:?}");
+            log::trace!("Got events: {events:?}");
 
             return events;
         };
