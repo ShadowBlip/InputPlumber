@@ -1147,7 +1147,7 @@ impl Manager {
                 // Signal that a source device was added
                 log::debug!("Spawing task to add source device: {id}");
                 self.on_source_device_added(id.clone(), device).await?;
-                log::debug!("Finished adding event device {id}");
+                log::debug!("Finished adding hidraw device {id}");
             }
 
             "iio" => {
@@ -1311,13 +1311,13 @@ impl Manager {
 
                     match action.to_str().unwrap() {
                         "add" => {
-                            log::debug!("Got add action for {path:?}");
+                            log::debug!("Got udev add action for {path:?}");
                             cmd_tx.blocking_send(ManagerCommand::DeviceAdded {
                                 device: device.into(),
                             })?;
                         }
                         "remove" => {
-                            log::debug!("Got remove action for {path:?}");
+                            log::debug!("Got udev remove action for {path:?}");
                             cmd_tx.blocking_send(ManagerCommand::DeviceRemoved {
                                 device: device.into(),
                             })?;
@@ -1410,7 +1410,7 @@ impl Manager {
                         };
 
                         // Notify the manager that a device was added
-                        log::debug!("Got add action for {base_path}/{name}");
+                        log::debug!("Got inotify add action for {base_path}/{name}");
                         let result = cmd_tx
                             .send(ManagerCommand::DeviceAdded {
                                 device: device.into(),
@@ -1422,7 +1422,7 @@ impl Manager {
                     }
                     WatchEvent::Delete { name, base_path } => {
                         let device = UdevDevice::from_devnode(base_path.as_str(), name.as_str());
-                        log::debug!("Got remove action for {base_path}/{name}");
+                        log::debug!("Got inotify remove action for {base_path}/{name}");
                         let result = cmd_tx.send(ManagerCommand::DeviceRemoved { device }).await;
                         if let Err(e) = result {
                             log::error!("Unable to send command: {:?}", e);

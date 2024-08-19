@@ -104,7 +104,7 @@ impl Driver {
 
         let events = match report_id {
             DATA => {
-                log::debug!("Got touch data.");
+                log::debug!("Got input data.");
                 if bytes_read != PACKET_SIZE {
                     return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
                 }
@@ -132,9 +132,9 @@ impl Driver {
         let input_report = XBoxSeriesInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        log::debug!("--- Input report ---");
-        log::debug!("{input_report}");
-        log::debug!("---- End Report ----");
+        log::trace!("--- Input report ---");
+        log::trace!("{input_report}");
+        log::trace!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_state(input_report);
