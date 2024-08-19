@@ -35,10 +35,10 @@ pub fn watch(path: String, tx: Sender<WatchEvent>) {
 
         for event in events {
             // Send the event over our channel
-            log::debug!("inotify: {:?}", event.name);
             let name = String::from(event.name.unwrap().to_str().unwrap());
 
             if event.mask.contains(EventMask::CREATE) {
+                log::debug!("inotify CREATE: {:?}", event.name);
                 let value = WatchEvent::Create {
                     name,
                     base_path: path.clone(),
@@ -53,6 +53,7 @@ pub fn watch(path: String, tx: Sender<WatchEvent>) {
                 //    println!("File created: {:?}", event.name);
                 //}
             } else if event.mask.contains(EventMask::DELETE) {
+                log::debug!("inotify DELETE: {:?}", event.name);
                 let value = WatchEvent::Delete {
                     name,
                     base_path: path.clone(),
@@ -62,6 +63,7 @@ pub fn watch(path: String, tx: Sender<WatchEvent>) {
                     Err(e) => log::error!("Error sending event: {}", e),
                 }
             } else if event.mask.contains(EventMask::MODIFY) {
+                log::trace!("inotify MODIFY: {:?}", event.name);
                 let value = WatchEvent::Modify {
                     name,
                     base_path: path.clone(),
