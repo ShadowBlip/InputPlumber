@@ -93,6 +93,14 @@ impl TargetDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+    /// Clear any local state on the target device. This is typically called
+    /// whenever the composite device has entered intercept mode to indicate
+    /// that the target device should stop sending input.
+    pub async fn clear_state(&self) -> Result<(), ClientError> {
+        self.tx.send(TargetCommand::ClearState).await?;
+        Ok(())
+    }
+
     /// Stop the target device.
     pub async fn stop(&self) -> Result<(), ClientError> {
         self.tx.send(TargetCommand::Stop).await?;
