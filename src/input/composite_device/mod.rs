@@ -45,7 +45,7 @@ const BUFFER_SIZE: usize = 16384;
 /// The [InterceptMode] defines whether or not inputs should be routed over
 /// DBus instead of to the target devices. This can be used by overlays to
 /// intercept input.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum InterceptMode {
     /// Pass all input to the target devices
     None,
@@ -329,7 +329,7 @@ impl CompositeDevice {
                             log::error!("Failed to send target capabilities: {:?}", e);
                         }
                     }
-                    CompositeCommand::SetInterceptMode(mode) => self.set_intercept_mode(mode),
+                    CompositeCommand::SetInterceptMode(mode) => self.set_intercept_mode(mode).await,
                     CompositeCommand::GetInterceptMode(sender) => {
                         if let Err(e) = sender.send(self.intercept_mode.clone()).await {
                             log::error!("Failed to send intercept mode: {:?}", e);
@@ -1055,9 +1055,21 @@ impl CompositeDevice {
     }
 
     /// Sets the intercept mode to the given value
-    fn set_intercept_mode(&mut self, mode: InterceptMode) {
+    async fn set_intercept_mode(&mut self, mode: InterceptMode) {
         log::debug!("Setting intercept mode to: {:?}", mode);
         self.intercept_mode = mode;
+
+        // If intercept mode is being set to 'Always', clear the state from
+        // any target devices to prevent further input events.
+        if mode != InterceptMode::Always {
+            return;
+        }
+        for (path, device) in self.target_devices.iter() {
+            log::debug!("Clearing state on device: {path}");
+            if let Err(e) = device.clear_state().await {
+                log::error!("Failed to clear state on target device {path}: {e:?}");
+            }
+        }
     }
 
     /// Translates the given event into a different event based on the given
@@ -1542,7 +1554,7 @@ impl CompositeDevice {
             self.intercept_active_inputs.push(cap.clone());
             // Send the intercept target.
             log::debug!("Found activation chord!");
-            self.set_intercept_mode(InterceptMode::Always);
+            self.set_intercept_mode(InterceptMode::Always).await;
             let target_event =
                 NativeEvent::new(self.intercept_mode_target_cap.clone(), event.get_value());
             log::trace!("Release event: {target_event:?}");
@@ -1615,7 +1627,7 @@ impl CompositeDevice {
                 }
                 self.intercept_active_inputs.clear();
 
-                self.set_intercept_mode(InterceptMode::Always);
+                self.set_intercept_mode(InterceptMode::Always).await;
                 // Generate a new chord
                 let event = NativeEvent::new(
                     self.intercept_mode_target_cap.clone(),

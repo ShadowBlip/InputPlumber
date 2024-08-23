@@ -280,6 +280,11 @@ pub trait TargetInputDevice {
         });
     }
 
+    /// Clear any local state on the target device. This is typically called
+    /// whenever the composite device has entered intercept mode to indicate
+    /// that the target device should stop sending input.
+    fn clear_state(&mut self) {}
+
     /// Stop the target device
     fn stop(&mut self) -> Result<(), InputError> {
         Ok(())
@@ -489,6 +494,9 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                     }
                     TargetCommand::GetType(sender) => {
                         sender.blocking_send(type_id.to_string())?;
+                    }
+                    TargetCommand::ClearState => {
+                        implementation.clear_state();
                     }
                     TargetCommand::Stop => {
                         implementation.stop()?;
