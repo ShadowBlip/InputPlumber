@@ -1,7 +1,9 @@
 pub mod blocked;
 pub mod gamepad;
 
-use std::{error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, time::Duration};
+
+use evdev::{Device, EventType};
 
 use crate::{
     constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
@@ -67,4 +69,102 @@ impl EventDevice {
 /// Returns the DBus object path for evdev devices
 pub fn get_dbus_path(handler: String) -> String {
     format!("{}/{}", BUS_SOURCES_PREFIX, handler.clone())
+}
+
+/// Returns the evdev capabilities of the input device at the given path (e.g. /dev/input/event0)
+pub fn get_capabilities(handler: &str) -> Result<HashMap<EventType, Vec<u16>>, Box<dyn Error>> {
+    if !handler.contains("input/event") {
+        return Ok(HashMap::new());
+    }
+    let path = handler;
+    log::debug!("Opening device at: {}", path);
+    let device = Device::open(path)?;
+    let mut capabilities: HashMap<EventType, Vec<u16>> = HashMap::new();
+
+    // Loop through all support events
+    let events = device.supported_events();
+    for event in events.iter() {
+        match event {
+            EventType::KEY => {
+                let Some(keys) = device.supported_keys() else {
+                    continue;
+                };
+                for key in keys.iter() {
+                    capabilities
+                        .entry(EventType::KEY)
+                        .and_modify(|caps| caps.push(key.0))
+                        .or_insert(vec![key.0]);
+                }
+            }
+            EventType::RELATIVE => {
+                let Some(rel) = device.supported_relative_axes() else {
+                    continue;
+                };
+                for axis in rel.iter() {
+                    capabilities
+                        .entry(EventType::RELATIVE)
+                        .and_modify(|caps| caps.push(axis.0))
+                        .or_insert(vec![axis.0]);
+                }
+            }
+            EventType::ABSOLUTE => {
+                let Some(abs) = device.supported_absolute_axes() else {
+                    continue;
+                };
+                for axis in abs.iter() {
+                    capabilities
+                        .entry(EventType::ABSOLUTE)
+                        .and_modify(|caps| caps.push(axis.0))
+                        .or_insert(vec![axis.0]);
+                }
+            }
+            EventType::SWITCH => {
+                let Some(supported) = device.supported_switches() else {
+                    continue;
+                };
+                for cap in supported.iter() {
+                    capabilities
+                        .entry(EventType::SWITCH)
+                        .and_modify(|caps| caps.push(cap.0))
+                        .or_insert(vec![cap.0]);
+                }
+            }
+            EventType::LED => {
+                let Some(supported) = device.supported_leds() else {
+                    continue;
+                };
+                for cap in supported.iter() {
+                    capabilities
+                        .entry(EventType::LED)
+                        .and_modify(|caps| caps.push(cap.0))
+                        .or_insert(vec![cap.0]);
+                }
+            }
+            EventType::SOUND => {
+                let Some(supported) = device.supported_sounds() else {
+                    continue;
+                };
+                for cap in supported.iter() {
+                    capabilities
+                        .entry(EventType::SOUND)
+                        .and_modify(|caps| caps.push(cap.0))
+                        .or_insert(vec![cap.0]);
+                }
+            }
+            EventType::FORCEFEEDBACK => {
+                let Some(supported) = device.supported_ff() else {
+                    continue;
+                };
+                for cap in supported.iter() {
+                    capabilities
+                        .entry(EventType::FORCEFEEDBACK)
+                        .and_modify(|caps| caps.push(cap.0))
+                        .or_insert(vec![cap.0]);
+                }
+            }
+            _ => (),
+        }
+    }
+
+    Ok(capabilities)
 }
