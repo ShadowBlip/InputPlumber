@@ -8,7 +8,7 @@ use crate::{
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse, MouseButton,
-            Touch, Touchpad,
+            Touch, TouchButton, Touchpad,
         },
         event::{native::NativeEvent, value::InputValue},
         source::{InputError, SourceInputDevice, SourceOutputDevice},
@@ -165,100 +165,100 @@ fn translate_events(events: Vec<event::Event>) -> Vec<NativeEvent> {
 /// Translate the given Legion Go event into a native event
 fn translate_event(event: event::Event) -> NativeEvent {
     match event {
-        event::Event::Button(button) => match button {
-            event::ButtonEvent::A(value) => NativeEvent::new(
+        event::Event::GamepadButton(button) => match button {
+            event::GamepadButtonEvent::A(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::X(value) => NativeEvent::new(
+            event::GamepadButtonEvent::X(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::B(value) => NativeEvent::new(
+            event::GamepadButtonEvent::B(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::Y(value) => NativeEvent::new(
+            event::GamepadButtonEvent::Y(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::Menu(value) => NativeEvent::new(
+            event::GamepadButtonEvent::Menu(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::View(value) => NativeEvent::new(
+            event::GamepadButtonEvent::View(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::Legion(value) => NativeEvent::new(
+            event::GamepadButtonEvent::Legion(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::QuickAccess(value) => NativeEvent::new(
+            event::GamepadButtonEvent::QuickAccess(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::DPadDown(value) => NativeEvent::new(
+            event::GamepadButtonEvent::DPadDown(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::DPadUp(value) => NativeEvent::new(
+            event::GamepadButtonEvent::DPadUp(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::DPadLeft(value) => NativeEvent::new(
+            event::GamepadButtonEvent::DPadLeft(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::DPadRight(value) => NativeEvent::new(
+            event::GamepadButtonEvent::DPadRight(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::LB(value) => NativeEvent::new(
+            event::GamepadButtonEvent::LB(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::DTriggerL(value) => NativeEvent::new(
+            event::GamepadButtonEvent::DTriggerL(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::ThumbL(value) => NativeEvent::new(
+            event::GamepadButtonEvent::ThumbL(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::Y1(value) => NativeEvent::new(
+            event::GamepadButtonEvent::Y1(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::Y2(value) => NativeEvent::new(
+            event::GamepadButtonEvent::Y2(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::RB(value) => NativeEvent::new(
+            event::GamepadButtonEvent::RB(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::DTriggerR(value) => NativeEvent::new(
+            event::GamepadButtonEvent::DTriggerR(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::ThumbR(value) => NativeEvent::new(
+            event::GamepadButtonEvent::ThumbR(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::Y3(value) => NativeEvent::new(
+            event::GamepadButtonEvent::Y3(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::M3(value) => NativeEvent::new(
+            event::GamepadButtonEvent::M3(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::M2(value) => NativeEvent::new(
+            event::GamepadButtonEvent::M2(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::MouseClick(value) => NativeEvent::new(
+            event::GamepadButtonEvent::MouseClick(value) => NativeEvent::new(
                 Capability::Mouse(Mouse::Button(MouseButton::Middle)),
                 InputValue::Bool(value.pressed),
             ),
@@ -315,6 +315,12 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 InputValue::Bool(value.pressed),
             ),
         },
+        event::Event::TouchButton(button) => match button {
+            event::TouchButtonEvent::Left(value) => NativeEvent::new(
+                Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
+                InputValue::Bool(value.pressed),
+            ),
+        },
 
         _ => NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false)),
     }
@@ -355,5 +361,6 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Mouse(Mouse::Button(MouseButton::Right)),
     Capability::Mouse(Mouse::Button(MouseButton::Side)),
     Capability::Mouse(Mouse::Motion),
+    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];

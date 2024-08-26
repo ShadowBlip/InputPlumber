@@ -9,8 +9,9 @@ use packed_struct::{types::SizedInteger, PackedStruct};
 
 use super::{
     event::{
-        AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, MouseAxisInput, MouseButtonEvent,
-        MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput, TriggerEvent, TriggerInput,
+        AxisEvent, BinaryInput, Event, GamepadButtonEvent, JoyAxisInput, MouseAxisInput,
+        MouseButtonEvent, MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput,
+        TouchButtonEvent, TriggerEvent, TriggerInput,
     },
     hid_report::{
         DInputDataLeftReport, DInputDataRightReport, KeyboardDataReport, MouseDataReport,
@@ -62,10 +63,14 @@ pub struct Driver {
     xinput_state: Option<XInputDataReport>,
     /// HIDRAW device instance
     device: HidDevice,
+    /// Timestamp of the first touch event. Used to detect tap-to-click events
+    first_touch: Instant,
     /// Timestamp of the last touch event.
     last_touch: Instant,
     /// Whether or not we are detecting a touch event currently.
     is_touching: bool,
+    /// Whether or not we are currently holding a tap-to-click.
+    is_tapped: bool,
 }
 
 impl Driver {
@@ -85,12 +90,14 @@ impl Driver {
             device,
             dinputl_state: None,
             dinputr_state: None,
-            xinput_state: None,
+            first_touch: Instant::now(),
+            is_tapped: false,
+            is_touching: false,
             keyboard_state: None,
+            last_touch: Instant::now(),
             mouse_state: None,
             touchpad_state: None,
-            last_touch: Instant::now(),
-            is_touching: false,
+            xinput_state: None,
         })
     }
 
@@ -169,8 +176,28 @@ impl Driver {
             }
         };
 
+        // There is no release event, so check to see if we are still touching.
         if self.is_touching && (self.last_touch.elapsed() > Duration::from_millis(4)) {
             let event: Event = self.release_touch();
+            events.push(event);
+            // Check for tap events
+            if self.first_touch.elapsed() < Duration::from_millis(200) {
+                // For double clicking, ensure the previous tap is cleared.
+                if self.is_tapped {
+                    let event: Event = self.release_tap();
+                    events.push(event);
+                }
+                let event: Event = self.start_tap();
+                events.push(event);
+            }
+        }
+
+        // If we did a click event, see if we shoudl release it. Accounts for click and drag.
+        if !self.is_touching
+            && self.is_tapped
+            && (self.last_touch.elapsed() > Duration::from_millis(100))
+        {
+            let event: Event = self.release_tap();
             events.push(event);
         }
 
@@ -219,44 +246,54 @@ impl Driver {
         if let Some(old_state) = old_state {
             // Binary Events
             if state.down != old_state.down {
-                events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                    pressed: state.down,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DPadDown(
+                    BinaryInput {
+                        pressed: state.down,
+                    },
+                )));
             }
             if state.up != old_state.up {
-                events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                    pressed: state.up,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DPadUp(
+                    BinaryInput { pressed: state.up },
+                )));
             }
             if state.left != old_state.left {
-                events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                    pressed: state.left,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DPadLeft(
+                    BinaryInput {
+                        pressed: state.left,
+                    },
+                )));
             }
             if state.right != old_state.right {
-                events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                    pressed: state.right,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DPadRight(
+                    BinaryInput {
+                        pressed: state.right,
+                    },
+                )));
             }
             if state.y1 != old_state.y1 {
-                events.push(Event::Button(ButtonEvent::Y1(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::Y1(BinaryInput {
                     pressed: state.y1,
                 })));
             }
             if state.y2 != old_state.y2 {
-                events.push(Event::Button(ButtonEvent::Y2(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::Y2(BinaryInput {
                     pressed: state.y2,
                 })));
             }
             if state.menu != old_state.menu {
-                events.push(Event::Button(ButtonEvent::Menu(BinaryInput {
-                    pressed: state.menu,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::Menu(
+                    BinaryInput {
+                        pressed: state.menu,
+                    },
+                )));
             }
             if state.view != old_state.view {
-                events.push(Event::Button(ButtonEvent::View(BinaryInput {
-                    pressed: state.view,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::View(
+                    BinaryInput {
+                        pressed: state.view,
+                    },
+                )));
             }
 
             // Axis events
@@ -335,44 +372,46 @@ impl Driver {
         if let Some(old_state) = old_state {
             // Binary Events
             if state.a != old_state.a {
-                events.push(Event::Button(ButtonEvent::A(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::A(BinaryInput {
                     pressed: state.a,
                 })));
             }
             if state.b != old_state.b {
-                events.push(Event::Button(ButtonEvent::B(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::B(BinaryInput {
                     pressed: state.b,
                 })));
             }
             if state.x != old_state.x {
-                events.push(Event::Button(ButtonEvent::X(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::X(BinaryInput {
                     pressed: state.x,
                 })));
             }
             if state.y != old_state.y {
-                events.push(Event::Button(ButtonEvent::Y(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::Y(BinaryInput {
                     pressed: state.y,
                 })));
             }
             if state.m2 != old_state.m2 {
-                events.push(Event::Button(ButtonEvent::M2(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::M2(BinaryInput {
                     pressed: state.m2,
                 })));
             }
             if state.m3 != old_state.m3 {
-                events.push(Event::Button(ButtonEvent::M3(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::M3(BinaryInput {
                     pressed: state.m3,
                 })));
             }
             if state.y3 != old_state.y3 {
-                events.push(Event::Button(ButtonEvent::Y3(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::Y3(BinaryInput {
                     pressed: state.y3,
                 })));
             }
             if state.quick_access != old_state.quick_access {
-                events.push(Event::Button(ButtonEvent::QuickAccess(BinaryInput {
-                    pressed: state.quick_access,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::QuickAccess(
+                    BinaryInput {
+                        pressed: state.quick_access,
+                    },
+                )));
             }
 
             // Axis events
@@ -581,6 +620,7 @@ impl Driver {
         //// Axis events
         if !self.is_touching {
             self.is_touching = true;
+            self.first_touch = Instant::now();
             log::trace!("Started TOUCH event");
         }
         events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
@@ -642,138 +682,166 @@ impl Driver {
             if state.gamepad_mode == 2 {
                 //log::debug!("In FPS Mode, rejecting gamepad input.");
                 if state.legion != old_state.legion {
-                    events.push(Event::Button(ButtonEvent::Legion(BinaryInput {
-                        pressed: state.legion,
-                    })));
+                    events.push(Event::GamepadButton(GamepadButtonEvent::Legion(
+                        BinaryInput {
+                            pressed: state.legion,
+                        },
+                    )));
                 }
                 if state.quick_access != old_state.quick_access {
-                    events.push(Event::Button(ButtonEvent::QuickAccess(BinaryInput {
-                        pressed: state.quick_access,
-                    })));
+                    events.push(Event::GamepadButton(GamepadButtonEvent::QuickAccess(
+                        BinaryInput {
+                            pressed: state.quick_access,
+                        },
+                    )));
                 }
 
                 return events;
             }
             // Binary Events
             if state.a != old_state.a {
-                events.push(Event::Button(ButtonEvent::A(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::A(BinaryInput {
                     pressed: state.a,
                 })));
             }
             if state.b != old_state.b {
-                events.push(Event::Button(ButtonEvent::B(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::B(BinaryInput {
                     pressed: state.b,
                 })));
             }
             if state.x != old_state.x {
-                events.push(Event::Button(ButtonEvent::X(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::X(BinaryInput {
                     pressed: state.x,
                 })));
             }
             if state.y != old_state.y {
-                events.push(Event::Button(ButtonEvent::Y(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::Y(BinaryInput {
                     pressed: state.y,
                 })));
             }
             if state.menu != old_state.menu {
-                events.push(Event::Button(ButtonEvent::Menu(BinaryInput {
-                    pressed: state.menu,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::Menu(
+                    BinaryInput {
+                        pressed: state.menu,
+                    },
+                )));
             }
             if state.view != old_state.view {
-                events.push(Event::Button(ButtonEvent::View(BinaryInput {
-                    pressed: state.view,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::View(
+                    BinaryInput {
+                        pressed: state.view,
+                    },
+                )));
             }
             if state.legion != old_state.legion {
-                events.push(Event::Button(ButtonEvent::Legion(BinaryInput {
-                    pressed: state.legion,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::Legion(
+                    BinaryInput {
+                        pressed: state.legion,
+                    },
+                )));
             }
             if state.quick_access != old_state.quick_access {
-                events.push(Event::Button(ButtonEvent::QuickAccess(BinaryInput {
-                    pressed: state.quick_access,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::QuickAccess(
+                    BinaryInput {
+                        pressed: state.quick_access,
+                    },
+                )));
             }
             if state.down != old_state.down {
-                events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                    pressed: state.down,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DPadDown(
+                    BinaryInput {
+                        pressed: state.down,
+                    },
+                )));
             }
             if state.up != old_state.up {
-                events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                    pressed: state.up,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DPadUp(
+                    BinaryInput { pressed: state.up },
+                )));
             }
             if state.left != old_state.left {
-                events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                    pressed: state.left,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DPadLeft(
+                    BinaryInput {
+                        pressed: state.left,
+                    },
+                )));
             }
             if state.right != old_state.right {
-                events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                    pressed: state.right,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DPadRight(
+                    BinaryInput {
+                        pressed: state.right,
+                    },
+                )));
             }
             if state.lb != old_state.lb {
-                events.push(Event::Button(ButtonEvent::LB(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::LB(BinaryInput {
                     pressed: state.lb,
                 })));
             }
             if state.rb != old_state.rb {
-                events.push(Event::Button(ButtonEvent::RB(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::RB(BinaryInput {
                     pressed: state.rb,
                 })));
             }
             if state.d_trigger_l != old_state.d_trigger_l {
-                events.push(Event::Button(ButtonEvent::DTriggerL(BinaryInput {
-                    pressed: state.d_trigger_l,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DTriggerL(
+                    BinaryInput {
+                        pressed: state.d_trigger_l,
+                    },
+                )));
             }
             if state.d_trigger_r != old_state.d_trigger_r {
-                events.push(Event::Button(ButtonEvent::DTriggerR(BinaryInput {
-                    pressed: state.d_trigger_r,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::DTriggerR(
+                    BinaryInput {
+                        pressed: state.d_trigger_r,
+                    },
+                )));
             }
             if state.m2 != old_state.m2 {
-                events.push(Event::Button(ButtonEvent::M2(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::M2(BinaryInput {
                     pressed: state.m2,
                 })));
             }
             if state.m3 != old_state.m3 {
-                events.push(Event::Button(ButtonEvent::M3(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::M3(BinaryInput {
                     pressed: state.m3,
                 })));
             }
             if state.y1 != old_state.y1 {
-                events.push(Event::Button(ButtonEvent::Y1(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::Y1(BinaryInput {
                     pressed: state.y1,
                 })));
             }
             if state.y2 != old_state.y2 {
-                events.push(Event::Button(ButtonEvent::Y2(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::Y2(BinaryInput {
                     pressed: state.y2,
                 })));
             }
             if state.y3 != old_state.y3 {
-                events.push(Event::Button(ButtonEvent::Y3(BinaryInput {
+                events.push(Event::GamepadButton(GamepadButtonEvent::Y3(BinaryInput {
                     pressed: state.y3,
                 })));
             }
             if state.mouse_click != old_state.mouse_click {
-                events.push(Event::Button(ButtonEvent::MouseClick(BinaryInput {
-                    pressed: state.mouse_click,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::MouseClick(
+                    BinaryInput {
+                        pressed: state.mouse_click,
+                    },
+                )));
             }
             if state.thumb_l != old_state.thumb_l {
-                events.push(Event::Button(ButtonEvent::ThumbL(BinaryInput {
-                    pressed: state.thumb_l,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::ThumbL(
+                    BinaryInput {
+                        pressed: state.thumb_l,
+                    },
+                )));
             }
             if state.thumb_r != old_state.thumb_r {
-                events.push(Event::Button(ButtonEvent::ThumbR(BinaryInput {
-                    pressed: state.thumb_r,
-                })));
+                events.push(Event::GamepadButton(GamepadButtonEvent::ThumbR(
+                    BinaryInput {
+                        pressed: state.thumb_r,
+                    },
+                )));
             }
 
             // Axis events
@@ -863,5 +931,17 @@ impl Driver {
             x: 0,
             y: 0,
         }))
+    }
+
+    fn start_tap(&mut self) -> Event {
+        log::trace!("Started CLICK event.");
+        self.is_tapped = true;
+        Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true }))
+    }
+
+    fn release_tap(&mut self) -> Event {
+        log::trace!("Released CLICK event.");
+        self.is_tapped = false;
+        Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false }))
     }
 }

@@ -1,8 +1,9 @@
 /// Events that can be emitted by the Legion Go controller
 #[derive(Clone, Debug)]
 pub enum Event {
-    Button(ButtonEvent),
+    GamepadButton(GamepadButtonEvent),
     MouseButton(MouseButtonEvent),
+    TouchButton(TouchButtonEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
     Status(StatusEvent),
@@ -36,14 +37,6 @@ pub struct JoyAxisInput {
     pub y: u8,
 }
 
-/// AccelerometerInput represents the state of the accelerometer (x, y, z) values
-#[derive(Clone, Debug)]
-pub struct GyroInput {
-    pub x: u8,
-    pub y: u8,
-    pub z: u8,
-}
-
 // Status inputs contain some value that corresponds to the current status of a device.
 #[derive(Clone, Debug)]
 pub struct StatusInput {
@@ -64,7 +57,7 @@ pub struct TriggerInput {
 
 /// Button events represend binary inputs
 #[derive(Clone, Debug)]
-pub enum ButtonEvent {
+pub enum GamepadButtonEvent {
     /// A Button
     A(BinaryInput),
     /// X Button
@@ -130,6 +123,13 @@ pub enum MouseButtonEvent {
     Left(BinaryInput),
 }
 
+/// Button events represend binary inputs
+#[derive(Clone, Debug)]
+pub enum TouchButtonEvent {
+    /// Tap to click button
+    Left(BinaryInput),
+}
+
 /// Axis events are events that have (x, y) values
 #[derive(Clone, Debug)]
 pub enum AxisEvent {
@@ -157,4 +157,3 @@ pub enum StatusEvent {
     RightControllerMode0(StatusInput),
     RightControllerMode1(StatusInput),
 }
-
