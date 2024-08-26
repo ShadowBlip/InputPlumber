@@ -66,6 +66,40 @@ impl SourceEventDeviceInterface {
 
 #[interface(name = "org.shadowblip.Input.Source.EventDevice")]
 impl SourceEventDeviceInterface {
+    /// Returns the detected device class of the device (e.g. "joystick", "touchscreen", etc.)
+    #[zbus(property)]
+    pub fn device_class(&self) -> fdo::Result<String> {
+        let properties = self.device.get_properties();
+        if properties.contains_key("ID_INPUT_KEYBOARD") {
+            return Ok("keyboard".to_string());
+        }
+        if properties.contains_key("ID_INPUT_MOUSE") {
+            return Ok("mouse".to_string());
+        }
+        if properties.contains_key("ID_INPUT_JOYSTICK") {
+            return Ok("joystick".to_string());
+        }
+        if properties.contains_key("ID_INPUT_TABLET") {
+            return Ok("tablet".to_string());
+        }
+        if properties.contains_key("ID_INPUT_TOUCHPAD") {
+            return Ok("touchpad".to_string());
+        }
+        if properties.contains_key("ID_INPUT_TOUCHSCREEN") {
+            return Ok("touchscreen".to_string());
+        }
+        if properties.contains_key("ID_INPUT_SWITCH") {
+            return Ok("switch".to_string());
+        }
+        if properties.contains_key("ID_INPUT_ACCELEROMETER") {
+            return Ok("imu".to_string());
+        }
+        if properties.contains_key("ID_INPUT_POINTINGSTICK") {
+            return Ok("pointer".to_string());
+        }
+        Ok("other".to_string())
+    }
+
     /// Returns the full device node path to the device (e.g. /dev/input/event3)
     #[zbus(property)]
     pub fn device_path(&self) -> fdo::Result<String> {
