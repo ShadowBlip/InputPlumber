@@ -178,4 +178,10 @@ impl SourceEventDeviceInterface {
     async fn supported_ff(&self) -> fdo::Result<Vec<u16>> {
         Ok(self.supported_events(&EventType::FORCEFEEDBACK))
     }
+
+    /// Returns the udev device properties of the device
+    #[zbus(property)]
+    async fn udev_properties(&self) -> fdo::Result<HashMap<String, String>> {
+        Ok(self.device.get_properties())
+    }
 }
