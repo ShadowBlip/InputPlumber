@@ -26,6 +26,10 @@ pub trait AttributeGetter {
     fn product(&self) -> String;
     fn serial_number(&self) -> String;
     fn uniq(&self) -> String;
+    /// Returns the value of the given property from the device
+    fn get_property(&self, property: &str) -> Option<String>;
+    /// Returns device properties for the device. E.g. {"ID_INPUT": "1", ...}
+    fn get_properties(&self) -> HashMap<String, String>;
 }
 
 impl AttributeGetter for ::udev::Device {
@@ -210,6 +214,24 @@ impl AttributeGetter for ::udev::Device {
             }
         };
         attr.to_string_lossy().to_string()
+    }
+
+    /// Returns the value of the given property from the device
+    fn get_property(&self, property: &str) -> Option<String> {
+        self.property_value(property)
+            .map(|v| v.to_string_lossy().to_string())
+    }
+
+    /// Returns device properties for the device. E.g. {"ID_INPUT": "1", ...}
+    fn get_properties(&self) -> HashMap<String, String> {
+        let mut properties = HashMap::new();
+        for property in self.properties() {
+            let key = property.name().to_string_lossy().to_string();
+            let value = property.value().to_string_lossy().to_string();
+            properties.insert(key, value);
+        }
+
+        properties
     }
 }
 
@@ -452,6 +474,22 @@ impl UdevDevice {
             }
             _ => "".to_string(),
         }
+    }
+
+    /// Returns the value of the given property from the device
+    pub fn get_property(&self, property: &str) -> Option<String> {
+        let Ok(device) = self.get_device() else {
+            return None;
+        };
+        device.get_property(property)
+    }
+
+    /// Returns device properties for the device. E.g. {"ID_INPUT": "1", ...}
+    pub fn get_properties(&self) -> HashMap<String, String> {
+        let Ok(device) = self.get_device() else {
+            return HashMap::new();
+        };
+        device.get_properties()
     }
 }
 
