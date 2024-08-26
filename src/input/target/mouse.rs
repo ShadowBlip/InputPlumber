@@ -2,7 +2,8 @@ use std::{collections::HashMap, error::Error, time::Instant};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
-    AbsInfo, AbsoluteAxisCode, AttributeSet, InputEvent, KeyCode, RelativeAxisCode,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, BusType, InputEvent, InputId, KeyCode,
+    RelativeAxisCode,
 };
 use zbus::Connection;
 
@@ -19,6 +20,26 @@ use crate::{
 use super::{
     client::TargetDeviceClient, InputError, OutputError, TargetInputDevice, TargetOutputDevice,
 };
+
+/// Configuration of the target touchpad device.
+#[derive(Debug, Clone)]
+pub struct MouseConfig {
+    pub name: String,
+    pub vendor_id: u16,
+    pub product_id: u16,
+    pub version: u16,
+}
+
+impl Default for MouseConfig {
+    fn default() -> Self {
+        Self {
+            name: "InputPlumber Mouse".to_string(),
+            vendor_id: 0x0000,
+            product_id: 0xffff,
+            version: 0x001,
+        }
+    }
+}
 
 /// The [MouseMotionState] keeps track of the mouse velocity from translated
 /// input events (like a joystick), and sends mouse motion events to the
@@ -39,8 +60,14 @@ pub struct MouseDevice {
 }
 
 impl MouseDevice {
+    /// Create a new emulated touchpad device with the default configuration.
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        let device = MouseDevice::create_virtual_device()?;
+        MouseDevice::new_with_config(MouseConfig::default())
+    }
+
+    /// Create a new emulated touchpad device with the given configuration.
+    pub fn new_with_config(config: MouseConfig) -> Result<Self, Box<dyn Error>> {
+        let device = MouseDevice::create_virtual_device(&config)?;
         Ok(Self {
             device,
             state: MouseMotionState::default(),
@@ -58,15 +85,24 @@ impl MouseDevice {
     }
 
     /// Create the virtual device to emulate
-    fn create_virtual_device() -> Result<VirtualDevice, Box<dyn Error>> {
+    fn create_virtual_device(config: &MouseConfig) -> Result<VirtualDevice, Box<dyn Error>> {
         let mut buttons = AttributeSet::<KeyCode>::new();
         buttons.insert(KeyCode::BTN_LEFT);
         buttons.insert(KeyCode::BTN_RIGHT);
         buttons.insert(KeyCode::BTN_MIDDLE);
         buttons.insert(KeyCode::BTN_SIDE);
         buttons.insert(KeyCode::BTN_EXTRA);
+
+        // Identify to the kernel as a touchpad
+        let name = config.name.as_str();
+        let vendor = config.vendor_id;
+        let product = config.product_id;
+        let version = config.version;
+        let id = InputId::new(BusType(3), vendor, product, version);
+
         let device = VirtualDeviceBuilder::new()?
-            .name("InputPlumber Mouse")
+            .name(name)
+            .input_id(id)
             .with_keys(&buttons)?
             .with_relative_axes(&AttributeSet::from_iter([
                 RelativeAxisCode::REL_X,

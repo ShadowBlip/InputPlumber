@@ -2,7 +2,6 @@ use std::{
     error::Error,
     ffi::CString,
     time::{Duration, Instant},
-    u8, vec,
 };
 
 use hidapi::HidDevice;
@@ -11,7 +10,7 @@ use packed_struct::{types::SizedInteger, PackedStruct};
 use crate::udev::device::UdevDevice;
 
 use super::{
-    event::{Event, TouchAxisInput},
+    event::{BinaryInput, Event, TouchAxisEvent, TouchButtonEvent},
     hid_report::TouchpadDataReport,
 };
 
@@ -39,8 +38,12 @@ pub struct Driver {
     device: HidDevice,
     /// Whether or not we are detecting a touch event currently.
     is_touching: bool,
-    /// Timestamp of the last touch event.
+    /// Whether or not we are currently holding a tap-to-click.
+    is_tapped: bool,
+    /// Timestamp of the last touch event. Used to track if the touch has ended.
     last_touch: Instant,
+    /// Timestamp of the first touch event. Used to detect tap-to-click events
+    first_touch: Instant,
     /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport>,
 }
@@ -58,6 +61,8 @@ impl Driver {
 
         Ok(Self {
             device,
+            first_touch: Instant::now(),
+            is_tapped: false,
             is_touching: false,
             last_touch: Instant::now(),
             touchpad_state: None,
@@ -93,8 +98,28 @@ impl Driver {
             }
         };
 
+        // There is no release event, so check to see if we are still touching.
         if self.is_touching && (self.last_touch.elapsed() > Duration::from_millis(4)) {
             let event: Event = self.release_touch();
+            events.push(event);
+            // Check for tap events
+            if self.first_touch.elapsed() < Duration::from_millis(200) {
+                // For double clicking, ensure the previous tap is cleared.
+                if self.is_tapped {
+                    let event: Event = self.release_tap();
+                    events.push(event);
+                }
+                let event: Event = self.start_tap();
+                events.push(event);
+            }
+        }
+
+        // If we did a click event, see if we shoudl release it. Accounts for click and drag.
+        if !self.is_touching
+            && self.is_tapped
+            && (self.last_touch.elapsed() > Duration::from_millis(100))
+        {
+            let event: Event = self.release_tap();
             events.push(event);
         }
 
@@ -147,9 +172,10 @@ impl Driver {
         //// Axis events
         if !self.is_touching {
             self.is_touching = true;
+            self.first_touch = Instant::now();
             log::trace!("Started TOUCH event");
         }
-        events.push(Event::TouchAxis(TouchAxisInput {
+        events.push(Event::TouchAxis(TouchAxisEvent {
             index: 0,
             is_touching: true,
             x: state.touch_x.to_primitive(),
@@ -163,11 +189,23 @@ impl Driver {
     fn release_touch(&mut self) -> Event {
         log::trace!("Released TOUCH event.");
         self.is_touching = false;
-        Event::TouchAxis(TouchAxisInput {
+        Event::TouchAxis(TouchAxisEvent {
             index: 0,
             is_touching: false,
             x: 0,
             y: 0,
         })
+    }
+
+    fn start_tap(&mut self) -> Event {
+        log::trace!("Started CLICK event.");
+        self.is_tapped = true;
+        Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true }))
+    }
+
+    fn release_tap(&mut self) -> Event {
+        log::trace!("Released CLICK event.");
+        self.is_tapped = false;
+        Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false }))
     }
 }

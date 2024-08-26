@@ -8,7 +8,7 @@ use evdev::{
 use nix::fcntl::{FcntlArg, OFlag};
 
 use crate::input::{
-    capability::{Capability, Touch, Touchpad},
+    capability::{Capability, Touch, TouchButton, Touchpad},
     composite_device::client::CompositeDeviceClient,
     event::{native::NativeEvent, value::InputValue},
     output_event::OutputEvent,
@@ -163,22 +163,35 @@ impl TouchpadDevice {
     fn translate_event(&mut self, event: NativeEvent) -> Vec<InputEvent> {
         let mut events = vec![];
         let cap = event.as_capability();
-        let touch_events: Vec<Capability> = vec![
+
+        let button_events: Vec<Capability> = vec![
+            Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Press))),
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
+            Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
+        ];
+
+        let motion_events: Vec<Capability> = vec![
             Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
             Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
         ];
-        // TODO: Add support for buttons
-        //let _button_events: Vec<Capability> = vec![
-        //    Capability::Touchpad(Touchpad::CenterPad(Touch::Button)),
-        //    Capability::Touchpad(Touchpad::LeftPad(Touch::Button)),
-        //    Capability::Touchpad(Touchpad::RightPad(Touch::Button)),
-        //];
-        // && !button_events.contains(&cap) {
 
-        if !touch_events.contains(&cap) {
-            return events;
+        if button_events.contains(&cap) {
+            let event = self.translate_button(event.clone());
+            events.push(event);
         };
+
+        if motion_events.contains(&cap) {
+            let mut event_list = self.translate_motion(event);
+            events.append(&mut event_list);
+        }
+
+        events
+    }
+
+    /// Translate the given native [Touch::Motion] event into a sereis of evdev events
+    fn translate_motion(&mut self, event: NativeEvent) -> Vec<InputEvent> {
+        let mut events = vec![];
 
         // Destructure the input value
         let InputValue::Touch {
@@ -314,10 +327,20 @@ impl TouchpadDevice {
         let value = self.timestamp;
         let event = InputEvent::new(EventType::MISC.0, MiscCode::MSC_TIMESTAMP.0, value);
         events.push(event);
-        self.timestamp = self.timestamp.wrapping_add(10000);
+        self.timestamp = self.timestamp.wrapping_add(6500);
         self.should_set_timestamp = false;
 
         events
+    }
+
+    fn translate_button(&mut self, event: NativeEvent) -> InputEvent {
+        // Destructure the input value
+        let value: InputValue = event.get_value();
+        InputEvent::new(
+            EventType::KEY.0,
+            KeyCode::BTN_LEFT.0,
+            value.pressed() as i32,
+        )
     }
 }
 
@@ -332,8 +355,11 @@ impl TargetInputDevice for TouchpadDevice {
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(vec![
+            Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
+            Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
         ])
     }

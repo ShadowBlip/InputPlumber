@@ -6,7 +6,7 @@ use crate::{
         event,
     },
     input::{
-        capability::{Capability, Touch, Touchpad},
+        capability::{Capability, Touch, TouchButton, Touchpad},
         event::{native::NativeEvent, value::InputValue},
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -86,7 +86,7 @@ fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
 
 /// Normalize the value to something between -1.0 and 1.0 based on the Deck's
 /// minimum and maximum axis ranges.
-fn normalize_axis_value(event: event::TouchAxisInput) -> InputValue {
+fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
     let x = event.x;
     let y = event.y;
     log::trace!("Got axis to normalize: {x}, {y}");
@@ -138,12 +138,30 @@ fn translate_event(event: event::Event, touchpad_side: TouchpadSide) -> NativeEv
                 normalize_axis_value(axis),
             ),
         },
-        //_ => NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false)),
+        // TODO: Consider making a [TouchButton::Tap] event so we can do more events with touchpads
+        // that have physical buttons (e.g. Steam Deck).
+        event::Event::TouchButton(button) => match button {
+            event::TouchButtonEvent::Left(value) => match touchpad_side {
+                TouchpadSide::Unknown => {
+                    NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
+                }
+                TouchpadSide::Left => NativeEvent::new(
+                    Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
+                    InputValue::Bool(value.pressed),
+                ),
+                TouchpadSide::Right => NativeEvent::new(
+                    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
+                    InputValue::Bool(value.pressed),
+                ),
+            },
+        },
     }
 }
 
 /// List of all capabilities that the OrangePi NEO driver implements
 pub const CAPABILITIES: &[Capability] = &[
+    Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
+    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];
