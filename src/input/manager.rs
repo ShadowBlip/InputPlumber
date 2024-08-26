@@ -28,6 +28,7 @@ use crate::dbus::interface::manager::ManagerInterface;
 use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
 use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
 use crate::dbus::interface::source::iio_imu::SourceIioImuInterface;
+use crate::dbus::interface::source::udev::SourceUdevDeviceInterface;
 use crate::dmi::data::DMIData;
 use crate::dmi::get_cpu_info;
 use crate::dmi::get_dmi_data;
@@ -1016,9 +1017,21 @@ impl Manager {
 
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
+                let path = evdev::get_dbus_path(sys_name.clone());
                 log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
 
+                let dbus_path = path.clone();
                 task::spawn(async move {
+                    let result = SourceUdevDeviceInterface::listen_on_dbus(
+                        conn.clone(),
+                        dbus_path.as_str(),
+                        sysname.as_str(),
+                        dev.clone(),
+                    )
+                    .await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source udev dbus interface: {e:?}");
+                    }
                     let result =
                         SourceEventDeviceInterface::listen_on_dbus(conn, sysname, dev).await;
                     if let Err(e) = result {
@@ -1028,7 +1041,6 @@ impl Manager {
                 });
 
                 // Add the device as a source device
-                let path = evdev::get_dbus_path(sys_name.clone());
                 self.source_device_dbus_paths.insert(id.clone(), path);
 
                 // Check to see if the device is virtual
@@ -1070,8 +1082,21 @@ impl Manager {
                 log::debug!("hidraw device added");
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
+                let path = hidraw::get_dbus_path(sys_name.clone());
+
                 log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
+                let dbus_path = path.clone();
                 task::spawn(async move {
+                    let result = SourceUdevDeviceInterface::listen_on_dbus(
+                        conn.clone(),
+                        dbus_path.as_str(),
+                        sysname.as_str(),
+                        dev.clone(),
+                    )
+                    .await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source udev dbus interface: {e:?}");
+                    }
                     let result = SourceHIDRawInterface::listen_on_dbus(conn, sysname, dev).await;
                     if let Err(e) = result {
                         log::error!("Error creating source evdev dbus interface: {e:?}");
@@ -1080,7 +1105,6 @@ impl Manager {
                 });
 
                 // Add the device as a source device
-                let path = hidraw::get_dbus_path(sys_name.clone());
                 self.source_device_dbus_paths.insert(id.clone(), path);
 
                 // Check to see if the device is virtual
@@ -1155,8 +1179,22 @@ impl Manager {
 
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
+                let path = iio::get_dbus_path(sys_name.clone());
+
                 log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
+                let dbus_path = path.clone();
                 task::spawn(async move {
+                    let result = SourceUdevDeviceInterface::listen_on_dbus(
+                        conn.clone(),
+                        dbus_path.as_str(),
+                        sysname.as_str(),
+                        dev.clone(),
+                    )
+                    .await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source udev dbus interface: {e:?}");
+                    }
+
                     let result = SourceIioImuInterface::listen_on_dbus(conn, dev).await;
                     if let Err(e) = result {
                         log::error!("Error creating source evdev dbus interface: {e:?}");
@@ -1165,7 +1203,6 @@ impl Manager {
                 });
 
                 // Add the device as a source device
-                let path = iio::get_dbus_path(sys_name.clone());
                 self.source_device_dbus_paths.insert(id.clone(), path);
 
                 // Check to see if the device is virtual
@@ -1198,7 +1235,20 @@ impl Manager {
         log::debug!("Device dbus path: {path}");
         let conn = self.dbus.clone();
         task::spawn(async move {
-            log::debug!("Stopping dbus interface: {path}");
+            log::debug!("Stopping dbus interfaces: {path}");
+
+            // Stop generic interfaces
+            let result = conn
+                .object_server()
+                .remove::<SourceUdevDeviceInterface, ObjectPath>(path.clone())
+                .await;
+            if let Err(e) = result {
+                log::error!("Failed to remove udev dbus interface {path}: {e:?}");
+            } else {
+                log::debug!("Stopped udev dbus interface: {path}");
+            }
+
+            // Stop subsystem-specific interfaces
             let result = match subsystem.as_str() {
                 "input" => {
                     conn.object_server()
