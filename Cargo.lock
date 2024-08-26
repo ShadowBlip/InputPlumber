@@ -837,7 +837,7 @@ dependencies = [
 
 [[package]]
 name = "inputplumber"
-version = "0.34.5"
+version = "0.34.6"
 dependencies = [
  "env_logger",
  "evdev",
