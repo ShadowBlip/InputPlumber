@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{collections::HashMap, error::Error};
 
 use zbus::Connection;
 
@@ -32,6 +32,7 @@ struct State {
     l2_value: Option<f64>,
     pressed_r2: bool,
     r2_value: Option<f64>,
+    buttons: HashMap<Capability, bool>,
 }
 
 /// The [DBusDevice] is a virtual input device that can emit input events. It
@@ -265,6 +266,32 @@ impl DBusDevice {
 
         Ok(())
     }
+
+    /// Checks if the given button event has changed from the previous state.
+    fn is_duplicate_event(&self, event: &NativeEvent) -> bool {
+        let InputValue::Bool(value) = event.get_value() else {
+            return false;
+        };
+
+        let cap = event.as_capability();
+        let Some(current) = self.state.buttons.get(&cap) else {
+            return false;
+        };
+        value == *current
+    }
+
+    fn update_button_state(&mut self, event: &NativeEvent) {
+        let InputValue::Bool(value) = event.get_value() else {
+            return;
+        };
+
+        let cap = event.as_capability();
+        self.state
+            .buttons
+            .entry(cap)
+            .and_modify(|v| *v = value)
+            .or_insert(value);
+    }
 }
 
 impl TargetInputDevice for DBusDevice {
@@ -291,6 +318,10 @@ impl TargetInputDevice for DBusDevice {
         event: crate::input::event::native::NativeEvent,
     ) -> Result<(), super::InputError> {
         log::trace!("Got event to emit: {:?}", event);
+        if self.is_duplicate_event(&event) {
+            return Ok(());
+        }
+        self.update_button_state(&event);
         let dbus_events = self.translate_event(event);
         for dbus_event in dbus_events {
             log::trace!("Writing DBus event: {dbus_event:?}");
