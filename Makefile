@@ -16,8 +16,8 @@ IMAGE_NAME ?= inputplumber-builder
 IMAGE_TAG ?= latest
 
 # systemd-sysext variables 
-SYSEXT_ID ?= steamos
-SYSEXT_VERSION_ID ?= 3.5.17
+SYSEXT_ID ?= _any
+SYSEXT_VERSION_ID ?=
 
 # Include any user defined settings
 -include settings.mk
@@ -148,7 +148,7 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz $(CACHE_DIR)/libiio $(CACHE_DIR)/libserial
 	cd $(CACHE_DIR) && tar xvfz $(NAME).tar.gz $(NAME)/usr
 	mkdir -p $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d
 	echo ID=$(SYSEXT_ID) > $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
-	echo VERSION_ID=$(SYSEXT_VERSION_ID) >> $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
+	if [ -n "$(SYSEXT_VERSION_ID)" ]; then echo VERSION_ID=$(SYSEXT_VERSION_ID) >> $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME); fi
 
 	# Install libserialport in the extension for libiio compatibility in SteamOS
 	cp -r $(CACHE_DIR)/libserialport/usr/lib/libserialport* $(CACHE_DIR)/$(NAME)/usr/lib
