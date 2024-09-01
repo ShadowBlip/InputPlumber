@@ -148,6 +148,7 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz $(CACHE_DIR)/libiio $(CACHE_DIR)/libserial
 	cd $(CACHE_DIR) && tar xvfz $(NAME).tar.gz $(NAME)/usr
 	mkdir -p $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d
 	echo ID=$(SYSEXT_ID) > $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
+	echo EXTENSION_RELOAD_MANAGER=1 >> $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
 	if [ -n "$(SYSEXT_VERSION_ID)" ]; then echo VERSION_ID=$(SYSEXT_VERSION_ID) >> $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME); fi
 
 	# Install libserialport in the extension for libiio compatibility in SteamOS
