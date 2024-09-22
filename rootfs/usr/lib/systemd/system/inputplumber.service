@@ -1,6 +1,5 @@
 [Unit]
 Description=InputPlumber Service
-After=graphical-session.target
 
 [Service]
 ExecStart=/usr/bin/inputplumber
