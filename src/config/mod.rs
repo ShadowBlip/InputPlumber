@@ -268,7 +268,17 @@ pub struct TouchMotionCapability {
     pub speed_pps: Option<u64>,
 }
 
-/// Defines a platform match for loading a [CompositeDevice]
+/// Defines available options for loading a [CompositeDeviceConfig]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct CompositeDeviceConfigOptions {
+    /// If true, InputPlumber will automatically try to manage the input device.
+    /// If this is false, InputPlumber will not try to manage the device unless
+    /// an external service enables management of all devices.
+    pub auto_manage: Option<bool>,
+}
+
+/// Defines a platform match for loading a [CompositeDeviceConfig]
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Match {
@@ -352,6 +362,7 @@ pub struct CompositeDeviceConfig {
     pub capability_map_id: Option<String>,
     pub source_devices: Vec<SourceDevice>,
     pub target_devices: Option<Vec<String>>,
+    pub options: Option<CompositeDeviceConfigOptions>,
 }
 
 impl CompositeDeviceConfig {

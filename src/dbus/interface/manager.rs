@@ -29,6 +29,37 @@ impl ManagerInterface {
         Ok("InputPlumber".to_string())
     }
 
+    /// If set to 'true', InputPlumber will try to manage all input devices
+    /// on the system that have a Composite Device configuration.
+    #[zbus(property)]
+    async fn manage_all_devices(&self) -> fdo::Result<bool> {
+        let (sender, mut receiver) = mpsc::channel(1);
+        self.tx
+            .send_timeout(
+                ManagerCommand::GetManageAllDevices { sender },
+                Duration::from_millis(500),
+            )
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+
+        // Read the response from the manager
+        let Some(response) = receiver.recv().await else {
+            return Err(fdo::Error::Failed("No response from manager".to_string()));
+        };
+        Ok(response)
+    }
+    #[zbus(property)]
+    async fn set_manage_all_devices(&self, value: bool) -> zbus::Result<()> {
+        self.tx
+            .send_timeout(
+                ManagerCommand::SetManageAllDevices(value),
+                Duration::from_millis(500),
+            )
+            .await
+            .map_err(|err| zbus::Error::Failure(err.to_string()))?;
+        Ok(())
+    }
+
     /// Returns a list of supported target device names. E.g. ["InputPlumber Mouse", "Microsoft
     /// XBox 360 Gamepad"]
     #[zbus(property)]
