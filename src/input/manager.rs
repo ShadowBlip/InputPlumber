@@ -89,6 +89,10 @@ pub enum ManagerCommand {
         path: String,
     },
     CompositeDeviceStopped(String),
+    GetManageAllDevices {
+        sender: mpsc::Sender<bool>,
+    },
+    SetManageAllDevices(bool),
 }
 
 /// Manages input devices
@@ -142,6 +146,9 @@ pub struct Manager {
     /// Mapping of target devices to their respective handles
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Handle>}
     target_devices: HashMap<String, TargetDeviceClient>,
+    /// Defines whether or not InputPlumber should try to automatically manage all
+    /// input devices that have a [CompositeDeviceConfig] definition
+    manage_all_devices: bool,
 }
 
 impl Manager {
@@ -177,6 +184,7 @@ impl Manager {
             used_configs: HashMap::new(),
             composite_device_sources: HashMap::new(),
             composite_device_targets: HashMap::new(),
+            manage_all_devices: false,
         }
     }
 
@@ -289,6 +297,48 @@ impl Manager {
                 ManagerCommand::DeviceRemoved { device } => {
                     if let Err(e) = self.on_device_removed(device).await {
                         log::error!("Error removing device: {e:?}");
+                    }
+                }
+                ManagerCommand::SetManageAllDevices(manage_all_devices) => {
+                    log::debug!("Setting management of all devices to: {manage_all_devices}");
+                    if self.manage_all_devices == manage_all_devices {
+                        continue;
+                    }
+                    self.manage_all_devices = manage_all_devices;
+
+                    // If management of all devices was enabled, trigger device discovery
+                    if manage_all_devices {
+                        let cmd_tx = self.tx.clone();
+                        tokio::task::spawn(async move {
+                            if let Err(e) = Manager::discover_all_devices(&cmd_tx).await {
+                                log::error!("Failed to trigger device discovery: {e:?}");
+                            }
+                        });
+                        continue;
+                    }
+
+                    // If management was disabled, stop any composite devices that
+                    // are not auto-managed.
+                    for (dbus_path, config) in self.used_configs.iter() {
+                        if let Some(options) = config.options.as_ref() {
+                            let auto_managed = options.auto_manage.unwrap_or(false);
+                            if auto_managed {
+                                continue;
+                            }
+                        }
+
+                        log::debug!("Found composite device that should not be managed anymore: {dbus_path}");
+                        let Some(device) = self.composite_devices.get(dbus_path) else {
+                            continue;
+                        };
+                        if let Err(e) = device.stop().await {
+                            log::error!("Failed to stop composite device: {e:?}");
+                        }
+                    }
+                }
+                ManagerCommand::GetManageAllDevices { sender } => {
+                    if let Err(e) = sender.send(self.manage_all_devices).await {
+                        log::error!("Failed to send response: {e:?}");
                     }
                 }
             }
@@ -822,6 +872,22 @@ impl Manager {
         for config in configs {
             log::trace!("Checking config {:?} for device", config.name);
 
+            // Check to see if 'auto_manage' is enabled for this config.
+            let auto_manage = {
+                if let Some(options) = config.options.as_ref() {
+                    options.auto_manage.unwrap_or(false)
+                } else {
+                    false
+                }
+            };
+            if !self.manage_all_devices && !auto_manage {
+                log::trace!(
+                    "Config {:?} does not have 'auto_manage' option enabled. Skipping.",
+                    config.name
+                );
+                continue;
+            }
+
             // Check to see if this configuration matches the system
             if !config.has_valid_matches(&self.dmi_data, &self.cpu_info) {
                 log::trace!("Configuration does not match system");
@@ -1327,17 +1393,14 @@ impl Manager {
     async fn watch_input_devices(&self) -> Result<(), Box<dyn Error>> {
         log::debug!("Performing initial input device discovery");
         let cmd_tx = self.tx.clone();
-        let hidraw_devices = udev::discover_devices("hidraw")?;
-        let hidraw_devices = hidraw_devices.into_iter().map(|dev| dev.into()).collect();
-        Manager::discover_devices(&cmd_tx, hidraw_devices).await?;
-        let event_devices = udev::discover_devices("input")?;
-        let event_devices = event_devices.into_iter().map(|dev| dev.into()).collect();
-        Manager::discover_devices(&cmd_tx, event_devices).await?;
-        let iio_devices = udev::discover_devices("iio")?;
-        let iio_devices = iio_devices.into_iter().map(|dev| dev.into()).collect();
-        Manager::discover_devices(&cmd_tx, iio_devices).await?;
+        task::spawn(async move {
+            if let Err(e) = Manager::discover_all_devices(&cmd_tx).await {
+                log::error!("Failed to perform initial device discovery: {e:?}");
+            }
+        });
 
         // Watch for IIO device events.
+        let cmd_tx = self.tx.clone();
         task::spawn_blocking(move || {
             let mut monitor = MonitorBuilder::new()?.match_subsystem("iio")?.listen()?;
 
@@ -1489,6 +1552,23 @@ impl Manager {
         Ok(())
     }
 
+    /// Performs initial input device discovery of all supported subsystems
+    async fn discover_all_devices(
+        cmd_tx: &mpsc::Sender<ManagerCommand>,
+    ) -> Result<(), Box<dyn Error>> {
+        let hidraw_devices = udev::discover_devices("hidraw")?;
+        let hidraw_devices = hidraw_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(cmd_tx, hidraw_devices).await?;
+        let event_devices = udev::discover_devices("input")?;
+        let event_devices = event_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(cmd_tx, event_devices).await?;
+        let iio_devices = udev::discover_devices("iio")?;
+        let iio_devices = iio_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(cmd_tx, iio_devices).await?;
+
+        Ok(())
+    }
+
     async fn discover_devices(
         manager_tx: &mpsc::Sender<ManagerCommand>,
         devices: Vec<UdevDevice>,
@@ -1607,7 +1687,13 @@ impl Manager {
     async fn listen_on_dbus(&self) -> Result<(), Box<dyn Error>> {
         let iface = ManagerInterface::new(self.tx.clone());
         let manager_path = format!("{}/Manager", BUS_PREFIX);
-        self.dbus.object_server().at(manager_path, iface).await?;
+        let dbus = self.dbus.clone();
+        task::spawn(async move {
+            if let Err(e) = dbus.object_server().at(manager_path, iface).await {
+                log::error!("Failed create manager dbus interface: {e:?}");
+            }
+        });
+
         Ok(())
     }
 

@@ -42,6 +42,9 @@
           "description": "The ID of a device event mapping in the 'capability_maps' directory",
           "type": "string"
         },
+        "options": {
+          "$ref": "#/definitions/Options"
+        },
         "target_devices": {
           "description": "Target input device(s) to emulate. Can be one of ['mouse', 'keyboard', 'gamepad', 'xb360', 'xbox-elite', 'xbox-series', 'deck', 'ds5', 'ds5-edge', 'touchscreen', 'touchpad'].",
           "type": "array",
@@ -71,6 +74,19 @@
         "version"
       ],
       "title": "CompositeDevice"
+    },
+    "Options": {
+      "description": "Optional configuration for the composite device",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto_manage": {
+          "description": "If true, InputPlumber will automatically try to manage the input device. If this is false, InputPlumber will not try to manage the device unless an external service enables management of the device. Defaults to 'false'",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "title": "Options"
     },
     "Match": {
       "description": "Only use this configuration if *any* of the given items match the system. If this list is empty, then matching source devices will always create a CompositeDevice.",
