@@ -24,14 +24,14 @@ matches:
 source_devices:
   - group: gamepad
     evdev:
-      name: Microsoft X-Box 360 pad
+      name: "Microsoft X-Box 360 pad"
       phys_path: usb-0000:73:00.3-4.1/input0
       handler: event*
   - group: keyboard
     evdev:
-      name: Mouse for Windows
-      phys_path: usb-0000:73:00.3-4.2/input0
+      name: "  Mouse for Windows"
       handler: event*
+      phys_path: usb-0000:73:00.3-4.2/input1
   - group: imu
     iio:
       name: i2c-BMI0160:00
