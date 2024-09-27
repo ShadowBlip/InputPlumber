@@ -46,9 +46,9 @@ pub fn get_devices_paths() -> Vec<PathBuf> {
 /// E.g. ["/etc/inputplumber/capability_maps.d", "/usr/share/inputplumber/capability_maps"]
 pub fn get_capability_maps_paths() -> Vec<PathBuf> {
     let paths = vec![
-        PathBuf::from("./rootfs/usr/share/inputplumber/capability_maps"),
-        PathBuf::from("/etc/inputplumber/capability_maps.d"),
         get_base_path().join("capability_maps"),
+        PathBuf::from("/etc/inputplumber/capability_maps.d"),
+        PathBuf::from("./rootfs/usr/share/inputplumber/capability_maps"),
     ];
 
     paths
