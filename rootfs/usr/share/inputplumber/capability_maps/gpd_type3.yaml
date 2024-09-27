@@ -15,13 +15,13 @@ id: gpd3
 mapping:
   - name: Left Paddle
     source_events:
-      - keyboard: KeyPause
+      - keyboard: KeySysrq
     target_event:
       gamepad:
         button: LeftPaddle1
   - name: Right Paddle
     source_events:
-      - keyboard: KeySysrq
+      - keyboard: KeyPause
     target_event:
       gamepad:
         button: RightPaddle1
