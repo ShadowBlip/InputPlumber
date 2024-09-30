@@ -60,7 +60,6 @@ jobs:
     outputs:
       should_publish: ${{ steps.status.outputs.was_released }}
 
-
   publish-to-copr:
     name: 🟤 Publish to COPR
     needs: release
@@ -70,7 +69,6 @@ jobs:
     steps:
       - name: Trigger COPR Build
         run: curl -X POST ${{ secrets.COPR_WEBHOOK_URL }}
-
 
   publish-to-aur:
     name: 🐧 Publish to AUR
@@ -127,3 +125,22 @@ jobs:
           git commit -m "Update to $(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)"
           git push origin master
 
+      - name: Checkout AUR
+        run: git clone ssh://aur@aur.archlinux.org/inputplumber.git
+
+      - name: Copy Makefile from git package
+        run: cp inputplumber-git/Makefile inputplumber/Makefile
+
+      - name: Build package
+        working-directory: inputplumber
+        run: make in-docker
+
+      - name: Commit and publish package
+        shell: bash
+        working-directory: inputplumber
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "shadowblip+github-actions[bot]@users.noreply.github.com"
+          git add .SRCINFO PKGBUILD
+          git commit -m "Update to $(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)"
+          git push origin master
