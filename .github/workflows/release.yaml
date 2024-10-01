@@ -129,7 +129,9 @@ jobs:
         run: git clone ssh://aur@aur.archlinux.org/inputplumber.git
 
       - name: Copy Makefile from git package
-        run: cp inputplumber-git/Makefile inputplumber/Makefile
+        run: |
+          cp inputplumber-git/Makefile inputplumber/Makefile
+          cp inputplumber-git/Dockerfile inputplumber/Dockerfile
 
       - name: Build package
         working-directory: inputplumber
