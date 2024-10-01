@@ -56,7 +56,7 @@ options:
   # If true, InputPlumber will automatically try to manage the input device. If
   # this is false, InputPlumber will not try to manage the device unless an
   # external service enables management of the device. Defaults to 'false'
-  auto_manage: true
+  auto_manage: false
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
