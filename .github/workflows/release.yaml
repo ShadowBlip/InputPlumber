@@ -56,6 +56,13 @@ jobs:
           name: PKGBUILD
           path: ./pkg/archlinux/PKGBUILD
           if-no-files-found: error
+      - name: Upload Release Version
+        uses: actions/upload-artifact@v4
+        if: steps.status.outputs.was_released == 'yes'
+        with:
+          name: version.txt
+          path: ./.version.txt
+          if-no-files-found: error
 
     outputs:
       should_publish: ${{ steps.status.outputs.was_released }}
@@ -81,6 +88,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: PKGBUILD
+
+      - name: Download Release Version
+        uses: actions/download-artifact@v4
+        with:
+          name: version.txt
 
       - name: Setup SSH
         uses: MrSquaare/ssh-setup-action@v3
@@ -128,14 +140,18 @@ jobs:
       - name: Checkout AUR
         run: git clone ssh://aur@aur.archlinux.org/inputplumber.git
 
-      - name: Copy Makefile from git package
+      - name: Copy Makefile from git package and update PKGBUILD
         run: |
           cp inputplumber-git/Makefile inputplumber/Makefile
           cp inputplumber-git/Dockerfile inputplumber/Dockerfile
+          curl -sL https://github.com/ShadowBlip/InputPlumber/archive/refs/tags/v$(cat version.txt).tar.gz | sha256sum | cut -d' ' -f1 > hash.txt
+          sed -i "s/^pkgver=.*/pkgver=$(cat version.txt)/g" inputplumber/PKGBUILD
+          sed -i "s/^sha256sums=.*/sha256sums=('$(cat hash.txt)')/g" inputplumber/PKGBUILD
 
       - name: Build package
         working-directory: inputplumber
-        run: make in-docker
+        run: |
+          make in-docker
 
       - name: Commit and publish package
         shell: bash
