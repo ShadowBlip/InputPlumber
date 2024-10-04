@@ -134,13 +134,16 @@ source_devices:
       handler: event*
 
   # IMU
-  - group: imu
-    iio:
-      name: accel_3d
-      mount_matrix:
-        x: [0, 1, 0]
-        y: [0, 0, -1]
-        z: [-1, 0, 0]
+# Broken for now --causes IP to hard freeze
+# Enabling only gyro_3d allows the tablet gyro to work without needing kernel patch
+# TODO: Find out why this is broken and swap tablet gyro to controller gyro as default.
+#  - group: imu
+#    iio:
+#      name: accel_3d
+#      mount_matrix:
+#        x: [0, 1, 0]
+#        y: [0, 0, -1]
+#        z: [-1, 0, 0]
   - group: imu
     iio:
       name: gyro_3d
