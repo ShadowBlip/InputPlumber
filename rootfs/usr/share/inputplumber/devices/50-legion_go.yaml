@@ -23,16 +23,12 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  ## XInput - Connected 0x6182
   # Touchpad
   - group: mouse # Gamepad Mode
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6182
-      interface_num: 1
-  - group: mouse # DInput Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6184
       interface_num: 1
   - group: mouse # Gampead Mode
     blocked: true
@@ -41,49 +37,15 @@ source_devices:
       product_id: "6182"
       name: "  Legion Controller for Windows  Touchpad"
       handler: event*
-  - group: mouse # DInput mode
-    blocked: true
-    evdev:
-      vendor_id: "17ef"
-      product_id: "6184"
-      name: "Legion-Controller 1-D6 Touchpad"
-      handler: event*
-
   # Mouse
-  - group: mouse # DInput Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6185
-      interface_num: 1
-  - group: mouse # Gamepad Mode
+  - group: mouse
     blocked: true
     evdev:
       vendor_id: "17ef"
       product_id: "6182"
       name: "  Legion Controller for Windows  Mouse"
       handler: event*
-  - group: mouse # FPS/Dinput Mode
-    blocked: true
-    evdev:
-      vendor_id: "17ef"
-      product_id: "618[4-5]"
-      name: "Legion-Controller 1-D6 Mouse"
-      handler: event*
-  - group: mouse # FPS/Dinput Mode
-    blocked: true
-    unique: false
-    evdev:
-      vendor_id: "17ef"
-      product_id: "618[4-5]"
-      name: "Legion-Controller 1-D6"
-      handler: event*
-
   # Keyboard
-  - group: mouse # DInput Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6185
-      interface_num: 0
   - group: keyboard # Gamepad Mode
     blocked: true
     evdev:
@@ -91,34 +53,11 @@ source_devices:
       product_id: "6182"
       name: "  Legion Controller for Windows  Keyboard"
       handler: event*
-  - group: keyboard # FPS/DInput Mode
-    blocked: true
-    evdev:
-      vendor_id: "17ef"
-      product_id: "618[4-5]"
-      name: "Legion-Controller 1-D6 Keyboard"
-      handler: event*
-
   # Gamepad
-  - group: gamepad # Gamepad Mode
+  - group: gamepad
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6182
-      interface_num: 2
-  - group: gamepad # Dinput Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6184
-      interface_num: 0
-  - group: gamepad # Dinput Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6184
-      interface_num: 2
-  - group: gamepad # FPS Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6185
       interface_num: 2
   - group: gamepad # Newer Kernels
     evdev:
@@ -133,17 +72,172 @@ source_devices:
       name: "Generic X-Box pad"
       handler: event*
 
+  ## DInput - Attached 0x6183
+  # Touchpad
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6183
+      interface_num: 1
+  - group: mouse
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6183"
+      name: "Legion-Controller 1-D6 Touchpad"
+      handler: event*
+  # Mouse
+  - group: mouse
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6183"
+      name: "Legion-Controller 1-D6 Mouse"
+      handler: event*
+  - group: mouse
+    blocked: true
+    unique: false
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6183"
+      name: "Legion-Controller 1-D6"
+      handler: event*
+  # Keyboard
+  - group: keyboard
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6183"
+      name: "Legion-Controller 1-D6 Keyboard"
+      handler: event*
+  # Gamepad
+  - group: gamepad # Dinput report
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6183
+      interface_num: 0
+  - group: gamepad # XInput report 40Hz
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6183
+      interface_num: 2
+
+  ## DInput - Detached 0x6184
+  # Touchpad
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6184
+      interface_num: 1
+  - group: mouse
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6184"
+      name: "Legion-Controller 1-D6 Touchpad"
+      handler: event*
+  # Mouse
+  - group: mouse
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6184"
+      name: "Legion-Controller 1-D6 Mouse"
+      handler: event*
+  - group: mouse
+    blocked: true
+    unique: false
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6184"
+      name: "Legion-Controller 1-D6"
+      handler: event*
+  # Keyboard
+  - group: keyboard
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6184"
+      name: "Legion-Controller 1-D6 Keyboard"
+      handler: event*
+  # Gamepad
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6184
+      interface_num: 0
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6184
+      interface_num: 2
+
+  ## FPS Mode - 0x6185
+  # Touchpad
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6185
+      interface_num: 1
+  - group: mouse
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6185"
+      name: "Legion-Controller 1-D6 Touchpad"
+      handler: event*
+  # Mouse
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6185
+      interface_num: 1
+  - group: mouse
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6185"
+      name: "Legion-Controller 1-D6 Mouse"
+      handler: event*
+  - group: mouse
+    blocked: true
+    unique: false
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6185"
+      name: "Legion-Controller 1-D6"
+      handler: event*
+  # Keyboard
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6185
+      interface_num: 0
+  - group: keyboard
+    blocked: true
+    evdev:
+      vendor_id: "17ef"
+      product_id: "6185"
+      name: "Legion-Controller 1-D6 Keyboard"
+      handler: event*
+  # Gamepad
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x6185
+      interface_num: 2
+
   # IMU
-# Broken for now --causes IP to hard freeze
-# Enabling only gyro_3d allows the tablet gyro to work without needing kernel patch
-# TODO: Find out why this is broken and swap tablet gyro to controller gyro as default.
-#  - group: imu
-#    iio:
-#      name: accel_3d
-#      mount_matrix:
-#        x: [0, 1, 0]
-#        y: [0, 0, -1]
-#        z: [-1, 0, 0]
+  # Broken for now --causes IP to hard freeze
+  # Enabling only gyro_3d allows the tablet gyro to work without needing kernel patch
+  # TODO: Find out why this is broken and swap tablet gyro to controller gyro as default.
+  #  - group: imu
+  #    iio:
+  #      name: accel_3d
+  #      mount_matrix:
+  #        x: [0, 1, 0]
+  #        y: [0, 0, -1]
+  #        z: [-1, 0, 0]
   - group: imu
     iio:
       name: gyro_3d
