@@ -1,8 +1,4 @@
-use std::{
-    error::Error,
-    ffi::CString,
-    time::{Duration, Instant},
-};
+use std::{error::Error, ffi::CString};
 
 use hidapi::HidDevice;
 use packed_struct::{types::SizedInteger, PackedStruct};
@@ -10,34 +6,26 @@ use packed_struct::{types::SizedInteger, PackedStruct};
 use super::{
     event::{
         AxisEvent, BinaryInput, Event, GamepadButtonEvent, JoyAxisInput, MouseAxisInput,
-        MouseButtonEvent, MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput,
-        TouchButtonEvent, TriggerEvent, TriggerInput,
+        MouseButtonEvent, MouseWheelInput, StatusEvent, StatusInput, TriggerEvent, TriggerInput,
     },
-    hid_report::{
-        DInputDataLeftReport, DInputDataRightReport, KeyboardDataReport, MouseDataReport,
-        TouchpadDataReport, XInputDataReport,
-    },
+    hid_report::{KeyboardDataReport, MouseDataReport, XInputDataReport},
 };
 
 // Hardware ID's
 pub const VID: u16 = 0x17ef;
-pub const PID1: u16 = 0x6182;
-pub const PID2: u16 = 0x6184;
-pub const PID3: u16 = 0x6185;
-pub const PIDS: [u16; 3] = [PID1, PID2, PID3];
-// Hardware limits
-pub const DINPUT_LEFT_DATA: u8 = 0x07;
-pub const DINPUT_RIGHT_DATA: u8 = 0x08;
+pub const PID: u16 = 0x6185;
+
+// Report ID's
 pub const KEYBOARD_TOUCH_DATA: u8 = 0x01;
 pub const MOUSE_FPS_DATA: u8 = 0x02;
 pub const XINPUT_DATA: u8 = 0x04;
+
 // Input report sizes
-const DINPUT_PACKET_SIZE: usize = 13;
 const XINPUT_PACKET_SIZE: usize = 60;
 const KEYBOARD_PACKET_SIZE: usize = 15;
 const MOUSE_PACKET_SIZE: usize = 7;
-const TOUCHPAD_PACKET_SIZE: usize = 20;
 const HID_TIMEOUT: i32 = 10;
+
 // Input report axis ranges
 pub const MOUSE_WHEEL_MAX: f64 = 120.0;
 pub const PAD_X_MAX: f64 = 1024.0;
@@ -49,28 +37,14 @@ pub const STICK_Y_MIN: f64 = 0.0;
 pub const TRIGG_MAX: f64 = 255.0;
 
 pub struct Driver {
-    /// State for the left detachable controller when in dinput mode
-    dinputl_state: Option<DInputDataLeftReport>,
-    /// State for the right detachable controller when in dinput mode
-    dinputr_state: Option<DInputDataRightReport>,
     /// State for the vitrual keyboard device on the left controller in FPS mode
     keyboard_state: Option<KeyboardDataReport>,
     /// State for the mouse device
     mouse_state: Option<MouseDataReport>,
-    /// State for the touchpad device
-    touchpad_state: Option<TouchpadDataReport>,
     /// State for the internal gamepad  controller
     xinput_state: Option<XInputDataReport>,
     /// HIDRAW device instance
     device: HidDevice,
-    /// Timestamp of the first touch event. Used to detect tap-to-click events
-    first_touch: Instant,
-    /// Timestamp of the last touch event.
-    last_touch: Instant,
-    /// Whether or not we are detecting a touch event currently.
-    is_touching: bool,
-    /// Whether or not we are currently holding a tap-to-click.
-    is_tapped: bool,
 }
 
 impl Driver {
@@ -80,23 +54,14 @@ impl Driver {
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
         let info = device.get_device_info()?;
-        if info.vendor_id() != VID
-            || (info.product_id() != PID1 && info.product_id() != PID2) && info.product_id() != PID3
-        {
+        if info.vendor_id() != VID || info.product_id() != PID {
             return Err(format!("Device '{fmtpath}' is not a Legion Go Controller").into());
         }
 
         Ok(Self {
             device,
-            dinputl_state: None,
-            dinputr_state: None,
-            first_touch: Instant::now(),
-            is_tapped: false,
-            is_touching: false,
             keyboard_state: None,
-            last_touch: Instant::now(),
             mouse_state: None,
-            touchpad_state: None,
             xinput_state: None,
         })
     }
@@ -112,42 +77,15 @@ impl Driver {
         //log::trace!("Got Report ID: {report_id}");
         //log::trace!("Got Report Size: {bytes_read}");
 
-        let mut events = match report_id {
-            DINPUT_LEFT_DATA => {
-                if bytes_read != DINPUT_PACKET_SIZE {
-                    return Err("Invalid packet size for Direct Input Data.".into());
-                }
-                // Handle the incoming input report
-                let sized_buf = slice.try_into()?;
-
-                self.handle_dinputl_report(sized_buf)?
-            }
-
-            DINPUT_RIGHT_DATA => {
-                if bytes_read != DINPUT_PACKET_SIZE {
-                    return Err("Invalid packet size for Direct Input Data.".into());
-                }
-                // Handle the incoming input report
-                let sized_buf = slice.try_into()?;
-
-                self.handle_dinputr_report(sized_buf)?
-            }
-
+        let events = match report_id {
             KEYBOARD_TOUCH_DATA => {
                 if bytes_read != KEYBOARD_PACKET_SIZE {
-                    if bytes_read != TOUCHPAD_PACKET_SIZE {
-                        return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
-                    }
-                    // Handle the incoming input report
-                    let sized_buf = slice.try_into()?;
-
-                    self.handle_touchinput_report(sized_buf)?
-                } else {
-                    // Handle the incoming input report
-                    let sized_buf = slice.try_into()?;
-
-                    self.handle_keyboard_report(sized_buf)?
+                    return Err("Invalid packet size for Keyboard Data.".into());
                 }
+                // Handle the incoming input report
+                let sized_buf = slice.try_into()?;
+
+                self.handle_keyboard_report(sized_buf)?
             }
 
             MOUSE_FPS_DATA => {
@@ -176,274 +114,7 @@ impl Driver {
             }
         };
 
-        // There is no release event, so check to see if we are still touching.
-        if self.is_touching && (self.last_touch.elapsed() > Duration::from_millis(4)) {
-            let event: Event = self.release_touch();
-            events.push(event);
-            // Check for tap events
-            if self.first_touch.elapsed() < Duration::from_millis(200) {
-                // For double clicking, ensure the previous tap is cleared.
-                if self.is_tapped {
-                    let event: Event = self.release_tap();
-                    events.push(event);
-                }
-                let event: Event = self.start_tap();
-                events.push(event);
-            }
-        }
-
-        // If we did a click event, see if we shoudl release it. Accounts for click and drag.
-        if !self.is_touching
-            && self.is_tapped
-            && (self.last_touch.elapsed() > Duration::from_millis(100))
-        {
-            let event: Event = self.release_tap();
-            events.push(event);
-        }
-
         Ok(events)
-    }
-    /// Unpacks the buffer into a [DInputDataReport] structure and updates
-    /// the internal dinput_state
-    fn handle_dinputl_report(
-        &mut self,
-        buf: [u8; DINPUT_PACKET_SIZE],
-    ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let input_report = DInputDataLeftReport::unpack(&buf)?;
-
-        // Print input report for debugging
-        //log::trace!("--- Input report ---");
-        //log::trace!("{input_report}");
-        //log::trace!("---- End Report ----");
-
-        // Update the state
-        let old_dinput_state = self.update_dinputl_state(input_report);
-
-        // Translate the state into a stream of input events
-        let events = self.translate_dinputl(old_dinput_state);
-
-        Ok(events)
-    }
-
-    /// Update dinput state
-    fn update_dinputl_state(
-        &mut self,
-        input_report: DInputDataLeftReport,
-    ) -> Option<DInputDataLeftReport> {
-        let old_state = self.dinputl_state;
-        self.dinputl_state = Some(input_report);
-        old_state
-    }
-
-    /// Translate the state into individual events
-    fn translate_dinputl(&self, old_state: Option<DInputDataLeftReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.dinputl_state else {
-            return events;
-        };
-
-        // Translate state changes into events if they have changed
-        if let Some(old_state) = old_state {
-            // Binary Events
-            if state.down != old_state.down {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DPadDown(
-                    BinaryInput {
-                        pressed: state.down,
-                    },
-                )));
-            }
-            if state.up != old_state.up {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DPadUp(
-                    BinaryInput { pressed: state.up },
-                )));
-            }
-            if state.left != old_state.left {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DPadLeft(
-                    BinaryInput {
-                        pressed: state.left,
-                    },
-                )));
-            }
-            if state.right != old_state.right {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DPadRight(
-                    BinaryInput {
-                        pressed: state.right,
-                    },
-                )));
-            }
-            if state.y1 != old_state.y1 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Y1(BinaryInput {
-                    pressed: state.y1,
-                })));
-            }
-            if state.y2 != old_state.y2 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Y2(BinaryInput {
-                    pressed: state.y2,
-                })));
-            }
-            if state.menu != old_state.menu {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Menu(
-                    BinaryInput {
-                        pressed: state.menu,
-                    },
-                )));
-            }
-            if state.view != old_state.view {
-                events.push(Event::GamepadButton(GamepadButtonEvent::View(
-                    BinaryInput {
-                        pressed: state.view,
-                    },
-                )));
-            }
-
-            // Axis events
-            if state.l_stick_x_sm != old_state.l_stick_x_sm
-                || state.l_stick_y_sm != old_state.l_stick_y_sm
-                || state.l_stick_x_lg != old_state.l_stick_x_lg
-                || state.l_stick_y_lg != old_state.l_stick_y_lg
-            {
-                events.push(Event::Axis(AxisEvent::LStick(JoyAxisInput {
-                    x: self.xify_dinputl_x_axis(
-                        state.l_stick_x_sm.to_primitive() as u16,
-                        state.l_stick_x_lg as u16,
-                    ),
-                    y: self.xify_dinputl_y_axis(
-                        state.l_stick_y_sm.to_primitive() as u16,
-                        state.l_stick_y_lg as u16,
-                    ),
-                })));
-            }
-        }
-        events
-    }
-
-    /// Converts a 4096-0 dinput x axis into a 0-255 xinput axis
-    fn xify_dinputl_x_axis(&self, x_axis_sm: u16, x_axis_lg: u16) -> u8 {
-        let axis = (x_axis_lg << 4 | x_axis_sm) as i16;
-        ((axis - 4095).abs() / 16) as u8
-    }
-
-    /// Converts a 0-4096 dinput y axis into a 0-255 xinput axis
-    fn xify_dinputl_y_axis(&self, y_axis_sm: u16, y_axis_lg: u16) -> u8 {
-        let axis = (y_axis_sm << 8 | y_axis_lg) as i16;
-        (axis / 16) as u8
-    }
-
-    /// Unpacks the buffer into a [DInputDataReport] structure and updates
-    /// the internal dinput_state
-    fn handle_dinputr_report(
-        &mut self,
-        buf: [u8; DINPUT_PACKET_SIZE],
-    ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let input_report = DInputDataRightReport::unpack(&buf)?;
-
-        // Print input report for debugging
-        //log::trace!("--- Input report ---");
-        //log::trace!("{input_report}");
-        //log::trace!("---- End Report ----");
-
-        // Update the state
-        let old_dinput_state = self.update_dinputr_state(input_report);
-
-        // Translate the state into a stream of input events
-        let events = self.translate_dinputr(old_dinput_state);
-
-        Ok(events)
-    }
-
-    /// Update dinput state
-    fn update_dinputr_state(
-        &mut self,
-        input_report: DInputDataRightReport,
-    ) -> Option<DInputDataRightReport> {
-        let old_state = self.dinputr_state;
-        self.dinputr_state = Some(input_report);
-        old_state
-    }
-
-    /// Translate the state into individual events
-    fn translate_dinputr(&self, old_state: Option<DInputDataRightReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.dinputr_state else {
-            return events;
-        };
-
-        // Translate state changes into events if they have changed
-        if let Some(old_state) = old_state {
-            // Binary Events
-            if state.a != old_state.a {
-                events.push(Event::GamepadButton(GamepadButtonEvent::A(BinaryInput {
-                    pressed: state.a,
-                })));
-            }
-            if state.b != old_state.b {
-                events.push(Event::GamepadButton(GamepadButtonEvent::B(BinaryInput {
-                    pressed: state.b,
-                })));
-            }
-            if state.x != old_state.x {
-                events.push(Event::GamepadButton(GamepadButtonEvent::X(BinaryInput {
-                    pressed: state.x,
-                })));
-            }
-            if state.y != old_state.y {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Y(BinaryInput {
-                    pressed: state.y,
-                })));
-            }
-            if state.m2 != old_state.m2 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::M2(BinaryInput {
-                    pressed: state.m2,
-                })));
-            }
-            if state.m3 != old_state.m3 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::M3(BinaryInput {
-                    pressed: state.m3,
-                })));
-            }
-            if state.y3 != old_state.y3 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Y3(BinaryInput {
-                    pressed: state.y3,
-                })));
-            }
-            if state.quick_access != old_state.quick_access {
-                events.push(Event::GamepadButton(GamepadButtonEvent::QuickAccess(
-                    BinaryInput {
-                        pressed: state.quick_access,
-                    },
-                )));
-            }
-
-            // Axis events
-            if state.r_stick_x_sm != old_state.r_stick_x_sm
-                || state.r_stick_y_sm != old_state.r_stick_y_sm
-                || state.r_stick_x_lg != old_state.r_stick_x_lg
-                || state.r_stick_y_lg != old_state.r_stick_y_lg
-            {
-                events.push(Event::Axis(AxisEvent::RStick(JoyAxisInput {
-                    x: self.xify_dinputr_x_axis(
-                        state.r_stick_x_sm.to_primitive() as u16,
-                        state.r_stick_x_lg as u16,
-                    ),
-                    y: self.xify_dinputr_y_axis(
-                        state.r_stick_y_sm.to_primitive() as u16,
-                        state.r_stick_y_lg as u16,
-                    ),
-                })));
-            }
-        }
-        events
-    }
-    /// Converts a 0-4096 dinput x axis into a 0-255 xinput axis
-    fn xify_dinputr_x_axis(&self, x_axis_sm: u16, x_axis_lg: u16) -> u8 {
-        let axis = (x_axis_lg << 4 | x_axis_sm) as i16;
-        (axis / 16) as u8
-    }
-
-    /// Converts a 4096-0 dinput y axis into a 0-255 xinput axis
-    fn xify_dinputr_y_axis(&self, y_axis_sm: u16, y_axis_lg: u16) -> u8 {
-        let axis = (y_axis_sm << 8 | y_axis_lg) as i16;
-        ((axis - 4095).abs() / 16) as u8
     }
 
     /// Unpacks the buffer into a [KeyboardDataReport] structure and updates
@@ -574,66 +245,6 @@ impl Driver {
         events
     }
 
-    /// Unpacks the buffer into a [TouchpadDataReport] structure and updates
-    /// the internal touchpad_state
-    fn handle_touchinput_report(
-        &mut self,
-        buf: [u8; TOUCHPAD_PACKET_SIZE],
-    ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let input_report = TouchpadDataReport::unpack(&buf)?;
-
-        // Print input report for debugging
-        //log::trace!("--- Input report ---");
-        //log::trace!("{input_report}");
-        //log::trace!("---- End Report ----");
-
-        // Update the state
-        let old_dinput_state = self.update_touchpad_state(input_report);
-
-        // Translate the state into a stream of input events
-        let events = self.translate_touch(old_dinput_state);
-
-        Ok(events)
-    }
-
-    /// Update touchinput state
-    fn update_touchpad_state(
-        &mut self,
-        input_report: TouchpadDataReport,
-    ) -> Option<TouchpadDataReport> {
-        let old_state = self.touchpad_state;
-        self.touchpad_state = Some(input_report);
-        old_state
-    }
-
-    /// Translate the state into individual events
-    fn translate_touch(&mut self, old_state: Option<TouchpadDataReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.touchpad_state else {
-            return events;
-        };
-
-        // Translate state changes into events if they have changed
-        let Some(_) = old_state else {
-            return events;
-        };
-        //// Axis events
-        if !self.is_touching {
-            self.is_touching = true;
-            self.first_touch = Instant::now();
-            log::trace!("Started TOUCH event");
-        }
-        events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
-            index: 0,
-            is_touching: true,
-            x: state.touch_x_0,
-            y: state.touch_y_0,
-        })));
-
-        self.last_touch = Instant::now();
-        events
-    }
-
     /// Unpacks the buffer into a [XinputDataReport] structure and updates
     /// the internal xinput_state
     fn handle_xinput_report(
@@ -643,9 +254,9 @@ impl Driver {
         let input_report = XInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        //log::trace!("--- Input report ---");
-        //log::trace!("{input_report}");
-        //log::trace!(" ---- End Report ----");
+        //log::debug!("--- Input report ---");
+        //log::debug!("{input_report}");
+        //log::debug!(" ---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_xinput_state(input_report);
@@ -664,7 +275,7 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_xinput(&self, old_state: Option<XInputDataReport>) -> Vec<Event> {
+    fn translate_xinput(&mut self, old_state: Option<XInputDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
         let Some(state) = self.xinput_state else {
             return events;
@@ -679,6 +290,9 @@ impl Driver {
                     state.gamepad_mode
                 );
             }
+
+            // Watch for FPS mode, we want to ignore most events in this mode.
+            // TODO: Add keyboard events for WASD stuff
             if state.gamepad_mode == 2 {
                 //log::debug!("In FPS Mode, rejecting gamepad input.");
                 if state.legion != old_state.legion {
@@ -698,6 +312,7 @@ impl Driver {
 
                 return events;
             }
+
             // Binary Events
             if state.a != old_state.a {
                 events.push(Event::GamepadButton(GamepadButtonEvent::A(BinaryInput {
@@ -920,28 +535,5 @@ impl Driver {
         };
 
         events
-    }
-
-    fn release_touch(&mut self) -> Event {
-        log::trace!("Released TOUCH event.");
-        self.is_touching = false;
-        Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
-            index: 0,
-            is_touching: false,
-            x: 0,
-            y: 0,
-        }))
-    }
-
-    fn start_tap(&mut self) -> Event {
-        log::trace!("Started CLICK event.");
-        self.is_tapped = true;
-        Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true }))
-    }
-
-    fn release_tap(&mut self) -> Event {
-        log::trace!("Released CLICK event.");
-        self.is_tapped = false;
-        Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false }))
     }
 }

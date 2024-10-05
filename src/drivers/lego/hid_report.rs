@@ -27,6 +27,37 @@ impl ReportType {
         }
     }
 }
+
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
+pub enum DPadDirection {
+    #[default]
+    Up = 0,
+    UpRight = 1,
+    Right = 2,
+    DownRight = 3,
+    Down = 4,
+    DownLeft = 5,
+    Left = 6,
+    UpLeft = 7,
+    None = 8,
+}
+
+impl DPadDirection {
+    pub fn as_bitflag(&self) -> u8 {
+        match *self {
+            Self::Up => 1,                      // 00000001
+            Self::UpRight => 1 | 1 << 1,        // 00000011
+            Self::Right => 1 << 1,              // 00000010
+            Self::DownRight => 1 << 2 | 1 << 1, // 00000110
+            Self::Down => 1 << 2,               // 00000100
+            Self::DownLeft => 1 << 2 | 1 << 3,  // 00001100
+            Self::Left => 1 << 3,               // 00001000
+            Self::UpLeft => 1 | 1 << 3,         // 00001001
+            Self::None => 0,                    // 00000000
+        }
+    }
+}
+
 //XInputData
 //
 //
@@ -225,32 +256,38 @@ pub struct XInputDataReport {
     #[packed_field(bytes = "1")]
     pub report_size: u8,
 
-    #[packed_field(bytes = "2")]
-    pub unk_2: u8,
-    #[packed_field(bytes = "3")]
-    pub unk_3: u8,
-    #[packed_field(bytes = "4")]
-    pub unk_4: u8,
-
+    //#[packed_field(bytes = "2")]
+    //pub unk_2: u8,
+    //#[packed_field(bytes = "3")]
+    //pub unk_3: u8,
+    //#[packed_field(bytes = "4")]
+    //pub unk_4: u8,
     #[packed_field(bytes = "5")]
     pub l_controller_battery: u8,
-    #[packed_field(bytes = "6")]
+
+    // BYTE 6
+    #[packed_field(bytes = "6")] //48 - 55
     pub l_controller_mode0: u8,
     #[packed_field(bytes = "7")]
     pub r_controller_battery: u8,
+
+    // BYTE 8
     #[packed_field(bytes = "8")]
-    pub r_controller_mode0: u8,
+    pub r_controller_mode0: u8, // 64 - 71
 
     #[packed_field(bytes = "9")]
     pub gamepad_mode: u8,
-    #[packed_field(bytes = "10")]
-    pub unk_10: u8,
-    #[packed_field(bytes = "11")]
-    pub unk_11: u8,
+    //#[packed_field(bytes = "10")]
+    //pub unk_10: u8,
+    //#[packed_field(bytes = "11")]
+    //pub unk_11: u8,
 
-    #[packed_field(bytes = "12")]
+    // BYTE 12
+    #[packed_field(bytes = "12")] // 96 - 103
     pub l_controller_mode1: u8,
-    #[packed_field(bytes = "13")]
+
+    // BYTE 13
+    #[packed_field(bytes = "13")] // 104 - 11
     pub r_controller_mode1: u8,
 
     #[packed_field(byte = "14", endian = "lsb")]
@@ -305,8 +342,8 @@ pub struct XInputDataReport {
     pub y2: bool,
     #[packed_field(bits = "162")]
     pub y3: bool,
-    #[packed_field(bits = "163")]
-    pub unk_20_4: bool,
+    //#[packed_field(bits = "163")]
+    //pub unk_20_4: bool,
     #[packed_field(bits = "164")]
     pub m2: bool,
     #[packed_field(bits = "165")]
@@ -319,21 +356,20 @@ pub struct XInputDataReport {
     // BYTE 21: Mouse Wheel Click (-128)
     #[packed_field(bits = "168")]
     pub mouse_click: bool,
-    #[packed_field(bits = "169")]
-    pub unk_21_1: bool,
-    #[packed_field(bits = "170")]
-    pub unk_21_2: bool,
-    #[packed_field(bits = "171")]
-    pub unk_21_3: bool,
-    #[packed_field(bits = "172")]
-    pub unk_21_4: bool,
-    #[packed_field(bits = "173")]
-    pub unk_21_5: bool,
-    #[packed_field(bits = "174")]
-    pub unk_21_6: bool,
-    #[packed_field(bits = "175")]
-    pub unk_21_7: bool,
-
+    //#[packed_field(bits = "169")]
+    //pub unk_21_1: bool,
+    //#[packed_field(bits = "170")]
+    //pub unk_21_2: bool,
+    //#[packed_field(bits = "171")]
+    //pub unk_21_3: bool,
+    //#[packed_field(bits = "172")]
+    //pub unk_21_4: bool,
+    //#[packed_field(bits = "173")]
+    //pub unk_21_5: bool,
+    //#[packed_field(bits = "174")]
+    //pub unk_21_6: bool,
+    //#[packed_field(bits = "175")]
+    //pub unk_21_7: bool,
     #[packed_field(bytes = "22")]
     pub a_trigger_l: u8,
     #[packed_field(bytes = "23")]
@@ -358,59 +394,58 @@ pub struct XInputDataReport {
     pub right_gyro_x: u8,
     #[packed_field(bytes = "33")]
     pub right_gyro_y: u8,
-
-    #[packed_field(bytes = "34")]
-    pub unk_34: u8,
-    #[packed_field(bytes = "35")]
-    pub unk_35: u8,
-    #[packed_field(bytes = "36")]
-    pub unk_36: u8,
-    #[packed_field(bytes = "37")]
-    pub unk_37: u8,
-    #[packed_field(bytes = "38")]
-    pub unk_38: u8,
-    #[packed_field(bytes = "39")]
-    pub unk_39: u8,
-    #[packed_field(bytes = "40")]
-    pub unk_40: u8,
-    #[packed_field(bytes = "41")]
-    pub unk_41: u8,
-    #[packed_field(bytes = "42")]
-    pub unk_42: u8,
-    #[packed_field(bytes = "43")]
-    pub unk_43: u8,
-    #[packed_field(bytes = "44")]
-    pub unk_44: u8,
-    #[packed_field(bytes = "45")]
-    pub unk_45: u8,
-    #[packed_field(bytes = "46")]
-    pub unk_46: u8,
-    #[packed_field(bytes = "47")]
-    pub unk_47: u8,
-    #[packed_field(bytes = "48")]
-    pub unk_48: u8,
-    #[packed_field(bytes = "49")]
-    pub unk_49: u8,
-    #[packed_field(bytes = "50")]
-    pub unk_50: u8,
-    #[packed_field(bytes = "51")]
-    pub unk_51: u8,
-    #[packed_field(bytes = "52")]
-    pub unk_52: u8,
-    #[packed_field(bytes = "53")]
-    pub unk_53: u8,
-    #[packed_field(bytes = "54")]
-    pub unk_54: u8,
-    #[packed_field(bytes = "55")]
-    pub unk_55: u8,
-    #[packed_field(bytes = "56")]
-    pub unk_56: u8,
-    #[packed_field(bytes = "57")]
-    pub unk_57: u8,
-    #[packed_field(bytes = "58")]
-    pub unk_58: u8,
-    #[packed_field(bytes = "59")]
-    pub unk_59: u8,
+    //#[packed_field(bytes = "34")]
+    //pub unk_34: u8,
+    //#[packed_field(bytes = "35")]
+    //pub unk_35: u8,
+    //#[packed_field(bytes = "36")]
+    //pub unk_36: u8,
+    //#[packed_field(bytes = "37")]
+    //pub unk_37: u8,
+    //#[packed_field(bytes = "38")]
+    //pub unk_38: u8,
+    //#[packed_field(bytes = "39")]
+    //pub unk_39: u8,
+    //#[packed_field(bytes = "40")]
+    //pub unk_40: u8,
+    //#[packed_field(bytes = "41")]
+    //pub unk_41: u8,
+    //#[packed_field(bytes = "42")]
+    //pub unk_42: u8,
+    //#[packed_field(bytes = "43")]
+    //pub unk_43: u8,
+    //#[packed_field(bytes = "44")]
+    //pub unk_44: u8,
+    //#[packed_field(bytes = "45")]
+    //pub unk_45: u8,
+    //#[packed_field(bytes = "46")]
+    //pub unk_46: u8,
+    //#[packed_field(bytes = "47")]
+    //pub unk_47: u8,
+    //#[packed_field(bytes = "48")]
+    //pub unk_48: u8,
+    //#[packed_field(bytes = "49")]
+    //pub unk_49: u8,
+    //#[packed_field(bytes = "50")]
+    //pub unk_50: u8,
+    //#[packed_field(bytes = "51")]
+    //pub unk_51: u8,
+    //#[packed_field(bytes = "52")]
+    //pub unk_52: u8,
+    //#[packed_field(bytes = "53")]
+    //pub unk_53: u8,
+    //#[packed_field(bytes = "54")]
+    //pub unk_54: u8,
+    //#[packed_field(bytes = "55")]
+    //pub unk_55: u8,
+    //#[packed_field(bytes = "56")]
+    //pub unk_56: u8,
+    //#[packed_field(bytes = "57")]
+    //pub unk_57: u8,
+    //#[packed_field(bytes = "58")]
+    //pub unk_58: u8,
+    //#[packed_field(bytes = "59")]
+    //pub unk_59: u8,
 }
 // KeyboardData
 //
@@ -483,11 +518,213 @@ pub struct KeyboardDataReport {
     pub report_size: u8,
 }
 
-//
 // DInpuit doesn't have a complete implementation. Triggers and some buttons are not active. Two
 // identical reports, 7 and 8, indicate if the left or right controller is where the information is
-// coming from.
+// coming from when detached. Report 7 also has the full controller when attached, but mapped
+// differently.
+
+// Axes
 //
+// Left Stick Left
+// # ReportID: 7 / X:     0 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000007.735942 13 07 00 00 80 00 08 80 08 00 00 00 00 00
+//
+// Left Stick Right
+// # ReportID: 7 / X:  4095 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000003.734726 13 07 ff 0f 80 00 08 80 08 00 00 00 00 00
+//
+// Left Stick Up
+// # ReportID: 7 / X:  2048 | Y:     0 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000010.387878 13 07 00 08 00 00 08 80 08 00 00 00 00 00
+//
+// Left Stick Down
+// # ReportID: 7 / X:  2048 | Y:  4095 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000009.355726 13 07 00 f8 ff 00 08 80 08 00 00 00 00 00
+//
+// Right Stick Left
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:     0 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000004.767933 13 07 00 08 80 00 00 80 08 00 00 00 00 00
+//
+// Right Stick Right
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  4095 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000005.617290 13 07 00 08 80 ff 0f 80 08 00 00 00 00 00
+//
+// Right Stick Up
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:     0 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000006.117911 13 07 00 08 80 00 08 00 08 00 00 00 00 00
+//
+// Right Stick Down
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  4095 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000006.732367 13 07 00 08 80 00 f8 ff 08 00 00 00 00 00
+//
+// Buttons
+//
+// DPad Up
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   0 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000806.520835 13 07 00 08 80 00 08 80 00 00 00 00 00 00
+//
+// Dpad Right
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   2 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000025.115069 13 07 00 08 80 00 08 80 02 00 00 00 00 00
+//
+// DPad Down
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   4 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000002.826058 13 07 00 08 80 00 08 80 04 00 00 00 00 00
+//
+// DPad Left
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   6 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000002.437427 13 07 00 08 80 00 08 80 06 00 00 00 00 00
+//
+// Button A
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000009.013915 13 07 00 08 80 00 08 80 08 01 00 00 00 00
+//
+// Button B
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000001.981636 13 07 00 08 80 00 08 80 08 02 00 00 00 00
+//
+// Button X
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  1  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000010.407126 13 07 00 08 80 00 08 80 08 08 00 00 00 00
+//
+// Button Y
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  1  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000002.643979 13 07 00 08 80 00 08 80 08 10 00 00 00 00
+//
+// Left Bumper
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  1  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000009.157302 13 07 00 08 80 00 08 80 08 40 00 00 00 00
+//
+// Right Bumper
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  1  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000005.876053 13 07 00 08 80 00 08 80 08 80 00 00 00 00
+//
+// Left Trigger
+// # ReportID: 7 / X:  2048 | Y:  1984 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  1  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000002.237866 13 07 00 08 7c 00 08 80 08 00 01 00 00 00
+//
+// Right Trigger
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  1  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000002.095731 13 07 00 08 80 00 08 80 08 00 02 00 00 00
+//
+// View
+// # ReportID: 6 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  1  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000002.045963 13 07 00 08 80 00 08 80 08 00 04 00 00 00
+//
+// Menu
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  1  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000005.027975 13 07 00 08 80 00 08 80 08 00 08 00 00 00
+//
+// Left Stick Click
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  1  0  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000003.263941 13 07 00 08 80 00 08 80 08 00 20 00 00 00
+//
+// Right Stick Click
+// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2088 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  1  0 | Accelerator:    0 | Brake:    0 | #
+// E: 000002.127843 13 07 00 08 80 28 08 80 08 00 40 00 00 00
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "13")]
+pub struct DInputDataFullReport {
+    // Byte 0
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+
+    // Byte 1-3
+    #[packed_field(bytes = "1", endian = "lsb")]
+    pub l_stick_x_lg: u8,
+    #[packed_field(bits = "16..=19", endian = "lsb")]
+    pub l_stick_y_sm: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bits = "20..=23", endian = "lsb")]
+    pub l_stick_x_sm: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bytes = "3", endian = "lsb")]
+    pub l_stick_y_lg: u8,
+
+    // Byte 4-6
+    #[packed_field(bytes = "4", endian = "lsb")]
+    pub r_stick_x_lg: u8,
+    #[packed_field(bits = "40..=43", endian = "lsb")]
+    pub r_stick_y_sm: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bits = "44..=47", endian = "lsb")]
+    pub r_stick_x_sm: Integer<u8, packed_bits::Bits<4>>,
+    #[packed_field(bytes = "6", endian = "lsb")]
+    pub r_stick_y_lg: u8,
+
+    // Buttons
+    // Byte 7
+    #[packed_field(bytes = "7", ty = "enum")]
+    pub dpad_state: DPadDirection,
+
+    // Byte 8
+    #[packed_field(bits = "64")]
+    pub rb: bool,
+    #[packed_field(bits = "65")]
+    pub lb: bool,
+    #[packed_field(bits = "66")]
+    pub unk_66: bool,
+    #[packed_field(bits = "67")]
+    pub y: bool,
+    #[packed_field(bits = "68")]
+    pub x: bool,
+    #[packed_field(bits = "69")]
+    pub unk_69: bool,
+    #[packed_field(bits = "70")]
+    pub b: bool,
+    #[packed_field(bits = "71")]
+    pub a: bool,
+
+    // Byte 9
+    #[packed_field(bits = "72")]
+    pub unk_72: bool,
+    #[packed_field(bits = "73")]
+    pub rs: bool,
+    #[packed_field(bits = "74")]
+    pub ls: bool,
+    #[packed_field(bits = "75")]
+    pub unk_75: bool,
+    #[packed_field(bits = "76")]
+    pub menu: bool,
+    #[packed_field(bits = "77")]
+    pub view: bool,
+    #[packed_field(bits = "78")]
+    pub rt: bool,
+    #[packed_field(bits = "79")]
+    pub lt: bool,
+}
+
+impl Default for DInputDataFullReport {
+    fn default() -> Self {
+        Self {
+            report_id: 0x11,
+            l_stick_x_lg: Default::default(),
+            l_stick_y_sm: Default::default(),
+            l_stick_x_sm: Default::default(),
+            l_stick_y_lg: Default::default(),
+            r_stick_x_lg: Default::default(),
+            r_stick_y_sm: Default::default(),
+            r_stick_x_sm: Default::default(),
+            r_stick_y_lg: Default::default(),
+            dpad_state: Default::default(),
+            rb: Default::default(),
+            lb: Default::default(),
+            unk_66: Default::default(),
+            y: Default::default(),
+            x: Default::default(),
+            unk_69: Default::default(),
+            b: Default::default(),
+            a: Default::default(),
+            unk_72: Default::default(),
+            rs: Default::default(),
+            ls: Default::default(),
+            unk_75: Default::default(),
+            menu: Default::default(),
+            view: Default::default(),
+            rt: Default::default(),
+            lt: Default::default(),
+        }
+    }
+}
+
 // DInputDataLeft
 // X and Y report backwards here.
 // No Input
@@ -495,7 +732,7 @@ pub struct KeyboardDataReport {
 // E: 000031.877403 13 08 00 08 80 00 08 80 08 00 00 00 00 00
 //
 // Axes
-//
+//z
 // Left Stick Right
 // # ReportID: 7 / X:  2048 | Y:     0 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
 // E: 000031.876378 13 07 00 08 00 00 08 80 08 00 00 00 00 00
@@ -568,22 +805,22 @@ pub struct DInputDataLeftReport {
     pub l_stick_x_lg: u8,
 
     // Buttons
-    #[packed_field(bits = "72")]
-    pub left: bool,
-    #[packed_field(bits = "73")]
-    pub down: bool,
-    #[packed_field(bits = "74")]
-    pub up: bool,
-    #[packed_field(bits = "75")]
-    pub right: bool,
-    #[packed_field(bits = "76")]
-    pub y1: bool,
-    #[packed_field(bits = "77")]
-    pub y2: bool,
-    #[packed_field(bits = "78")]
-    pub view: bool,
-    #[packed_field(bits = "79")]
+    #[packed_field(bits = "64")]
     pub menu: bool,
+    #[packed_field(bits = "65")]
+    pub view: bool,
+    #[packed_field(bits = "66")]
+    pub y2: bool,
+    #[packed_field(bits = "67")]
+    pub y1: bool,
+    #[packed_field(bits = "68")]
+    pub right: bool,
+    #[packed_field(bits = "69")]
+    pub up: bool,
+    #[packed_field(bits = "70")]
+    pub down: bool,
+    #[packed_field(bits = "71")]
+    pub left: bool,
 }
 
 // DInputDataRight
@@ -661,22 +898,22 @@ pub struct DInputDataRightReport {
     pub r_stick_x_lg: u8,
 
     // Buttons
-    #[packed_field(bits = "72")]
-    pub b: bool,
-    #[packed_field(bits = "73")]
-    pub y: bool,
-    #[packed_field(bits = "74")]
-    pub a: bool,
-    #[packed_field(bits = "75")]
-    pub x: bool,
-    #[packed_field(bits = "76")]
-    pub y3: bool,
-    #[packed_field(bits = "77")]
-    pub m3: bool,
-    #[packed_field(bits = "78")]
-    pub m2: bool,
-    #[packed_field(bits = "79")]
+    #[packed_field(bits = "64")]
     pub quick_access: bool,
+    #[packed_field(bits = "65")]
+    pub m2: bool,
+    #[packed_field(bits = "66")]
+    pub m3: bool,
+    #[packed_field(bits = "67")]
+    pub y3: bool,
+    #[packed_field(bits = "68")]
+    pub x: bool,
+    #[packed_field(bits = "69")]
+    pub a: bool,
+    #[packed_field(bits = "70")]
+    pub y: bool,
+    #[packed_field(bits = "71")]
+    pub b: bool,
 }
 
 // MouseDataFPS, MouseData
