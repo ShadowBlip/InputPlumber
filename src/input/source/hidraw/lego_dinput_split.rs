@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Debug};
 
 use crate::{
     drivers::lego::{
-        driver::{self, Driver},
+        driver_dinput_split::{self, Driver},
         event,
     },
     input::{
@@ -17,11 +17,11 @@ use crate::{
 };
 
 /// Legion Go Controller source device implementation
-pub struct LegionController {
+pub struct LegionControllerDSplit {
     driver: Driver,
 }
 
-impl LegionController {
+impl LegionControllerDSplit {
     /// Create a new Legion controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -30,7 +30,7 @@ impl LegionController {
     }
 }
 
-impl SourceInputDevice for LegionController {
+impl SourceInputDevice for LegionControllerDSplit {
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
@@ -44,9 +44,9 @@ impl SourceInputDevice for LegionController {
     }
 }
 
-impl SourceOutputDevice for LegionController {}
+impl SourceOutputDevice for LegionControllerDSplit {}
 
-impl Debug for LegionController {
+impl Debug for LegionControllerDSplit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LegionController").finish()
     }
@@ -80,10 +80,10 @@ fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
 fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
     match event {
         event::AxisEvent::Touchpad(value) => {
-            let max = driver::PAD_X_MAX;
+            let max = driver_dinput_split::PAD_X_MAX;
             let x = normalize_unsigned_value(value.x as f64, max);
 
-            let max = driver::PAD_Y_MAX;
+            let max = driver_dinput_split::PAD_Y_MAX;
             let y = normalize_unsigned_value(value.y as f64, max);
 
             // If this is an UP event, don't override the position of X/Y
@@ -102,26 +102,26 @@ fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
             }
         }
         event::AxisEvent::LStick(value) => {
-            let min = driver::STICK_X_MIN;
-            let max = driver::STICK_X_MAX;
+            let min = driver_dinput_split::STICK_X_MIN;
+            let max = driver_dinput_split::STICK_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = driver::STICK_Y_MAX; // uses inverted Y-axis
-            let max = driver::STICK_Y_MIN;
+            let min = driver_dinput_split::STICK_Y_MAX; // uses inverted Y-axis
+            let max = driver_dinput_split::STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
         event::AxisEvent::RStick(value) => {
-            let min = driver::STICK_X_MIN;
-            let max = driver::STICK_X_MAX;
+            let min = driver_dinput_split::STICK_X_MIN;
+            let max = driver_dinput_split::STICK_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = driver::STICK_Y_MAX; // uses inverted Y-axis
-            let max = driver::STICK_Y_MIN;
+            let min = driver_dinput_split::STICK_Y_MAX; // uses inverted Y-axis
+            let max = driver_dinput_split::STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
@@ -143,17 +143,14 @@ fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
 fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
     match event {
         event::TriggerEvent::ATriggerL(value) => {
-            let max = driver::TRIGG_MAX;
+            let max = driver_dinput_split::TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
         event::TriggerEvent::ATriggerR(value) => {
-            let max = driver::TRIGG_MAX;
+            let max = driver_dinput_split::TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
-        event::TriggerEvent::MouseWheel(value) => {
-            let max = driver::MOUSE_WHEEL_MAX;
-            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
-        }
+        event::TriggerEvent::MouseWheel(_value) => InputValue::None,
     }
 }
 
