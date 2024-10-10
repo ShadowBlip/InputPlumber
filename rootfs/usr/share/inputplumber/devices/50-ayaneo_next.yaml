@@ -67,7 +67,7 @@ options:
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
-  - xb360
+  - xbox-series
   - mouse
   - keyboard
 
