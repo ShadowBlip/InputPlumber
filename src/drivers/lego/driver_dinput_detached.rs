@@ -9,37 +9,31 @@ use packed_struct::{types::SizedInteger, PackedStruct};
 
 use super::{
     event::{
-        AxisEvent, BinaryInput, Event, GamepadButtonEvent, JoyAxisInput, MouseAxisInput,
-        MouseButtonEvent, MouseWheelInput, StatusEvent, StatusInput, TouchAxisInput,
-        TouchButtonEvent, TriggerEvent, TriggerInput,
+        AxisEvent, BinaryInput, Event, GamepadButtonEvent, JoyAxisInput, MouseWheelInput,
+        StatusEvent, StatusInput, TouchAxisInput, TouchButtonEvent, TriggerEvent, TriggerInput,
     },
     hid_report::{
-        DInputDataLeftReport, DInputDataRightReport, KeyboardDataReport, MouseDataReport,
-        TouchpadDataReport, XInputDataReport,
+        DInputDataLeftReport, DInputDataRightReport, TouchpadDataReport, XInputDataReport,
     },
 };
 
 // Hardware ID's
 pub const VID: u16 = 0x17ef;
-pub const PID1: u16 = 0x6182;
-pub const PID2: u16 = 0x6184;
-pub const PID3: u16 = 0x6185;
-pub const PIDS: [u16; 3] = [PID1, PID2, PID3];
-// Hardware limits
+pub const PID: u16 = 0x6184;
+
+// Report ID's
+pub const KEYBOARD_TOUCH_DATA: u8 = 0x01;
+pub const XINPUT_DATA: u8 = 0x04;
 pub const DINPUT_LEFT_DATA: u8 = 0x07;
 pub const DINPUT_RIGHT_DATA: u8 = 0x08;
-pub const KEYBOARD_TOUCH_DATA: u8 = 0x01;
-pub const MOUSE_FPS_DATA: u8 = 0x02;
-pub const XINPUT_DATA: u8 = 0x04;
+
 // Input report sizes
 const DINPUT_PACKET_SIZE: usize = 13;
 const XINPUT_PACKET_SIZE: usize = 60;
-const KEYBOARD_PACKET_SIZE: usize = 15;
-const MOUSE_PACKET_SIZE: usize = 7;
 const TOUCHPAD_PACKET_SIZE: usize = 20;
 const HID_TIMEOUT: i32 = 10;
+
 // Input report axis ranges
-pub const MOUSE_WHEEL_MAX: f64 = 120.0;
 pub const PAD_X_MAX: f64 = 1024.0;
 pub const PAD_Y_MAX: f64 = 1024.0;
 pub const STICK_X_MAX: f64 = 255.0;
@@ -49,14 +43,10 @@ pub const STICK_Y_MIN: f64 = 0.0;
 pub const TRIGG_MAX: f64 = 255.0;
 
 pub struct Driver {
-    /// State for the left detachable controller when in dinput mode
+    /// State for the left controller when detached in dinput mode
     dinputl_state: Option<DInputDataLeftReport>,
-    /// State for the right detachable controller when in dinput mode
+    /// State for the right controller when detached in dinput mode
     dinputr_state: Option<DInputDataRightReport>,
-    /// State for the vitrual keyboard device on the left controller in FPS mode
-    keyboard_state: Option<KeyboardDataReport>,
-    /// State for the mouse device
-    mouse_state: Option<MouseDataReport>,
     /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport>,
     /// State for the internal gamepad  controller
@@ -80,9 +70,7 @@ impl Driver {
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
         let info = device.get_device_info()?;
-        if info.vendor_id() != VID
-            || (info.product_id() != PID1 && info.product_id() != PID2) && info.product_id() != PID3
-        {
+        if info.vendor_id() != VID || info.product_id() != PID {
             return Err(format!("Device '{fmtpath}' is not a Legion Go Controller").into());
         }
 
@@ -93,9 +81,7 @@ impl Driver {
             first_touch: Instant::now(),
             is_tapped: false,
             is_touching: false,
-            keyboard_state: None,
             last_touch: Instant::now(),
-            mouse_state: None,
             touchpad_state: None,
             xinput_state: None,
         })
@@ -134,30 +120,13 @@ impl Driver {
             }
 
             KEYBOARD_TOUCH_DATA => {
-                if bytes_read != KEYBOARD_PACKET_SIZE {
-                    if bytes_read != TOUCHPAD_PACKET_SIZE {
-                        return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
-                    }
-                    // Handle the incoming input report
-                    let sized_buf = slice.try_into()?;
-
-                    self.handle_touchinput_report(sized_buf)?
-                } else {
-                    // Handle the incoming input report
-                    let sized_buf = slice.try_into()?;
-
-                    self.handle_keyboard_report(sized_buf)?
-                }
-            }
-
-            MOUSE_FPS_DATA => {
-                if bytes_read != MOUSE_PACKET_SIZE {
-                    return Err("Invalid packet size for Mouse Data.".into());
+                if bytes_read != TOUCHPAD_PACKET_SIZE {
+                    return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
                 }
                 // Handle the incoming input report
                 let sized_buf = slice.try_into()?;
 
-                self.handle_mouseinput_report(sized_buf)?
+                self.handle_touchinput_report(sized_buf)?
             }
 
             XINPUT_DATA => {
@@ -203,8 +172,9 @@ impl Driver {
 
         Ok(events)
     }
+
     /// Unpacks the buffer into a [DInputDataReport] structure and updates
-    /// the internal dinput_state
+    /// the internal dinputl_state
     fn handle_dinputl_report(
         &mut self,
         buf: [u8; DINPUT_PACKET_SIZE],
@@ -212,9 +182,9 @@ impl Driver {
         let input_report = DInputDataLeftReport::unpack(&buf)?;
 
         // Print input report for debugging
-        //log::trace!("--- Input report ---");
-        //log::trace!("{input_report}");
-        //log::trace!("---- End Report ----");
+        //log::debug!("--- Input report ---");
+        //log::debug!("{input_report}");
+        //log::debug!("---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_dinputl_state(input_report);
@@ -225,7 +195,7 @@ impl Driver {
         Ok(events)
     }
 
-    /// Update dinput state
+    /// Update dinputl state
     fn update_dinputl_state(
         &mut self,
         input_report: DInputDataLeftReport,
@@ -330,7 +300,7 @@ impl Driver {
     }
 
     /// Unpacks the buffer into a [DInputDataReport] structure and updates
-    /// the internal dinput_state
+    /// the internal dinputr_state
     fn handle_dinputr_report(
         &mut self,
         buf: [u8; DINPUT_PACKET_SIZE],
@@ -351,7 +321,7 @@ impl Driver {
         Ok(events)
     }
 
-    /// Update dinput state
+    /// Update dinputr state
     fn update_dinputr_state(
         &mut self,
         input_report: DInputDataRightReport,
@@ -434,6 +404,7 @@ impl Driver {
         }
         events
     }
+
     /// Converts a 0-4096 dinput x axis into a 0-255 xinput axis
     fn xify_dinputr_x_axis(&self, x_axis_sm: u16, x_axis_lg: u16) -> u8 {
         let axis = (x_axis_lg << 4 | x_axis_sm) as i16;
@@ -444,134 +415,6 @@ impl Driver {
     fn xify_dinputr_y_axis(&self, y_axis_sm: u16, y_axis_lg: u16) -> u8 {
         let axis = (y_axis_sm << 8 | y_axis_lg) as i16;
         ((axis - 4095).abs() / 16) as u8
-    }
-
-    /// Unpacks the buffer into a [KeyboardDataReport] structure and updates
-    /// the internal keyboard_state
-    fn handle_keyboard_report(
-        &mut self,
-        buf: [u8; KEYBOARD_PACKET_SIZE],
-    ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let input_report = KeyboardDataReport::unpack(&buf)?;
-
-        // Print input report for debugging
-        // log::trace!("--- Input report ---");
-        // log::trace!("{input_report}");
-        // log::trace!("---- End Report ----");
-
-        // Update the state
-        let old_dinput_state = self.update_keyboard_state(input_report);
-
-        // Translate the state into a stream of input events
-        let events = self.translate_keyboard(old_dinput_state);
-
-        Ok(events)
-    }
-
-    /// Update keyboard state
-    fn update_keyboard_state(
-        &mut self,
-        input_report: KeyboardDataReport,
-    ) -> Option<KeyboardDataReport> {
-        let old_state = self.keyboard_state;
-        self.keyboard_state = Some(input_report);
-        old_state
-    }
-
-    /// Translate the state into individual events
-    fn translate_keyboard(&self, _old_state: Option<KeyboardDataReport>) -> Vec<Event> {
-        let events = Vec::new();
-        let Some(_) = self.keyboard_state else {
-            return events;
-        };
-
-        // Translate state changes into events if they have changed
-        //if let Some(_) = old_state {}
-        events
-    }
-
-    /// Unpacks the buffer into a [MouseDataReport] structure and updates
-    /// the internal mouse_state
-    fn handle_mouseinput_report(
-        &mut self,
-        buf: [u8; MOUSE_PACKET_SIZE],
-    ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let input_report = MouseDataReport::unpack(&buf)?;
-
-        // Print input report for debugging
-        //log::trace!("--- Input report ---");
-        //log::trace!("{input_report}");
-        //log::trace!("---- End Report ----");
-
-        // Update the state
-        let old_mouse_state = self.update_mouseinput_state(input_report);
-
-        // Translate the state into a stream of input events
-        let events = self.translate_mouse(old_mouse_state);
-
-        Ok(events)
-    }
-
-    /// Update mouseinput state
-    fn update_mouseinput_state(
-        &mut self,
-        input_report: MouseDataReport,
-    ) -> Option<MouseDataReport> {
-        let old_state = self.mouse_state;
-        self.mouse_state = Some(input_report);
-        old_state
-    }
-
-    /// Translate the state into individual events
-    fn translate_mouse(&self, old_state: Option<MouseDataReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.mouse_state else {
-            return events;
-        };
-
-        // Translate state changes into events if they have changed
-        if let Some(old_state) = old_state {
-            // Binary Events
-            if state.y3 != old_state.y3 {
-                events.push(Event::MouseButton(MouseButtonEvent::Y3(BinaryInput {
-                    pressed: state.y3,
-                })));
-            }
-            if state.m3 != old_state.m3 {
-                events.push(Event::MouseButton(MouseButtonEvent::M3(BinaryInput {
-                    pressed: state.m3,
-                })));
-            }
-            if state.mouse_click != old_state.mouse_click {
-                events.push(Event::MouseButton(MouseButtonEvent::Left(BinaryInput {
-                    pressed: state.mouse_click,
-                })));
-            }
-            if state.m2 != old_state.m2 {
-                events.push(Event::MouseButton(MouseButtonEvent::M2(BinaryInput {
-                    pressed: state.m2,
-                })));
-            }
-            if state.m1 != old_state.m1 {
-                events.push(Event::MouseButton(MouseButtonEvent::M1(BinaryInput {
-                    pressed: state.m1,
-                })));
-            }
-
-            // Axis events
-            if state.mouse_x != old_state.mouse_x || state.mouse_y != old_state.mouse_y {
-                events.push(Event::Axis(AxisEvent::Mouse(MouseAxisInput {
-                    x: state.mouse_x.to_primitive(),
-                    y: state.mouse_y.to_primitive(),
-                })));
-            }
-            if state.mouse_z != old_state.mouse_z {
-                events.push(Event::Trigger(TriggerEvent::MouseWheel(MouseWheelInput {
-                    value: state.mouse_z,
-                })));
-            }
-        }
-        events
     }
 
     /// Unpacks the buffer into a [TouchpadDataReport] structure and updates
@@ -617,7 +460,18 @@ impl Driver {
         let Some(_) = old_state else {
             return events;
         };
-        //// Axis events
+
+        // There is a "hold to tap" event built into the firmware, ignore this event.
+        if state.touch_x_0 == 314
+            && state.touch_y_0 == 512
+            && state.touch_x_1 == 682
+            && state.touch_y_1 == 512
+        {
+            log::debug!("Detected 'hold to press' event. Ignoring");
+            return events;
+        }
+
+        // Axis events
         if !self.is_touching {
             self.is_touching = true;
             self.first_touch = Instant::now();
@@ -643,9 +497,9 @@ impl Driver {
         let input_report = XInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        //log::trace!("--- Input report ---");
-        //log::trace!("{input_report}");
-        //log::trace!(" ---- End Report ----");
+        //log::debug!("--- Input report ---");
+        //log::debug!("{input_report}");
+        //log::debug!(" ---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_xinput_state(input_report);
@@ -664,7 +518,7 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate_xinput(&self, old_state: Option<XInputDataReport>) -> Vec<Event> {
+    fn translate_xinput(&mut self, old_state: Option<XInputDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
         let Some(state) = self.xinput_state else {
             return events;
@@ -679,6 +533,9 @@ impl Driver {
                     state.gamepad_mode
                 );
             }
+
+            // Watch for FPS mode, we want to ignore most events in this mode.
+            // TODO: Add keyboard events for WASD stuff
             if state.gamepad_mode == 2 {
                 //log::debug!("In FPS Mode, rejecting gamepad input.");
                 if state.legion != old_state.legion {
@@ -698,6 +555,7 @@ impl Driver {
 
                 return events;
             }
+
             // Binary Events
             if state.a != old_state.a {
                 events.push(Event::GamepadButton(GamepadButtonEvent::A(BinaryInput {
