@@ -34,7 +34,7 @@ source_devices:
       product_id: 0x09cc
       interface_num: 3
 
-# The target input device(s) that the virtual device profile can use
+# The target input device(s) to emulate by default
 target_devices:
   - ds5
   - mouse

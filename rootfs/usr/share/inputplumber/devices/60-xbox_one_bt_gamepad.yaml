@@ -30,7 +30,7 @@ source_devices:
       vendor_id: 0x045e
       product_id: 0x0b13
 
-# The target input device(s) that the virtual device profile can use
+# The target input device(s) to emulate by default
 target_devices:
   - xbox-series
   - mouse

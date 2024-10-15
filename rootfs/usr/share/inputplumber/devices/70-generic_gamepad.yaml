@@ -24,7 +24,7 @@ source_devices:
     evdev:
       handler: js*
 
-# The target input device(s) that the virtual device profile can use
+# The target input device(s) to emulate by default
 target_devices:
   - xb360
   - mouse

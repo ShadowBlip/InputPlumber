@@ -51,7 +51,7 @@ options:
   # external service enables management of the device. Defaults to 'false'
   auto_manage: true
 
-# The target input device(s) that the virtual device profile can use
+# The target input device(s) to emulate by default
 target_devices:
   - xbox-elite
   - mouse
