@@ -61,8 +61,9 @@ jobs:
         if: steps.status.outputs.was_released == 'yes'
         with:
           name: version.txt
-          path: ./.version.txt
+          path: .version.txt
           if-no-files-found: error
+          include-hidden-files: true
 
     outputs:
       should_publish: ${{ steps.status.outputs.was_released }}
