@@ -27,7 +27,7 @@ source_devices:
   #  evdev:
   #    name: Nintendo Co., Ltd. Pro Controller (IMU)
 
-# The target input device(s) that the virtual device profile can use
+# The target input device(s) to emulate by default
 target_devices:
   - gamepad #TODO: Nintendo controller target
   - mouse

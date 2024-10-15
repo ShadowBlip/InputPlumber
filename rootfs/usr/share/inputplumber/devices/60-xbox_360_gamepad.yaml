@@ -242,7 +242,7 @@ source_devices:
       product_id: "2104"
       handler: event*
 
-# The target input device(s) that the virtual device profile can use
+# The target input device(s) to emulate by default
 target_devices:
   - xb360
   - mouse

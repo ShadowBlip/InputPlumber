@@ -26,7 +26,7 @@ source_devices:
       product_id: "{02e3,0b00}"
       handler: event*
 
-# The target input device(s) that the virtual device profile can use
+# The target input device(s) to emulate by default
 target_devices:
   - xbox-elite
   - mouse
