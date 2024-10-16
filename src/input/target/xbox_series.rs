@@ -167,11 +167,11 @@ impl TargetInputDevice for XboxSeriesController {
 
             let (guide, south) = if pressed {
                 let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(80));
+                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
                 (guide, south)
             } else {
-                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(160));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(80));
+                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(240));
+                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
                 (guide, south)
             };
 
