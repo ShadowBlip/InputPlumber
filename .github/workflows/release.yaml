@@ -145,8 +145,8 @@ jobs:
         run: |
           cp inputplumber-git/Makefile inputplumber/Makefile
           cp inputplumber-git/Dockerfile inputplumber/Dockerfile
-          curl -sL https://github.com/ShadowBlip/InputPlumber/archive/refs/tags/v$(cat version.txt).tar.gz | sha256sum | cut -d' ' -f1 > hash.txt
-          sed -i "s/^pkgver=.*/pkgver=$(cat version.txt)/g" inputplumber/PKGBUILD
+          curl -sL https://github.com/ShadowBlip/InputPlumber/archive/refs/tags/v$(cat .version.txt).tar.gz | sha256sum | cut -d' ' -f1 > hash.txt
+          sed -i "s/^pkgver=.*/pkgver=$(cat .version.txt)/g" inputplumber/PKGBUILD
           sed -i "s/^sha256sums=.*/sha256sums=('$(cat hash.txt)')/g" inputplumber/PKGBUILD
 
       - name: Build package
