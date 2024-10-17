@@ -40,16 +40,18 @@ source_devices:
     iio:
       name: accel_3d
       mount_matrix:
+        # TODO: Reverify on actual hardware
         x: [0, 1, 0]
-        y: [0, 0, -1]
-        z: [-1, 0, 0]
+        y: [-1, 0, 0]
+        z: [0, 0, -1]
   - group: imu
     iio:
       name: gyro_3d
       mount_matrix:
+        # TODO: Reverify on actual hardware
         x: [0, 1, 0]
-        y: [0, 0, -1]
-        z: [-1, 0, 0]
+        y: [-1, 0, 0]
+        z: [0, 0, -1]
 
 # Optional configuration for the composite device
 options:
