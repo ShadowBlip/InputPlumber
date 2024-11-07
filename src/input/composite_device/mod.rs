@@ -1227,14 +1227,14 @@ impl CompositeDevice {
         // none is found, return the original un-translated event.
         let source_cap = event.as_capability();
         if let Some(mappings) = self.device_profile_config_map.get(&source_cap) {
-            // Find which mapping in the device profile matches this source event
-            let matched_mapping = mappings
+            // Find which mappings in the device profile matches this source event
+            let matched_mappings = mappings
                 .iter()
-                .find(|mapping| mapping.source_matches_properties(event));
+                .filter(|mapping| mapping.source_matches_properties(event));
 
-            // If a mapping was found, translate the event based on the found
-            // mapping.
-            if let Some(mapping) = matched_mapping {
+            let mut events = Vec::new();
+            // Based on all found mappings, translate the event
+            for mapping in matched_mappings {
                 log::trace!(
                     "Found translation for event {:?} in profile mapping: {}",
                     source_cap,
@@ -1242,7 +1242,6 @@ impl CompositeDevice {
                 );
 
                 // Translate the event into the defined target event(s)
-                let mut events = Vec::new();
                 for target_event in mapping.target_events.iter() {
                     // TODO: We can cache this conversion for faster translation
                     let target_cap: Capability = target_event.clone().into();
@@ -1290,9 +1289,8 @@ impl CompositeDevice {
                     let event = NativeEvent::new_translated(source_cap.clone(), target_cap, value);
                     events.push(event);
                 }
-
-                return Ok(events);
             }
+            return Ok(events);
         }
 
         log::trace!("No translation mapping found for event: {:?}", source_cap);
