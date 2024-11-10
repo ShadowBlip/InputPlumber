@@ -48,6 +48,9 @@ jobs:
           GIT_AUTHOR_EMAIL: ${{ steps.gpg.outputs.email}}
           GIT_COMMITTER_NAME: ${{ steps.gpg.outputs.name}}
           GIT_COMMITTER_EMAIL: ${{ steps.gpg.outputs.email}}
+          # Editor needs to be set to handle annotated tags which are required
+          # for tag signing.
+          EDITOR: "echo 'Created-by: semantic-release' > $1"
         run: make sem-release
 
       # In ".releaserc.yaml" a step is defined to write the release version to
