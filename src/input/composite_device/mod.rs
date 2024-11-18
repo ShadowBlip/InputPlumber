@@ -53,6 +53,9 @@ pub enum InterceptMode {
     Pass,
     /// Intercept all input and send nothing to the target devices
     Always,
+    /// Intercept all gamepad input that would be routed to target devices and
+    /// send events over dbus instead
+    GamepadOnly,
 }
 
 /// A [CompositeDevice] represents any number source input devices that
@@ -828,7 +831,7 @@ impl CompositeDevice {
             }
         }
 
-        let intercept = matches!(self.intercept_mode.clone(), InterceptMode::Pass);
+        let intercept = self.intercept_mode == InterceptMode::Pass;
 
         for event in events {
             let cap = event.as_capability();
@@ -943,10 +946,21 @@ impl CompositeDevice {
 
         // If the device is in intercept mode, only send events to DBus
         // target devices.
-        if matches!(self.intercept_mode, InterceptMode::Always) {
+        if self.intercept_mode == InterceptMode::Always {
             log::trace!("Emit intercepted event: {:?}", event);
-            #[allow(clippy::for_kv_map)]
-            for (_, target) in &self.target_dbus_devices {
+            for target in self.target_dbus_devices.values() {
+                target.write_event(event.clone()).await?;
+            }
+            return Ok(());
+        }
+
+        // If the device is in gamepad intercept mode, send gamepad events to
+        // DBus target devices.
+        if self.intercept_mode == InterceptMode::GamepadOnly
+            && matches!(cap, Capability::Gamepad(_))
+        {
+            log::trace!("Emit intercepted event: {:?}", event);
+            for target in self.target_dbus_devices.values() {
                 target.write_event(event.clone()).await?;
             }
             return Ok(());
@@ -1059,12 +1073,21 @@ impl CompositeDevice {
         log::debug!("Setting intercept mode to: {:?}", mode);
         self.intercept_mode = mode;
 
-        // If intercept mode is being set to 'Always', clear the state from
-        // any target devices to prevent further input events.
-        if mode != InterceptMode::Always {
+        // Nothing else is required when turning off input interception.
+        if mode == InterceptMode::None || mode == InterceptMode::Pass {
             return;
         }
+
+        // If intercept mode is being turned on, clear the state from
+        // any target devices to prevent further input events.
         for (path, device) in self.target_devices.iter() {
+            // If intercept is set to only intercept gamepad input, only target
+            // gamepad devices need to have their state cleared.
+            if mode == InterceptMode::GamepadOnly && !path.contains("gamepad") {
+                log::debug!("Intercept mode is set to GamepadOnly, skipping clearing state on target device {path}");
+                continue;
+            }
+
             log::debug!("Clearing state on device: {path}");
             if let Err(e) = device.clear_state().await {
                 log::error!("Failed to clear state on target device {path}: {e:?}");

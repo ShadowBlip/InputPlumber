@@ -128,6 +128,7 @@ of three values:
 - `0` (NONE) - No inputs are intercepted and re-routed
 - `1` (PASS) - No inputs are intercepted and re-routed *except* for gamepad `Guide` events. Upon receiving a gamepad `Guide` event, the device is automatically switched to intercept mode `2` (ALL).
 - `2` (ALL) - All inputs are intercepted and re-routed over DBus
+- `3` (GAMEPAD_ONLY) - All gamepad inputs are intercepted and re-routed over DBus
 
 Typically the intercept mode should be handled by an external application, but
 you can also set the intercept mode from the command line using `busctl`:
