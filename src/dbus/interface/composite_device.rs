@@ -314,6 +314,7 @@ impl CompositeDeviceInterface {
             InterceptMode::None => Ok(0),
             InterceptMode::Pass => Ok(1),
             InterceptMode::Always => Ok(2),
+            InterceptMode::GamepadOnly => Ok(3),
         }
     }
 
@@ -323,6 +324,7 @@ impl CompositeDeviceInterface {
             0 => InterceptMode::None,
             1 => InterceptMode::Pass,
             2 => InterceptMode::Always,
+            3 => InterceptMode::GamepadOnly,
             _ => InterceptMode::None,
         };
         self.composite_device
