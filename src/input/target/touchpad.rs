@@ -164,13 +164,13 @@ impl TouchpadDevice {
         let mut events = vec![];
         let cap = event.as_capability();
 
-        let button_events: Vec<Capability> = vec![
+        let button_events = [
             Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
         ];
 
-        let motion_events: Vec<Capability> = vec![
+        let motion_events = [
             Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
             Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
@@ -191,7 +191,7 @@ impl TouchpadDevice {
 
     /// Translate the given native [Touch::Motion] event into a sereis of evdev events
     fn translate_motion(&mut self, event: NativeEvent) -> Vec<InputEvent> {
-        let mut events = vec![];
+        let mut events = Vec::with_capacity(10);
 
         // Destructure the input value
         let InputValue::Touch {
