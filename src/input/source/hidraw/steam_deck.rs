@@ -334,12 +334,15 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let min = steam_deck::hid_report::PAD_X_MIN;
             let max = steam_deck::hid_report::PAD_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
+            let x = (x + 1.0) / 2.0; // Convert from -1.0 - 1.0 range to 0.0 - 1.0 range
             let x = Some(x);
 
             let min = steam_deck::hid_report::PAD_Y_MAX; // uses inverted Y-axis
             let max = steam_deck::hid_report::PAD_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
-            let y = Some(-y); // Y-Axis is inverted
+            let y = -y; // Y-axis is inverted
+            let y = (y + 1.0) / 2.0; // Convert from -1.0 - 1.0 range to 0.0 - 1.0 range
+            let y = Some(y);
 
             InputValue::Touch {
                 index: value.index,
@@ -353,12 +356,15 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
             let min = steam_deck::hid_report::PAD_X_MIN;
             let max = steam_deck::hid_report::PAD_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
+            let x = (x + 1.0) / 2.0; // Convert from -1.0 - 1.0 range to 0.0 - 1.0 range
             let x = Some(x);
 
             let min = steam_deck::hid_report::PAD_Y_MAX; // uses inverted Y-axis
             let max = steam_deck::hid_report::PAD_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
-            let y = Some(-y); // Y-Axis is inverted
+            let y = -y; // Y-axis is inverted
+            let y = (y + 1.0) / 2.0; // Convert from -1.0 - 1.0 range to 0.0 - 1.0 range
+            let y = Some(y);
 
             InputValue::Touch {
                 index: value.index,

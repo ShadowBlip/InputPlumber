@@ -12,7 +12,7 @@ use super::{
         AccelerometerEvent, AccelerometerInput, AxisEvent, AxisInput, BinaryInput, ButtonEvent,
         Event, TouchAxisInput, TriggerEvent, TriggerInput,
     },
-    hid_report::{PackedMappingsReport, PackedRumbleReport, ReportType},
+    hid_report::{PackedMappingsReport, PackedRumbleReport, Register, ReportType, TrackpadMode},
 };
 
 /// Vendor ID
@@ -93,18 +93,62 @@ impl Driver {
     /// Set lizard mode, which will automatically try to emulate mouse/keyboard
     /// if enabled.
     pub fn set_lizard_mode(&self, enabled: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
-        // Initialize the report to send
-        let report = match enabled {
-            true => PackedMappingsReport {
+        // Lizard mode enabled
+        if enabled {
+            // Enable keyboard emulation
+            let report = PackedMappingsReport {
                 report_id: ReportType::DefaultMappings as u8,
-            },
-            false => PackedMappingsReport {
+            };
+            let buf = report.pack()?;
+            let _bytes_written = self.device.write(&buf)?;
+
+            // Enable mouse emulation on the right pad
+            let report = PackedMappingsReport {
+                report_id: ReportType::DefaultMouse as u8,
+            };
+            let buf = report.pack()?;
+            let _bytes_written = self.device.write(&buf)?;
+
+            // Enable smoothing
+            self.write_register(Register::SmoothAbsoluteMouse, 0x01)?;
+        }
+        // Lizard mode disabled
+        else {
+            // Disable keyboard emulation (for a few seconds)
+            let report = PackedMappingsReport {
                 report_id: ReportType::ClearMappings as u8,
-            },
-        };
+            };
+            let buf = report.pack()?;
+            let _bytes_written = self.device.write(&buf)?;
+
+            // Disable mouse emulation on the right pad
+            self.write_register(Register::RPadMode, TrackpadMode::None as u16)?;
+
+            // Disable smoothing
+            self.write_register(Register::SmoothAbsoluteMouse, 0x00)?;
+        }
+
+        Ok(())
+    }
+
+    /// Write the given register value to the gamepad device
+    pub fn write_register(
+        &self,
+        register: Register,
+        value: u16,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Create a buffer for the report
+        let mut buf = [0; 64];
+        buf[0] = ReportType::WriteRegister as u8;
+        // Only allow writing one register at a time (size: 3 bytes)
+        buf[1] = 3;
+        // Register is 8 bits
+        buf[2] = register as u8;
+        // Value is 16 bits, with the low bits first
+        buf[3] = (value & 0xff) as u8;
+        buf[4] = (value >> 8) as u8;
 
         // Write the report to the device
-        let buf = report.pack()?;
         let _bytes_written = self.device.write(&buf)?;
 
         Ok(())
