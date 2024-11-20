@@ -44,4 +44,6 @@ pub enum CompositeCommand {
     WriteEvent(NativeEvent),
     WriteSendEvent(NativeEvent),
     Stop,
+    Suspend(mpsc::Sender<()>),
+    Resume(mpsc::Sender<()>),
 }

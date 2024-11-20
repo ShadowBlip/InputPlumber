@@ -1836,7 +1836,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 [[package]]
 name = "virtual-usb"
 version = "0.1.0"
-source = "git+https://github.com/ShadowBlip/virtual-usb-rs.git?rev=5a7a96a6aedc54f339d9ebff78bf484e5b17728d#5a7a96a6aedc54f339d9ebff78bf484e5b17728d"
+source = "git+https://github.com/ShadowBlip/virtual-usb-rs.git?rev=4bca5c6fb9f2b63944a286854405e3e7e0b5d259#4bca5c6fb9f2b63944a286854405e3e7e0b5d259"
 dependencies = [
  "libudev",
  "packed_struct",

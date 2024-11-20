@@ -306,4 +306,26 @@ impl CompositeDeviceClient {
         self.tx.send(CompositeCommand::Stop).await?;
         Ok(())
     }
+
+    /// Calls the suspend handler to perform system suspend-related tasks.
+    pub async fn suspend(&self) -> Result<(), ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx.send(CompositeCommand::Suspend(tx)).await?;
+
+        if let Some(result) = rx.recv().await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Calls the resume handler to perform system wake from suspend-related tasks.
+    pub async fn resume(&self) -> Result<(), ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx.send(CompositeCommand::Resume(tx)).await?;
+
+        if let Some(result) = rx.recv().await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
 }

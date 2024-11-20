@@ -61,6 +61,7 @@ systemctl disable inputplumber.servce
 /usr/bin/inputplumber
 /usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf
 /usr/lib/systemd/system/inputplumber.service
+/usr/lib/systemd/system/inputplumber-suspend.service
 /usr/lib/udev/hwdb.d/59-inputplumber.hwdb
 /usr/share/inputplumber/capability_maps/ally_type1.yaml
 /usr/share/inputplumber/capability_maps/anbernic_type1.yaml

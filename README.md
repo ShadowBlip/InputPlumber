@@ -49,6 +49,7 @@ Then start the service with:
 
 ```bash
 sudo systemctl enable inputplumber
+sudo systemctl enable inputplumber-suspend
 sudo systemctl start inputplumber
 ```
 

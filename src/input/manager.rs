@@ -93,6 +93,12 @@ pub enum ManagerCommand {
         sender: mpsc::Sender<bool>,
     },
     SetManageAllDevices(bool),
+    SystemSleep {
+        sender: mpsc::Sender<()>,
+    },
+    SystemWake {
+        sender: mpsc::Sender<()>,
+    },
 }
 
 /// Manages input devices
@@ -340,6 +346,50 @@ impl Manager {
                     if let Err(e) = sender.send(self.manage_all_devices).await {
                         log::error!("Failed to send response: {e:?}");
                     }
+                }
+                ManagerCommand::SystemSleep { sender } => {
+                    log::info!("Preparing for system suspend");
+
+                    // Call the suspend handler on each composite device and wait
+                    // for a response.
+                    let composite_devices = self.composite_devices.clone();
+                    tokio::task::spawn(async move {
+                        for device in composite_devices.values() {
+                            if let Err(e) = device.suspend().await {
+                                log::error!("Failed to call suspend handler on device: {e:?}");
+                            }
+                        }
+
+                        // Respond to the sender to inform them that suspend tasks
+                        // have completed.
+                        if let Err(e) = sender.send(()).await {
+                            log::error!("Failed to send response: {e:?}");
+                        }
+
+                        log::info!("Finished preparing for system suspend");
+                    });
+                }
+                ManagerCommand::SystemWake { sender } => {
+                    log::info!("Preparing for system resume");
+
+                    // Call the resume handler on each composite device and wait
+                    // for a response.
+                    let composite_devices = self.composite_devices.clone();
+                    tokio::task::spawn(async move {
+                        for device in composite_devices.values() {
+                            if let Err(e) = device.resume().await {
+                                log::error!("Failed to call resume handler on device: {e:?}");
+                            }
+                        }
+
+                        // Respond to the sender to inform them that resume tasks
+                        // have completed.
+                        if let Err(e) = sender.send(()).await {
+                            log::error!("Failed to send response: {e:?}");
+                        }
+
+                        log::info!("Finished preparing for system resume");
+                    });
                 }
             }
         }

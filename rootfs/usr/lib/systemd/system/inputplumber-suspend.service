@@ -1,0 +1,13 @@
+[Unit]
+Description=InputPlumber Suspend Inhibit Service
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=busctl call org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/Manager org.shadowblip.InputManager HookSleep
+ExecStop=busctl call org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/Manager org.shadowblip.InputManager HookWake
+
+[Install]
+WantedBy=sleep.target

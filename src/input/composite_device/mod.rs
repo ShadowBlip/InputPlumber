@@ -127,6 +127,9 @@ pub struct CompositeDevice {
     /// This is used to block/requeue multiple calls to set_target_devices().
     /// E.g. ["/org/shadowblip/InputPlumber/devices/target/gamepad0"]
     target_devices_queued: HashSet<String>,
+    /// List of active target device types (e.g. "deck", "ds5", "xb360") that
+    /// were active before system suspend.
+    target_devices_suspended: Vec<String>,
     /// Map of DBusDevice DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
     target_dbus_devices: HashMap<String, TargetDeviceClient>,
@@ -185,6 +188,7 @@ impl CompositeDevice {
             target_devices: HashMap::new(),
             target_devices_by_capability: HashMap::new(),
             target_devices_queued: HashSet::new(),
+            target_devices_suspended: Vec::new(),
             target_dbus_devices: HashMap::new(),
             ff_effect_ids: (0..64).collect(),
             ff_effect_id_source_map: HashMap::new(),
@@ -472,6 +476,26 @@ impl CompositeDevice {
                             self.dbus_path
                         );
                         break 'main;
+                    }
+                    CompositeCommand::Suspend(sender) => {
+                        log::info!(
+                            "Preparing for system suspend for: {}",
+                            self.dbus_path.as_ref().unwrap_or(&"".to_string())
+                        );
+                        self.handle_suspend().await;
+                        if let Err(e) = sender.send(()).await {
+                            log::error!("Failed to send suspend response: {e:?}");
+                        }
+                    }
+                    CompositeCommand::Resume(sender) => {
+                        log::info!(
+                            "Preparing for system resume for: {}",
+                            self.dbus_path.as_ref().unwrap_or(&"".to_string())
+                        );
+                        self.handle_resume().await;
+                        if let Err(e) = sender.send(()).await {
+                            log::error!("Failed to send resume response: {e:?}");
+                        }
                     }
                 }
             }
@@ -1988,5 +2012,79 @@ impl CompositeDevice {
                 log::error!("Failed to send source devices changed signal: {e:?}");
             }
         });
+    }
+
+    /// Called when notified by the input manager that system suspend is about
+    /// to happen.
+    async fn handle_suspend(&mut self) {
+        // Clear the list of suspended target devices
+        self.target_devices_suspended.clear();
+
+        // Create a list of target devices that should be stopped on suspend
+        let mut targets_to_stop = HashMap::new();
+
+        // Record what target devices are currently used so they can be restored
+        // when the system is resumed.
+        for (path, target) in self.target_devices.clone().into_iter() {
+            let target_type = match target.get_type().await {
+                Ok(kind) => kind,
+                Err(err) => {
+                    log::error!("Failed to get target device type: {err:?}");
+                    continue;
+                }
+            };
+
+            // The "deck" target device does not support suspend
+            if target_type.as_str() == "deck" {
+                targets_to_stop.insert(path, target);
+            }
+
+            self.target_devices_suspended.push(target_type);
+        }
+        log::info!(
+            "Target devices before suspend: {:?}",
+            self.target_devices_suspended
+        );
+
+        // Tear down any target devices that do not support suspend
+        for (path, target) in targets_to_stop.into_iter() {
+            log::info!("Stopping target device: {path}");
+            self.target_devices.remove(&path);
+            for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
+                target_devices.remove(&path);
+            }
+            if let Err(e) = target.stop().await {
+                log::error!("Failed to stop old target device: {e:?}");
+            }
+
+            // Wait a few beats to ensure that the target device is really gone
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    }
+
+    /// Called when notified by the input manager that system resume is about
+    /// to happen.
+    async fn handle_resume(&mut self) {
+        log::info!(
+            "Restoring target devices: {:?}",
+            self.target_devices_suspended
+        );
+
+        // Only handle resume if a deck controller target device was used
+        if !self.target_devices_suspended.contains(&"deck".to_string()) {
+            self.target_devices_suspended.clear();
+            return;
+        }
+
+        // Set the target devices back to the ones used before suspend
+        if let Err(err) = self
+            .set_target_devices(self.target_devices_suspended.clone())
+            .await
+        {
+            log::error!("Failed to set restore target devices: {err:?}");
+        }
+
+        // Clear the list of suspended target devices
+        self.target_devices_suspended.clear();
     }
 }

@@ -165,4 +165,42 @@ impl ManagerInterface {
 
         Ok(())
     }
+
+    /// Used to prepare InputPlumber for system suspend
+    async fn hook_sleep(&self) -> fdo::Result<()> {
+        let (sender, mut receiver) = mpsc::channel(1);
+        self.tx
+            .send_timeout(
+                ManagerCommand::SystemSleep { sender },
+                Duration::from_secs(5),
+            )
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+
+        // Read the response from the manager
+        if receiver.recv().await.is_none() {
+            return Err(fdo::Error::Failed("No response from manager".to_string()));
+        }
+
+        Ok(())
+    }
+
+    /// Used to prepare InputPlumber for resume from system suspend
+    async fn hook_wake(&self) -> fdo::Result<()> {
+        let (sender, mut receiver) = mpsc::channel(1);
+        self.tx
+            .send_timeout(
+                ManagerCommand::SystemWake { sender },
+                Duration::from_secs(5),
+            )
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+
+        // Read the response from the manager
+        if receiver.recv().await.is_none() {
+            return Err(fdo::Error::Failed("No response from manager".to_string()));
+        }
+
+        Ok(())
+    }
 }
