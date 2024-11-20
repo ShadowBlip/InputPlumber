@@ -98,6 +98,22 @@ pub enum Direction {
     None = 8,
 }
 
+impl Direction {
+    pub fn as_bitflag(&self) -> u8 {
+        match *self {
+            Self::North => 1,                   // 00000001
+            Self::NorthEast => 1 | 1 << 1,      // 00000011
+            Self::East => 1 << 1,               // 00000010
+            Self::SouthEast => 1 << 2 | 1 << 1, // 00000110
+            Self::South => 1 << 2,              // 00000100
+            Self::SouthWest => 1 << 2 | 1 << 3, // 00001100
+            Self::West => 1 << 3,               // 00001000
+            Self::NorthWest => 1 | 1 << 3,      // 00001001
+            Self::None => 0,                    // 00000000
+        }
+    }
+}
+
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum PowerState {
     Disharging = 0x00,
