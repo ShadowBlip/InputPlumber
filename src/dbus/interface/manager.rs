@@ -25,6 +25,12 @@ impl ManagerInterface {
 #[interface(name = "org.shadowblip.InputManager")]
 impl ManagerInterface {
     #[zbus(property)]
+    async fn version(&self) -> fdo::Result<String> {
+        const VERSION: &str = env!("CARGO_PKG_VERSION");
+        Ok(VERSION.to_string())
+    }
+
+    #[zbus(property)]
     async fn intercept_mode(&self) -> fdo::Result<String> {
         Ok("InputPlumber".to_string())
     }
