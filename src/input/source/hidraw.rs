@@ -5,6 +5,7 @@ pub mod lego_dinput_combined;
 pub mod lego_dinput_split;
 pub mod lego_fps_mode;
 pub mod lego_xinput;
+pub mod legos;
 pub mod opineo;
 pub mod rog_ally;
 pub mod steam_deck;
@@ -27,7 +28,7 @@ use self::{
     dualsense::DualSenseController, fts3528::Fts3528Touchscreen,
     lego_dinput_combined::LegionControllerDCombined, lego_dinput_split::LegionControllerDSplit,
     lego_fps_mode::LegionControllerFPS, lego_xinput::LegionControllerX,
-    opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
+    legos::LegionSController, opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
 };
 
 use super::{SourceDriver, SourceDriverOptions};
@@ -41,6 +42,7 @@ enum DriverType {
     LegionGoDCombined,
     LegionGoDSplit,
     LegionGoFPS,
+    LegionGoS,
     LegionGoX,
     OrangePiNeo,
     RogAlly,
@@ -57,6 +59,7 @@ pub enum HidRawDevice {
     LegionGoDCombined(SourceDriver<LegionControllerDCombined>),
     LegionGoDSplit(SourceDriver<LegionControllerDSplit>),
     LegionGoFPS(SourceDriver<LegionControllerFPS>),
+    LegionGoS(SourceDriver<LegionSController>),
     LegionGoX(SourceDriver<LegionControllerX>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
     RogAlly(SourceDriver<RogAlly>),
@@ -115,6 +118,11 @@ impl HidRawDevice {
                 let device = LegionControllerX::new(device_info.clone())?;
                 let source_device = SourceDriver::new(composite_device, device, device_info);
                 Ok(Self::LegionGoX(source_device))
+            }
+            DriverType::LegionGoS => {
+                let device = LegionSController::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::LegionGoS(source_device))
             }
             DriverType::OrangePiNeo => {
                 let device = OrangePiNeoTouchpad::new(device_info.clone())?;
@@ -194,6 +202,12 @@ impl HidRawDevice {
         if vid == drivers::lego::driver_xinput::VID && pid == drivers::lego::driver_xinput::PID {
             log::info!("Detected Legion Go XInput Mode");
             return DriverType::LegionGoX;
+        }
+
+	// Legion Go S
+        if vid == drivers::legos::driver::VID && pid == drivers::legos::driver::PID {
+            log::info!("Detected Legion Go S");
+            return DriverType::LegionGoS;
         }
 
         // OrangePi NEO
