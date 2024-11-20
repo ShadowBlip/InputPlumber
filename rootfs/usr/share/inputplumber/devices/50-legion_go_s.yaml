@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Lenovo Legion Go S
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Only use this profile if *any* of the given matches match. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches:
+  - dmi_data:
+      product_name: "83L3"
+      sys_vendor: LENOVO
+      cpu_vendor: AuthenticAMD
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  # Touchpad
+  - group: mouse # Gampead Mode
+    blocked: true
+    evdev:
+      vendor_id: "1a86"
+      product_id: "e310"
+      name: "wch.cn Legion Go S Mouse"
+      handler: event*
+
+  # Gamepad
+  - group: gamepad # Gamepad Mode
+    hidraw:
+      vendor_id: 0x1a86
+      product_id: 0xe310
+      interface_num: 6
+  - group: gamepad
+    blocked: true
+    evdev:
+      vendor_id: "1a86"
+      product_id: "e310"
+      name: "QH Electronics Controller"
+      handler: event*
+
+  # IMU
+# Broken for now --causes IP to hard freeze
+# Enabling only gyro_3d allows the tablet gyro to work without needing kernel patch
+# TODO: Find out why this is broken and swap tablet gyro to controller gyro as default.
+#  - group: imu
+#    iio:
+#      name: accel_3d
+#      mount_matrix:
+#        x: [0, 1, 0]
+#        y: [0, 0, -1]
+#        z: [-1, 0, 0]
+#  - group: imu
+#    iio:
+#      name: gyro_3d
+#      mount_matrix:
+#        x: [0, 1, 0]
+#        y: [0, 0, -1]
+#        z: [-1, 0, 0]
+
+# Optional configuration for the composite device
+options:
+  # If true, InputPlumber will automatically try to manage the input device. If
+  # this is false, InputPlumber will not try to manage the device unless an
+  # external service enables management of the device. Defaults to 'false'
+  auto_manage: true
+
+# The target input device(s) to emulate by default
+target_devices:
+  - deck
