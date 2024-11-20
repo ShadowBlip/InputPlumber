@@ -295,61 +295,76 @@ impl Driver {
                         pressed: true,
                     })))
                 }
-                Direction::None => match old_state.dpad {
-                    Direction::North => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })))
-                    }
-                    Direction::NorthEast => {
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })));
-                    }
-                    Direction::East => {
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })))
-                    }
-                    Direction::SouthEast => {
-                        events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })))
-                    }
-                    Direction::South => {
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })))
-                    }
-                    Direction::SouthWest => {
-                        events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })))
-                    }
-                    Direction::West => {
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })))
-                    }
-                    Direction::NorthWest => {
-                        events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                            pressed: false,
-                        })));
-                        events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                            pressed: false,
-                        })))
-                    }
-                    Direction::None => (),
-                },
+                Direction::None => (),
+            }
+            // Find state that changed and release button presses for dpad's appropriate keys
+            match (state.dpad, old_state.dpad) {
+                // Release NORTH
+                (_, Direction::North) // if any other direction is used
+                | (Direction::East, Direction::NorthEast)
+                | (Direction::West, Direction::NorthWest) => {
+                    events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
+                        pressed: false,
+                    })))
+                }
+                // Release EAST
+                (_, Direction::East)
+                | (Direction::North, Direction::NorthEast)
+                | (Direction::South, Direction::SouthEast) => {
+                    events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
+                        pressed: false,
+                    })))
+                }
+                // Release SOUTH
+                (_, Direction::South)
+                | (Direction::East, Direction::SouthEast)
+                | (Direction::West, Direction::SouthWest) => {
+                    events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
+                        pressed: false,
+                    })))
+                }
+                // Release WEST
+                (_, Direction::West)
+                | (Direction::South, Direction::SouthWest)
+                | (Direction::North, Direction::NorthWest) => {
+                    events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
+                        pressed: false,
+                    })))
+                }
+                // If any other combination is used, simply release both buttons for given "combo" state
+                (_, Direction::NorthEast) => {
+                    events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
+                        pressed: false,
+                    })));
+                    events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
+                        pressed: false,
+                    })));
+                }
+                (_, Direction::SouthEast) => {
+                    events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
+                        pressed: false,
+                    })));
+                    events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
+                        pressed: false,
+                    })))
+                }
+                (_, Direction::NorthWest) => {
+                    events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
+                        pressed: false,
+                    })));
+                    events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
+                        pressed: false,
+                    })))
+                }
+                (_, Direction::SouthWest) => {
+                    events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
+                        pressed: false,
+                    })));
+                    events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
+                        pressed: false,
+                    })))
+                }
+                (_, _) => (),
             }
         }
         if state.l1 != old_state.l1 {
