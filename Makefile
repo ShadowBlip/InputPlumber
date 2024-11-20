@@ -67,6 +67,7 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/bin/$(NAME)
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
+	rm $(PREFIX)/lib/systemd/system/$(NAME)-suspend.service
 	rm $(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb
 	rm -rf $(PREFIX)/share/$(NAME)/devices/
 	rm -rf $(PREFIX)/share/$(NAME)/schema/

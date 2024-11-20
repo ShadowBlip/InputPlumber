@@ -767,7 +767,23 @@ impl TargetInputDevice for SteamDeckDevice {
 
     /// Stop the virtual USB read/write threads
     fn stop(&mut self) -> Result<(), InputError> {
+        log::debug!("Stopping virtual Deck controller");
         self.device.stop();
+
+        // Read from the device
+        let xfer = self.device.blocking_read()?;
+
+        // Handle any non-standard transfers
+        if let Some(xfer) = xfer {
+            let reply = self.handle_xfer(xfer);
+
+            // Write to the device if a reply is necessary
+            if let Some(reply) = reply {
+                self.device.write(reply)?;
+            }
+        }
+
+        log::debug!("Finished stopping");
         Ok(())
     }
 }
