@@ -149,18 +149,20 @@ impl HidRawDevice {
             return DriverType::Fts3528Touchscreen;
         }
 
-        // XpadUhid
-        if drivers::xpad_uhid::driver::VIDS.contains(&vid)
-            && drivers::xpad_uhid::driver::PIDS.contains(&pid)
-        {
-            log::info!("Detected UHID XPAD");
-            return DriverType::XpadUhid;
-        }
-
         // Rog Ally
         if vid == drivers::rog_ally::driver::VID && drivers::rog_ally::driver::PIDS.contains(&pid) {
             log::info!("Detected ROG Ally");
             return DriverType::RogAlly;
+        }
+
+        // XpadUhid
+        let drivers = device.drivers();
+        if drivers.contains(&"microsoft".to_string()) {
+            let syspath = device.syspath();
+            if syspath.contains("uhid") {
+                log::info!("Detected UHID XPAD");
+                return DriverType::XpadUhid;
+            }
         }
 
         // Unknown
