@@ -20,9 +20,14 @@
           "type": "string"
         },
         "single_source": {
-          "description": "If true, this composite device should only use one source device. Defaults to false.",
+          "description": "DEPRECATED: use 'maximum_sources' instead. If true, this composite device should only use one source device. Defaults to false.",
           "type": "boolean",
           "default": false
+        },
+        "maximum_sources": {
+          "description": "Maximum number of source devices that this composite device can manage. When this composite device reaches this maximum and a new matching source device is detected, a new composite device will be created instead of adding the source device to the existing one. Any value less than 1 indicates no maximum. Defaults to 0 (unlimited).",
+          "type": "integer",
+          "default": 0
         },
         "matches": {
           "description": "Only use this profile if *any* of the given DMI system matches match. If this list is empty, then the source devices will *always* be checked.",

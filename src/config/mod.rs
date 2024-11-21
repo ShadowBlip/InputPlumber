@@ -379,7 +379,8 @@ pub struct CompositeDeviceConfig {
     pub kind: String,
     pub name: String,
     pub matches: Vec<Match>,
-    pub single_source: Option<bool>,
+    pub single_source: Option<bool>, // DEPRECATED; use 'maximum_sources' instead
+    pub maximum_sources: Option<i32>,
     pub capability_map_id: Option<String>,
     pub source_devices: Vec<SourceDevice>,
     pub target_devices: Option<Vec<String>>,

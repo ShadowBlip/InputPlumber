@@ -706,10 +706,35 @@ impl Manager {
                 log::trace!("{:?} is a single source device. Skipping.", config.name);
                 continue;
             }
+            if config.maximum_sources.unwrap_or(0) == 1 {
+                log::trace!("{:?} is a single source device. Skipping.", config.name);
+                continue;
+            }
             log::trace!(
                 "Composite device has {} source devices defined",
                 config.source_devices.len()
             );
+
+            // If the CompositeDevice only allows a maximum number of source devices,
+            // check to see if that limit has been reached. If that limit is reached,
+            // then a new CompositeDevice will be created for the source device.
+            if let Some(max_sources) = config.maximum_sources {
+                // If maximum_sources is less than 1 (e.g. 0, -1) then consider
+                // the maximum to be 'unlimited'.
+                if max_sources > 0 {
+                    // Check to see how many source devices this composite device is
+                    // currently managing.
+                    if let Some(sources) = self.composite_device_sources.get(composite_device) {
+                        let sources_count = sources.len() as i32;
+                        if sources_count >= max_sources {
+                            log::trace!(
+                                "{composite_device:?} maximum source devices reached: {max_sources}. Skipping."
+                            );
+                            continue;
+                        }
+                    }
+                }
+            }
 
             // Check if this device matches any source udev configs of the running
             // CompositeDevice.
@@ -1650,17 +1675,27 @@ impl Manager {
                         };
 
                         // Wait until the device has initialized with udev
-                        // TODO: Add max wait time for udev initialization
+                        const MAX_TRIES: u8 = 80;
+                        let mut attempt: u8 = 0;
                         loop {
+                            // Break after max attempts reached
+                            if attempt > MAX_TRIES {
+                                log::warn!("Unable to create initialized UdevDevice for {base_path}/{name} after {MAX_TRIES} attempts.");
+                                continue 'outer;
+                            }
+
+                            // Try to get the device from udev to check its initialization state
                             {
                                 let Ok(device) = ::udev::Device::from_subsystem_sysname(
                                     subsystem.to_string(),
                                     name.clone(),
                                 ) else {
-                                    log::warn!(
+                                    log::debug!(
                                         "Unable to create UdevDevice from {base_path}/{name} to check initialization"
                                     );
-                                    continue 'outer;
+                                    attempt += 1;
+                                    tokio::time::sleep(Duration::from_millis(10)).await;
+                                    continue;
                                 };
 
                                 if device.is_initialized() {
@@ -1670,6 +1705,7 @@ impl Manager {
                             log::trace!("{base_path}/{name} is not yet initialized by udev");
 
                             tokio::time::sleep(Duration::from_millis(10)).await;
+                            attempt += 1;
                         }
 
                         // Create a udev device for the device
