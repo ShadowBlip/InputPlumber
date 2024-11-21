@@ -23,6 +23,7 @@ impl BlockedEventDevice {
         log::debug!("Opening device at: {}", path);
         let mut device = Device::open(path.clone())?;
         device.grab()?;
+        log::info!("Blocking input events from {path}");
 
         Ok(Self { device })
     }

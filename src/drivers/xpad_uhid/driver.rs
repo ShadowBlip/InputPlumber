@@ -13,12 +13,9 @@ use super::{
     hid_report::{XpadUhidOutputData, XpadUhidOutputReport},
 };
 
-// Hardware ID's
-pub const VIDS: [u16; 1] = [0x045e];
-pub const PIDS: [u16; 1] = [0x0b13];
-
 // Report ID
 pub const DATA: u8 = 0x01;
+pub const GUIDE: u8 = 0x02;
 
 // Input report size
 const PACKET_SIZE: usize = 17;
@@ -51,13 +48,19 @@ pub struct Driver {
 impl Driver {
     pub fn new(udevice: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = udevice.devnode();
+        let driver = udevice.drivers();
+        if !driver.contains(&"microsoft".to_string()) {
+            return Err(format!("Device '{path}' is not using the hid-microsoft driver").into());
+        }
+        let syspath = udevice.syspath();
+        if !syspath.contains("uhid") {
+            return Err(format!("Device '{path}' is not a uhid virtual device").into());
+        }
+
         let cs_path = CString::new(path.clone())?;
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&cs_path)?;
-        let info = device.get_device_info()?;
-        if !VIDS.contains(&info.vendor_id()) || !PIDS.contains(&info.product_id()) {
-            return Err(format!("Device '{path}' is not an xpad_uhid controller").into());
-        }
+
         Ok(Self {
             device,
             state: None,
@@ -104,12 +107,24 @@ impl Driver {
             DATA => {
                 log::trace!("Got input data.");
                 if bytes_read != PACKET_SIZE {
-                    return Err("Invalid packet size for Keyboard or Touchpad Data.".into());
+                    return Err("Invalid packet size for input data.".into());
                 }
                 // Handle the incoming input report
                 let sized_buf = slice.try_into()?;
 
                 self.handle_input_report(sized_buf)?
+            }
+            // XBox One gamepads have a separate report for guide button presses
+            // for some reason.
+            GUIDE => {
+                log::trace!("Got guide input data.");
+                // This report is only 2 bytes, with the first byte representing
+                // the report id and the second byte being the guide button state
+                let value = buf[1];
+                let event = Event::Button(ButtonEvent::Guide(BinaryInput {
+                    pressed: value == 1,
+                }));
+                vec![event]
             }
             _ => {
                 //log::debug!("Invalid Report ID.");
