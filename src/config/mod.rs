@@ -307,6 +307,7 @@ pub struct SourceDevice {
     pub evdev: Option<Evdev>,
     pub hidraw: Option<Hidraw>,
     pub iio: Option<IIO>,
+    pub udev: Option<Udev>,
     pub unique: Option<bool>,
     pub blocked: Option<bool>,
     pub ignore: Option<bool>,
@@ -330,6 +331,26 @@ pub struct Hidraw {
     pub interface_num: Option<i32>,
     pub handler: Option<String>,
     pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct Udev {
+    pub attributes: Option<Vec<UdevAttribute>>,
+    pub dev_node: Option<String>,
+    pub dev_path: Option<String>,
+    pub driver: Option<String>,
+    pub properties: Option<Vec<UdevAttribute>>,
+    pub subsystem: Option<String>,
+    pub sys_name: Option<String>,
+    pub sys_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct UdevAttribute {
+    pub name: String,
+    pub value: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -397,6 +418,18 @@ impl CompositeDeviceConfig {
 
     /// Returns a [SourceDevice] if it matches the given [UdevDevice].
     pub fn get_matching_device(&self, udevice: &UdevDevice) -> Option<SourceDevice> {
+        // Check udev matches first
+        for config in self.source_devices.iter() {
+            let Some(udev_config) = config.udev.as_ref() else {
+                continue;
+            };
+
+            if self.has_matching_udev(udevice, udev_config) {
+                return Some(config.clone());
+            }
+        }
+
+        // Deprecated method for device matching based on subsystem
         let subsystem = udevice.subsystem();
         match subsystem.as_str() {
             "input" => {
@@ -429,6 +462,116 @@ impl CompositeDeviceConfig {
             _ => (),
         };
         None
+    }
+
+    /// Returns true if a given device matches the given udev config
+    pub fn has_matching_udev(&self, device: &UdevDevice, udev_config: &Udev) -> bool {
+        log::trace!("Checking udev config '{:?}'", udev_config);
+
+        if let Some(attributes) = udev_config.attributes.as_ref() {
+            let device_attributes = device.get_attributes();
+
+            for attribute in attributes {
+                let Some(device_attr_value) = device_attributes.get(&attribute.name) else {
+                    // If the device does not have this attribute, return false
+                    return false;
+                };
+
+                // If no value was specified in the config, then only match on
+                // the presence of the attribute and not the value.
+                let Some(attr_value) = attribute.value.as_ref() else {
+                    continue;
+                };
+
+                // Glob match on the attribute value
+                log::trace!("Checking attribute: {attr_value} against {device_attr_value}");
+                if !glob_match(attr_value.as_str(), device_attr_value.as_str()) {
+                    return false;
+                }
+            }
+        }
+
+        if let Some(dev_node) = udev_config.dev_node.as_ref() {
+            let device_dev_node = device.devnode();
+            log::trace!("Checking dev_node: {dev_node} against {device_dev_node}");
+            if !glob_match(dev_node.as_str(), device_dev_node.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(dev_path) = udev_config.dev_path.as_ref() {
+            let device_dev_path = device.devpath();
+            log::trace!("Checking dev_path: {dev_path} against {device_dev_path}");
+            if !glob_match(dev_path.as_str(), device_dev_path.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(driver) = udev_config.driver.as_ref() {
+            let all_drivers = device.drivers();
+            let mut has_matches = false;
+
+            for device_driver in all_drivers {
+                log::trace!("Checking driver: {driver} against {device_driver}");
+                if glob_match(driver.as_str(), device_driver.as_str()) {
+                    has_matches = true;
+                    break;
+                }
+            }
+
+            if !has_matches {
+                return false;
+            }
+        }
+
+        if let Some(properties) = udev_config.properties.as_ref() {
+            let device_properties = device.get_properties();
+
+            for property in properties {
+                let Some(device_prop_value) = device_properties.get(&property.name) else {
+                    // If the device does not have this property, return false
+                    return false;
+                };
+
+                // If no value was specified in the config, then only match on
+                // the presence of the property and not the value.
+                let Some(prop_value) = property.value.as_ref() else {
+                    continue;
+                };
+
+                // Glob match on the property value
+                log::trace!("Checking property: {prop_value} against {device_prop_value}");
+                if !glob_match(prop_value.as_str(), device_prop_value.as_str()) {
+                    return false;
+                }
+            }
+        }
+
+        if let Some(subsystem) = udev_config.subsystem.as_ref() {
+            let device_subsystem = device.subsystem();
+            log::trace!("Checking subsystem: {subsystem} against {device_subsystem}");
+            if !glob_match(subsystem.as_str(), device_subsystem.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(sys_name) = udev_config.sys_name.as_ref() {
+            let device_sys_name = device.sysname();
+            log::trace!("Checking sys_name: {sys_name} against {device_sys_name}");
+            if !glob_match(sys_name.as_str(), device_sys_name.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(sys_path) = udev_config.sys_path.as_ref() {
+            let device_sys_path = device.syspath();
+            log::trace!("Checking sys_path: {sys_path} against {device_sys_path}");
+            if !glob_match(sys_path.as_str(), device_sys_path.as_str()) {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Returns true if a given hidraw device is within a list of hidraw configs.
