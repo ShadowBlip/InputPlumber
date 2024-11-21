@@ -168,6 +168,9 @@
           "type": "boolean",
           "default": false
         },
+        "udev": {
+          "$ref": "#/definitions/Udev"
+        },
         "evdev": {
           "$ref": "#/definitions/Evdev"
         },
@@ -186,6 +189,70 @@
         "group"
       ],
       "title": "SourceDevice"
+    },
+    "Udev": {
+      "description": "Source device to manage. Properties support globbing patterns.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attributes": {
+          "description": "Device attributes to match. Attributes can be found by running `udevadm info --attribute-walk /path/to/device` and looking at fields that look like: `ATTR{name}==\"value\"`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UdevKeyValue"
+          }
+        },
+        "dev_node": {
+          "description": "Full device node path to match. E.g. '/dev/hidraw3', '/dev/input/event*'",
+          "type": "string"
+        },
+        "dev_path": {
+          "description": "Full kernel device path to match. The path does not contain the sys mount point, but does start with a `/`. For example, the dev_path for `hidraw3` could be `/devices/pci0000:00/0000:00:08.1/.../hidraw/hidraw3`.",
+          "type": "string"
+        },
+        "driver": {
+          "description": "Driver being used by the device (or parent devices) to match. E.g. `playstation`, `microsoft`",
+          "type": "string"
+        },
+        "properties": {
+          "description": "Device properties to match. Properties can be found by running `udevadm info -q property /path/to/device`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UdevKeyValue"
+          }
+        },
+        "subsystem": {
+          "description": "Subsystem to match. E.g. `input`, `hidraw`, `iio`",
+          "type": "string"
+        },
+        "sys_name": {
+          "description": "Sysname to match. The sysname is typically the last part of the path to the device. E.g. `hidraw3`, `event6`",
+          "type": "string"
+        },
+        "sys_path": {
+          "description": "Syspath to match. The syspath is an absolute path and includes the sys mount point. For example, the syspath for `hidraw3` could be `/sys/devices/pci0000:00/0000:00:08.1/.../hidraw/hidraw3`, which includes the sys mount point `/sys`.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "Udev"
+    },
+    "UdevKeyValue": {
+      "description": "Udev attribute or property key/value pair"
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Name of the property or attribute to match. Does NOT support globbing patterns.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Value of the property or attribute to match. Supports globbing patterns.",
+          "type": "string"
+        },
+      },
+      "required": ["name"],
+      "title": "UdevKeyValue"
     },
     "Evdev": {
       "description": "Source device to manage. Properties support globbing patterns.",

@@ -26,10 +26,15 @@ pub trait AttributeGetter {
     fn product(&self) -> String;
     fn serial_number(&self) -> String;
     fn uniq(&self) -> String;
+    fn get_attributes(&self) -> HashMap<String, String>;
     /// Returns the value of the given property from the device
     fn get_property(&self, property: &str) -> Option<String>;
     /// Returns device properties for the device. E.g. {"ID_INPUT": "1", ...}
     fn get_properties(&self) -> HashMap<String, String>;
+    /// Returns a list of all drivers used for this device. This list will be
+    /// in ascending order, with the first item in the list being the first
+    /// discovered driver in the device tree.
+    fn drivers(&self) -> Vec<String>;
 }
 
 impl AttributeGetter for ::udev::Device {
@@ -164,6 +169,35 @@ impl AttributeGetter for ::udev::Device {
         attr
     }
 
+    /// Returns a list of all drivers used for this device. This list will be
+    /// in ascending order, with the first item in the list being the first
+    /// discovered driver in the device tree.
+    fn drivers(&self) -> Vec<String> {
+        let mut drivers = vec![];
+        if let Some(driver) = self.driver() {
+            let value = driver.to_string_lossy().to_string();
+            if !value.is_empty() {
+                drivers.push(value);
+            }
+        }
+
+        // Walk up the device tree and query for each driver
+        let mut parent = self.parent();
+        while parent.is_some() {
+            let current_parent = parent.unwrap();
+            if let Some(driver) = current_parent.driver() {
+                let value = driver.to_string_lossy().to_string();
+                if !value.is_empty() {
+                    drivers.push(value);
+                }
+            }
+
+            parent = current_parent.parent();
+        }
+
+        drivers
+    }
+
     /// Looks for the given attribute at the given path using sysfs.
     fn get_attribute_from_sysfs(&self, path: &str, attribute: &str) -> Option<String> {
         let parent = self.parent()?;
@@ -195,6 +229,37 @@ impl AttributeGetter for ::udev::Device {
         }
 
         None
+    }
+
+    /// Recursively gets attributes for this device and all parent devices.
+    fn get_attributes(&self) -> HashMap<String, String> {
+        let mut attributes = HashMap::new();
+        for attr in self.attributes() {
+            let key = attr.name().to_string_lossy().to_string();
+            if attributes.contains_key(&key) {
+                continue;
+            }
+            let value = attr.value().to_string_lossy().to_string();
+            attributes.insert(key, value);
+        }
+
+        // Walk up the device tree and query each device
+        let mut parent = self.parent();
+        while parent.is_some() {
+            let current_parent = parent.unwrap();
+            for attr in current_parent.attributes() {
+                let key = attr.name().to_string_lossy().to_string();
+                if attributes.contains_key(&key) {
+                    continue;
+                }
+                let value = attr.value().to_string_lossy().to_string();
+                attributes.insert(key, value);
+            }
+
+            parent = current_parent.parent();
+        }
+
+        attributes
     }
 
     /// Gets an attribute from the first device in the device tree to match the attribute.
@@ -345,6 +410,14 @@ impl UdevDevice {
         device.devpath().to_string_lossy().to_string()
     }
 
+    /// Recursively returns all drivers associated with the device.
+    pub fn drivers(&self) -> Vec<String> {
+        let Ok(device) = self.get_device() else {
+            return vec![];
+        };
+        device.drivers()
+    }
+
     /// Return the bustype attribute from the device
     pub fn id_bustype(&self) -> u16 {
         if let Some(bus_type) = self.bus_type {
@@ -473,6 +546,27 @@ impl UdevDevice {
                 format!("iio://{}", self.sysname)
             }
             _ => "".to_string(),
+        }
+    }
+
+    /// Recursively gets attributes for this device and all parent devices.
+    pub fn get_attributes(&self) -> HashMap<String, String> {
+        let Ok(device) = self.get_device() else {
+            return HashMap::new();
+        };
+        device.get_attributes()
+    }
+
+    /// Gets an attribute from the first device in the device tree to match the attribute.
+    pub fn get_attribute_from_tree(&self, attribute: &str) -> Option<String> {
+        let Ok(device) = self.get_device() else {
+            return None;
+        };
+        let value = device.get_attribute_from_tree(attribute);
+        if value.is_empty() {
+            None
+        } else {
+            Some(value)
         }
     }
 
