@@ -520,6 +520,11 @@ impl UdevDevice {
         self.sysname.clone()
     }
 
+    /// Returns the syspath of the device.
+    ///
+    /// The path is an absolute path and includes the sys mount point. For example, the syspath for
+    /// `tty0` could be `/sys/devices/virtual/tty/tty0`, which includes the sys mount point,
+    /// `/sys`.
     pub fn syspath(&self) -> String {
         self.syspath.clone()
     }
