@@ -52,8 +52,8 @@ source_devices:
       name: bmi323-imu
       mount_matrix:
         x: [0, -1, 0]
-        y: [0, 0, 1]
-        z: [-1, 0, 0]
+        y: [1, 0, 0]
+        z: [0, 0, 1]
 
 # Optional configuration for the composite device
 options:
