@@ -13,7 +13,7 @@ use crate::dbus::interface::target::gamepad::TargetGamepadInterface;
 
 use super::{
     capability::Capability,
-    composite_device::client::CompositeDeviceClient,
+    composite_device::client::{ClientError, CompositeDeviceClient},
     event::native::{NativeEvent, ScheduledNativeEvent},
     output_capability::OutputCapability,
     output_event::OutputEvent,
@@ -83,6 +83,12 @@ impl From<Box<dyn Error + Send + Sync>> for InputError {
 
 impl From<io::Error> for InputError {
     fn from(value: io::Error) -> Self {
+        InputError::DeviceError(value.to_string())
+    }
+}
+
+impl From<ClientError> for InputError {
+    fn from(value: ClientError) -> Self {
         InputError::DeviceError(value.to_string())
     }
 }
@@ -285,6 +291,14 @@ pub trait TargetInputDevice {
     /// that the target device should stop sending input.
     fn clear_state(&mut self) {}
 
+    /// Called when the target device has been attached to a composite device.
+    fn on_composite_device_attached(
+        &mut self,
+        _device: CompositeDeviceClient,
+    ) -> Result<(), InputError> {
+        Ok(())
+    }
+
     /// Stop the target device
     fn stop(&mut self) -> Result<(), InputError> {
         Ok(())
@@ -486,7 +500,8 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                         implementation.write_event(event)?;
                     }
                     TargetCommand::SetCompositeDevice(device) => {
-                        *composite_device = Some(device);
+                        *composite_device = Some(device.clone());
+                        implementation.on_composite_device_attached(device)?;
                     }
                     TargetCommand::GetCapabilities(sender) => {
                         let capabilities = implementation.get_capabilities().unwrap_or_default();
