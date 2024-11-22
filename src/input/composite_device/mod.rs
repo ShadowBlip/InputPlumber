@@ -1528,6 +1528,17 @@ impl CompositeDevice {
             });
         }
 
+        // Clear the state from all target devices
+        let target_devices = self.target_devices.clone();
+        tokio::task::spawn(async move {
+            for (path, device) in target_devices.iter() {
+                log::debug!("Clearing state on device: {path}");
+                if let Err(e) = device.clear_state().await {
+                    log::error!("Failed to clear state on target device {path}: {e:?}");
+                }
+            }
+        });
+
         log::debug!("Successfully loaded device profile: {}", profile.name);
         Ok(())
     }
