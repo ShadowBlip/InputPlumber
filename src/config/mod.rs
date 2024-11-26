@@ -5,7 +5,7 @@ use std::io;
 use ::procfs::CpuInfo;
 use glob_match::glob_match;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
@@ -23,7 +23,7 @@ pub enum LoadError {
     DeserializeError(#[from] serde_yaml::Error),
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct DeviceProfile {
     pub version: u32, //useful?
@@ -49,7 +49,7 @@ impl DeviceProfile {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct ProfileMapping {
     pub name: String,
@@ -155,7 +155,7 @@ impl ProfileMapping {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityMap {
     pub version: u32,
@@ -181,7 +181,7 @@ impl CapabilityMap {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityMapping {
     pub name: String,
@@ -189,7 +189,7 @@ pub struct CapabilityMapping {
     pub target_event: CapabilityConfig,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityConfig {
     pub gamepad: Option<GamepadCapability>,
@@ -200,7 +200,7 @@ pub struct CapabilityConfig {
     pub touchscreen: Option<TouchCapability>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct GamepadCapability {
     pub axis: Option<AxisCapability>,
@@ -209,7 +209,7 @@ pub struct GamepadCapability {
     pub gyro: Option<GyroCapability>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct AxisCapability {
     pub name: String,
@@ -217,14 +217,14 @@ pub struct AxisCapability {
     pub deadzone: Option<f64>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct TriggerCapability {
     pub name: String,
     pub deadzone: Option<f64>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct GyroCapability {
     pub name: String,
@@ -233,35 +233,35 @@ pub struct GyroCapability {
     pub axis: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct MouseCapability {
     pub button: Option<String>,
     pub motion: Option<MouseMotionCapability>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct MouseMotionCapability {
     pub direction: Option<String>,
     pub speed_pps: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct TouchpadCapability {
     pub name: String,
     pub touch: TouchCapability,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct TouchCapability {
     pub button: Option<String>,
     pub motion: Option<TouchMotionCapability>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct TouchMotionCapability {
     pub region: Option<String>,
@@ -269,7 +269,7 @@ pub struct TouchMotionCapability {
 }
 
 /// Defines available options for loading a [CompositeDeviceConfig]
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct CompositeDeviceConfigOptions {
     /// If true, InputPlumber will automatically try to manage the input device.
@@ -279,14 +279,14 @@ pub struct CompositeDeviceConfigOptions {
 }
 
 /// Defines a platform match for loading a [CompositeDeviceConfig]
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Match {
     pub dmi_data: Option<DMIMatch>,
 }
 
 /// Match DMI data for loading a [CompositeDevice]
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct DMIMatch {
     pub bios_release: Option<String>,
@@ -300,7 +300,7 @@ pub struct DMIMatch {
     pub cpu_vendor: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct SourceDevice {
     pub group: String,
@@ -313,7 +313,7 @@ pub struct SourceDevice {
     pub ignore: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Evdev {
     pub name: Option<String>,
@@ -323,7 +323,7 @@ pub struct Evdev {
     pub product_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Hidraw {
     pub vendor_id: Option<u16>,
@@ -333,7 +333,7 @@ pub struct Hidraw {
     pub name: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Udev {
     pub attributes: Option<Vec<UdevAttribute>>,
@@ -346,14 +346,14 @@ pub struct Udev {
     pub sys_path: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct UdevAttribute {
     pub name: String,
     pub value: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
 pub struct IIO {
@@ -362,7 +362,7 @@ pub struct IIO {
     pub mount_matrix: Option<MountMatrix>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
 pub struct MountMatrix {
@@ -372,7 +372,7 @@ pub struct MountMatrix {
 }
 
 /// Defines a combined device
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct CompositeDeviceConfig {
     pub version: u32,

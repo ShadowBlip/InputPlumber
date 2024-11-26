@@ -20,9 +20,11 @@ and translate their input to a variety of virtual device formats.
 ### Features
 
 - [x] Combine multiple input devices
+- [x] Handheld gamepad support (Steam Deck, ROG Ally, Legion Go, and more)
 - [x] Emulate mouse, keyboard, and gamepad inputs
 - [x] Intercept and route input over DBus for overlay interface control
 - [x] Input mapping profiles to translate source input into the desired target input
+- [x] Custom input routing via Lua scripting API
 - [ ] Route input over the network
 
 ## Install
@@ -169,6 +171,12 @@ looks at all the input devices on the system and checks to see if they match a
 composite device configuration. If they do, the input devices are combined into
 a single logical composite device.
 
+InputPlumber looks for composite device configuration files in the following
+locations:
+
+* `/etc/inputplumber/devices.d`
+* `/usr/share/inputplumber/devices`
+
 A composite device configuration looks like this:
 
 ```yaml
@@ -207,7 +215,7 @@ target_devices:
   - mouse
   - keyboard
 
-# The ID of a device capability mapping in the 'capability_maps' folder
+# The ID of a device capability mapping in the 'capability_maps' folder (optional)
 capability_map_id: oxp1
 ```
 
@@ -220,6 +228,11 @@ of actual gamepad events.
 Capability maps are defined in a separate YAML configuration file that follows
 the [Capability Map Schema](./rootfs/usr/share/inputplumber/schema/capability_map_v1.json)
 and are referenced by their unique ID.
+
+InputPlumber loads capabilities maps from the following locations:
+
+* `/etc/inputplumber/capability_maps.d`
+* `/usr/share/inputplumber/capability_maps`
 
 A capability map configuration looks like this:
 
@@ -239,6 +252,131 @@ mapping:
     target_event:
       gamepad:
         button: Guide
+```
+
+## Custom routing & scripting
+
+InputPlumber supports custom input routing with a Lua scripting API. Input scripts
+allow you to define custom input routing logic that can run at any step of the input
+pipeline for any device managed by InputPlumber, giving you the power to route and
+transform input events in almost any way you can imagine.
+
+When InputPlumber starts managing a device, it will load input scripts from the
+following locations:
+
+* `/etc/inputplumber/scripts.d`
+* `/usr/share/inputplumber/scripts`
+
+Each input script should return a table with function(s) defined to run at
+particular stages of the input pipeline. As input events flow from physical
+source device(s) to virtual target device(s), the composite device will execute
+the Lua function in each script that matches the pipeline stage.
+
+These are the stages of the input pipeline in order of execution:
+
+* `preprocess_event` - executed on each event _before_ capability mapping **and** _before_ input profile translation
+* `process_event` - executed on each event _after_ capability mapping **but** _before_ input profile translation
+* `postprocess_event` - executed on each event _after_ capability mapping **and** _after_ input profile translation
+
+```
+ Source Device(s)
+       │
+    (event)
+       │
+       └── Composite Device
+                  │
+          (preprocess_event)
+                  │
+           (process_event)
+                  │
+         (postprocess_event)
+                  │
+                  └── Target Device(s)
+                            │
+                         (event)
+```
+
+For example, this script will print a message to the log whenever the start button is pressed
+and processed during the `process_event` stage:
+
+```lua
+-- process_event is called on every input event -after- capability mapping
+-- but -before- input profile translation.
+local process_event = function(event)
+  if event.capability == "Gamepad:Button:Start" then
+    print("Start button was pressed! Value:", event.value)
+  end
+
+  -- Returning 'true' allows the event to be processed further by the input
+  -- pipeline.
+  return true
+end
+
+return {
+  process_event = process_event,
+}
+```
+
+### Global Variables
+
+Several global variables are available that can be used in your script that
+expose information about the input device and methods for emitting input events.
+
+* `system` - contains system and cpu information
+* `device` - composite device properties and methods
+
+### Examples
+
+#### Transform guide button events (XBox button, PS button, etc.) into start button events
+
+```lua
+-- process_event is called on every input event -after- capability mapping
+-- but -before- input profile translation.
+local process_event = function(event)
+  -- If this is not a guide button event, continue processing the event like
+  -- normal by returning 'true'.
+  if event.capability ~= "Gamepad:Button:Guide" then
+    return true
+  end
+
+  -- Events can be emitted using the 'write_event' method on the 'device' global
+  local new_event = {
+    capability = "Gamepad:Button:Start",
+    value = event.value,
+  }
+  device.write_event(new_event)
+
+  -- Returning 'false' stops further processing of this event
+  return false
+end
+
+return {
+  process_event = process_event,
+}
+```
+
+#### Print every input event only if the device is a Sony DualSense controller
+
+```lua
+-- If the composite device configuration is not a Sony DualSense controller,
+-- return a table with 'enabled' set to false so no events are procesed by
+-- this script.
+if device.config.name ~= "Sony Interactive Entertainment DualSense Wireless Controller" then
+  return {
+    enabled = false,
+  }
+end
+
+-- preprocess_event is called on every input event -before- capability mapping
+-- and input profile translation.
+local preprocess_event = function(event)
+  print("Event: ", event.capability, event.value)
+  return true
+end
+
+return {
+  preprocess_event = preprocess_event,
+}
 ```
 
 ## License

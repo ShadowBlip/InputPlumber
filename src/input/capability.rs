@@ -23,6 +23,26 @@ pub enum Capability {
     Touchscreen(Touch),
 }
 
+impl Capability {
+    pub fn to_capability_string(&self) -> String {
+        match self {
+            Capability::Gamepad(gamepad) => match gamepad {
+                Gamepad::Button(button) => format!("Gamepad:Button:{}", button),
+                Gamepad::Axis(axis) => format!("Gamepad:Axis:{}", axis),
+                Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{}", trigger),
+                Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
+                Gamepad::Gyro => "Gamepad:Gyro".to_string(),
+            },
+            Capability::Mouse(mouse) => match mouse {
+                Mouse::Motion => "Mouse:Motion".to_string(),
+                Mouse::Button(button) => format!("Mouse:Button:{}", button),
+            },
+            Capability::Keyboard(key) => format!("Keyboard:{}", key),
+            _ => self.to_string(),
+        }
+    }
+}
+
 impl fmt::Display for Capability {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
