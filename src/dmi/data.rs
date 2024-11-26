@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 /// Container for system DMI data
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct DMIData {
     pub bios_date: String,

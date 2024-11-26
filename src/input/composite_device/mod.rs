@@ -1,7 +1,11 @@
 pub mod client;
 pub mod command;
+#[cfg(feature = "scripting")]
+pub mod script;
 pub mod targets;
 
+#[cfg(feature = "scripting")]
+use script::{CompositeDeviceLua, ScriptEventAction};
 use std::{
     borrow::Borrow,
     collections::{
@@ -75,6 +79,9 @@ pub enum InterceptMode {
 pub struct CompositeDevice {
     /// DBus interface(s) for this device
     dbus: DBusInterfaceManager,
+    /// Lua state instance
+    #[cfg(feature = "scripting")]
+    lua: CompositeDeviceLua,
     /// Configuration for the CompositeDevice
     config: CompositeDeviceConfig,
     /// Name of the [CompositeDeviceConfig] loaded for the device
@@ -180,6 +187,8 @@ impl CompositeDevice {
         let dbus = DBusInterfaceManager::new(conn.clone(), dbus_path.clone())?;
         let mut device = Self {
             dbus,
+            #[cfg(feature = "scripting")]
+            lua: CompositeDeviceLua::new(tx.clone().into(), config.clone()),
             config,
             name,
             capabilities: HashSet::new(),
@@ -725,6 +734,12 @@ impl CompositeDevice {
             return Ok(());
         }
 
+        // Process the event with lua
+        #[cfg(feature = "scripting")]
+        if self.lua.preprocess_event(&event) == ScriptEventAction::Stop {
+            return Ok(());
+        }
+
         // Check if the event needs to be translated based on the
         // capability map. Translated events will be re-enqueued, so this will
         // return early.
@@ -912,6 +927,12 @@ impl CompositeDevice {
         // Track the delay for chord events.
         let mut sleep_time = 0;
 
+        // Process the event with lua
+        #[cfg(feature = "scripting")]
+        if self.lua.process_event(&event) == ScriptEventAction::Stop {
+            return Ok(());
+        }
+
         // Translate the event using the device profile.
         let mut events = if self.device_profile.is_some() {
             self.translate_event(&event)
@@ -1078,9 +1099,14 @@ impl CompositeDevice {
 
     /// Writes the given event to the appropriate target device.
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
-        let cap = event.as_capability();
+        // Run post-process scripts
+        #[cfg(feature = "scripting")]
+        if self.lua.postprocess_event(&event) == ScriptEventAction::Stop {
+            return Ok(());
+        }
 
         // If this event implements the DBus capability, send the event to DBus devices
+        let cap = event.as_capability();
         if matches!(cap, Capability::DBus(_)) {
             self.targets.write_dbus_event(event).await;
             return Ok(());
@@ -1238,6 +1264,8 @@ impl CompositeDevice {
             return;
         }
         self.intercept_mode = mode;
+        #[cfg(feature = "scripting")]
+        self.lua.set_intercept_mode(mode);
 
         // Nothing else is required when turning off input interception.
         if mode == InterceptMode::None || mode == InterceptMode::Pass {
@@ -1661,6 +1689,9 @@ impl CompositeDevice {
 
         if let Some(idx) = self.source_device_paths.iter().position(|str| str == &path) {
             self.source_device_paths.remove(idx);
+            #[cfg(feature = "scripting")]
+            self.lua
+                .set_source_device_paths(self.source_device_paths.clone());
         };
 
         if let Some(idx) = self.source_devices_used.iter().position(|str| str == &id) {
@@ -1871,8 +1902,10 @@ impl CompositeDevice {
         let device_path = source_device.get_device_path();
         self.source_devices_discovered.push(source_device);
         self.source_device_paths.push(device_path);
-        self.source_devices_used.push(id.clone());
         self.source_device_persistent_ids.insert(id, persistent_id);
+        #[cfg(feature = "scripting")]
+        self.lua
+            .set_source_device_paths(self.source_device_paths.clone());
 
         Ok(())
     }
