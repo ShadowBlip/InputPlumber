@@ -44,6 +44,14 @@ mapping:
     target_event:
       gamepad:
         button: RightTop
+  - name: Secondary Screen Interaction
+    source_events:
+      - keyboard: KeyRightCtrl
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyF18
+    target_event:
+      gamepad:
+        button: Keyboard
 
 # List of events to filter from the source devices
 filtered_events: []
