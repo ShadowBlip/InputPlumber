@@ -39,9 +39,16 @@ log = { version = "0.4.22", features = [
   "release_max_level_debug",
 ] }
 mio = { version = "0.8.11", features = ["os-poll", "os-ext", "net"] }
+mlua = { version = "0.10.1", features = [
+  "lua54",
+  "vendored",
+  "async",
+  "send",
+  "serialize",
+] }
 nix = { version = "0.29.0", features = ["fs"] }
 packed_struct = "0.10.1"
-procfs = "0.16.0"
+procfs = { version = "0.17.0", features = ["serde1"] }
 rand = "0.8.5"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_yaml = "0.9.34"
