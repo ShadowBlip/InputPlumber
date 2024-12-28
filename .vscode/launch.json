@@ -1,0 +1,78 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Remote launch",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/inputplumber",
+            "initCommands": [
+                "platform select remote-linux",
+                "platform connect connect://192.168.1.19:1234",
+                "settings set target.inherit-env false"
+            ],
+            "env": {
+                "PATH": "/usr/bin:/usr/local/sbin:/usr/local/bin:/var/lib/flatpak/exports/bin:/usr/lib/rustup/bin"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'inputplumber'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=inputplumber"
+                ],
+                "filter": {
+                    "name": "inputplumber",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'inputplumber'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=inputplumber",
+                    "--package=inputplumber"
+                ],
+                "filter": {
+                    "name": "inputplumber",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'inputplumber'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=inputplumber",
+                    "--package=inputplumber"
+                ],
+                "filter": {
+                    "name": "inputplumber",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
