@@ -19,9 +19,11 @@ pub struct SourceEventDeviceInterface {
 
 impl SourceEventDeviceInterface {
     pub fn new(device: UdevDevice) -> SourceEventDeviceInterface {
-        let handler = device.devnode();
-        let capabilities = get_capabilities(handler.as_str()).unwrap_or_else(|e| {
-            log::warn!("Failed to get capabilities for source evdev device '{handler}': {e:?}");
+        let capabilities = get_capabilities(device.devnode().as_str()).unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to get capabilities for source evdev device '{}': {e:?}",
+                device.name()
+            );
             HashMap::new()
         });
         SourceEventDeviceInterface {

@@ -1,7 +1,7 @@
 pub mod blocked;
 pub mod gamepad;
 
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, path::Path, time::Duration};
 
 use evdev::{Device, EventType};
 
@@ -73,7 +73,7 @@ pub fn get_dbus_path(handler: String) -> String {
 
 /// Returns the evdev capabilities of the input device at the given path (e.g. /dev/input/event0)
 pub fn get_capabilities(handler: &str) -> Result<HashMap<EventType, Vec<u16>>, Box<dyn Error>> {
-    if !handler.contains("input/event") {
+    if (!handler.contains("input/event")) || (!Path::new(handler).exists()) {
         return Ok(HashMap::new());
     }
     let path = handler;
