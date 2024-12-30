@@ -312,6 +312,8 @@ pub struct SourceDevice {
     pub hidraw: Option<Hidraw>,
     /// Devices that match the given iio properties will be captured by InputPlumber
     pub iio: Option<IIO>,
+    /// Devices that match the given led properties will be capture by InputPlumber
+    pub led: Option<Led>,
     /// Devices that match the given udev properties will be captured by InputPlumber
     pub udev: Option<Udev>,
     /// Device configuration options are used to alter how the source device is managed
@@ -418,6 +420,24 @@ pub struct IIO {
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
+pub struct Led {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub led_fixed_color: Option<LedFixedColor>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct LedFixedColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
 pub struct MountMatrix {
     pub x: [f64; 3],
     pub y: [f64; 3],
@@ -517,6 +537,15 @@ impl CompositeDeviceConfig {
                 for config in self.source_devices.iter() {
                     if let Some(iio_config) = config.iio.as_ref() {
                         if self.has_matching_iio(udevice, iio_config) {
+                            return Some(config.clone());
+                        }
+                    }
+                }
+            }
+            "leds" => {
+                for config in self.source_devices.iter() {
+                    if let Some(led_config) = config.led.as_ref() {
+                        if self.has_matching_led(udevice, led_config) {
                             return Some(config.clone());
                         }
                     }
@@ -640,7 +669,6 @@ impl CompositeDeviceConfig {
     /// Returns true if a given hidraw device is within a list of hidraw configs.
     pub fn has_matching_hidraw(&self, device: &UdevDevice, hidraw_config: &Hidraw) -> bool {
         log::trace!("Checking hidraw config '{:?}'", hidraw_config,);
-        let hidraw_config = hidraw_config.clone();
 
         // TODO: Switch either evdev of hidraw configs to use the same type. Legacy version had i16
         // for hidraw and string for evdev.
@@ -668,7 +696,7 @@ impl CompositeDeviceConfig {
             }
         }
 
-        if let Some(name) = hidraw_config.name {
+        if let Some(name) = hidraw_config.name.as_ref() {
             let dname = device.name();
             log::trace!("Checking name: {name} against {dname}");
             if !glob_match(name.as_str(), dname.as_str()) {
@@ -682,9 +710,8 @@ impl CompositeDeviceConfig {
     /// Returns true if a given iio device is within a list of iio configs.
     pub fn has_matching_iio(&self, device: &UdevDevice, iio_config: &IIO) -> bool {
         log::trace!("Checking iio config: {:?} against {:?}", iio_config, device);
-        let iio_config = iio_config.clone();
 
-        if let Some(id) = iio_config.id {
+        if let Some(id) = iio_config.id.as_ref() {
             let dsyspath = device.syspath();
             log::trace!("Checking id: {id} against {dsyspath}");
             if !glob_match(id.as_str(), dsyspath.as_str()) {
@@ -692,7 +719,30 @@ impl CompositeDeviceConfig {
             }
         }
 
-        if let Some(name) = iio_config.name {
+        if let Some(name) = iio_config.name.as_ref() {
+            let dname = device.name();
+            log::trace!("Checking name: {name} against {dname}");
+            if !glob_match(name.as_str(), dname.as_str()) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Returns true if a given iio device is within a list of iio configs.
+    pub fn has_matching_led(&self, device: &UdevDevice, led_config: &Led) -> bool {
+        log::trace!("Checking led config: {:?} against {:?}", led_config, device);
+
+        if let Some(id) = led_config.id.as_ref() {
+            let dsyspath = device.syspath();
+            log::trace!("Checking id: {id} against {dsyspath}");
+            if !glob_match(id.as_str(), dsyspath.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(name) = led_config.name.as_ref() {
             let dname = device.name();
             log::trace!("Checking name: {name} against {dname}");
             if !glob_match(name.as_str(), dname.as_str()) {
@@ -712,9 +762,7 @@ impl CompositeDeviceConfig {
             device
         );
 
-        let evdev_config = evdev_config.clone();
-
-        if let Some(name) = evdev_config.name {
+        if let Some(name) = evdev_config.name.as_ref() {
             let dname = device.name();
             log::trace!("Checking name: {name} against {dname}");
             if !glob_match(name.as_str(), dname.as_str()) {
@@ -722,7 +770,7 @@ impl CompositeDeviceConfig {
             }
         }
 
-        if let Some(phys_path) = evdev_config.phys_path {
+        if let Some(phys_path) = evdev_config.phys_path.as_ref() {
             let dphys_path = device.phys();
             log::trace!("Checking phys_path: {phys_path} against {dphys_path}");
             if !glob_match(phys_path.as_str(), dphys_path.as_str()) {
@@ -730,7 +778,7 @@ impl CompositeDeviceConfig {
             }
         }
 
-        if let Some(handler) = evdev_config.handler {
+        if let Some(handler) = evdev_config.handler.as_ref() {
             let handle = device.sysname();
             log::trace!("Checking handler: {handler} against {handle}");
             if !glob_match(handler.as_str(), handle.as_str()) {
@@ -738,7 +786,7 @@ impl CompositeDeviceConfig {
             }
         }
 
-        if let Some(vendor_id) = evdev_config.vendor_id {
+        if let Some(vendor_id) = evdev_config.vendor_id.as_ref() {
             let id_vendor = format!("{:04x}", device.id_vendor());
             log::trace!("Checking vendor ID: {vendor_id} against {id_vendor}");
             if !glob_match(vendor_id.as_str(), id_vendor.as_str()) {
@@ -746,7 +794,7 @@ impl CompositeDeviceConfig {
             }
         }
 
-        if let Some(product_id) = evdev_config.product_id {
+        if let Some(product_id) = evdev_config.product_id.as_ref() {
             let id_product = format!("{:04x}", device.id_product());
             log::trace!("Checking product ID: {product_id} against {id_product}");
             if !glob_match(product_id.as_str(), id_product.as_str()) {
