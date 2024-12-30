@@ -629,7 +629,7 @@ pub struct Device {
     /// M: Device name in /sys (i.e. the last component of "P:")
     pub name: String,
     /// R: Device number in /sys (i.e. the numeric suffix of the last component of "P:")
-    pub number: u32,
+    pub number: u64,
     /// U: Kernel subsystem
     pub subsystem: String,
     /// T: Device type within subsystem
@@ -653,10 +653,21 @@ pub struct Device {
 }
 
 impl Device {
+    /// Returns a path to the sysfs device link, such as
+    /// "/sys/devices/pci0000:00/0000:00:08.1/0000:09:00.3/usb1/1-3/1-3:1.2/0003:0B05:1ABE.0003/hidraw/hidraw2/device"
+    fn sysnode_device_link(&self) -> String {
+        let s = self.path.as_str();
+        match s.ends_with("/device") {
+            true => String::from(s),
+            false => format!("{}/device", s)
+        }
+    }
+
     /// Returns the parent sysfs device path
     pub fn get_parent(&self) -> Option<String> {
-        let path = format!("/sys{}/device", self.path.clone());
-        let base_path = format!("/sys{}", self.path.clone());
+        let path = self.sysnode_device_link();
+        let s = path.as_str();
+        let base_path = if s.ends_with("/device") { &s[..s.len()-7] } else { &s };
         let device_path = read_link(path.clone()).ok()?.to_string_lossy().to_string();
         let relative_path = format!("{base_path}/{device_path}");
         let full_path = fs::canonicalize(relative_path).ok()?;
@@ -666,7 +677,7 @@ impl Device {
 
     /// Returns the name of the parent (e.g. input26)
     pub fn get_parent_device_name(&self) -> Option<String> {
-        let path = format!("/sys{}/device", self.path.clone());
+        let path = self.sysnode_device_link();
         let device_path = read_link(path).ok()?;
         let name = device_path.file_name()?;
         Some(name.to_string_lossy().to_string())
@@ -703,7 +714,7 @@ impl Device {
     /// Returns the vendor id for the given device. Will only work with event
     /// devices.
     pub fn get_vendor_id(&self) -> Option<String> {
-        let path = format!("/sys{}/device/id/vendor", self.path.clone());
+        let path = format!("{}/id/vendor", self.sysnode_device_link());
         let id = fs::read_to_string(path).ok()?;
         Some(id.replace('\n', ""))
     }
@@ -711,7 +722,7 @@ impl Device {
     /// Returns the product id for the given device. Will only work with event
     /// devices.
     pub fn get_product_id(&self) -> Option<String> {
-        let path = format!("/sys{}/device/id/product", self.path.clone());
+        let path = format!("{}/id/product", self.sysnode_device_link());
         let id = fs::read_to_string(path).ok()?;
         Some(id.replace('\n', ""))
     }
