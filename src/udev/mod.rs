@@ -7,6 +7,7 @@ pub mod device_test;
 pub mod device;
 
 use std::{error::Error, fs, path::Path};
+use std::os::linux::fs::MetadataExt;
 
 use device::AttributeGetter;
 use tokio::process::Command;
@@ -129,89 +130,54 @@ async fn reload_all() -> Result<(), Box<dyn Error>> {
 /// Returns device information for the given device path using udevadm.
 pub async fn get_device(path: String) -> Result<Device, Box<dyn Error>> {
     let mut device = Device::default();
-    let output = Command::new("udevadm")
-        .args(["info", path.as_str()])
-        .output()
-        .await?;
-    let output = String::from_utf8(output.stdout)?;
 
-    for line in output.split('\n') {
-        if line.starts_with("P: ") {
-            let line = line.replace("P: ", "");
-            device.path = line;
-            continue;
+    let output = (match path.starts_with("/dev/") {
+        true => {
+            let metadata = fs::metadata(path).map_err(|e| Box::new(e))?;
+            let devtype = match metadata.st_mode() & nix::libc::S_IFMT {
+                nix::libc::S_IFCHR => Some(udev::DeviceType::Character),
+                nix::libc::S_IFBLK => Some(udev::DeviceType::Block),
+                _ => None,
+            }.expect("Not a character or block special file");
+            udev::Device::from_devnum(devtype, metadata.st_rdev())
+        },
+        false => {
+            udev::Device::from_syspath(Path::new(path.as_str()))
         }
-        if line.starts_with("M: ") {
-            let line = line.replace("M: ", "");
-            device.name = line;
-            continue;
-        }
-        if line.starts_with("R: ") {
-            let line = line.replace("R: ", "");
-            let number = line.parse().unwrap_or_default();
-            device.number = number;
-            continue;
-        }
-        if line.starts_with("U: ") {
-            let line = line.replace("U: ", "");
-            device.subsystem = line;
-            continue;
-        }
-        if line.starts_with("T: ") {
-            let line = line.replace("T: ", "");
-            device.device_type = line;
-            continue;
-        }
-        if line.starts_with("D: ") {
-            let line = line.replace("D: ", "");
-            device.node = line;
-            continue;
-        }
-        if line.starts_with("I: ") {
-            let line = line.replace("I: ", "");
-            device.network_index = line;
-            continue;
-        }
-        if line.starts_with("N: ") {
-            let line = line.replace("N: ", "");
-            device.node_name = line;
-            continue;
-        }
-        if line.starts_with("L: ") {
-            let line = line.replace("L: ", "");
-            let priority = line.parse().unwrap_or_default();
-            device.symlink_priority = priority;
-            continue;
-        }
-        if line.starts_with("S: ") {
-            let line = line.replace("S: ", "");
-            device.symlink.push(line);
-            continue;
-        }
-        if line.starts_with("Q: ") {
-            let line = line.replace("Q: ", "");
-            let seq = line.parse().unwrap_or_default();
-            device.sequence_num = seq;
-            continue;
-        }
-        if line.starts_with("V: ") {
-            let line = line.replace("V: ", "");
-            device.driver = line;
-            continue;
-        }
-        if line.starts_with("E: ") {
-            let line = line.replace("E: ", "");
-            let mut parts = line.splitn(2, '=');
-            if parts.clone().count() != 2 {
-                continue;
-            }
-            let key = parts.next().unwrap();
-            let value = parts.last().unwrap();
-            device.properties.insert(key.to_string(), value.to_string());
-            continue;
-        }
-    }
+    }).map_err(|e| Box::new(e))?;
 
+    device.path = String::from(output.syspath().to_string_lossy());
+    device.name = String::from(output.name());
+
+    if let Some(val) = output.devnum() {
+        device.number = val
+    };
+
+    if let Some(val) = output.subsystem() {
+        device.subsystem = String::from(val.to_string_lossy())
+    };
+
+    if let Some(val) = output.devtype() {
+        device.device_type = String::from(val.to_string_lossy())
+    };
+
+    if let Some(val) = output.devnode() {
+        device.node = String::from(val.to_string_lossy())
+    };
+
+    if let Some(val) = output.driver() {
+        device.driver = String::from(val.to_string_lossy())
+    };
+
+    device.properties = output.properties().into_iter().map(|p| (
+        String::from(p.name().to_string_lossy()),
+        String::from(p.value().to_string_lossy())
+    )).collect();
+
+    // TODO: L: device.symlink_priority
+    // TODO: S: device.symlink
+    // TODO: Q: device.sequence_num
+    // TODO: I: Network interface index
     Ok(device)
 }
 
