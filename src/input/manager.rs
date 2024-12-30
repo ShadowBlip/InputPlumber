@@ -1290,6 +1290,7 @@ impl Manager {
         let dev_sysname = device.sysname();
         let sys_name = device.sysname();
         if sys_name.is_empty() {
+            log::debug!("Device discarded for missing sysname: {dev_name} at {dev_path}");
             return Ok(());
         }
         let sysname = sys_name.clone();
@@ -1306,7 +1307,12 @@ impl Manager {
         // Create a DBus interface depending on the device subsystem
         match subsystem.as_str() {
             "input" => {
-                log::debug!("Event device added");
+                if device.devnode().is_empty() {
+                    log::debug!("Event device discarded for missing devnode: {dev_name} ({dev_sysname}) at {dev_path}");
+                    return Ok(());
+                }
+
+                log::debug!("Event device added: {dev_name} ({dev_sysname})");
 
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
@@ -1371,7 +1377,13 @@ impl Manager {
                 log::debug!("Finished adding {id}");
             }
             "hidraw" => {
-                log::debug!("hidraw device added");
+                if device.devnode().is_empty() {
+                    log::debug!("hidraw device discarded for missing devnode: {dev_name} ({dev_sysname}) at {dev_path}");
+                    return Ok(());
+                }
+
+                log::debug!("hidraw device added: {dev_name} ({dev_sysname})");
+
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
                 let path = hidraw::get_dbus_path(sys_name.clone());
@@ -1464,7 +1476,12 @@ impl Manager {
             }
 
             "iio" => {
-                log::debug!("iio device added");
+                if device.devnode().is_empty() {
+                    log::warn!("iio device discarded for missing devnode: {dev_name} ({dev_sysname}) at {dev_path}");
+                    return Ok(());
+                }
+
+                log::debug!("iio device added: {} ({})", device.name(), device.sysname());
 
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
