@@ -9,6 +9,7 @@
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/inputplumber",
+            "sourceLanguages": ["rust"],
             "initCommands": [
                 "platform select remote-linux",
                 "platform connect connect://192.168.1.19:1234",
