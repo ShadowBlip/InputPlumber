@@ -605,7 +605,8 @@ impl Manager {
             "Starting CompositeDevice at {composite_path} with the following sources: {source_device_ids:?}"
         );
         for id in source_device_ids {
-            self.source_devices_used.insert(id.clone(), composite_path.clone());
+            self.source_devices_used
+                .insert(id.clone(), composite_path.clone());
             self.source_devices.insert(id, source_device.clone());
         }
 
@@ -672,10 +673,15 @@ impl Manager {
             }
             log::debug!("Composite device stopped running: {composite_path}");
             if let Err(e) = tx
-                .send(ManagerCommand::CompositeDeviceStopped(composite_path.clone()))
+                .send(ManagerCommand::CompositeDeviceStopped(
+                    composite_path.clone(),
+                ))
                 .await
             {
-                log::error!("Error sending to composite device {composite_path} the stopped signal: {}", e.to_string());
+                log::error!(
+                    "Error sending to composite device {composite_path} the stopped signal: {}",
+                    e.to_string()
+                );
             }
         }))
     }
@@ -1327,7 +1333,7 @@ impl Manager {
         for i in 0u64.. {
             let path = format!("{}/CompositeDevice{}", BUS_PREFIX, i);
             if !self.composite_devices.contains_key(&path) {
-                return Ok(path)
+                return Ok(path);
             }
         }
 
