@@ -8,6 +8,7 @@ use std::{
 };
 
 use ::evdev::FFEffectData;
+use led::LedDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
@@ -30,6 +31,7 @@ pub mod command;
 pub mod evdev;
 pub mod hidraw;
 pub mod iio;
+pub mod led;
 
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
@@ -467,6 +469,7 @@ pub enum SourceDevice {
     Event(EventDevice),
     HidRaw(HidRawDevice),
     Iio(IioDevice),
+    Led(LedDevice),
 }
 
 impl SourceDevice {
@@ -476,6 +479,7 @@ impl SourceDevice {
             SourceDevice::Event(device) => device.get_device_ref(),
             SourceDevice::HidRaw(device) => device.get_device_ref(),
             SourceDevice::Iio(device) => device.get_device_ref(),
+            SourceDevice::Led(device) => device.get_device_ref(),
         }
     }
 
@@ -485,6 +489,7 @@ impl SourceDevice {
             SourceDevice::Event(device) => device.get_id(),
             SourceDevice::HidRaw(device) => device.get_id(),
             SourceDevice::Iio(device) => device.get_id(),
+            SourceDevice::Led(device) => device.get_id(),
         }
     }
 
@@ -494,6 +499,7 @@ impl SourceDevice {
             SourceDevice::Event(device) => device.client(),
             SourceDevice::HidRaw(device) => device.client(),
             SourceDevice::Iio(device) => device.client(),
+            SourceDevice::Led(device) => device.client(),
         }
     }
 
@@ -503,6 +509,7 @@ impl SourceDevice {
             SourceDevice::Event(device) => device.run().await,
             SourceDevice::HidRaw(device) => device.run().await,
             SourceDevice::Iio(device) => device.run().await,
+            SourceDevice::Led(device) => device.run().await,
         }
     }
 
@@ -512,6 +519,7 @@ impl SourceDevice {
             SourceDevice::Event(device) => device.get_capabilities(),
             SourceDevice::HidRaw(device) => device.get_capabilities(),
             SourceDevice::Iio(device) => device.get_capabilities(),
+            SourceDevice::Led(device) => device.get_capabilities(),
         }
     }
 
@@ -521,6 +529,7 @@ impl SourceDevice {
             SourceDevice::Event(device) => device.get_device_path(),
             SourceDevice::HidRaw(device) => device.get_device_path(),
             SourceDevice::Iio(device) => device.get_device_path(),
+            SourceDevice::Led(device) => device.get_device_path(),
         }
     }
 }
