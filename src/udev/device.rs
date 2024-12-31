@@ -593,6 +593,9 @@ impl UdevDevice {
             "iio" => {
                 format!("iio://{}", self.sysname)
             }
+            "leds" => {
+                format!("leds://{}", self.sysname)
+            }
             _ => "".to_string(),
         }
     }
