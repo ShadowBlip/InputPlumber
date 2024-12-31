@@ -90,7 +90,7 @@ impl MultiColorChassis {
             .zip(contents.split_whitespace().into_iter())
             .map(|(index_type, index_value)| match index_type {
                 IndexType::RGB => {
-                    (((r as u32) << 0u32) | ((g as u32) << 8u32) | ((b as u32) << 16u32))
+                    (((r as u32) << 16u32) | ((g as u32) << 8u32) | ((b as u32) << 0u32))
                         .to_string()
                 }
                 _ => String::from(index_value),
