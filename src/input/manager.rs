@@ -763,11 +763,15 @@ impl Manager {
             // If the CompositeDevice only allows a single source device, skip its
             // consideration.
             if config.single_source.unwrap_or(false) {
-                log::trace!("Skipping composite device {composite_device}: is a single source device");
+                log::trace!(
+                    "Skipping composite device {composite_device}: is a single source device"
+                );
                 continue;
             }
             if config.maximum_sources.unwrap_or(0) == 1 {
-                log::trace!("Skipping composite device {composite_device}: is a single source device");
+                log::trace!(
+                    "Skipping composite device {composite_device}: is a single source device"
+                );
                 continue;
             }
             log::trace!(

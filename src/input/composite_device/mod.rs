@@ -1431,19 +1431,30 @@ impl CompositeDevice {
             }
             "iio" => {
                 // Get any defined config for the IIO device
-                let config = self.config.get_matching_device(&device).map_or(None, |cfg| cfg.iio);
+                let config = self
+                    .config
+                    .get_matching_device(&device)
+                    .map_or(None, |cfg| cfg.iio);
 
                 log::debug!("Adding {dev_subsystem} source device: {dev_name}");
                 SourceDevice::Iio(IioDevice::new(device, self.client(), config)?)
             }
             "leds" => {
                 // Get any defined config for the IIO device
-                let config = self.config.get_matching_device(&device).map_or(None, |cfg| cfg.led);
+                let config = self
+                    .config
+                    .get_matching_device(&device)
+                    .map_or(None, |cfg| cfg.led);
 
                 log::debug!("Adding {dev_subsystem} source device: {dev_name}");
                 SourceDevice::Led(LedDevice::new(device, self.client(), config)?)
             }
-            _ => return Err(format!("Unspported subsystem: {dev_subsystem}, unable to add source device {dev_name}").into())
+            _ => {
+                return Err(format!(
+                    "Unspported subsystem: {dev_subsystem}, unable to add source device {dev_name}"
+                )
+                .into())
+            }
         };
 
         // Get the capabilities of the source device.
