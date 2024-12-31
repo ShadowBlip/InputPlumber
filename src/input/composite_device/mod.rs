@@ -620,7 +620,7 @@ impl CompositeDevice {
 
             // Add the IIO IMU Dbus interface. We do this here because it needs the source
             // device transmitter and this is the only place we can refrence it at the moment.
-            let device = source_device.get_device();
+            let device = source_device.get_device_ref().clone();
             if let SourceDevice::Iio(_) = source_device {
                 SourceIioImuInterface::listen_on_dbus(self.conn.clone(), device.clone()).await?;
             }

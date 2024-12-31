@@ -18,9 +18,7 @@ use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
 
 use crate::{
-    constants::BUS_SOURCES_PREFIX,
-    drivers,
-    input::composite_device::client::CompositeDeviceClient,
+    constants::BUS_SOURCES_PREFIX, drivers, input::composite_device::client::CompositeDeviceClient,
     udev::device::UdevDevice,
 };
 
@@ -31,7 +29,7 @@ use self::{
     legos::LegionSController, opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
 };
 
-use super::{SourceDriver, SourceDriverOptions};
+use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 
 /// List of available drivers
 enum DriverType {
@@ -65,6 +63,112 @@ pub enum HidRawDevice {
     RogAlly(SourceDriver<RogAlly>),
     SteamDeck(SourceDriver<DeckController>),
     XpadUhid(SourceDriver<XpadUhid>),
+}
+
+impl SourceDeviceCompatible for HidRawDevice {
+    fn get_device_ref(&self) -> &UdevDevice {
+        match self {
+            HidRawDevice::DualSense(source_driver) => source_driver.info_ref(),
+            HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.info_ref(),
+            HidRawDevice::HoripadSteam(source_driver) => source_driver.info_ref(),
+            HidRawDevice::LegionGoDCombined(source_driver) => source_driver.info_ref(),
+            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.info_ref(),
+            HidRawDevice::LegionGoFPS(source_driver) => source_driver.info_ref(),
+            HidRawDevice::LegionGoS(source_driver) => source_driver.info_ref(),
+            HidRawDevice::LegionGoX(source_driver) => source_driver.info_ref(),
+            HidRawDevice::OrangePiNeo(source_driver) => source_driver.info_ref(),
+            HidRawDevice::RogAlly(source_driver) => source_driver.info_ref(),
+            HidRawDevice::SteamDeck(source_driver) => source_driver.info_ref(),
+            HidRawDevice::XpadUhid(source_driver) => source_driver.info_ref(),
+        }
+    }
+
+    fn get_id(&self) -> String {
+        match self {
+            HidRawDevice::DualSense(source_driver) => source_driver.get_id(),
+            HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_id(),
+            HidRawDevice::HoripadSteam(source_driver) => source_driver.get_id(),
+            HidRawDevice::LegionGoDCombined(source_driver) => source_driver.get_id(),
+            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.get_id(),
+            HidRawDevice::LegionGoFPS(source_driver) => source_driver.get_id(),
+            HidRawDevice::LegionGoS(source_driver) => source_driver.get_id(),
+            HidRawDevice::LegionGoX(source_driver) => source_driver.get_id(),
+            HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_id(),
+            HidRawDevice::RogAlly(source_driver) => source_driver.get_id(),
+            HidRawDevice::SteamDeck(source_driver) => source_driver.get_id(),
+            HidRawDevice::XpadUhid(source_driver) => source_driver.get_id(),
+        }
+    }
+
+    fn client(&self) -> super::client::SourceDeviceClient {
+        match self {
+            HidRawDevice::DualSense(source_driver) => source_driver.client(),
+            HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.client(),
+            HidRawDevice::HoripadSteam(source_driver) => source_driver.client(),
+            HidRawDevice::LegionGoDCombined(source_driver) => source_driver.client(),
+            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.client(),
+            HidRawDevice::LegionGoFPS(source_driver) => source_driver.client(),
+            HidRawDevice::LegionGoS(source_driver) => source_driver.client(),
+            HidRawDevice::LegionGoX(source_driver) => source_driver.client(),
+            HidRawDevice::OrangePiNeo(source_driver) => source_driver.client(),
+            HidRawDevice::RogAlly(source_driver) => source_driver.client(),
+            HidRawDevice::SteamDeck(source_driver) => source_driver.client(),
+            HidRawDevice::XpadUhid(source_driver) => source_driver.client(),
+        }
+    }
+
+    async fn run(self) -> Result<(), Box<dyn Error>> {
+        match self {
+            HidRawDevice::DualSense(source_driver) => source_driver.run().await,
+            HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.run().await,
+            HidRawDevice::HoripadSteam(source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoDCombined(source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoFPS(source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoS(source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoX(source_driver) => source_driver.run().await,
+            HidRawDevice::OrangePiNeo(source_driver) => source_driver.run().await,
+            HidRawDevice::RogAlly(source_driver) => source_driver.run().await,
+            HidRawDevice::SteamDeck(source_driver) => source_driver.run().await,
+            HidRawDevice::XpadUhid(source_driver) => source_driver.run().await,
+        }
+    }
+
+    fn get_capabilities(
+        &self,
+    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+        match self {
+            HidRawDevice::DualSense(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::HoripadSteam(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::LegionGoDCombined(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::LegionGoFPS(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::LegionGoS(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::LegionGoX(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::RogAlly(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::SteamDeck(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::XpadUhid(source_driver) => source_driver.get_capabilities(),
+        }
+    }
+
+    fn get_device_path(&self) -> String {
+        match self {
+            HidRawDevice::DualSense(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::HoripadSteam(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::LegionGoDCombined(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::LegionGoFPS(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::LegionGoS(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::LegionGoX(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::RogAlly(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::SteamDeck(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::XpadUhid(source_driver) => source_driver.get_device_path(),
+        }
+    }
 }
 
 impl HidRawDevice {
