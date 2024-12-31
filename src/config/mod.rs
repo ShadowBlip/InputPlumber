@@ -564,14 +564,15 @@ impl CompositeDeviceConfig {
 
                 // If no value was specified in the config, then only match on
                 // the presence of the property and not the value.
-                let Some(prop_value) = property.value.as_ref() else {
-                    continue;
-                };
-
-                // Glob match on the property value
-                log::trace!("Checking property: {prop_value} against {device_prop_value}");
-                if !glob_match(prop_value.as_str(), device_prop_value.as_str()) {
-                    return false;
+                match property.value.as_ref() {
+                    Some(prop_value) => {
+                        // Glob match on the property value
+                        log::trace!("Checking property: {prop_value} against {device_prop_value}");
+                        if !glob_match(prop_value.as_str(), device_prop_value.as_str()) {
+                            return false;
+                        }
+                    }
+                    None => continue,
                 }
             }
         }
