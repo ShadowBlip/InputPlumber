@@ -10,6 +10,7 @@ use mio::{Events, Interest, Poll, Token};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::task;
+use tokio::task::JoinHandle;
 use zbus::fdo::ManagedObjects;
 use zbus::zvariant::ObjectPath;
 use zbus::Connection;
@@ -483,6 +484,7 @@ impl Manager {
             self.tx.clone(),
             config,
             device,
+            self.next_composite_dbus_path()?,
             capability_map,
         )?;
 
@@ -596,22 +598,19 @@ impl Manager {
         config: CompositeDeviceConfig,
         target_types: Option<Vec<String>>,
         source_device: SourceDevice,
-    ) -> Result<(), Box<dyn Error>> {
-        // Generate the DBus tree path for this composite device
-        let path = self.next_composite_dbus_path();
-
+    ) -> Result<JoinHandle<()>, Box<dyn Error>> {
         // Keep track of the source devices that this composite device is
         // using.
         let source_device_ids = device.get_source_devices_used();
+        let composite_path = device.dbus_path();
         log::debug!(
-            "Starting CompositeDevice at {path} with the following sources: {source_device_ids:?}"
+            "Starting CompositeDevice at {composite_path} with the following sources: {source_device_ids:?}"
         );
         for id in source_device_ids {
-            self.source_devices_used.insert(id.clone(), path.clone());
+            self.source_devices_used.insert(id.clone(), composite_path.clone());
             self.source_devices.insert(id, source_device.clone());
         }
 
-        let composite_path = path.clone();
         if !self.composite_device_sources.contains_key(&composite_path) {
             self.composite_device_sources
                 .insert(composite_path.clone(), Vec::new());
@@ -622,8 +621,7 @@ impl Manager {
             .unwrap();
         sources.push(source_device);
 
-        // Create a DBus interface for the device
-        device.listen_on_dbus(path.clone()).await?;
+        device.listen_on_dbus().await?;
 
         // Get a handle to the device
         let client = device.client();
@@ -632,7 +630,7 @@ impl Manager {
         let mut target_device_paths = Vec::new();
 
         // Create a DBus target device
-        log::debug!("Creating target devices for {path}");
+        log::debug!("Creating target devices for {composite_path}");
         let dbus_device = self.create_target_device("dbus").await?;
         let dbus_devices = self.start_target_devices(vec![dbus_device]).await?;
         let dbus_paths = dbus_devices.keys();
@@ -658,32 +656,30 @@ impl Manager {
         }
 
         // Run the device
-        let dbus_path = path.clone();
         let tx = self.tx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = device.run(targets).await {
-                log::error!("Error running {dbus_path}: {}", e.to_string());
-            }
-            log::debug!("Composite device stopped running: {dbus_path}");
-            if let Err(e) = tx
-                .send(ManagerCommand::CompositeDeviceStopped(dbus_path))
-                .await
-            {
-                log::error!("Error sending composite device stopped: {}", e.to_string());
-            }
-        });
-        let comp_path = path.clone();
+        let comp_path = composite_path.clone();
 
         // Add the device to our maps
         self.composite_devices.insert(comp_path, client);
         log::trace!("Managed source devices: {:?}", self.source_devices_used);
-        self.used_configs.insert(path, config);
+        self.used_configs.insert(composite_path.clone(), config);
         log::trace!("Used configs: {:?}", self.used_configs);
         self.composite_device_targets
             .insert(composite_path.clone(), target_device_paths);
         log::trace!("Used target devices: {:?}", self.composite_device_targets);
 
-        Ok(())
+        Ok(tokio::spawn(async move {
+            if let Err(e) = device.run(targets).await {
+                log::error!("Error running {composite_path}: {}", e.to_string());
+            }
+            log::debug!("Composite device stopped running: {composite_path}");
+            if let Err(e) = tx
+                .send(ManagerCommand::CompositeDeviceStopped(composite_path.clone()))
+                .await
+            {
+                log::error!("Error sending to composite device {composite_path} the stopped signal: {}", e.to_string());
+            }
+        }))
     }
 
     /// Called when a composite device stops running
@@ -896,7 +892,7 @@ impl Manager {
                                 target_devices_config,
                                 source_device.clone(),
                             )
-                            .await?
+                            .await?;
                         }
                     };
 
@@ -1329,20 +1325,15 @@ impl Manager {
     }
 
     /// Returns the next available composite device dbus path
-    fn next_composite_dbus_path(&self) -> String {
-        let max = 2048;
-        let mut i = 0;
-        loop {
-            if i > max {
-                return "Devices exceeded".to_string();
-            }
+    fn next_composite_dbus_path(&self) -> Result<String, Box<dyn Error>> {
+        for i in 0u64.. {
             let path = format!("{}/CompositeDevice{}", BUS_PREFIX, i);
-            if self.composite_devices.contains_key(&path) {
-                i += 1;
-                continue;
+            if !self.composite_devices.contains_key(&path) {
+                return Ok(path)
             }
-            return path;
         }
+
+        Err(Box::from("No available dbus path left"))
     }
 
     fn watch_iio_devices(
