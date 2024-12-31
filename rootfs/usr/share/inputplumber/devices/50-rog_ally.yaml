@@ -53,6 +53,9 @@ source_devices:
         x: [1, 0, 0]
         y: [0, -1, 0]
         z: [0, 0, -1]
+  - group: led
+    led:
+      name: ASUS ROG Ally Config
 
 # Optional configuration for the composite device
 options:
