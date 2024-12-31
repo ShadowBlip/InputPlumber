@@ -31,7 +31,9 @@ use crate::{
             Event,
         },
         output_event::UinputOutputEvent,
-        source::{evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, SourceDevice},
+        source::{
+            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice, SourceDevice,
+        },
     },
     udev::{device::UdevDevice, hide_device, unhide_device},
 };
@@ -1422,6 +1424,17 @@ impl CompositeDevice {
                 log::debug!("Adding source device: {:?}", device.name());
                 let device = IioDevice::new(device, self.client(), config)?;
                 SourceDevice::Iio(device)
+            }
+            "leds" => {
+                // Get any defined config for the IIO device
+                let config = if let Some(device_config) = self.config.get_matching_device(&device) {
+                    device_config.led
+                } else {
+                    None
+                };
+
+                log::debug!("Adding source device: {:?}", device.name());
+                SourceDevice::Led(LedDevice::new(device, self.client(), config)?)
             }
             _ => {
                 return Err(format!(
