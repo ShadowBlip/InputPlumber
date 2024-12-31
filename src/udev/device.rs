@@ -550,6 +550,9 @@ impl UdevDevice {
             "iio" => {
                 format!("iio://{}", self.sysname)
             }
+            "leds" => {
+                format!("leds://{}", self.sysname)
+            }
             _ => "".to_string(),
         }
     }
@@ -659,7 +662,7 @@ impl Device {
         let s = self.path.as_str();
         match s.ends_with("/device") {
             true => String::from(s),
-            false => format!("{}/device", s)
+            false => format!("{}/device", s),
         }
     }
 
@@ -667,7 +670,11 @@ impl Device {
     pub fn get_parent(&self) -> Option<String> {
         let path = self.sysnode_device_link();
         let s = path.as_str();
-        let base_path = if s.ends_with("/device") { &s[..s.len()-7] } else { &s };
+        let base_path = if s.ends_with("/device") {
+            &s[..s.len() - 7]
+        } else {
+            &s
+        };
         let device_path = read_link(path.clone()).ok()?.to_string_lossy().to_string();
         let relative_path = format!("{base_path}/{device_path}");
         let full_path = fs::canonicalize(relative_path).ok()?;

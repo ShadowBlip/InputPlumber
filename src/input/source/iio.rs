@@ -14,7 +14,7 @@ use crate::{
 
 use self::{accel_gyro_3d_new::AccelGyro3dImu, bmi_imu_new::BmiImu};
 
-use super::SourceDriver;
+use super::{SourceDeviceCompatible, SourceDriver};
 
 /// List of available drivers
 enum DriverType {
@@ -28,6 +28,52 @@ enum DriverType {
 pub enum IioDevice {
     BmiImu(SourceDriver<BmiImu>),
     AccelGryo3D(SourceDriver<AccelGyro3dImu>),
+}
+
+impl SourceDeviceCompatible for IioDevice {
+    fn get_device_ref(&self) -> &UdevDevice {
+        match self {
+            IioDevice::BmiImu(source_driver) => source_driver.info_ref(),
+            IioDevice::AccelGryo3D(source_driver) => source_driver.info_ref(),
+        }
+    }
+
+    fn get_id(&self) -> String {
+        match self {
+            IioDevice::BmiImu(source_driver) => source_driver.get_id(),
+            IioDevice::AccelGryo3D(source_driver) => source_driver.get_id(),
+        }
+    }
+
+    fn client(&self) -> super::client::SourceDeviceClient {
+        match self {
+            IioDevice::BmiImu(source_driver) => source_driver.client(),
+            IioDevice::AccelGryo3D(source_driver) => source_driver.client(),
+        }
+    }
+
+    async fn run(self) -> Result<(), Box<dyn Error>> {
+        match self {
+            IioDevice::BmiImu(source_driver) => source_driver.run().await,
+            IioDevice::AccelGryo3D(source_driver) => source_driver.run().await,
+        }
+    }
+
+    fn get_capabilities(
+        &self,
+    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+        match self {
+            IioDevice::BmiImu(source_driver) => source_driver.get_capabilities(),
+            IioDevice::AccelGryo3D(source_driver) => source_driver.get_capabilities(),
+        }
+    }
+
+    fn get_device_path(&self) -> String {
+        match self {
+            IioDevice::BmiImu(source_driver) => source_driver.get_device_path(),
+            IioDevice::AccelGryo3D(source_driver) => source_driver.get_device_path(),
+        }
+    }
 }
 
 impl IioDevice {

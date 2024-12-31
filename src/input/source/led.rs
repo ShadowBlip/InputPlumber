@@ -2,7 +2,7 @@ pub mod multicolor_chassis;
 use std::error::Error;
 //use glob_match::glob_match;
 use self::multicolor_chassis::MultiColorChassis;
-use super::SourceDriver;
+use super::{SourceDeviceCompatible, SourceDriver};
 use crate::{
     config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
     udev::device::UdevDevice,
@@ -15,6 +15,46 @@ enum DriverType {
 #[derive(Debug)]
 pub enum LedDevice {
     MultiColorChassis(SourceDriver<MultiColorChassis>),
+}
+
+impl SourceDeviceCompatible for LedDevice {
+    fn get_device_ref(&self) -> &UdevDevice {
+        match self {
+            LedDevice::MultiColorChassis(source_driver) => source_driver.info_ref(),
+        }
+    }
+
+    fn get_id(&self) -> String {
+        match self {
+            LedDevice::MultiColorChassis(source_driver) => source_driver.get_id(),
+        }
+    }
+
+    fn client(&self) -> super::client::SourceDeviceClient {
+        match self {
+            LedDevice::MultiColorChassis(source_driver) => source_driver.client(),
+        }
+    }
+
+    async fn run(self) -> Result<(), Box<dyn Error>> {
+        match self {
+            LedDevice::MultiColorChassis(source_driver) => source_driver.run().await,
+        }
+    }
+
+    fn get_capabilities(
+        &self,
+    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+        match self {
+            LedDevice::MultiColorChassis(source_driver) => source_driver.get_capabilities(),
+        }
+    }
+
+    fn get_device_path(&self) -> String {
+        match self {
+            LedDevice::MultiColorChassis(source_driver) => source_driver.get_device_path(),
+        }
+    }
 }
 
 impl LedDevice {

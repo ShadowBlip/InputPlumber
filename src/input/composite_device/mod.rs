@@ -27,7 +27,9 @@ use crate::{
             Event,
         },
         output_event::UinputOutputEvent,
-        source::{evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, SourceDevice},
+        source::{
+            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice, SourceDevice,
+        },
     },
     udev::{device::UdevDevice, hide_device, unhide_device},
 };
@@ -627,7 +629,7 @@ impl CompositeDevice {
 
             // Add the IIO IMU Dbus interface. We do this here because it needs the source
             // device transmitter and this is the only place we can refrence it at the moment.
-            let device = source_device.get_device();
+            let device = source_device.get_device_ref().clone();
             if let SourceDevice::Iio(_) = source_device {
                 SourceIioImuInterface::listen_on_dbus(self.conn.clone(), device.clone()).await?;
             }
@@ -1438,6 +1440,17 @@ impl CompositeDevice {
                 log::debug!("Adding source device: {:?}", device.name());
                 let device = IioDevice::new(device, self.client(), config)?;
                 SourceDevice::Iio(device)
+            }
+            "leds" => {
+                // Get any defined config for the IIO device
+                let config = if let Some(device_config) = self.config.get_matching_device(&device) {
+                    device_config.led
+                } else {
+                    None
+                };
+
+                log::debug!("Adding source device: {:?}", device.name());
+                SourceDevice::Led(LedDevice::new(device, self.client(), config)?)
             }
             _ => {
                 return Err(format!(

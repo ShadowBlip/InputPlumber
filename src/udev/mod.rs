@@ -6,8 +6,8 @@ pub mod device_test;
 
 pub mod device;
 
-use std::{error::Error, fs, path::Path};
 use std::os::linux::fs::MetadataExt;
+use std::{error::Error, fs, path::Path};
 
 use device::AttributeGetter;
 use tokio::process::Command;
@@ -138,13 +138,13 @@ pub async fn get_device(path: String) -> Result<Device, Box<dyn Error>> {
                 nix::libc::S_IFCHR => Some(udev::DeviceType::Character),
                 nix::libc::S_IFBLK => Some(udev::DeviceType::Block),
                 _ => None,
-            }.expect("Not a character or block special file");
+            }
+            .expect("Not a character or block special file");
             udev::Device::from_devnum(devtype, metadata.st_rdev())
-        },
-        false => {
-            udev::Device::from_syspath(Path::new(path.as_str()))
         }
-    }).map_err(|e| Box::new(e))?;
+        false => udev::Device::from_syspath(Path::new(path.as_str())),
+    })
+    .map_err(|e| Box::new(e))?;
 
     device.path = String::from(output.syspath().to_string_lossy());
     device.name = String::from(output.name());
@@ -169,10 +169,16 @@ pub async fn get_device(path: String) -> Result<Device, Box<dyn Error>> {
         device.driver = String::from(val.to_string_lossy())
     };
 
-    device.properties = output.properties().into_iter().map(|p| (
-        String::from(p.name().to_string_lossy()),
-        String::from(p.value().to_string_lossy())
-    )).collect();
+    device.properties = output
+        .properties()
+        .into_iter()
+        .map(|p| {
+            (
+                String::from(p.name().to_string_lossy()),
+                String::from(p.value().to_string_lossy()),
+            )
+        })
+        .collect();
 
     // TODO: L: device.symlink_priority
     // TODO: S: device.symlink
