@@ -71,10 +71,7 @@ impl LedDevice {
             DriverType::MultiColorChassis => {
                 let device = MultiColorChassis::new(
                     device_info.clone(),
-                    match config {
-                        Some(cfg) => cfg.led_fixed_color,
-                        None => None,
-                    },
+                    config.map_or(None, |cfg| cfg.led_fixed_color)
                 )?;
                 let source_device = SourceDriver::new(composite_device, device, device_info);
                 Ok(Self::MultiColorChassis(source_device))
