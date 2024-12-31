@@ -27,7 +27,6 @@ enum IndexType {
 
 /// MultiColorChassis source device implementation
 pub struct MultiColorChassis {
-    device_info: UdevDevice,
     multi_intensity_path: PathBuf,
     multi_index_map: Vec<IndexType>,
     fixed_color: Option<LedFixedColor>,
@@ -69,7 +68,6 @@ impl MultiColorChassis {
         }
 
         let result = Self {
-            device_info,
             fixed_color,
             multi_intensity_path,
             multi_index_map,
