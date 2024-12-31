@@ -3,7 +3,8 @@ use crate::udev::device::UdevDevice;
 use std::error::Error;
 use zbus::{fdo, Connection};
 use zbus_macros::interface;
-/// DBusInterface exposing information about a HIDRaw device
+
+/// DBusInterface exposing information about a led device
 pub struct SourceLedInterface {
     device: UdevDevice,
 }
@@ -11,7 +12,7 @@ impl SourceLedInterface {
     pub fn new(device: UdevDevice) -> SourceLedInterface {
         SourceLedInterface { device }
     }
-    /// Creates a new instance of the source hidraw interface on DBus. Returns
+    /// Creates a new instance of the source led interface on DBus. Returns
     /// a structure with information about the source device.
     pub async fn listen_on_dbus(
         conn: Connection,

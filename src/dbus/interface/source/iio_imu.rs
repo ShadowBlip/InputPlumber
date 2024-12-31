@@ -6,7 +6,7 @@ use zbus_macros::interface;
 
 use crate::input::source::iio::get_dbus_path;
 
-/// DBusInterface exposing information about a HIDRaw device
+/// DBusInterface exposing information about a iio device
 pub struct SourceIioImuInterface {
     device: UdevDevice,
 }
@@ -16,7 +16,7 @@ impl SourceIioImuInterface {
         SourceIioImuInterface { device }
     }
 
-    /// Creates a new instance of the source hidraw interface on DBus. Returns
+    /// Creates a new instance of the source imu interface on DBus. Returns
     /// a structure with information about the source device.
     pub async fn listen_on_dbus(
         conn: Connection,

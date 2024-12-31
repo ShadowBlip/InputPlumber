@@ -668,7 +668,7 @@ impl CompositeDeviceConfig {
         true
     }
 
-    /// Returns true if a given iio device is within a list of iio configs.
+    /// Returns true if a given led device is within a list of led configs.
     pub fn has_matching_led(&self, device: &UdevDevice, led_config: &Led) -> bool {
         log::trace!("Checking led config: {:?} against {:?}", led_config, device);
 
