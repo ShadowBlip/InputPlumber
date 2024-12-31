@@ -6,6 +6,7 @@ use std::{
 };
 
 use ::evdev::FFEffectData;
+use led::LedDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
@@ -28,6 +29,7 @@ pub mod command;
 pub mod evdev;
 pub mod hidraw;
 pub mod iio;
+pub mod led;
 
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
