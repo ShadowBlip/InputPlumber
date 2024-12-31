@@ -409,11 +409,9 @@ impl Manager {
         let tx_for_listen_on_dbus = self.tx.clone();
         let dbus_for_listen_on_dbus = self.dbus.clone();
 
-        let this: &Self = self;
-
-        let cmd_tx_all_devices = this.tx.clone();
-        let cmd_tx_iio = this.tx.clone();
-        let cmd_tx_hidraw = this.tx.clone();
+        let cmd_tx_all_devices = self.tx.clone();
+        let cmd_tx_iio = self.tx.clone();
+        let cmd_tx_hidraw = self.tx.clone();
 
         // Watch for hidraw/evdev inotify events.
         // TODO: when we reload the udev device it triggers the udev watcher. We do this to break
