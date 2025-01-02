@@ -629,7 +629,7 @@ pub struct Device {
     /// M: Device name in /sys (i.e. the last component of "P:")
     pub name: String,
     /// R: Device number in /sys (i.e. the numeric suffix of the last component of "P:")
-    pub number: u32,
+    pub number: u64,
     /// U: Kernel subsystem
     pub subsystem: String,
     /// T: Device type within subsystem
