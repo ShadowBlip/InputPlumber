@@ -15,13 +15,13 @@ id: claw1
 mapping:
   - name: Guide
     source_events:
-      - keyboard: KeyF16
+      - keyboard: KeyF15
     target_event:
       gamepad:
         button: Guide
   - name: QuickAccess
     source_events:
-      - keyboard: KeyF15
+      - keyboard: KeyF16
     target_event:
       gamepad:
         button: QuickAccess
