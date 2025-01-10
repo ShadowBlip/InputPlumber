@@ -16,7 +16,7 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: "83L3"
+      product_name: "{83L3,83N6,83Q2,83Q3}"
       sys_vendor: LENOVO
       cpu_vendor: AuthenticAMD
 
