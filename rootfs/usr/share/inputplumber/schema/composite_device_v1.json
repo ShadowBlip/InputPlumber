@@ -243,7 +243,7 @@
       "title": "Udev"
     },
     "UdevKeyValue": {
-      "description": "Udev attribute or property key/value pair"
+      "description": "Udev attribute or property key/value pair",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -254,9 +254,11 @@
         "value": {
           "description": "Value of the property or attribute to match. Supports globbing patterns.",
           "type": "string"
-        },
+        }
       },
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "title": "UdevKeyValue"
     },
     "Evdev": {
