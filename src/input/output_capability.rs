@@ -6,6 +6,7 @@ pub enum OutputCapability {
     ForceFeedback,
     ForceFeedbackUpload,
     ForceFeedbackErase,
+    Haptics(Haptic),
     #[allow(clippy::upper_case_acronyms)]
     LED(LED),
 }
@@ -16,4 +17,12 @@ pub enum OutputCapability {
 pub enum LED {
     Brightness,
     Color,
+}
+
+/// Haptic capabilities
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Haptic {
+    TrackpadLeft,
+    TrackpadRight,
+    //TrackpadCenter,
 }

@@ -70,23 +70,24 @@ impl Driver {
     /// Rumble the gamepad
     pub fn haptic_rumble(
         &mut self,
-        intensity: u16,
         left_speed: u16,
         right_speed: u16,
-        left_gain: u8,
-        right_gain: u8,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let mut report = PackedRumbleReport::new();
-        report.intensity = Integer::from_primitive(intensity);
         report.left_speed = Integer::from_primitive(left_speed);
         report.right_speed = Integer::from_primitive(right_speed);
-        report.left_gain = left_gain;
-        report.right_gain = right_gain;
 
         // Write the report to the device
         let buf = report.pack()?;
         let _bytes_written = self.device.write(&buf)?;
 
+        Ok(())
+    }
+
+    /// Writes the given buffer (typically an [OutputReport]) to the source device
+    /// physical interface.
+    pub fn write(&self, buf: &[u8]) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.device.write(buf)?;
         Ok(())
     }
 
