@@ -509,10 +509,26 @@ impl Default for PackedInputDataReport {
 }
 
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
-pub enum Pad {
+pub enum PadSide {
     Left = 0,
     Right = 1,
     Both = 2,
+}
+
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+pub enum Intensity {
+    Default = 0,
+    Short = 1,
+    Medium = 2,
+    Long = 3,
+    Insane = 4,
+}
+
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+pub enum CommandType {
+    Off = 0,
+    Tick = 1,
+    Click = 2,
 }
 
 /*
@@ -529,7 +545,7 @@ pub struct PackedHapticPulseReport {
     #[packed_field(bytes = "1")]
     pub report_size: u8,
     #[packed_field(bytes = "2", ty = "enum")]
-    pub side: Pad,
+    pub side: PadSide,
     #[packed_field(bytes = "3..=4", endian = "lsb")]
     pub amplitude: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "5..=6", endian = "lsb")]
@@ -543,7 +559,7 @@ impl PackedHapticPulseReport {
         Self {
             report_id: ReportType::TriggerHapticPulse as u8,
             report_size: 9,
-            side: Pad::Both,
+            side: PadSide::Both,
             amplitude: Integer::from_primitive(0),
             period: Integer::from_primitive(0),
             count: Integer::from_primitive(0),
@@ -558,41 +574,87 @@ impl Default for PackedHapticPulseReport {
 }
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0")]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "64")]
 pub struct PackedRumbleReport {
     #[packed_field(bytes = "0")]
-    pub report_id: u8,
+    pub cmd_id: u8,
     #[packed_field(bytes = "1")]
     pub report_size: u8,
-    #[packed_field(bytes = "3..=4", endian = "lsb")]
-    pub intensity: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "2")]
+    pub unk_2: u8,
+    #[packed_field(bytes = "3", endian = "lsb")]
+    pub event_type: u8,
+    #[packed_field(bytes = "4", endian = "lsb")]
+    pub intensity: u8,
     #[packed_field(bytes = "5..=6", endian = "lsb")]
     pub left_speed: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "7..=8", endian = "lsb")]
     pub right_speed: Integer<u16, packed_bits::Bits<16>>,
-    /// Max gain: 135
-    #[packed_field(bytes = "9")]
-    pub left_gain: u8,
-    /// Max gain: 135
-    #[packed_field(bytes = "10")]
-    pub right_gain: u8,
 }
 
 impl PackedRumbleReport {
     pub fn new() -> Self {
         Self {
-            report_id: ReportType::TriggerRumbleCommand as u8,
+            cmd_id: ReportType::TriggerRumbleCommand as u8,
             report_size: 9,
-            intensity: Integer::from_primitive(1),
+            unk_2: 0,
+            event_type: 0,
+            intensity: 0,
             left_speed: Integer::from_primitive(0),
             right_speed: Integer::from_primitive(0),
-            left_gain: 130,
-            right_gain: 130,
         }
     }
 }
 
 impl Default for PackedRumbleReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "64")]
+pub struct PackedHapticReport {
+    #[packed_field(bytes = "0")]
+    pub cmd_id: u8,
+    #[packed_field(bytes = "1")]
+    pub report_size: u8,
+    #[packed_field(bytes = "2", ty = "enum")]
+    pub side: PadSide,
+    #[packed_field(bytes = "3", ty = "enum")]
+    pub cmd_type: CommandType,
+    #[packed_field(bytes = "4", ty = "enum")]
+    pub intensity: Intensity,
+    #[packed_field(bytes = "5")]
+    pub gain: i8,
+    #[packed_field(bytes = "6")]
+    pub unk_6: u8,
+    #[packed_field(bytes = "7")]
+    pub unk_7: u8,
+    #[packed_field(bytes = "8")]
+    pub unk_8: u8,
+    #[packed_field(bytes = "12")]
+    pub unk_12: u8,
+}
+
+impl PackedHapticReport {
+    pub fn new() -> Self {
+        Self {
+            cmd_id: ReportType::TriggerHapticCommand as u8,
+            report_size: 13,
+            side: PadSide::Left,
+            cmd_type: CommandType::Off,
+            intensity: Intensity::Default,
+            gain: 0,
+            unk_6: 95,
+            unk_7: 204,
+            unk_8: 3,
+            unk_12: 16,
+        }
+    }
+}
+
+impl Default for PackedHapticReport {
     fn default() -> Self {
         Self::new()
     }

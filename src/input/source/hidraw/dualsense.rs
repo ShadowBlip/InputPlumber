@@ -2,8 +2,10 @@ use std::fmt::Debug;
 use std::{collections::HashMap, error::Error};
 
 use evdev::{FFEffectData, FFEffectKind};
+use packed_struct::types::SizedInteger;
 
 use crate::drivers::dualsense::driver::{DS5_EDGE_PID, DS5_PID, DS5_VID};
+use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
 use crate::{
     drivers::dualsense::{self, driver::Driver},
     input::{
@@ -112,19 +114,27 @@ impl DualSenseController {
                 weak_magnitude,
             } => {
                 // Scale the rumble values to the DS5 values
-                let left_speed = (strong_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
-                let left_speed = left_speed.round() as u8;
-                let right_speed = (weak_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
-                let right_speed = right_speed.round() as u8;
+                let left_speed = strong_magnitude / u8::MAX as u16 + 1;
+                let right_speed = weak_magnitude / u8::MAX as u16 + 1;
 
                 // Do rumble
-                if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+                if let Err(e) = self.driver.rumble(left_speed as u8, right_speed as u8) {
                     let err = format!("Failed to do rumble: {:?}", e);
                     return Err(err.into());
                 }
             }
         }
 
+        Ok(())
+    }
+
+    /// Procces Steam Deck FFB events.
+    fn process_deck_ff(&mut self, report: PackedRumbleReport) -> Result<(), Box<dyn Error>> {
+        let left_speed = report.left_speed.to_primitive() / u8::MAX as u16 + 1;
+        let right_speed = report.right_speed.to_primitive() / u8::MAX as u16 + 1;
+        self.driver
+            .rumble(left_speed as u8, right_speed as u8)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 }
@@ -157,6 +167,14 @@ impl SourceOutputDevice for DualSenseController {
                 Ok(self.driver.write(report)?)
             }
             OutputEvent::Uinput(_) => Ok(()),
+            OutputEvent::SteamDeckHaptics(_report) => Ok(()),
+            OutputEvent::SteamDeckRumble(report) => {
+                log::debug!("Received Steam Deck FFB Output Report");
+                if let Err(e) = self.process_deck_ff(report) {
+                    log::error!("Failed to process Steam Deck Force Feedback Report: {e:?}")
+                }
+                Ok(())
+            }
         }
     }
 

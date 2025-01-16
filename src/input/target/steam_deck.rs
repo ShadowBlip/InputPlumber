@@ -24,9 +24,9 @@ use crate::{
     drivers::steam_deck::{
         driver::{PID, VID},
         hid_report::{
-            PackedInputDataReport, ReportType, PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX,
-            PAD_Y_MIN, STICK_FORCE_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
-            TRIGG_MAX,
+            PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
+            PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX,
+            STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
         report_descriptor::{CONTROLLER_DESCRIPTOR, KEYBOARD_DESCRIPTOR, MOUSE_DESCRIPTOR},
     },
@@ -40,6 +40,7 @@ use crate::{
             native::{NativeEvent, ScheduledNativeEvent},
             value::InputValue,
         },
+        output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
     },
 };
@@ -60,6 +61,7 @@ pub struct SteamDeckDevice {
     serial_number: String,
     queued_events: Vec<ScheduledNativeEvent>,
     pressed_events: HashMap<Capability, Instant>,
+    output_event: Option<OutputEvent>,
 }
 
 impl SteamDeckDevice {
@@ -82,6 +84,7 @@ impl SteamDeckDevice {
             serial_number: "INPU7PLUMB3R".to_string(),
             queued_events: vec![],
             pressed_events: HashMap::new(),
+            output_event: None,
         })
     }
 
@@ -423,8 +426,50 @@ impl SteamDeckDevice {
                         log::debug!("Serial number requested");
                         self.current_report = ReportType::GetSerial;
                     }
-                    ReportType::TriggerHapticCommand => (),
-                    ReportType::TriggerRumbleCommand => (),
+                    ReportType::TriggerHapticCommand => {
+                        self.current_report = ReportType::TriggerHapticCommand;
+
+                        let buf = match data.as_slice().try_into() {
+                            Ok(buffer) => buffer,
+                            Err(e) => {
+                                log::error!("Failed to process Haptic Command: {e}");
+                                return;
+                            }
+                        };
+
+                        let packed_haptic_report = match PackedHapticReport::unpack(buf) {
+                            Ok(report) => report,
+                            Err(e) => {
+                                log::error!("Failed to process Haptic Command: {e}");
+                                return;
+                            }
+                        };
+                        //log::trace!("Got PackedHapticReport: {packed_haptic_report}");
+                        let event = OutputEvent::SteamDeckHaptics(packed_haptic_report);
+                        self.output_event = Some(event);
+                    }
+                    ReportType::TriggerRumbleCommand => {
+                        self.current_report = ReportType::TriggerRumbleCommand;
+
+                        let buf = match data.as_slice().try_into() {
+                            Ok(buffer) => buffer,
+                            Err(e) => {
+                                log::error!("Failed to process Rumble Command: {e}");
+                                return;
+                            }
+                        };
+
+                        let packed_rumble_report = match PackedRumbleReport::unpack(buf) {
+                            Ok(report) => report,
+                            Err(e) => {
+                                log::error!("Failed to process Rumble Command: {e}");
+                                return;
+                            }
+                        };
+                        //log::trace!("Got PackedRumbleReport: {packed_rumble_report}");
+                        let event = OutputEvent::SteamDeckRumble(packed_rumble_report);
+                        self.output_event = Some(event);
+                    }
                 }
             }
             // Ignore other types of requests
@@ -809,7 +854,22 @@ impl TargetOutputDevice for SteamDeckDevice {
             }
         }
 
+        // Handle [OutputEvent] if it was created
+        let event = self.output_event.take();
+        if let Some(event) = event {
+            return Ok(vec![event]);
+        }
+
         Ok(vec![])
+    }
+
+    /// Returns the possible output events this device is capable of emitting
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![
+            OutputCapability::ForceFeedback,
+            OutputCapability::Haptics(Haptic::TrackpadLeft),
+            OutputCapability::Haptics(Haptic::TrackpadRight),
+        ])
     }
 }
 

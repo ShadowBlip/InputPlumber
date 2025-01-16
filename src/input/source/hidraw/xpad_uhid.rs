@@ -146,6 +146,8 @@ impl SourceOutputDevice for XpadUhid {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
             OutputEvent::DualSense(_) => Ok(()),
             OutputEvent::Uinput(_) => Ok(()),
+            OutputEvent::SteamDeckHaptics(_packed_haptic_report) => Ok(()),
+            OutputEvent::SteamDeckRumble(_packed_rumble_report) => Ok(()),
         }
     }
 
