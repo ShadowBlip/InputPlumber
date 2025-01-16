@@ -10,6 +10,7 @@ use mio::{Events, Interest, Poll, Token};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::task;
+use tokio::task::JoinHandle;
 use zbus::fdo::ManagedObjects;
 use zbus::zvariant::ObjectPath;
 use zbus::Connection;
@@ -28,6 +29,7 @@ use crate::dbus::interface::manager::ManagerInterface;
 use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
 use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
 use crate::dbus::interface::source::iio_imu::SourceIioImuInterface;
+use crate::dbus::interface::source::led::SourceLedInterface;
 use crate::dbus::interface::source::udev::SourceUdevDeviceInterface;
 use crate::dmi::data::DMIData;
 use crate::dmi::get_cpu_info;
@@ -36,9 +38,11 @@ use crate::input::composite_device::CompositeDevice;
 use crate::input::source::evdev;
 use crate::input::source::hidraw;
 use crate::input::source::iio;
+use crate::input::source::led;
 use crate::input::target::TargetDevice;
 use crate::input::target::TargetDeviceTypeId;
 use crate::udev;
+use crate::udev::device::AttributeGetter;
 use crate::udev::device::UdevDevice;
 
 use super::composite_device::client::CompositeDeviceClient;
@@ -194,15 +198,7 @@ impl Manager {
         }
     }
 
-    /// Starts listening for [Command] messages to be sent from clients and
-    /// dispatch those events.
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        // Start tasks for discovering new input devices
-        self.watch_input_devices().await?;
-
-        // Create a DBus interface
-        self.listen_on_dbus().await?;
-
+    async fn events_loop(&mut self) -> Result<(), Box<dyn Error>> {
         // Loop and listen for command events
         while let Some(cmd) = self.rx.recv().await {
             log::debug!("Received command: {:?}", cmd);
@@ -296,13 +292,21 @@ impl Manager {
                     self.target_devices.remove(&path);
                 }
                 ManagerCommand::DeviceAdded { device } => {
+                    let dev_name = device.name();
+                    let dev_sysname = device.sysname();
+
                     if let Err(e) = self.on_device_added(device).await {
-                        log::error!("Error adding device: {e:?}");
+                        log::error!(
+                            "Error adding device '{} ({})': {}",
+                            dev_name,
+                            dev_sysname,
+                            e.to_string()
+                        );
                     }
                 }
                 ManagerCommand::DeviceRemoved { device } => {
                     if let Err(e) = self.on_device_removed(device).await {
-                        log::error!("Error removing device: {e:?}");
+                        log::error!("Error removing device: {}", e.to_string());
                     }
                 }
                 ManagerCommand::SetManageAllDevices(manage_all_devices) => {
@@ -399,6 +403,54 @@ impl Manager {
         Ok(())
     }
 
+    /// Starts listening for [Command] messages to be sent from clients and
+    /// dispatch those events.
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let tx_for_listen_on_dbus = self.tx.clone();
+        let dbus_for_listen_on_dbus = self.dbus.clone();
+
+        let cmd_tx_all_devices = self.tx.clone();
+        let cmd_tx_iio = self.tx.clone();
+        let cmd_tx_hidraw = self.tx.clone();
+
+        // Watch for hidraw/evdev inotify events.
+        // TODO: when we reload the udev device it triggers the udev watcher. We do this to break
+        // access to the file descriptor for processes that have already authenticated. Figure out
+        // a way to do this only using the udev events.
+        let (watcher_tx, mut watcher_rx) = mpsc::channel(BUFFER_SIZE);
+        if std::path::Path::new(DEV_PATH).exists() {
+            let tx = watcher_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                log::info!("Started hidraw device discovery thread");
+                watcher::watch(DEV_PATH.into(), tx)
+            });
+        }
+        if std::path::Path::new(INPUT_PATH).exists() {
+            let tx = watcher_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                log::info!("Started evdev device discovery thread");
+                watcher::watch(INPUT_PATH.into(), tx)
+            });
+        }
+
+        log::debug!("Starting input manager task...");
+
+        let _ = tokio::join!(
+            // Discover all (initial) devices
+            Self::discover_all_devices(&cmd_tx_all_devices),
+            // Watch for IIO device events
+            Self::watch_iio_devices(cmd_tx_iio),
+            // Watch for iio and other devices
+            Self::watch_hidraw_devices(cmd_tx_hidraw, &mut watcher_rx),
+            // Create a DBus interface
+            Self::listen_on_dbus(dbus_for_listen_on_dbus, tx_for_listen_on_dbus),
+            // Manage events generated by other tasks
+            self.events_loop()
+        );
+
+        Ok(())
+    }
+
     /// Create a new [CompositeDevice] from the given [CompositeDeviceConfig]
     async fn create_composite_device(
         &mut self,
@@ -430,6 +482,7 @@ impl Manager {
             self.tx.clone(),
             config,
             device,
+            self.next_composite_dbus_path()?,
             capability_map,
         )?;
 
@@ -543,22 +596,20 @@ impl Manager {
         config: CompositeDeviceConfig,
         target_types: Option<Vec<String>>,
         source_device: SourceDevice,
-    ) -> Result<(), Box<dyn Error>> {
-        // Generate the DBus tree path for this composite device
-        let path = self.next_composite_dbus_path();
-
+    ) -> Result<JoinHandle<()>, Box<dyn Error>> {
         // Keep track of the source devices that this composite device is
         // using.
         let source_device_ids = device.get_source_devices_used();
+        let composite_path = device.dbus_path();
         log::debug!(
-            "Starting CompositeDevice at {path} with the following sources: {source_device_ids:?}"
+            "Starting CompositeDevice at {composite_path} with the following sources: {source_device_ids:?}"
         );
         for id in source_device_ids {
-            self.source_devices_used.insert(id.clone(), path.clone());
+            self.source_devices_used
+                .insert(id.clone(), composite_path.clone());
             self.source_devices.insert(id, source_device.clone());
         }
 
-        let composite_path = path.clone();
         if !self.composite_device_sources.contains_key(&composite_path) {
             self.composite_device_sources
                 .insert(composite_path.clone(), Vec::new());
@@ -569,8 +620,7 @@ impl Manager {
             .unwrap();
         sources.push(source_device);
 
-        // Create a DBus interface for the device
-        device.listen_on_dbus(path.clone()).await?;
+        device.listen_on_dbus().await?;
 
         // Get a handle to the device
         let client = device.client();
@@ -579,7 +629,7 @@ impl Manager {
         let mut target_device_paths = Vec::new();
 
         // Create a DBus target device
-        log::debug!("Creating target devices for {path}");
+        log::debug!("Creating target devices for {composite_path}");
         let dbus_device = self.create_target_device("dbus").await?;
         let dbus_devices = self.start_target_devices(vec![dbus_device]).await?;
         let dbus_paths = dbus_devices.keys();
@@ -605,32 +655,35 @@ impl Manager {
         }
 
         // Run the device
-        let dbus_path = path.clone();
         let tx = self.tx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = device.run(targets).await {
-                log::error!("Error running {dbus_path}: {:?}", e);
-            }
-            log::debug!("Composite device stopped running: {dbus_path}");
-            if let Err(e) = tx
-                .send(ManagerCommand::CompositeDeviceStopped(dbus_path))
-                .await
-            {
-                log::error!("Error sending composite device stopped: {:?}", e);
-            }
-        });
-        let comp_path = path.clone();
+        let comp_path = composite_path.clone();
 
         // Add the device to our maps
         self.composite_devices.insert(comp_path, client);
         log::trace!("Managed source devices: {:?}", self.source_devices_used);
-        self.used_configs.insert(path, config);
+        self.used_configs.insert(composite_path.clone(), config);
         log::trace!("Used configs: {:?}", self.used_configs);
         self.composite_device_targets
             .insert(composite_path.clone(), target_device_paths);
         log::trace!("Used target devices: {:?}", self.composite_device_targets);
 
-        Ok(())
+        Ok(tokio::spawn(async move {
+            if let Err(e) = device.run(targets).await {
+                log::error!("Error running {composite_path}: {}", e.to_string());
+            }
+            log::debug!("Composite device stopped running: {composite_path}");
+            if let Err(e) = tx
+                .send(ManagerCommand::CompositeDeviceStopped(
+                    composite_path.clone(),
+                ))
+                .await
+            {
+                log::error!(
+                    "Error sending to composite device {composite_path} the stopped signal: {}",
+                    e.to_string()
+                );
+            }
+        }))
     }
 
     /// Called when a composite device stops running
@@ -692,22 +745,33 @@ impl Manager {
         id: String,
         device: UdevDevice,
     ) -> Result<(), Box<dyn Error>> {
-        // Check all existing composite devices to see if this device is part of
-        // their config
-        'start: for composite_device in self.composite_devices.keys() {
-            let Some(config) = self.used_configs.get(composite_device) else {
+        // Check all CompositeDevice configs to see if this matches a CompositeDevice.
+        // On a match the CompositeDevice will either be created if possible and not existing already
+        // or the device will be added to an existing one if the CompositeDevice is not full.
+        'start: for config in self.load_device_configs().await {
+            let composite_device = (&config).name.clone();
+            let dev_subsystem = (&device).subsystem();
+
+            log::debug!("Checking if composite device {composite_device} wants current device device: {id:?}");
+
+            // Check to see if this configuration matches the system
+            if !config.has_valid_matches(&self.dmi_data, &self.cpu_info) {
+                log::trace!("Configuration does not match system");
                 continue;
-            };
-            log::debug!("Checking if existing composite device {composite_device:?} with config {:?} is missing device: {id:?}", config.name);
+            }
 
             // If the CompositeDevice only allows a single source device, skip its
             // consideration.
             if config.single_source.unwrap_or(false) {
-                log::trace!("{:?} is a single source device. Skipping.", config.name);
+                log::trace!(
+                    "Skipping composite device {composite_device}: is a single source device"
+                );
                 continue;
             }
             if config.maximum_sources.unwrap_or(0) == 1 {
-                log::trace!("{:?} is a single source device. Skipping.", config.name);
+                log::trace!(
+                    "Skipping composite device {composite_device}: is a single source device"
+                );
                 continue;
             }
             log::trace!(
@@ -724,11 +788,11 @@ impl Manager {
                 if max_sources > 0 {
                     // Check to see how many source devices this composite device is
                     // currently managing.
-                    if let Some(sources) = self.composite_device_sources.get(composite_device) {
+                    if let Some(sources) = self.composite_device_sources.get(&composite_device) {
                         let sources_count = sources.len() as i32;
                         if sources_count >= max_sources {
                             log::trace!(
-                                "{composite_device:?} maximum source devices reached: {max_sources}. Skipping."
+                                "{composite_device} maximum source devices reached: {max_sources}. Skipping."
                             );
                             continue;
                         }
@@ -738,463 +802,113 @@ impl Manager {
 
             // Check if this device matches any source udev configs of the running
             // CompositeDevice.
-            for source_device in config.source_devices.iter() {
-                log::trace!("Checking if existing composite device is missing udev device {id}");
-                let Some(udev_config) = source_device.udev.as_ref() else {
-                    continue;
-                };
-                if !config.has_matching_udev(&device, udev_config) {
-                    continue;
-                }
+            match config.get_matching_device(&device) {
+                Some(source_device) => {
+                    // Check if the device has already been used in this config or not,
+                    // stop here if the device must be unique.
+                    if let Some(sources) = self.composite_device_sources.get(&composite_device) {
+                        for source in sources {
+                            if *source != source_device {
+                                continue;
+                            }
 
-                // Check if the device has already been used in this config or not,
-                // stop here if the device must be unique.
-                if let Some(sources) = self.composite_device_sources.get(composite_device) {
-                    for source in sources {
-                        if source != source_device {
-                            continue;
-                        }
-                        if let Some(ignored) = source_device.ignore {
-                            if ignored {
+                            // Check if the source device has to be ignored (default to false)
+                            if source_device.ignore.unwrap_or(false) {
                                 log::debug!(
-                                    "Ignoring device {:?}, not adding to composite device: {}",
-                                    source_device,
-                                    composite_device
+                                    "Ignoring device {:?}, not adding to composite device: {composite_device}",
+                                    source_device
                                 );
-                                break 'start;
                             }
-                        }
-                        if let Some(unique) = source_device.clone().unique {
-                            if unique {
+
+                            // Check if the source device is unique (default to being unique)
+                            if source_device.clone().unique.unwrap_or(true) {
                                 log::trace!(
-                                    "Found unique device {:?}, not adding to composite device {}",
-                                    source_device,
-                                    composite_device
+                                    "Found unique device {:?}, not adding to composite device {composite_device}",
+                                    source_device
                                 );
                                 break 'start;
                             }
-                        // Default to being unique
-                        } else {
-                            log::trace!(
-                                "Found unique device {:?}, not adding to composite device {}",
-                                source_device,
-                                composite_device
-                            );
-                            break 'start;
                         }
                     }
-                }
 
-                log::info!("Found missing device, adding source device {id:?} to existing composite device: {composite_device:?}");
-                let client = self.composite_devices.get(composite_device.as_str());
-                if client.is_none() {
-                    log::error!("No existing composite device found for key {composite_device:?}");
-                    continue;
-                }
-                self.add_device_to_composite_device(device, client.unwrap())
-                    .await?;
-                self.source_devices_used
-                    .insert(id.clone(), composite_device.clone());
-                let composite_id = composite_device.clone();
-                if !self.composite_device_sources.contains_key(&composite_id) {
-                    self.composite_device_sources
-                        .insert(composite_id.clone(), Vec::new());
-                }
-                let sources = self
-                    .composite_device_sources
-                    .get_mut(&composite_id)
-                    .unwrap();
-                sources.push(source_device.clone());
-                self.source_devices.insert(id, source_device.clone());
+                    // fetch the composite device already in use or create a new one
+                    log::info!("Found missing {} device, adding source device {id} to existing composite device: {composite_device}", device.subsystem());
+                    match self.composite_devices.get(composite_device.as_str()) {
+                        Some(client) => {
+                            // add the current device to the composite device
+                            client.add_source_device(device).await?;
 
-                return Ok(());
-            }
-
-            // TODO: Consolidate these
-            match device.subsystem().as_str() {
-                "input" => {
-                    log::trace!(
-                        "Checking if existing composite device is missing evdev device: {:?}",
-                        device.name()
-                    );
-                    for source_device in config.source_devices.iter() {
-                        let Some(evdev_config) = source_device.evdev.as_ref() else {
-                            log::trace!("Evdev section is empty");
-                            continue;
-                        };
-                        if !config.has_matching_evdev(&device, evdev_config) {
-                            continue;
-                        }
-
-                        // Check if the device has already been used in this config or not, stop here if the device must be unique.
-                        if let Some(sources) = self.composite_device_sources.get(composite_device) {
-                            for source in sources {
-                                if source != source_device {
-                                    continue;
-                                }
-                                if let Some(ignored) = source_device.ignore {
-                                    if ignored {
-                                        log::debug!("Ignoring device {:?}, not adding to composite device: {}", source_device, composite_device);
-                                        break 'start;
-                                    }
-                                }
-                                if let Some(unique) = source_device.clone().unique {
-                                    if unique {
-                                        log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
-                                        break 'start;
-                                    }
-                                // Default to being unique
-                                } else {
-                                    log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
-                                    break 'start;
-                                }
+                            self.source_devices_used
+                                .insert(id.clone(), composite_device.clone());
+                            let composite_id = composite_device.clone();
+                            if !self.composite_device_sources.contains_key(&composite_id) {
+                                self.composite_device_sources
+                                    .insert(composite_id.clone(), Vec::new());
                             }
+                            let sources = self
+                                .composite_device_sources
+                                .get_mut(&composite_id)
+                                .unwrap();
+                            sources.push(source_device.clone());
+                            self.source_devices.insert(id, source_device.clone());
                         }
-
-                        log::info!("Found missing device, adding source device {id:?} to existing composite device: {composite_device:?}");
-                        let client = self.composite_devices.get(composite_device.as_str());
-                        if client.is_none() {
-                            log::error!(
-                                "No existing composite device found for key {composite_device:?}"
+                        None => {
+                            log::info!(
+                                "No existing composite device found for key {composite_device}"
                             );
-                            continue;
-                        }
-                        self.add_device_to_composite_device(device, client.unwrap())
-                            .await?;
-                        self.source_devices_used
-                            .insert(id.clone(), composite_device.clone());
-                        let composite_id = composite_device.clone();
-                        if !self.composite_device_sources.contains_key(&composite_id) {
-                            self.composite_device_sources
-                                .insert(composite_id.clone(), Vec::new());
-                        }
-                        let sources = self
-                            .composite_device_sources
-                            .get_mut(&composite_id)
-                            .unwrap();
-                        sources.push(source_device.clone());
-                        self.source_devices.insert(id, source_device.clone());
 
-                        return Ok(());
-                    }
-                }
-                "hidraw" => {
-                    log::trace!(
-                        "Checking if existing composite device is missing hidraw device: {:?}",
-                        device.name()
-                    );
-                    for source_device in config.source_devices.iter() {
-                        let Some(hidraw_config) = source_device.hidraw.as_ref() else {
-                            continue;
-                        };
-                        if !config.has_matching_hidraw(&device, hidraw_config) {
-                            continue;
-                        }
-
-                        // Check if the device has already been used in this config or not, stop here if the device must be unique.
-                        if let Some(sources) = self.composite_device_sources.get(composite_device) {
-                            for source in sources {
-                                if source != source_device {
-                                    continue;
-                                }
-                                if let Some(ignored) = source_device.ignore {
-                                    if ignored {
-                                        log::debug!("Ignoring device {:?}, not adding to composite device: {}", source_device, composite_device);
-                                        break 'start;
-                                    }
-                                }
-                                if let Some(unique) = source_device.clone().unique {
-                                    if unique {
-                                        log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
-                                        break 'start;
-                                    }
+                            // Check to see if 'auto_manage' is enabled for this config.
+                            let auto_manage = {
+                                if let Some(options) = config.options.as_ref() {
+                                    options.auto_manage.unwrap_or(false)
                                 } else {
-                                    log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
-                                    break 'start;
+                                    false
                                 }
+                            };
+                            if !self.manage_all_devices && !auto_manage {
+                                log::trace!("Config {composite_device} does not have 'auto_manage' option enabled. Skipping.");
+                                continue;
                             }
-                        }
 
-                        log::info!("Found missing device, adding source device {id} to existing composite device: {composite_device}");
-                        let handle = self.composite_devices.get(composite_device.as_str());
-                        if handle.is_none() {
-                            log::error!(
-                                "No existing composite device found for key {}",
-                                composite_device.as_str()
-                            );
-                            continue;
-                        }
-                        self.add_device_to_composite_device(device, handle.unwrap())
-                            .await?;
-                        self.source_devices_used
-                            .insert(id.clone(), composite_device.clone());
-                        let composite_id = composite_device.clone();
-                        if !self.composite_device_sources.contains_key(&composite_id) {
-                            self.composite_device_sources
-                                .insert(composite_id.clone(), Vec::new());
-                        }
-                        let sources = self
-                            .composite_device_sources
-                            .get_mut(&composite_id)
-                            .unwrap();
-                        sources.push(source_device.clone());
+                            log::trace!("Device does not match config for composite device {composite_device}");
 
-                        self.source_devices.insert(id, source_device.clone());
-                        return Ok(());
-                    }
-                }
-                "iio" => {
-                    log::trace!("Checking if existing composite device is missing iio device");
-                    for source_device in config.source_devices.iter() {
-                        let Some(iio_config) = source_device.iio.as_ref() else {
-                            continue;
-                        };
-                        if !config.has_matching_iio(&device, iio_config) {
-                            continue;
-                        }
-
-                        // Check if the device has already been used in this config or not, stop here if the device must be unique.
-                        if let Some(sources) = self.composite_device_sources.get(composite_device) {
-                            for source in sources {
-                                if source != source_device {
-                                    continue;
-                                }
-                                if let Some(ignored) = source_device.ignore {
-                                    if ignored {
-                                        log::debug!("Ignoring device {:?}, not adding to composite device: {}", source_device, composite_device);
-                                        continue;
-                                    }
-                                }
-                                if let Some(unique) = source_device.clone().unique {
-                                    if unique {
-                                        log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
-                                        break 'start;
-                                    }
-                                } else {
-                                    log::trace!("Found unique device {:?}, not adding to composite device {}", source_device, composite_device);
-                                    break 'start;
-                                }
-                            }
-                        }
-
-                        log::info!("Found missing device, adding source device {id} to existing composite device: {composite_device}");
-                        let handle = self.composite_devices.get(composite_device.as_str());
-                        if handle.is_none() {
-                            log::error!(
-                                "No existing composite device found for key {}",
-                                composite_device.as_str()
-                            );
-                            continue;
-                        }
-                        self.add_device_to_composite_device(device, handle.unwrap())
-                            .await?;
-                        self.source_devices_used
-                            .insert(id.clone(), composite_device.clone());
-                        let composite_id = composite_device.clone();
-                        if !self.composite_device_sources.contains_key(&composite_id) {
-                            self.composite_device_sources
-                                .insert(composite_id.clone(), Vec::new());
-                        }
-                        let sources = self
-                            .composite_device_sources
-                            .get_mut(&composite_id)
-                            .unwrap();
-                        sources.push(source_device.clone());
-
-                        self.source_devices.insert(id, source_device.clone());
-                        return Ok(());
-                    }
-                }
-                _ => (),
-            };
-            log::trace!(
-                "Device {id} does not match existing device: {:?}",
-                config.name
-            );
-        }
-        log::debug!("No existing composite device matches device {id}.");
-
-        // Check all CompositeDevice configs to see if this device creates
-        // a match that will automatically create a CompositeDevice.
-        let configs = self.load_device_configs().await;
-        log::debug!("Checking unused configs");
-        for config in configs {
-            log::trace!("Checking config {:?} for device", config.name);
-
-            // Check to see if 'auto_manage' is enabled for this config.
-            let auto_manage = {
-                if let Some(options) = config.options.as_ref() {
-                    options.auto_manage.unwrap_or(false)
-                } else {
-                    false
-                }
-            };
-            if !self.manage_all_devices && !auto_manage {
-                log::trace!(
-                    "Config {:?} does not have 'auto_manage' option enabled. Skipping.",
-                    config.name
-                );
-                continue;
-            }
-
-            // Check to see if this configuration matches the system
-            if !config.has_valid_matches(&self.dmi_data, &self.cpu_info) {
-                log::trace!("Configuration does not match system");
-                continue;
-            }
-
-            // Check if this device matches any source udev configs
-            for source_device in config.source_devices.iter() {
-                let Some(udev_config) = source_device.udev.as_ref() else {
-                    continue;
-                };
-                if !config.has_matching_udev(&device, udev_config) {
-                    continue;
-                }
-
-                if let Some(ignored) = source_device.ignore {
-                    if ignored {
-                        log::trace!("Event device configured to ignore: {:?}", device);
-                        return Ok(());
-                    }
-                }
-                log::info!("Found a matching udev device {id}, creating CompositeDevice");
-                let dev = self
-                    .create_composite_device_from_config(&config, device)
-                    .await?;
-
-                // Get the target input devices from the config
-                let target_devices_config = config.target_devices.clone();
-
-                // Create the composite deivce
-                self.start_composite_device(
-                    dev,
-                    config.clone(),
-                    target_devices_config,
-                    source_device.clone(),
-                )
-                .await?;
-
-                return Ok(());
-            }
-
-            let source_devices = config.source_devices.clone();
-            match device.subsystem().as_str() {
-                "input" => {
-                    for source_device in source_devices {
-                        if source_device.evdev.is_none() {
-                            continue;
-                        }
-                        // how to refrence source devices used by this config?
-
-                        if config.has_matching_evdev(&device, &source_device.clone().evdev.unwrap())
-                        {
                             if let Some(ignored) = source_device.ignore {
                                 if ignored {
                                     log::trace!("Event device configured to ignore: {:?}", device);
                                     return Ok(());
                                 }
                             }
-                            log::info!(
-                                "Found a matching evdev device {id}, creating CompositeDevice"
-                            );
-                            let dev = self
-                                .create_composite_device_from_config(&config, device)
-                                .await?;
-
-                            // Get the target input devices from the config
-                            let target_devices_config = config.target_devices.clone();
-
-                            // Create the composite deivce
-                            self.start_composite_device(
-                                dev,
-                                config,
-                                target_devices_config,
-                                source_device.clone(),
-                            )
-                            .await?;
-
-                            return Ok(());
-                        }
-                    }
-                }
-                "hidraw" => {
-                    for source_device in source_devices {
-                        if source_device.hidraw.is_none() {
-                            continue;
-                        }
-                        if config
-                            .has_matching_hidraw(&device, &source_device.clone().hidraw.unwrap())
-                        {
-                            if let Some(ignored) = source_device.ignore {
-                                if ignored {
-                                    log::trace!("hidraw device configured to ignore: {:?}", device);
-                                    return Ok(());
-                                }
-                            }
-                            log::info!(
-                                "Found a matching hidraw device {id}, creating CompositeDevice"
-                            );
-                            let dev = self
-                                .create_composite_device_from_config(&config, device)
-                                .await?;
-
-                            // Get the target input devices from the config
-                            let target_devices_config = config.target_devices.clone();
-
-                            // Create the composite deivce
-                            self.start_composite_device(
-                                dev,
-                                config,
-                                target_devices_config,
-                                source_device.clone(),
-                            )
-                            .await?;
-
-                            return Ok(());
-                        }
-                    }
-                }
-                "iio" => {
-                    for source_device in source_devices {
-                        if source_device.iio.is_none() {
-                            continue;
-                        }
-                        if config.has_matching_iio(&device, &source_device.clone().iio.unwrap()) {
-                            if let Some(ignored) = source_device.ignore {
-                                if ignored {
-                                    log::trace!("iio device configured to ignore: {:?}", device);
-                                    return Ok(());
-                                }
-                            }
-                            log::info!(
-                                "Found a matching iio device {id}, creating CompositeDevice"
-                            );
+                            log::info!("Found a matching {dev_subsystem} device {id}, creating a new composite device");
                             let dev = self
                                 .create_composite_device_from_config(&config, device.clone())
                                 .await?;
 
+                            self.composite_devices
+                                .insert(composite_device, dev.client());
+
                             // Get the target input devices from the config
                             let target_devices_config = config.target_devices.clone();
 
-                            // Create the composite deivce
+                            // Create the composite device with the given device attached
                             self.start_composite_device(
                                 dev,
-                                config,
+                                config.clone(),
                                 target_devices_config,
                                 source_device.clone(),
                             )
                             .await?;
-
-                            return Ok(());
                         }
-                    }
+                    };
+
+                    return Ok(());
                 }
-                _ => (),
+                None => log::trace!(
+                    "Device {id} does not match CompositeDevice configuration: {composite_device}"
+                ),
             }
-            log::trace!("Device does not match config: {:?}", config.name);
         }
-        log::debug!("No unused configs found for device.");
+
+        log::debug!("No existing configuration matched device {id}");
 
         Ok(())
     }
@@ -1205,7 +919,7 @@ impl Manager {
         device: UdevDevice,
         id: String,
     ) -> Result<(), Box<dyn Error>> {
-        log::debug!("Source device removed: {}", device.devnode());
+        log::debug!("Source device removed: {}", device.name());
         let Some(composite_device_path) = self.source_devices_used.get(&id) else {
             log::debug!("Source device not being managed by a composite device");
             return Ok(());
@@ -1240,19 +954,18 @@ impl Manager {
 
     /// Called when a new device is detected by udev
     async fn on_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        // We REQUIRE a dev node
-        let dev_node = device.devnode();
-        if dev_node.is_empty() {
-            return Ok(());
-        }
+        let dev_path = device.devpath();
         let sys_name = device.sysname();
         if sys_name.is_empty() {
+            log::warn!(
+                "Device discarded for missing sysname: {} at {}",
+                device.name(),
+                device.syspath()
+            );
             return Ok(());
         }
         let sysname = sys_name.clone();
         let dev = device.clone();
-
-        log::debug!("Device added: {}", device.devnode());
 
         // Get the device subsystem
         let subsystem = device.subsystem();
@@ -1263,12 +976,25 @@ impl Manager {
         // Create a DBus interface depending on the device subsystem
         match subsystem.as_str() {
             "input" => {
-                log::debug!("Event device added");
+                if device.devnode().is_empty() {
+                    log::warn!(
+                        "Event device discarded for missing devnode: {} at {}",
+                        device.name(),
+                        device.sysname()
+                    );
+                    return Ok(());
+                }
+
+                log::debug!(
+                    "Event device added: {} ({})",
+                    device.name(),
+                    device.sysname()
+                );
 
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
                 let path = evdev::get_dbus_path(sys_name.clone());
-                log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
+                log::debug!("Attempting to listen on dbus for {dev_path} | {sysname}");
 
                 let dbus_path = path.clone();
                 task::spawn(async move {
@@ -1296,13 +1022,13 @@ impl Manager {
                 // Check to see if the device is virtual
                 if device.is_virtual() {
                     // Look up the connected device using udev
-                    let device_info = udev::get_device(dev_node.clone()).await?;
+                    let device_info = udev::get_device(dev_path.clone()).await?;
 
                     // Check if the virtual device is using the bluetooth bus
                     // TODO: Can we get properties from UdevDevice::get_attribute_from_tree?
                     let id_bus = device_info.properties.get("ID_BUS");
 
-                    log::debug!("Bus ID for {dev_node}: {id_bus:?}");
+                    log::debug!("Bus ID for {dev_path}: {id_bus:?}");
                     let is_bluetooth = {
                         if let Some(bus) = id_bus {
                             bus == "bluetooth"
@@ -1312,15 +1038,12 @@ impl Manager {
                     };
 
                     if !is_bluetooth {
-                        log::debug!("{} is virtual, skipping consideration.", dev_node);
+                        log::debug!("{dev_path} is virtual, skipping consideration.");
                         return Ok(());
                     }
-                    log::debug!(
-                        "{} is a virtual device node for a bluetooth device. Treating as real.",
-                        dev_node
-                    )
+                    log::debug!("{dev_path} is a virtual device node for a bluetooth device. Treating as real.")
                 } else {
-                    log::trace!("{} is a real device.", dev_node);
+                    log::trace!("{dev_path} is a real device.");
                 }
 
                 // Signal that a source device was added
@@ -1329,12 +1052,26 @@ impl Manager {
                 log::debug!("Finished adding {id}");
             }
             "hidraw" => {
-                log::debug!("hidraw device added");
+                if device.devnode().is_empty() {
+                    log::warn!(
+                        "Hidraw device discarded for missing devnode: {} at {}",
+                        device.name(),
+                        device.sysname()
+                    );
+                    return Ok(());
+                }
+
+                log::debug!(
+                    "Hidraw device added: {} ({})",
+                    device.name(),
+                    device.sysname()
+                );
+
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
                 let path = hidraw::get_dbus_path(sys_name.clone());
 
-                log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
+                log::debug!("Attempting to listen on dbus for {dev_path} | {sysname}");
                 let dbus_path = path.clone();
                 task::spawn(async move {
                     let result = SourceUdevDeviceInterface::listen_on_dbus(
@@ -1362,7 +1099,7 @@ impl Manager {
                     // Check to see if this virtual device is a bluetooth device
                     let uniq = device.uniq();
                     if uniq.is_empty() {
-                        log::debug!("{} is virtual, skipping consideration.", dev_node);
+                        log::debug!("{dev_path} is virtual, skipping consideration.");
                         return Ok(());
                     };
 
@@ -1407,15 +1144,12 @@ impl Manager {
                     }
 
                     if !matches_bluetooth {
-                        log::debug!("{} is virtual, skipping consideration.", dev_node);
+                        log::debug!("{dev_path} is virtual, skipping consideration.");
                         return Ok(());
                     }
-                    log::debug!(
-                        "{} is a virtual device node for a bluetooth device. Treating as real.",
-                        dev_node
-                    );
+                    log::debug!("{dev_path} is a virtual device node for a bluetooth device. Treating as real.");
                 } else {
-                    log::trace!("{} is a real device.", dev_node);
+                    log::trace!("{dev_path} is a real device.");
                 }
 
                 // Signal that a source device was added
@@ -1425,13 +1159,22 @@ impl Manager {
             }
 
             "iio" => {
-                log::debug!("iio device added");
+                if device.devnode().is_empty() {
+                    log::warn!(
+                        "IIO device discarded for missing devnode: {} at {}",
+                        device.name(),
+                        device.sysname()
+                    );
+                    return Ok(());
+                }
+
+                log::debug!("IIO device added: {} ({})", device.name(), device.sysname());
 
                 // Create a DBus interface for the event device
                 let conn = self.dbus.clone();
                 let path = iio::get_dbus_path(sys_name.clone());
 
-                log::debug!("Attempting to listen on dbus for {dev_node} | {sysname}");
+                log::debug!("Attempting to listen on dbus for {dev_path} | {sysname}");
                 let dbus_path = path.clone();
                 task::spawn(async move {
                     let result = SourceUdevDeviceInterface::listen_on_dbus(
@@ -1457,12 +1200,41 @@ impl Manager {
 
                 // Check to see if the device is virtual
                 if device.is_virtual() {
-                    log::debug!("{} is virtual, skipping consideration.", dev_node);
+                    log::debug!("{dev_path} is virtual, skipping consideration.");
                     return Ok(());
                 } else {
-                    log::trace!("Real device: {}", dev_node);
+                    log::trace!("Real device: {dev_path}");
                 }
 
+                // Signal that a source device was added
+                log::debug!("Spawing task to add source device: {id}");
+                self.on_source_device_added(id.clone(), device).await?;
+                log::debug!("Finished adding event device {id}");
+            }
+
+            "leds" => {
+                log::debug!("LED device added: {} ({})", device.name(), device.sysname());
+
+                // Create a DBus interface for the event device
+                let conn = self.dbus.clone();
+                log::debug!("Attempting to listen on dbus for {dev_path} | {sysname}");
+                task::spawn(async move {
+                    let result = SourceLedInterface::listen_on_dbus(conn, dev).await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source evdev dbus interface: {e:?}");
+                    }
+                    log::debug!("Finished adding source device on dbus");
+                });
+                // Add the device as a source device
+                let path = led::get_dbus_path(sys_name.clone());
+                self.source_device_dbus_paths.insert(id.clone(), path);
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    log::debug!("{} is virtual, skipping consideration.", dev_path);
+                    return Ok(());
+                } else {
+                    log::trace!("Real device: {}", dev_path);
+                }
                 // Signal that a source device was added
                 log::debug!("Spawing task to add source device: {id}");
                 self.on_source_device_added(id.clone(), device).await?;
@@ -1478,7 +1250,7 @@ impl Manager {
     }
 
     async fn on_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        log::debug!("Device removed: {:?}", device.devnode());
+        log::debug!("Device removed: {} ({})", device.name(), device.sysname());
         let sys_name = device.sysname();
         let subsystem = device.subsystem();
         let path = ObjectPath::from_string_unchecked(format!("{BUS_SOURCES_PREFIX}/{sys_name}"));
@@ -1557,34 +1329,20 @@ impl Manager {
     }
 
     /// Returns the next available composite device dbus path
-    fn next_composite_dbus_path(&self) -> String {
-        let max = 2048;
-        let mut i = 0;
-        loop {
-            if i > max {
-                return "Devices exceeded".to_string();
-            }
+    fn next_composite_dbus_path(&self) -> Result<String, Box<dyn Error>> {
+        for i in 0u64.. {
             let path = format!("{}/CompositeDevice{}", BUS_PREFIX, i);
-            if self.composite_devices.contains_key(&path) {
-                i += 1;
-                continue;
+            if !self.composite_devices.contains_key(&path) {
+                return Ok(path);
             }
-            return path;
         }
+
+        Err(Box::from("No available dbus path left"))
     }
 
-    /// Starts watching for input devices that are added and removed.
-    async fn watch_input_devices(&self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Performing initial input device discovery");
-        let cmd_tx = self.tx.clone();
-        task::spawn(async move {
-            if let Err(e) = Manager::discover_all_devices(&cmd_tx).await {
-                log::error!("Failed to perform initial device discovery: {e:?}");
-            }
-        });
-
-        // Watch for IIO device events.
-        let cmd_tx = self.tx.clone();
+    fn watch_iio_devices(
+        cmd_tx: mpsc::Sender<ManagerCommand>,
+    ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + std::marker::Send + Sync>>> {
         task::spawn_blocking(move || {
             let mut monitor = MonitorBuilder::new()?.match_subsystem("iio")?.listen()?;
 
@@ -1601,20 +1359,16 @@ impl Manager {
                 for event in monitor.iter() {
                     let action = event.action().unwrap_or_default();
                     let device = event.device();
-                    let Some(path) = device.devnode() else {
-                        log::trace!("No devnode found for device: {device:?}");
-                        continue;
-                    };
 
                     match action.to_str().unwrap() {
                         "add" => {
-                            log::debug!("Got udev add action for {path:?}");
+                            log::debug!("Got udev add action for {}", device.name());
                             cmd_tx.blocking_send(ManagerCommand::DeviceAdded {
                                 device: device.into(),
                             })?;
                         }
                         "remove" => {
-                            log::debug!("Got udev remove action for {path:?}");
+                            log::debug!("Got udev remove action for {}", device.name());
                             cmd_tx.blocking_send(ManagerCommand::DeviceRemoved {
                                 device: device.into(),
                             })?;
@@ -1626,125 +1380,102 @@ impl Manager {
                 }
                 std::thread::sleep(Duration::from_millis(10));
             }
-            #[allow(unreachable_code)]
-            Ok::<(), Box<dyn Error + Send + Sync>>(())
-        });
+        })
+    }
 
-        // Watch for hidraw/evdev inotify events.
-        // TODO: when we reload the udev device it triggers the udev watcher. We do this to break
-        // access to the file descriptor for processes that have already authenticated. Figure out
-        // a way to do this only using the udev events.
-        let cmd_tx = self.tx.clone();
-        let (watcher_tx, mut watcher_rx) = mpsc::channel(BUFFER_SIZE);
-        if std::path::Path::new(DEV_PATH).exists() {
-            let tx = watcher_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                log::info!("Started hidraw device discovery thread");
-                watcher::watch(DEV_PATH.into(), tx)
-            });
-        }
-        if std::path::Path::new(INPUT_PATH).exists() {
-            let tx = watcher_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                log::info!("Started evdev device discovery thread");
-                watcher::watch(INPUT_PATH.into(), tx)
-            });
-        }
-
-        task::spawn(async move {
-            'outer: while let Some(event) = watcher_rx.recv().await {
-                match event {
-                    WatchEvent::Create { name, base_path } => {
-                        let subsystem = {
-                            match base_path.as_str() {
-                                "/dev" => {
-                                    if !name.starts_with("hidraw") {
-                                        None
-                                    } else {
-                                        Some("hidraw")
-                                    }
+    async fn watch_hidraw_devices(
+        cmd_tx: mpsc::Sender<ManagerCommand>,
+        watcher_rx: &mut mpsc::Receiver<WatchEvent>,
+    ) -> () {
+        'outer: while let Some(event) = watcher_rx.recv().await {
+            match event {
+                WatchEvent::Create { name, base_path } => {
+                    let subsystem = {
+                        match base_path.as_str() {
+                            "/dev" => {
+                                if !name.starts_with("hidraw") {
+                                    None
+                                } else {
+                                    Some("hidraw")
                                 }
-                                "/dev/input" => Some("input"),
-
-                                _ => None,
                             }
-                        };
-                        let Some(subsystem) = subsystem else {
-                            log::trace!("No supported subsystem detected for {base_path}/{name}");
-                            continue;
-                        };
+                            "/dev/input" => Some("input"),
 
-                        // Wait until the device has initialized with udev
-                        const MAX_TRIES: u8 = 80;
-                        let mut attempt: u8 = 0;
-                        loop {
-                            // Break after max attempts reached
-                            if attempt > MAX_TRIES {
-                                log::warn!("Unable to create initialized UdevDevice for {base_path}/{name} after {MAX_TRIES} attempts.");
-                                continue 'outer;
-                            }
+                            _ => None,
+                        }
+                    };
+                    let Some(subsystem) = subsystem else {
+                        log::trace!("No supported subsystem detected for {base_path}/{name}");
+                        continue;
+                    };
 
-                            // Try to get the device from udev to check its initialization state
-                            {
-                                let Ok(device) = ::udev::Device::from_subsystem_sysname(
-                                    subsystem.to_string(),
-                                    name.clone(),
-                                ) else {
-                                    log::debug!(
-                                        "Unable to create UdevDevice from {base_path}/{name} to check initialization"
-                                    );
-                                    attempt += 1;
-                                    tokio::time::sleep(Duration::from_millis(10)).await;
-                                    continue;
-                                };
+                    // Wait until the device has initialized with udev
+                    const MAX_TRIES: u8 = 80;
+                    let mut attempt: u8 = 0;
+                    loop {
+                        // Break after max attempts reached
+                        if attempt > MAX_TRIES {
+                            log::warn!("Unable to create initialized UdevDevice for {base_path}/{name} after {MAX_TRIES} attempts.");
+                            continue 'outer;
+                        }
 
-                                if device.is_initialized() {
-                                    break;
-                                }
+                        // Try to get the device from udev to check its initialization state
+                        {
+                            let Ok(device) = ::udev::Device::from_subsystem_sysname(
+                                subsystem.to_string(),
+                                name.clone(),
+                            ) else {
+                                log::debug!(
+                                    "Unable to create UdevDevice from {base_path}/{name} to check initialization"
+                                );
+                                attempt += 1;
+                                tokio::time::sleep(Duration::from_millis(10)).await;
+                                continue;
                             };
-                            log::trace!("{base_path}/{name} is not yet initialized by udev");
 
-                            tokio::time::sleep(Duration::from_millis(10)).await;
-                            attempt += 1;
-                        }
-
-                        // Create a udev device for the device
-                        let Ok(device) = ::udev::Device::from_subsystem_sysname(
-                            subsystem.to_string(),
-                            name.clone(),
-                        ) else {
-                            log::warn!("Unable to create UdevDevice from {base_path}/{name}");
-                            continue;
+                            if device.is_initialized() {
+                                break;
+                            }
                         };
+                        log::trace!("{base_path}/{name} is not yet initialized by udev");
 
-                        // Notify the manager that a device was added
-                        log::debug!("Got inotify add action for {base_path}/{name}");
-                        let result = cmd_tx
-                            .send(ManagerCommand::DeviceAdded {
-                                device: device.into(),
-                            })
-                            .await;
-                        if let Err(e) = result {
-                            log::error!("Unable to send command: {:?}", e);
-                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        attempt += 1;
                     }
-                    WatchEvent::Delete { name, base_path } => {
-                        let device = UdevDevice::from_devnode(base_path.as_str(), name.as_str());
-                        log::debug!("Got inotify remove action for {base_path}/{name}");
-                        let result = cmd_tx.send(ManagerCommand::DeviceRemoved { device }).await;
-                        if let Err(e) = result {
-                            log::error!("Unable to send command: {:?}", e);
-                        }
+
+                    // Create a udev device for the device
+                    let Ok(device) =
+                        ::udev::Device::from_subsystem_sysname(subsystem.to_string(), name.clone())
+                    else {
+                        log::warn!("Unable to create UdevDevice from {base_path}/{name}");
+                        continue;
+                    };
+
+                    // Notify the manager that a device was added
+                    log::debug!("Got inotify add action for {base_path}/{name}");
+                    let result = cmd_tx
+                        .send(ManagerCommand::DeviceAdded {
+                            device: device.into(),
+                        })
+                        .await;
+                    if let Err(e) = result {
+                        log::error!("Unable to send command: {:?}", e);
                     }
-                    WatchEvent::Modify {
-                        name: _,
-                        base_path: _,
-                    } => (),
                 }
+                WatchEvent::Delete { name, base_path } => {
+                    let device = UdevDevice::from_devnode(base_path.as_str(), name.as_str());
+                    log::debug!("Got inotify remove action for {base_path}/{name}");
+                    let result = cmd_tx.send(ManagerCommand::DeviceRemoved { device }).await;
+                    if let Err(e) = result {
+                        log::error!("Unable to send command: {:?}", e);
+                    }
+                }
+                WatchEvent::Modify {
+                    name: _,
+                    base_path: _,
+                } => (),
             }
-        });
-
-        Ok(())
+        }
     }
 
     /// Performs initial input device discovery of all supported subsystems
@@ -1760,6 +1491,9 @@ impl Manager {
         let iio_devices = udev::discover_devices("iio")?;
         let iio_devices = iio_devices.into_iter().map(|dev| dev.into()).collect();
         Manager::discover_devices(cmd_tx, iio_devices).await?;
+        let led_devices = udev::discover_devices("leds")?;
+        let led_devices = led_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(&cmd_tx, led_devices).await?;
 
         Ok(())
     }
@@ -1879,25 +1613,16 @@ impl Manager {
     }
 
     /// Creates a DBus object
-    async fn listen_on_dbus(&self) -> Result<(), Box<dyn Error>> {
-        let iface = ManagerInterface::new(self.tx.clone());
+    async fn listen_on_dbus(
+        dbus: Connection,
+        tx: mpsc::Sender<ManagerCommand>,
+    ) -> tokio::task::JoinHandle<()> {
+        let iface = ManagerInterface::new(tx);
         let manager_path = format!("{}/Manager", BUS_PREFIX);
-        let dbus = self.dbus.clone();
         task::spawn(async move {
             if let Err(e) = dbus.object_server().at(manager_path, iface).await {
                 log::error!("Failed create manager dbus interface: {e:?}");
             }
-        });
-
-        Ok(())
-    }
-
-    async fn add_device_to_composite_device(
-        &self,
-        device: UdevDevice,
-        client: &CompositeDeviceClient,
-    ) -> Result<(), Box<dyn Error>> {
-        client.add_source_device(device).await?;
-        Ok(())
+        })
     }
 }

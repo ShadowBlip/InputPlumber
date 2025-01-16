@@ -1,6 +1,7 @@
 use std::{
     error::Error,
     ffi::CString,
+    path::Path,
     time::{Duration, Instant},
 };
 
@@ -51,12 +52,24 @@ pub struct Driver {
 impl Driver {
     pub fn new(udevice: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = udevice.devnode();
-        let cs_path = CString::new(path.clone())?;
+        if !Path::new(path.as_str()).exists() {
+            return Err(format!(
+                "Device '{}' does not have a devnode: a valid OrangePi NEO Controller has one",
+                udevice.name()
+            )
+            .into());
+        }
+
+        let cs_path = CString::new(path)?;
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&cs_path)?;
         let info = device.get_device_info()?;
         if info.vendor_id() != VID || info.product_id() != PID {
-            return Err(format!("Device '{path}' is not a OrangePi NEO Controller").into());
+            return Err(format!(
+                "Device '{}' is not a OrangePi NEO Controller",
+                udevice.name()
+            )
+            .into());
         }
 
         Ok(Self {

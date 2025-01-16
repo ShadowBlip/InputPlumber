@@ -1,7 +1,7 @@
 pub mod blocked;
 pub mod gamepad;
 
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, path::Path, time::Duration};
 
 use evdev::{Device, EventType};
 
@@ -12,7 +12,7 @@ use crate::{
 
 use self::{blocked::BlockedEventDevice, gamepad::GamepadEventDevice};
 
-use super::{SourceDriver, SourceDriverOptions};
+use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 
 /// List of available drivers
 enum DriverType {
@@ -25,6 +25,52 @@ enum DriverType {
 pub enum EventDevice {
     Blocked(SourceDriver<BlockedEventDevice>),
     Gamepad(SourceDriver<GamepadEventDevice>),
+}
+
+impl SourceDeviceCompatible for EventDevice {
+    fn get_device_ref(&self) -> &UdevDevice {
+        match self {
+            EventDevice::Blocked(source_driver) => source_driver.info_ref(),
+            EventDevice::Gamepad(source_driver) => source_driver.info_ref(),
+        }
+    }
+
+    fn get_id(&self) -> String {
+        match self {
+            EventDevice::Blocked(source_driver) => source_driver.get_id(),
+            EventDevice::Gamepad(source_driver) => source_driver.get_id(),
+        }
+    }
+
+    fn client(&self) -> super::client::SourceDeviceClient {
+        match self {
+            EventDevice::Blocked(source_driver) => source_driver.client(),
+            EventDevice::Gamepad(source_driver) => source_driver.client(),
+        }
+    }
+
+    async fn run(self) -> Result<(), Box<dyn Error>> {
+        match self {
+            EventDevice::Blocked(source_driver) => source_driver.run().await,
+            EventDevice::Gamepad(source_driver) => source_driver.run().await,
+        }
+    }
+
+    fn get_capabilities(
+        &self,
+    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+        match self {
+            EventDevice::Blocked(source_driver) => source_driver.get_capabilities(),
+            EventDevice::Gamepad(source_driver) => source_driver.get_capabilities(),
+        }
+    }
+
+    fn get_device_path(&self) -> String {
+        match self {
+            EventDevice::Blocked(source_driver) => source_driver.get_device_path(),
+            EventDevice::Gamepad(source_driver) => source_driver.get_device_path(),
+        }
+    }
 }
 
 impl EventDevice {
@@ -73,7 +119,7 @@ pub fn get_dbus_path(handler: String) -> String {
 
 /// Returns the evdev capabilities of the input device at the given path (e.g. /dev/input/event0)
 pub fn get_capabilities(handler: &str) -> Result<HashMap<EventType, Vec<u16>>, Box<dyn Error>> {
-    if !handler.contains("input/event") {
+    if (!handler.contains("input/event")) || (!Path::new(handler).exists()) {
         return Ok(HashMap::new());
     }
     let path = handler;
