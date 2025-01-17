@@ -51,7 +51,7 @@ use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
 
 pub struct SteamDeckDevice {
-    device: VirtualUSBDevice,
+    device: Option<VirtualUSBDevice>,
     state: PackedInputDataReport,
     /// Steam will send 'SetReport' commands with a report type, so it can fetch
     /// a particular result with 'GetReport'
@@ -70,12 +70,8 @@ impl SteamDeckDevice {
             return Err(e.to_string().into());
         }
 
-        // Create and start the virtual USB device
-        let mut device = SteamDeckDevice::create_virtual_device()?;
-        device.start()?;
-
         Ok(Self {
-            device,
+            device: None,
             state: PackedInputDataReport::default(),
             current_report: ReportType::InputData,
             lizard_mode_enabled: false,
@@ -86,9 +82,9 @@ impl SteamDeckDevice {
     }
 
     /// Create the virtual device to emulate
-    fn create_virtual_device() -> Result<VirtualUSBDevice, Box<dyn Error>> {
+    fn create_virtual_device(product_id: u16) -> Result<VirtualUSBDevice, Box<dyn Error>> {
         // Configuration values can be obtained from a real device with "sudo lsusb -v"
-        let virtual_device = VirtualUSBDeviceBuilder::new(VID, PID)
+        let virtual_device = VirtualUSBDeviceBuilder::new(VID, product_id)
             .class(DeviceClass::UseInterface)
             .supported_langs(vec![LangId::EnglishUnitedStates])
             .manufacturer("Valve Software")
@@ -673,6 +669,44 @@ impl SteamDeckDevice {
 }
 
 impl TargetInputDevice for SteamDeckDevice {
+    /// Start the driver when attached to a composite device.
+    fn on_composite_device_attached(
+        &mut self,
+        composite_device: CompositeDeviceClient,
+    ) -> Result<(), InputError> {
+        // Get the configuration from the composite device
+        let config = composite_device.blocking_get_config()?;
+
+        // Set the product id based on the composite device configuration
+        let pid = match config.name.as_str() {
+            "Lenovo Legion Go" => PID,
+            "ASUS ROG Ally" => PID,
+            "ASUS ROG Ally X" => PID,
+            _ => PID,
+        };
+
+        // TODO:
+        // Get the device node paths to the source devices to query for additional
+        // information like serial number, etc.
+        //let source_device_paths = composite_device.blocking_get_source_device_paths()?;
+        //let mut source_device_info = Vec::with_capacity(source_device_paths.len());
+        //for source_path in source_device_paths {
+        //    let path = Path::new(source_path.as_str());
+        //    let name = path.file_name().unwrap_or_default();
+        //    let base_path = path.parent().unwrap().as_os_str();
+        //    let device =
+        //        UdevDevice::from_devnode(base_path.to_str().unwrap(), name.to_str().unwrap());
+        //    source_device_info.push(device);
+        //}
+
+        // Create and start the virtual USB device
+        let mut device = SteamDeckDevice::create_virtual_device(pid)?;
+        device.start()?;
+        self.device = Some(device);
+
+        Ok(())
+    }
+
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
 
@@ -768,10 +802,16 @@ impl TargetInputDevice for SteamDeckDevice {
     /// Stop the virtual USB read/write threads
     fn stop(&mut self) -> Result<(), InputError> {
         log::debug!("Stopping virtual Deck controller");
-        self.device.stop();
+        let xfer = {
+            let Some(device) = self.device.as_mut() else {
+                log::trace!("Deck controller was never started");
+                return Ok(());
+            };
+            device.stop();
 
-        // Read from the device
-        let xfer = self.device.blocking_read()?;
+            // Read from the device
+            device.blocking_read()?
+        };
 
         // Handle any non-standard transfers
         if let Some(xfer) = xfer {
@@ -779,7 +819,11 @@ impl TargetInputDevice for SteamDeckDevice {
 
             // Write to the device if a reply is necessary
             if let Some(reply) = reply {
-                self.device.write(reply)?;
+                let Some(device) = self.device.as_mut() else {
+                    log::trace!("Deck controller was never started");
+                    return Ok(());
+                };
+                device.write(reply)?;
             }
         }
 
@@ -797,7 +841,13 @@ impl TargetOutputDevice for SteamDeckDevice {
         self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
 
         // Read from the device
-        let xfer = self.device.blocking_read()?;
+        let xfer = {
+            let Some(device) = self.device.as_mut() else {
+                log::trace!("Device not started yet");
+                return Ok(vec![]);
+            };
+            device.blocking_read()?
+        };
 
         // Handle any non-standard transfers
         if let Some(xfer) = xfer {
@@ -805,7 +855,11 @@ impl TargetOutputDevice for SteamDeckDevice {
 
             // Write to the device if a reply is necessary
             if let Some(reply) = reply {
-                self.device.write(reply)?;
+                let Some(device) = self.device.as_mut() else {
+                    log::trace!("Device not started yet");
+                    return Ok(vec![]);
+                };
+                device.write(reply)?;
             }
         }
 
