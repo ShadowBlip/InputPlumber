@@ -6,7 +6,9 @@ use evdev::{
     FFTrigger, InputEvent,
 };
 use nix::fcntl::{FcntlArg, OFlag};
+use packed_struct::types::SizedInteger;
 
+use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
 use crate::{
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
@@ -24,6 +26,7 @@ pub struct GamepadEventDevice {
     axes_info: HashMap<AbsoluteAxisCode, AbsInfo>,
     ff_effects: HashMap<i16, FFEffect>,
     ff_effects_dualsense: Option<i16>,
+    ff_effects_deck: Option<i16>,
     hat_state: HashMap<AbsoluteAxisCode, i32>,
 }
 
@@ -54,6 +57,7 @@ impl GamepadEventDevice {
             axes_info,
             ff_effects: HashMap::new(),
             ff_effects_dualsense: None,
+            ff_effects_deck: None,
             hat_state: HashMap::new(),
         })
     }
@@ -163,6 +167,71 @@ impl GamepadEventDevice {
                 // DualSense values are u8, so scale them to be from u16::MIN-u16::MAX
                 strong_magnitude: report.rumble_emulation_left as u16 * 256,
                 weak_magnitude: report.rumble_emulation_right as u16 * 256,
+            },
+        };
+        log::trace!("Updating effect data");
+        effect.update(effect_data)?;
+        log::trace!("Playing effect with data: {:?}", effect_data);
+        effect.play(1)?;
+
+        Ok(())
+    }
+
+    // Process Steam Deck FFB events.
+    fn process_deck_ff(&mut self, report: PackedRumbleReport) -> Result<(), Box<dyn Error>> {
+        // If no effect was uploaded to handle Steam Deck force feedback, upload one.
+        if self.ff_effects_deck.is_none() {
+            let effect_data = FFEffectData {
+                direction: 0,
+                trigger: FFTrigger {
+                    button: 0,
+                    interval: 0,
+                },
+                replay: FFReplay {
+                    length: 50,
+                    delay: 0,
+                },
+                kind: FFEffectKind::Rumble {
+                    strong_magnitude: 0,
+                    weak_magnitude: 0,
+                },
+            };
+            log::debug!("Uploading FF effect data");
+            let effect = self.device.upload_ff_effect(effect_data)?;
+            let id = effect.id() as i16;
+            self.ff_effects.insert(id, effect);
+            self.ff_effects_deck = Some(id);
+        }
+
+        let effect_id = self.ff_effects_deck.unwrap();
+        let effect = self.ff_effects.get_mut(&effect_id).unwrap();
+
+        let left_speed = report.left_speed.to_primitive();
+        let right_speed = report.right_speed.to_primitive();
+
+        log::debug!("Got FF event data, Left Speed: {left_speed}, Right Speed: {right_speed}");
+
+        // Stop playing the effect if values are set to zero
+        if left_speed == 0 && right_speed == 0 {
+            log::trace!("Stopping FF effect");
+            effect.stop()?;
+            return Ok(());
+        }
+
+        // Set the values of the effect and play it
+        let effect_data = FFEffectData {
+            direction: 0,
+            trigger: FFTrigger {
+                button: 0,
+                interval: 0,
+            },
+            replay: FFReplay {
+                length: 60000,
+                delay: 0,
+            },
+            kind: FFEffectKind::Rumble {
+                strong_magnitude: left_speed,
+                weak_magnitude: right_speed,
             },
         };
         log::trace!("Updating effect data");
@@ -312,12 +381,20 @@ impl SourceOutputDevice for GamepadEventDevice {
                 log::debug!("Received DualSense output report");
                 if report.use_rumble_not_haptics || report.enable_improved_rumble_emulation {
                     if let Err(e) = self.process_dualsense_ff(report) {
-                        log::error!("Failed to process dualsense output report: {:?}", e);
+                        log::error!("Failed to process dualsense output report: {e:?}");
                     }
                 }
                 Ok(())
             }
             OutputEvent::Uinput(_) => Ok(()),
+            OutputEvent::SteamDeckHaptics(_report) => Ok(()),
+            OutputEvent::SteamDeckRumble(report) => {
+                log::debug!("Received Steam Deck FFB Output Report");
+                if let Err(e) = self.process_deck_ff(report) {
+                    log::error!("Failed to process Steam Deck Force Feedback Report: {e:?}")
+                }
+                Ok(())
+            }
         }
     }
 

@@ -8,6 +8,7 @@ use std::{
 };
 
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
+use packed_struct::PackedStruct;
 
 use crate::{
     drivers::{
@@ -119,7 +120,7 @@ impl DeckController {
 
         // The value determines if the effect should be playing or not.
         if value == 0 {
-            if let Err(e) = self.driver.haptic_rumble(0, 0, 0, 0, 0) {
+            if let Err(e) = self.driver.haptic_rumble(0, 0) {
                 log::debug!("Failed to stop haptic rumble: {:?}", e);
                 return Ok(());
             }
@@ -154,26 +155,11 @@ impl DeckController {
                 weak_magnitude,
             } => {
                 // Set rumble values based on the effect data
-                let intensity = 0;
                 let left_speed = strong_magnitude;
                 let right_speed = weak_magnitude;
-                let mut left_gain = 0; // Max 130
-                let mut right_gain = 0;
-                if left_speed == 0 {
-                    left_gain = 0;
-                }
-                if right_speed == 0 {
-                    right_gain = 0;
-                }
 
                 // Do rumble
-                if let Err(e) = self.driver.haptic_rumble(
-                    intensity,
-                    left_speed,
-                    right_speed,
-                    left_gain,
-                    right_gain,
-                ) {
+                if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
                     let err = format!("Failed to do haptic rumble: {:?}", e);
                     return Err(err.into());
                 }
@@ -189,22 +175,10 @@ impl DeckController {
         report: SetStatePackedOutputData,
     ) -> Result<(), Box<dyn Error>> {
         // Set the rumble values based on the DualSense output report
-        let intensity = 0;
         let left_speed = report.rumble_emulation_left as u16 * 256;
         let right_speed = report.rumble_emulation_right as u16 * 256;
-        let mut left_gain = 0; // Max 130
-        let mut right_gain = 0;
-        if left_speed == 0 {
-            left_gain = 0;
-        }
-        if right_speed == 0 {
-            right_gain = 0;
-        }
 
-        if let Err(e) =
-            self.driver
-                .haptic_rumble(intensity, left_speed, right_speed, left_gain, right_gain)
-        {
+        if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
             let err = format!("Failed to do haptic rumble: {:?}", e);
             return Err(err.into());
         }
@@ -249,6 +223,14 @@ impl SourceOutputDevice for DeckController {
                 }
             }
             OutputEvent::Uinput(_) => (),
+            OutputEvent::SteamDeckHaptics(packed_haptic_report) => {
+                let report = packed_haptic_report.pack().map_err(|e| e.to_string())?;
+                self.driver.write(&report)?;
+            }
+            OutputEvent::SteamDeckRumble(packed_rumble_report) => {
+                let report = packed_rumble_report.pack().map_err(|e| e.to_string())?;
+                self.driver.write(&report)?;
+            }
         }
 
         Ok(())
