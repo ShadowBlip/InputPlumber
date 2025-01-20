@@ -1,5 +1,6 @@
 pub mod dualsense;
 pub mod fts3528;
+pub mod horipad_steam;
 pub mod lego_dinput_combined;
 pub mod lego_dinput_split;
 pub mod lego_fps_mode;
@@ -11,12 +12,15 @@ pub mod xpad_uhid;
 
 use std::{error::Error, time::Duration};
 
+use horipad_steam::HoripadSteam;
 use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
 
 use crate::{
-    constants::BUS_SOURCES_PREFIX, drivers, input::composite_device::client::CompositeDeviceClient,
-    udev::device::UdevDevice,
+    constants::BUS_SOURCES_PREFIX,
+    drivers,
+    input::composite_device::client::CompositeDeviceClient,
+    udev::device::{self, UdevDevice},
 };
 
 use self::{
@@ -32,30 +36,32 @@ use super::{SourceDriver, SourceDriverOptions};
 enum DriverType {
     Unknown,
     DualSense,
-    SteamDeck,
+    Fts3528Touchscreen,
+    HoripadSteam,
     LegionGoDCombined,
     LegionGoDSplit,
     LegionGoFPS,
     LegionGoX,
     OrangePiNeo,
-    Fts3528Touchscreen,
-    XpadUhid,
     RogAlly,
+    SteamDeck,
+    XpadUhid,
 }
 
 /// [HidRawDevice] represents an input device using the hidraw subsystem.
 #[derive(Debug)]
 pub enum HidRawDevice {
     DualSense(SourceDriver<DualSenseController>),
-    SteamDeck(SourceDriver<DeckController>),
+    Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
+    HoripadSteam(SourceDriver<HoripadSteam>),
     LegionGoDCombined(SourceDriver<LegionControllerDCombined>),
     LegionGoDSplit(SourceDriver<LegionControllerDSplit>),
     LegionGoFPS(SourceDriver<LegionControllerFPS>),
     LegionGoX(SourceDriver<LegionControllerX>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
-    Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
-    XpadUhid(SourceDriver<XpadUhid>),
     RogAlly(SourceDriver<RogAlly>),
+    SteamDeck(SourceDriver<DeckController>),
+    XpadUhid(SourceDriver<XpadUhid>),
 }
 
 impl HidRawDevice {
@@ -135,6 +141,11 @@ impl HidRawDevice {
                     SourceDriver::new_with_options(composite_device, device, device_info, options);
                 Ok(Self::RogAlly(source_device))
             }
+            DriverType::HoripadSteam => {
+                let device = HoripadSteam::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::HoripadSteam(source_device))
+            }
         }
     }
 
@@ -212,6 +223,14 @@ impl HidRawDevice {
                 log::info!("Detected UHID XPAD");
                 return DriverType::XpadUhid;
             }
+        }
+
+        // Horipad Steam Controller
+        if vid == drivers::horipad_steam::driver::VID
+            && drivers::horipad_steam::driver::PIDS.contains(&pid)
+        {
+            log::info!("Detected Horipad Steam Controller");
+            return DriverType::HoripadSteam;
         }
 
         // Unknown

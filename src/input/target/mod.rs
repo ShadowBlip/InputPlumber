@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use horipad_steam::HoripadSteamDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
@@ -41,6 +42,7 @@ pub mod client;
 pub mod command;
 pub mod dbus;
 pub mod dualsense;
+pub mod horipad_steam;
 pub mod keyboard;
 pub mod mouse;
 pub mod steam_deck;
@@ -159,6 +161,10 @@ impl TargetDeviceTypeId {
             TargetDeviceTypeId {
                 id: "ds5-edge",
                 name: "Sony Interactive Entertainment DualSense Edge Wireless Controller",
+            },
+            TargetDeviceTypeId {
+                id: "hori-steam",
+                name: "HORI CO.,LTD. HORIPAD STEAM",
             },
             TargetDeviceTypeId {
                 id: "keyboard",
@@ -527,6 +533,7 @@ pub enum TargetDevice {
     Null,
     DBus(TargetDriver<DBusDevice>),
     DualSense(TargetDriver<DualSenseDevice>),
+    HoripadSteam(TargetDriver<HoripadSteamDevice>),
     Keyboard(TargetDriver<KeyboardDevice>),
     Mouse(TargetDriver<MouseDevice>),
     SteamDeck(TargetDriver<SteamDeckDevice>),
@@ -581,6 +588,11 @@ impl TargetDevice {
                 };
                 let driver = TargetDriver::new_with_options(id, device, dbus, options);
                 Ok(Self::DualSense(driver))
+            }
+            "hori-steam" => {
+                let device = HoripadSteamDevice::new()?;
+                let driver = TargetDriver::new(id, device, dbus);
+                Ok(Self::HoripadSteam(driver))
             }
             "keyboard" => {
                 let device = KeyboardDevice::new()?;
@@ -649,6 +661,7 @@ impl TargetDevice {
                 "ds5-edge-usb".try_into().unwrap(),
                 "ds5-edge-bt".try_into().unwrap(),
             ],
+            TargetDevice::HoripadSteam(_) => vec!["hori-steam".try_into().unwrap()],
             TargetDevice::Keyboard(_) => vec!["keyboard".try_into().unwrap()],
             TargetDevice::Mouse(_) => vec!["mouse".try_into().unwrap()],
             TargetDevice::SteamDeck(_) => vec!["deck".try_into().unwrap()],
@@ -670,6 +683,7 @@ impl TargetDevice {
             TargetDevice::Null => "null",
             TargetDevice::DBus(_) => "dbus",
             TargetDevice::DualSense(_) => "gamepad",
+            TargetDevice::HoripadSteam(_) => "gamepad",
             TargetDevice::Keyboard(_) => "keyboard",
             TargetDevice::Mouse(_) => "mouse",
             TargetDevice::SteamDeck(_) => "gamepad",
@@ -687,6 +701,7 @@ impl TargetDevice {
             TargetDevice::Null => None,
             TargetDevice::DBus(device) => Some(device.client()),
             TargetDevice::DualSense(device) => Some(device.client()),
+            TargetDevice::HoripadSteam(device) => Some(device.client()),
             TargetDevice::Keyboard(device) => Some(device.client()),
             TargetDevice::Mouse(device) => Some(device.client()),
             TargetDevice::SteamDeck(device) => Some(device.client()),
@@ -704,6 +719,7 @@ impl TargetDevice {
             TargetDevice::Null => Ok(()),
             TargetDevice::DBus(device) => device.run(dbus_path).await,
             TargetDevice::DualSense(device) => device.run(dbus_path).await,
+            TargetDevice::HoripadSteam(device) => device.run(dbus_path).await,
             TargetDevice::Keyboard(device) => device.run(dbus_path).await,
             TargetDevice::Mouse(device) => device.run(dbus_path).await,
             TargetDevice::SteamDeck(device) => device.run(dbus_path).await,

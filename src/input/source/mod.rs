@@ -9,7 +9,7 @@ use ::evdev::FFEffectData;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
-use crate::udev::device::UdevDevice;
+use crate::udev::device::{self, UdevDevice};
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,
@@ -379,6 +379,7 @@ impl SourceDevice {
                 HidRawDevice::Fts3528Touchscreen(device) => device.info(),
                 HidRawDevice::XpadUhid(device) => device.info(),
                 HidRawDevice::RogAlly(device) => device.info(),
+                HidRawDevice::HoripadSteam(device) => device.info(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.info(),
@@ -405,6 +406,7 @@ impl SourceDevice {
                 HidRawDevice::Fts3528Touchscreen(device) => device.info_ref(),
                 HidRawDevice::XpadUhid(device) => device.info_ref(),
                 HidRawDevice::RogAlly(device) => device.info_ref(),
+                HidRawDevice::HoripadSteam(device) => device.info_ref(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.info_ref(),
@@ -431,6 +433,7 @@ impl SourceDevice {
                 HidRawDevice::Fts3528Touchscreen(device) => device.get_id(),
                 HidRawDevice::XpadUhid(device) => device.get_id(),
                 HidRawDevice::RogAlly(device) => device.get_id(),
+                HidRawDevice::HoripadSteam(device) => device.get_id(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.get_id(),
@@ -457,6 +460,7 @@ impl SourceDevice {
                 HidRawDevice::Fts3528Touchscreen(device) => device.client(),
                 HidRawDevice::XpadUhid(device) => device.client(),
                 HidRawDevice::RogAlly(device) => device.client(),
+                HidRawDevice::HoripadSteam(device) => device.client(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.client(),
@@ -483,6 +487,7 @@ impl SourceDevice {
                 HidRawDevice::Fts3528Touchscreen(device) => device.run().await,
                 HidRawDevice::XpadUhid(device) => device.run().await,
                 HidRawDevice::RogAlly(device) => device.run().await,
+                HidRawDevice::HoripadSteam(device) => device.run().await,
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.run().await,
@@ -509,6 +514,7 @@ impl SourceDevice {
                 HidRawDevice::Fts3528Touchscreen(device) => device.get_capabilities(),
                 HidRawDevice::XpadUhid(device) => device.get_capabilities(),
                 HidRawDevice::RogAlly(device) => device.get_capabilities(),
+                HidRawDevice::HoripadSteam(device) => device.get_capabilities(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.get_capabilities(),
@@ -535,6 +541,7 @@ impl SourceDevice {
                 HidRawDevice::Fts3528Touchscreen(device) => device.get_device_path(),
                 HidRawDevice::XpadUhid(device) => device.get_device_path(),
                 HidRawDevice::RogAlly(device) => device.get_device_path(),
+                HidRawDevice::HoripadSteam(device) => device.get_device_path(),
             },
             SourceDevice::Iio(device) => match device {
                 IioDevice::BmiImu(device) => device.get_device_path(),
