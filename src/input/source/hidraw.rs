@@ -20,7 +20,7 @@ use crate::{
     constants::BUS_SOURCES_PREFIX,
     drivers,
     input::composite_device::client::CompositeDeviceClient,
-    udev::device::{self, UdevDevice},
+    udev::device::UdevDevice,
 };
 
 use self::{
