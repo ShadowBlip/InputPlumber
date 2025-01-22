@@ -25,7 +25,7 @@ use crate::{
 use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
 /// The [HoripadSteamDevice] is a target input device implementation that emulates
-/// a Playstation DualSense controller using uhid.
+/// a Horipad Steam Controller using uhid.
 pub struct HoripadSteamDevice {
     device: UHIDDevice<File>,
     state: PackedInputDataReport,
@@ -450,7 +450,7 @@ impl Debug for HoripadSteamDevice {
 }
 
 /// Convert the given normalized value between -1.0 - 1.0 to the real value
-/// based on the given minimum and maximum axis range. Playstation gamepads
+/// based on the given minimum and maximum axis range. Horipad gamepads
 /// use a range from 0-255, with 127 being the "nuetral" point.
 fn denormalize_signed_value(normal_value: f64, min: f64, max: f64) -> u8 {
     let mid = (max + min) / 2.0;
@@ -484,7 +484,7 @@ fn denormalize_accel_value(value_meters_sec: f64) -> i16 {
     value as i16
 }
 
-/// DualSense gyro values are measured in units of degrees per second.
+/// Horipad gyro values are measured in units of degrees per second.
 /// InputPlumber gyro values are also measured in degrees per second.
 fn denormalize_gyro_value(value_degrees_sec: f64) -> i16 {
     let value = value_degrees_sec;
