@@ -2,3 +2,4 @@
 /.cache
 /dist
 /settings.mk
+/.vscode
