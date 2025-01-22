@@ -9,7 +9,7 @@ use ::evdev::FFEffectData;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
-use crate::udev::device::{self, UdevDevice};
+use crate::udev::device::UdevDevice;
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,

@@ -13,7 +13,7 @@ use crate::{
     udev::device::UdevDevice,
 };
 
-/// XpadUhid source device implementation
+/// HoripadSteam source device implementation
 pub struct HoripadSteam {
     driver: Driver,
 }
@@ -45,7 +45,7 @@ impl SourceInputDevice for HoripadSteam {
 
 impl Debug for HoripadSteam {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("XpadUhid").finish()
+        f.debug_struct("HoripadSteam").finish()
     }
 }
 

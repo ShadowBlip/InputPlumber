@@ -8,7 +8,7 @@ use super::hid_report::PackedInputDataReport;
 async fn test_horipad_steam() -> Result<(), Box<dyn Error>> {
     let report = PackedInputDataReport::unpack_from_slice(&DATA_A).unwrap();
     println!("{report}");
-    assert_eq!(report.a, true);
+    assert!(report.a, "should be pressed");
 
     Ok(())
 }
