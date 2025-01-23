@@ -161,6 +161,7 @@
             "keyboard",
             "mouse",
             "gamepad",
+            "touchscreen",
             "imu"
           ]
         },
@@ -186,6 +187,9 @@
         "iio": {
           "$ref": "#/definitions/IIO"
         },
+        "config": {
+          "$ref": "#/definitions/SourceDeviceConfig"
+        },
         "unique": {
           "description": "If false, any devices matching this description will be added to the existing composite device. Defaults to true.",
           "type": "boolean"
@@ -195,6 +199,55 @@
         "group"
       ],
       "title": "SourceDevice"
+    },
+    "SourceDeviceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "touchscreen": {
+          "$ref": "#/definitions/TouchscreenConfig"
+        },
+        "imu": {
+          "$ref": "#/definitions/ImuConfig"
+        }
+      }
+    },
+    "TouchscreenConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "orientation": {
+          "description": "Orientation of the touchscreen device. Defaults to normal.",
+          "type": "string",
+          "enum": [
+            "normal",
+            "left",
+            "right",
+            "upsidedown"
+          ]
+        },
+        "width": {
+          "description": "Width of the touchscreen in pixels. If set, any virtual touchscreens will use this width instead of querying the source device for its size.",
+          "type": "integer"
+        },
+        "height": {
+          "description": "Height of the touchscreen in pixels. If set, any virtual touchscreens will use this height instead of querying the source device for its size.",
+          "type": "integer"
+        },
+        "override_source_size": {
+          "description": "If true, the source device will use the width/height defined in this configuration instead of the size advertised by the device itself. Defaults to false.",
+          "type": "boolean"
+        }
+      }
+    },
+    "ImuConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mount_matrix": {
+          "$ref": "#/definitions/MountMatrix"
+        }
+      }
     },
     "Udev": {
       "description": "Source device to manage. Properties support globbing patterns.",

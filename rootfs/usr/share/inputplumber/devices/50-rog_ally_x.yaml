@@ -52,6 +52,13 @@ source_devices:
         x: [1, 0, 0]
         y: [0, -1, 0]
         z: [0, 0, -1]
+  #- group: touchscreen
+  #  udev:
+  #    properties:
+  #      - name: ID_INPUT_TOUCHSCREEN
+  #        value: "1"
+  #    sys_name: "event*"
+  #    subsystem: input
 
 # Optional configuration for the composite device
 options:
@@ -65,6 +72,7 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
+  #- touchscreen
 
 # The ID of a device event mapping in the 'event_maps' folder
 capability_map_id: aly1

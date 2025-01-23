@@ -1,4 +1,4 @@
-use std::{error::Error, os::fd::AsRawFd};
+use std::{error::Error, os::fd::AsRawFd, time::Duration};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
@@ -6,12 +6,16 @@ use evdev::{
     MiscCode, PropType, UinputAbsSetup,
 };
 use nix::fcntl::{FcntlArg, OFlag};
+use tokio::sync::mpsc::{channel, Receiver};
 
-use crate::input::{
-    capability::{Capability, Touch},
-    composite_device::client::CompositeDeviceClient,
-    event::{native::NativeEvent, value::InputValue},
-    output_event::OutputEvent,
+use crate::{
+    input::{
+        capability::{Capability, Touch},
+        composite_device::client::CompositeDeviceClient,
+        event::{native::NativeEvent, value::InputValue},
+        output_event::OutputEvent,
+    },
+    udev::device::UdevDevice,
 };
 
 use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
@@ -20,14 +24,23 @@ use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 /// on whether the screen is rotated.
 #[derive(Debug, Clone, Default)]
 pub enum TouchscreenOrientation {
-    #[allow(dead_code)]
-    Normal,
-    #[allow(dead_code)]
-    UpsideDown,
     #[default]
+    Normal,
+    UpsideDown,
     RotateLeft,
-    #[allow(dead_code)]
     RotateRight,
+}
+
+impl From<&str> for TouchscreenOrientation {
+    fn from(value: &str) -> Self {
+        match value {
+            "normal" => Self::Normal,
+            "left" => Self::RotateLeft,
+            "right" => Self::RotateRight,
+            "upsidedown" => Self::UpsideDown,
+            _ => Self::Normal,
+        }
+    }
 }
 
 /// Configuration of the target touchscreen device.
@@ -70,7 +83,8 @@ pub struct TouchEvent {
 #[derive(Debug)]
 pub struct TouchscreenDevice {
     config: TouchscreenConfig,
-    device: VirtualDevice,
+    config_rx: Option<Receiver<TouchscreenConfig>>,
+    device: Option<VirtualDevice>,
     is_touching: bool,
     should_set_timestamp: bool,
     timestamp: i32,
@@ -86,10 +100,10 @@ impl TouchscreenDevice {
 
     /// Create a new emulated touchscreen device with the given configuration.
     pub fn new_with_config(config: TouchscreenConfig) -> Result<Self, Box<dyn Error>> {
-        let device = TouchscreenDevice::create_virtual_device(&config)?;
         Ok(Self {
             config,
-            device,
+            config_rx: None,
+            device: None,
             is_touching: false,
             should_set_timestamp: true,
             timestamp: 0,
@@ -351,10 +365,175 @@ impl TouchscreenDevice {
 }
 
 impl TargetInputDevice for TouchscreenDevice {
+    /// Start the driver when attached to a composite device.
+    fn on_composite_device_attached(
+        &mut self,
+        composite_device: CompositeDeviceClient,
+    ) -> Result<(), InputError> {
+        let (tx, rx) = channel(1);
+        let mut device_config = self.config.clone();
+
+        // Spawn a task to wait for the composite device config. This is done
+        // to prevent potential deadlocks if the composite device and target
+        // device are both waiting for a response from each other.
+        tokio::task::spawn(async move {
+            // Wait to ensure the composite device has grabbed all sources
+            // NOTE: We should look at other ways of signalling to target devices
+            // that a new source device has been added.
+            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            // Get the source devices attached to the composite device.
+            let paths = match composite_device.get_source_device_paths().await {
+                Ok(paths) => paths,
+                Err(e) => {
+                    log::error!("Failed to get source devices from composite device: {e:?}");
+                    return;
+                }
+            };
+            log::debug!("Found source devices: {paths:?}");
+
+            // Check all the source devices attached to the composite device and
+            // check to see if any of them are touchscreen devices.
+            let mut info_x = None;
+            let mut info_y = None;
+            for path in paths {
+                let device = UdevDevice::from_devnode_path(path.as_str());
+                let is_touchscreen = device
+                    .get_property_from_tree("ID_INPUT_TOUCHSCREEN")
+                    .is_some();
+                if !is_touchscreen {
+                    continue;
+                }
+
+                // If the device is a touchscreen, open it to query the touchscreen
+                // resolution.
+                log::debug!("Opening source touchscreen device {path} to query dimensions");
+                let device = match evdev::Device::open(path.clone()) {
+                    Ok(dev) => dev,
+                    Err(e) => {
+                        log::warn!(
+                            "Unable to open device {path} to check touchscreen settings: {e:?}"
+                        );
+                        continue;
+                    }
+                };
+
+                // Query the ABS info to get the touchscreen resolution.
+                log::debug!("Querying touchscreen device {path} for dimensions");
+                let abs_info = match device.get_absinfo() {
+                    Ok(info) => info,
+                    Err(e) => {
+                        log::warn!("Unable to get ABS info for device {path}: {e:?}");
+                        continue;
+                    }
+                };
+                for (code, info) in abs_info {
+                    if code.0 == AbsoluteAxisCode::ABS_MT_POSITION_X.0 {
+                        info_x = Some(info);
+                    }
+                    if code.0 == AbsoluteAxisCode::ABS_MT_POSITION_Y.0 {
+                        info_y = Some(info);
+                    }
+                }
+            }
+
+            // Update the configuration for the target touchscreen based on the detected
+            // dimensions of the source device.
+            if let Some(info) = info_x.as_ref() {
+                log::debug!("Detected source X axis info: {info:?}");
+                device_config.width = info.maximum() as u16;
+            }
+            if let Some(info) = info_y.as_ref() {
+                log::debug!("Detected source Y axis info: {info:?}");
+                device_config.height = info.maximum() as u16;
+            }
+            let detected_from_source = info_x.is_some() || info_y.is_some();
+
+            // Get the configuration from the composite device
+            log::debug!("Querying Composite Device for configuration");
+            let composite_config = match composite_device.get_config().await {
+                Ok(config) => config,
+                Err(e) => {
+                    log::error!("Failed to get config from composite device: {e:?}");
+                    return;
+                }
+            };
+
+            // Check to see if the composite device configuration has a touchscreen
+            let mut screen_config = None;
+            for src in composite_config.source_devices.into_iter() {
+                let Some(src_config) = src.config else {
+                    continue;
+                };
+
+                let Some(touch_config) = src_config.touchscreen else {
+                    continue;
+                };
+
+                screen_config = Some(touch_config);
+                break;
+            }
+
+            // Build the config to use for the virtual touchscreen device based on
+            // the touchscreen configuration from the composite device.
+            if let Some(screen_config) = screen_config {
+                if let Some(orientation) = screen_config.orientation {
+                    // Set the target screen orientation based on the source screen.
+                    // If the display is rotated, the target display must be rotated
+                    // in the opposite direction.
+                    let orientation = TouchscreenOrientation::from(orientation.as_str());
+                    let new_orientation = match orientation {
+                        TouchscreenOrientation::Normal => TouchscreenOrientation::Normal,
+                        TouchscreenOrientation::UpsideDown => TouchscreenOrientation::UpsideDown,
+                        TouchscreenOrientation::RotateLeft => TouchscreenOrientation::RotateRight,
+                        TouchscreenOrientation::RotateRight => TouchscreenOrientation::RotateLeft,
+                    };
+                    device_config.orientation = new_orientation;
+
+                    // If the dimensions of the screen were detected from a source device,
+                    // flip the values based on orientation.
+                    if detected_from_source {
+                        let width = device_config.width;
+                        let height = device_config.height;
+                        match device_config.orientation {
+                            TouchscreenOrientation::RotateLeft
+                            | TouchscreenOrientation::RotateRight => {
+                                device_config.width = height;
+                                device_config.height = width;
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+                if let Some(width) = screen_config.width {
+                    device_config.width = width as u16;
+                }
+                if let Some(height) = screen_config.height {
+                    device_config.height = height as u16;
+                }
+            }
+
+            log::debug!("Sending touchscreen configuration to target device");
+            if let Err(e) = tx.send(device_config).await {
+                log::error!("Failed to send touchscreen config: {e:?}");
+            }
+        });
+
+        // Save the receiver to wait for the touchscreen config.
+        self.config_rx = Some(rx);
+
+        Ok(())
+    }
+
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
         let evdev_events = self.translate_event(event);
-        self.device.emit(evdev_events.as_slice())?;
+
+        let Some(device) = self.device.as_mut() else {
+            log::trace!("Touchscreen was never started");
+            return Ok(());
+        };
+        device.emit(evdev_events.as_slice())?;
 
         Ok(())
     }
@@ -368,6 +547,28 @@ impl TargetOutputDevice for TouchscreenDevice {
     // Check to see if MSC_TIMESTAMP events should be sent. Timestamp events
     // should be sent continuously during active touches.
     fn poll(&mut self, _: &Option<CompositeDeviceClient>) -> Result<Vec<OutputEvent>, OutputError> {
+        // Create and start the device if needed
+        if let Some(rx) = self.config_rx.as_mut() {
+            if rx.is_empty() {
+                // If the queue is empty, we're still waiting for a response from
+                // the composite device.
+                return Ok(vec![]);
+            }
+            let config = match rx.blocking_recv() {
+                Some(config) => config,
+                None => self.config.clone(),
+            };
+
+            let device = TouchscreenDevice::create_virtual_device(&config)?;
+            self.device = Some(device);
+            self.config = config;
+        }
+
+        let Some(device) = self.device.as_mut() else {
+            log::trace!("Touchscreen not started");
+            return Ok(vec![]);
+        };
+
         // Send timestamp events whenever a touch is active
         let touching = self.is_touching;
         let set_timestamp = self.should_set_timestamp;
@@ -377,7 +578,7 @@ impl TargetOutputDevice for TouchscreenDevice {
             if set_timestamp {
                 let value = self.timestamp;
                 let event = InputEvent::new(EventType::MISC.0, MiscCode::MSC_TIMESTAMP.0, value);
-                self.device.emit(&[event])?;
+                device.emit(&[event])?;
                 self.timestamp = self.timestamp.wrapping_add(10000);
             } else {
                 self.should_set_timestamp = true;

@@ -1454,11 +1454,14 @@ impl CompositeDevice {
 
         let source_device = match subsystem.as_str() {
             "input" => {
+                // Get any defined config for the event device
+                let config = self.config.get_matching_device(&device);
+
                 log::debug!("Adding source device: {:?}", device.name());
                 if is_blocked {
                     is_blocked_evdev = true;
                 }
-                let device = EventDevice::new(device, self.client(), is_blocked)?;
+                let device = EventDevice::new(device, self.client(), config, is_blocked)?;
                 SourceDevice::Event(device)
             }
             "hidraw" => {
