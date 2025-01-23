@@ -138,6 +138,18 @@ source_devices:
         y: [-1, 0, 0]
         z: [0, 0, -1]
 
+  # Touchscreen
+  #- group: touchscreen
+  #  udev:
+  #    properties:
+  #      - name: ID_INPUT_TOUCHSCREEN
+  #        value: "1"
+  #    sys_name: "event*"
+  #    subsystem: input
+  #  config:
+  #    touchscreen:
+  #      orientation: "left"
+
   # Block all evdev devices; mouse, touchpad, gamepad, keyboard
   - group: gamepad
     blocked: true
@@ -160,3 +172,4 @@ target_devices:
   - mouse
   - keyboard
   - touchpad
+  #- touchscreen
