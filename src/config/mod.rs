@@ -308,9 +308,39 @@ pub struct SourceDevice {
     pub hidraw: Option<Hidraw>,
     pub iio: Option<IIO>,
     pub udev: Option<Udev>,
+    pub config: Option<SourceDeviceConfig>,
     pub unique: Option<bool>,
     pub blocked: Option<bool>,
     pub ignore: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct SourceDeviceConfig {
+    pub touchscreen: Option<TouchscreenConfig>,
+    pub imu: Option<ImuConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct TouchscreenConfig {
+    /// Orientation of the touchscreen. Can be one of: ["normal", "left", "right", "upsidedown"]
+    pub orientation: Option<String>,
+    /// Width of the touchscreen. If set, any virtual touchscreens will use this width
+    /// instead of querying the source device for its size.
+    pub width: Option<u32>,
+    /// Height of the touchscreen. If set, any virtual touchscreens will use this height
+    /// instead of querying the source device for its size.
+    pub height: Option<u32>,
+    /// If true, the source device will use the width/height defined in this configuration
+    /// instead of the size advertised by the device itself.
+    pub override_source_size: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct ImuConfig {
+    pub mount_matrix: Option<MountMatrix>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -359,6 +389,10 @@ pub struct UdevAttribute {
 pub struct IIO {
     pub id: Option<String>,
     pub name: Option<String>,
+    #[deprecated(
+        since = "0.43.0",
+        note = "please use `<SourceDevice>.config.imu.mount_matrix` instead"
+    )]
     pub mount_matrix: Option<MountMatrix>,
 }
 

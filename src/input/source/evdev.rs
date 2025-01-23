@@ -1,12 +1,14 @@
 pub mod blocked;
 pub mod gamepad;
+pub mod touchscreen;
 
 use std::{collections::HashMap, error::Error, time::Duration};
 
 use evdev::{Device, EventType};
+use touchscreen::TouchscreenEventDevice;
 
 use crate::{
-    constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
+    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
     udev::device::UdevDevice,
 };
 
@@ -18,6 +20,7 @@ use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 enum DriverType {
     Blocked,
     Gamepad,
+    Touchscreen,
 }
 
 /// [EventDevice] represents an input device using the input event subsystem.
@@ -25,6 +28,7 @@ enum DriverType {
 pub enum EventDevice {
     Blocked(SourceDriver<BlockedEventDevice>),
     Gamepad(SourceDriver<GamepadEventDevice>),
+    Touchscreen(SourceDriver<TouchscreenEventDevice>),
 }
 
 impl SourceDeviceCompatible for EventDevice {
@@ -32,6 +36,7 @@ impl SourceDeviceCompatible for EventDevice {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.info_ref(),
             EventDevice::Gamepad(source_driver) => source_driver.info_ref(),
+            EventDevice::Touchscreen(source_driver) => source_driver.info_ref(),
         }
     }
 
@@ -39,6 +44,7 @@ impl SourceDeviceCompatible for EventDevice {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.get_id(),
             EventDevice::Gamepad(source_driver) => source_driver.get_id(),
+            EventDevice::Touchscreen(source_driver) => source_driver.get_id(),
         }
     }
 
@@ -46,6 +52,7 @@ impl SourceDeviceCompatible for EventDevice {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.client(),
             EventDevice::Gamepad(source_driver) => source_driver.client(),
+            EventDevice::Touchscreen(source_driver) => source_driver.client(),
         }
     }
 
@@ -53,6 +60,7 @@ impl SourceDeviceCompatible for EventDevice {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.run().await,
             EventDevice::Gamepad(source_driver) => source_driver.run().await,
+            EventDevice::Touchscreen(source_driver) => source_driver.run().await,
         }
     }
 
@@ -62,6 +70,7 @@ impl SourceDeviceCompatible for EventDevice {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             EventDevice::Gamepad(source_driver) => source_driver.get_capabilities(),
+            EventDevice::Touchscreen(source_driver) => source_driver.get_capabilities(),
         }
     }
 
@@ -69,6 +78,7 @@ impl SourceDeviceCompatible for EventDevice {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.get_device_path(),
             EventDevice::Gamepad(source_driver) => source_driver.get_device_path(),
+            EventDevice::Touchscreen(source_driver) => source_driver.get_device_path(),
         }
     }
 }
@@ -77,6 +87,7 @@ impl EventDevice {
     pub fn new(
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
+        config: Option<config::SourceDevice>,
         is_blocked: bool,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver_type = EventDevice::get_driver_type(&device_info, is_blocked);
@@ -97,6 +108,12 @@ impl EventDevice {
                 let source_device = SourceDriver::new(composite_device, device, device_info);
                 Ok(Self::Gamepad(source_device))
             }
+            DriverType::Touchscreen => {
+                let config = config.and_then(|c| c.config).and_then(|c| c.touchscreen);
+                let device = TouchscreenEventDevice::new(device_info.clone(), config)?;
+                let source_device = SourceDriver::new(composite_device, device, device_info);
+                Ok(Self::Touchscreen(source_device))
+            }
         }
     }
 
@@ -108,6 +125,16 @@ impl EventDevice {
         if is_blocked {
             return DriverType::Blocked;
         }
+
+        let properties = device.get_properties();
+        if properties.contains_key("ID_INPUT_TOUCHSCREEN") {
+            return DriverType::Touchscreen;
+        }
+        if properties.contains_key("ID_INPUT_JOYSTICK") {
+            return DriverType::Gamepad;
+        }
+
+        log::debug!("Unknown input device, falling back to gamepad implementation");
         DriverType::Gamepad
     }
 }

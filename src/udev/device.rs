@@ -3,7 +3,7 @@ use std::{
     error::Error,
     ffi::OsStr,
     fs::{self, read_link},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 pub trait AttributeGetter {
@@ -28,7 +28,10 @@ pub trait AttributeGetter {
     fn uniq(&self) -> String;
     fn get_attributes(&self) -> HashMap<String, String>;
     /// Returns the value of the given property from the device
+    #[allow(dead_code)]
     fn get_property(&self, property: &str) -> Option<String>;
+    /// Gets a property from the first device in the device tree to match the property.
+    fn get_property_from_tree(&self, property: &str) -> Option<String>;
     /// Returns device properties for the device. E.g. {"ID_INPUT": "1", ...}
     fn get_properties(&self) -> HashMap<String, String>;
     /// Returns a list of all drivers used for this device. This list will be
@@ -287,6 +290,16 @@ impl AttributeGetter for ::udev::Device {
             .map(|v| v.to_string_lossy().to_string())
     }
 
+    /// Gets a property from the first device in the device tree to match the property.
+    fn get_property_from_tree(&self, property: &str) -> Option<String> {
+        if let Some(prop) = self.property_value(property) {
+            return Some(prop.to_string_lossy().to_string());
+        }
+
+        let parent = self.parent()?;
+        parent.get_property_from_tree(property)
+    }
+
     /// Returns device properties for the device. E.g. {"ID_INPUT": "1", ...}
     fn get_properties(&self) -> HashMap<String, String> {
         let mut properties = HashMap::new();
@@ -372,16 +385,40 @@ impl UdevDevice {
         .unwrap_or_default()
         .to_string();
 
+        // Try to look up the syspath of the device
+        let result = ::udev::Device::from_subsystem_sysname(subsystem.clone(), name.to_string());
+        let syspath = match result {
+            Ok(device) => device.syspath().to_string_lossy().to_string(),
+            Err(_) => "".to_string(),
+        };
+
         Self {
             devnode,
             subsystem,
-            syspath: "".to_string(),
+            syspath,
             sysname: name.to_string(),
             name: None,
             vendor_id: None,
             product_id: None,
             bus_type: None,
         }
+    }
+
+    /// Returns a UdevDevice object from the given path.
+    /// e.g. UdevDevice::from_devnode_path("/dev/hidraw0");
+    pub fn from_devnode_path(path: &str) -> Self {
+        // Break up the dev node name and base path
+        let path_buf = PathBuf::from(path);
+        let name = path_buf
+            .file_name()
+            .and_then(|p| p.to_str())
+            .unwrap_or_default();
+        let base_path = path_buf
+            .parent()
+            .and_then(|p| p.to_str())
+            .unwrap_or_default();
+
+        UdevDevice::from_devnode(base_path, name)
     }
 
     /// Returns a udev::Device from the stored syspath.
@@ -581,6 +618,15 @@ impl UdevDevice {
             return None;
         };
         device.get_property(property)
+    }
+
+    /// Returns the value of the given property from the first device in the
+    /// device tree.
+    pub fn get_property_from_tree(&self, property: &str) -> Option<String> {
+        let Ok(device) = self.get_device() else {
+            return None;
+        };
+        device.get_property_from_tree(property)
     }
 
     /// Returns device properties for the device. E.g. {"ID_INPUT": "1", ...}
