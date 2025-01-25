@@ -591,7 +591,11 @@ impl TargetDevice {
             }
             "hori-steam" => {
                 let device = HoripadSteamDevice::new()?;
-                let driver = TargetDriver::new(id, device, dbus);
+                let options = TargetDriverOptions {
+                    poll_rate: Duration::from_millis(1),
+                    buffer_size: 2048,
+                };
+                let driver = TargetDriver::new_with_options(id, device, dbus, options);
                 Ok(Self::HoripadSteam(driver))
             }
             "keyboard" => {
