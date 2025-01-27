@@ -22,7 +22,13 @@ impl ManagerInterface {
     }
 }
 
-#[interface(name = "org.shadowblip.InputManager")]
+#[interface(
+    name = "org.shadowblip.InputManager",
+    proxy(
+        default_service = "org.shadowblip.InputPlumber",
+        default_path = "/org/shadowblip/InputPlumber/Manager"
+    )
+)]
 impl ManagerInterface {
     #[zbus(property)]
     async fn version(&self) -> fdo::Result<String> {

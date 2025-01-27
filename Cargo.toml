@@ -24,6 +24,8 @@ libiio = "*"
 libevdev = "*"
 
 [dependencies]
+clap = { version = "4.5.27", features = ["derive"] }
+clap_complete = "4.5.42"
 env_logger = "0.11.3"
 evdev = { git = "https://github.com/emberian/evdev.git", features = [
   "tokio",
@@ -45,6 +47,7 @@ procfs = "0.16.0"
 rand = "0.8.5"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_yaml = "0.9.34"
+tabled = { version = "0.17.0", features = ["ansi"] }
 thiserror = "1.0.61"
 tokio = { version = "*", features = ["full"] }
 udev = { version = "^0.8", features = ["mio"] }
