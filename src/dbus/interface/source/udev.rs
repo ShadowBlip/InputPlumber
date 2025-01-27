@@ -43,7 +43,10 @@ impl SourceUdevDeviceInterface {
     }
 }
 
-#[interface(name = "org.shadowblip.Input.Source.UdevDevice")]
+#[interface(
+    name = "org.shadowblip.Input.Source.UdevDevice",
+    proxy(default_service = "org.shadowblip.InputPlumber",)
+)]
 impl SourceUdevDeviceInterface {
     /// Returns the full device node path to the device (e.g. /dev/input/event3)
     #[zbus(property)]

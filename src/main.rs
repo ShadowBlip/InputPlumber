@@ -1,3 +1,4 @@
+use clap::Parser;
 use std::env;
 use std::error::Error;
 use std::process;
@@ -10,6 +11,7 @@ use crate::input::manager::Manager;
 use crate::udev::unhide_all;
 
 mod bluetooth;
+mod cli;
 mod config;
 mod constants;
 mod dbus;
@@ -29,6 +31,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     env::set_var("RUST_LOG", log_level);
     env_logger::init();
     const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+    // If there are any subcommands, run as a CLI client instead.
+    let args = cli::Args::parse();
+    if let Some(cmd) = args.cmd.as_ref() {
+        if !matches!(cmd, cli::Commands::Run) {
+            cli::main_cli(args).await?;
+            return Ok(());
+        }
+    }
+
     log::info!("Starting InputPlumber v{}", VERSION);
 
     // Configure the DBus connection
