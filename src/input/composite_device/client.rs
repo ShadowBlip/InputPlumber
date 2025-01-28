@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
 
+use crate::config::CompositeDeviceConfig;
 use crate::input::event::native::NativeEvent;
 use crate::input::target::client::TargetDeviceClient;
 use crate::input::{capability::Capability, event::Event, output_event::OutputEvent};
@@ -97,6 +98,26 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+    /// Get the [CompositeDeviceConfig] from the [CompositeDevice]
+    pub async fn get_config(&self) -> Result<CompositeDeviceConfig, ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx.send(CompositeCommand::GetConfig(tx)).await?;
+        if let Some(config) = rx.recv().await {
+            return Ok(config);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Get the [CompositeDeviceConfig] from the [CompositeDevice] (blocking)
+    pub fn blocking_get_config(&self) -> Result<CompositeDeviceConfig, ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx.blocking_send(CompositeCommand::GetConfig(tx))?;
+        if let Some(config) = rx.blocking_recv() {
+            return Ok(config);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
     /// Get capabilities from all target devices
     pub async fn get_target_capabilities(&self) -> Result<HashSet<Capability>, ClientError> {
         let (tx, mut rx) = channel(1);
@@ -134,6 +155,17 @@ impl CompositeDeviceClient {
             .send(CompositeCommand::GetSourceDevicePaths(tx))
             .await?;
         if let Some(paths) = rx.recv().await {
+            return Ok(paths);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Get the source device paths of the composite device (blocking)
+    pub fn blocking_get_source_device_paths(&self) -> Result<Vec<String>, ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx
+            .blocking_send(CompositeCommand::GetSourceDevicePaths(tx))?;
+        if let Some(paths) = rx.blocking_recv() {
             return Ok(paths);
         }
         Err(ClientError::ChannelClosed)

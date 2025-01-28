@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc;
 
 use crate::{
+    config::CompositeDeviceConfig,
     input::{
         capability::Capability,
         event::{native::NativeEvent, Event},
@@ -20,6 +21,7 @@ use super::InterceptMode;
 #[derive(Debug, Clone)]
 pub enum CompositeCommand {
     AttachTargetDevices(HashMap<String, TargetDeviceClient>),
+    GetConfig(mpsc::Sender<CompositeDeviceConfig>),
     GetCapabilities(mpsc::Sender<HashSet<Capability>>),
     GetDBusDevicePaths(mpsc::Sender<Vec<String>>),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
