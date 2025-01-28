@@ -352,6 +352,11 @@ impl CompositeDevice {
                             log::error!("Failed to send intercept mode: {:?}", e);
                         }
                     }
+                    CompositeCommand::GetConfig(sender) => {
+                        if let Err(e) = sender.send(self.config.clone()).await {
+                            log::error!("Failed to send config: {e:?}");
+                        }
+                    }
                     CompositeCommand::GetSourceDevicePaths(sender) => {
                         if let Err(e) = sender.send(self.get_source_device_paths()).await {
                             log::error!("Failed to send source device paths: {:?}", e);
@@ -1902,14 +1907,6 @@ impl CompositeDevice {
 
         // Keep track of all target devices
         for (path, target) in targets.into_iter() {
-            log::debug!("Attaching target device: {path}");
-            if let Err(e) = target.set_composite_device(self.client()).await {
-                return Err(
-                    format!("Failed to set composite device for target device: {:?}", e).into(),
-                );
-            }
-            log::debug!("Attached device {path} to {dbus_path}");
-
             // Query the target device for its capabilities
             let caps = match target.get_capabilities().await {
                 Ok(caps) => caps,
@@ -1917,6 +1914,14 @@ impl CompositeDevice {
                     return Err(format!("Failed to get target capabilities: {e:?}").into());
                 }
             };
+
+            log::debug!("Attaching target device: {path}");
+            if let Err(e) = target.set_composite_device(self.client()).await {
+                return Err(
+                    format!("Failed to set composite device for target device: {:?}", e).into(),
+                );
+            }
+            log::debug!("Attached device {path} to {dbus_path}");
 
             // Add the target device
             self.target_devices_queued.remove(&path);
