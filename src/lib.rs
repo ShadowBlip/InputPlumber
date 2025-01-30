@@ -1,4 +1,5 @@
 pub mod bluetooth;
+pub mod cli;
 pub mod config;
 pub mod constants;
 pub mod dbus;

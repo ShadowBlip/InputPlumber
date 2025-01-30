@@ -25,7 +25,13 @@ impl CompositeDeviceInterface {
     }
 }
 
-#[interface(name = "org.shadowblip.Input.CompositeDevice")]
+#[interface(
+    name = "org.shadowblip.Input.CompositeDevice",
+    proxy(
+        default_service = "org.shadowblip.InputPlumber",
+        default_path = "/org/shadowblip/InputPlumber/Manager"
+    )
+)]
 impl CompositeDeviceInterface {
     /// Name of the composite device
     #[zbus(property)]
@@ -81,7 +87,7 @@ impl CompositeDeviceInterface {
     }
 
     /// Directly write to the composite device's target devices with the given event
-    fn send_event(&self, event: String, value: zvariant::Value) -> fdo::Result<()> {
+    fn send_event(&self, event: String, value: zvariant::Value<'_>) -> fdo::Result<()> {
         let cap = Capability::from_str(event.as_str()).map_err(|_| {
             fdo::Error::Failed(format!(
                 "Failed to parse event string {event} into capability."
