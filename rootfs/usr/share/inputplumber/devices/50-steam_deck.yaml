@@ -34,16 +34,17 @@ source_devices:
       product_id: 0x1205
       interface_num: 2
   # Touchscreen
-  - group: mouse
-    hidraw:
-      vendor_id: 0x2808
-      product_id: 0x1015
-  - group: mouse
+  - group: touchscreen
     unique: false
-    blocked: true
-    evdev:
-      name: "FTS3528:00 2808:1015*"
-      handler: event*
+    udev:
+      properties:
+        - name: ID_INPUT_TOUCHSCREEN
+          value: "1"
+      sys_name: "event*"
+      subsystem: input
+    config:
+      touchscreen:
+        orientation: "right"
   # Keyboard
   - group: keyboard
     evdev:

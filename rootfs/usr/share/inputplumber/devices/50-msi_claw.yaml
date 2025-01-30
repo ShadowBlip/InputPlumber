@@ -53,6 +53,15 @@ source_devices:
         y: [-1, 0, 0]
         z: [0, 0, -1]
 
+  # Touchscreen
+  #- group: touchscreen
+  #  udev:
+  #    properties:
+  #      - name: ID_INPUT_TOUCHSCREEN
+  #        value: "1"
+  #    sys_name: "event*"
+  #    subsystem: input
+
 # Optional configuration for the composite device
 options:
   # If true, InputPlumber will automatically try to manage the input device. If
@@ -65,6 +74,7 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
+  #- touchscreen
 
 # The ID of a device event mapping in the 'event_maps' folder
 capability_map_id: claw1
