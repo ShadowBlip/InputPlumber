@@ -848,6 +848,15 @@ impl CompositeDevice {
                 // capability as the initiator
                 .filter_map(|event| {
                     let target_cap = event.as_capability();
+                    // Handle only button presses
+                    if !matches!(
+                        target_cap,
+                        Capability::Gamepad(Gamepad::Button(_))
+                            | Capability::Keyboard(_)
+                            | Capability::Mouse(Mouse::Button(_))
+                    ) {
+                        return Some(event);
+                    }
                     let pressed = event.pressed();
                     match self.exclusive_inputs.entry(target_cap) {
                         Entry::Vacant(e) => {
