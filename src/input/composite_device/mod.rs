@@ -3,7 +3,10 @@ pub mod command;
 
 use std::{
     borrow::Borrow,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{
+        hash_map::{Entry, HashMap},
+        BTreeSet, HashSet,
+    },
     error::Error,
 };
 
@@ -153,6 +156,9 @@ pub struct CompositeDevice {
     /// List of currently active buttons and keys. Used to block "up" events for
     /// keys that have already been handled.
     active_inputs: Vec<Capability>,
+    /// Mapping of target and source capabilities preventing input release events
+    /// coming from capabilities that didn't start the event
+    exclusive_inputs: HashMap<Capability, Capability>,
 }
 
 impl CompositeDevice {
@@ -203,6 +209,7 @@ impl CompositeDevice {
             intercept_mode_target_cap: Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
             intercept_active_inputs: Vec::new(),
             active_inputs: Vec::new(),
+            exclusive_inputs: HashMap::new(),
         };
 
         // Load the capability map if one was defined
@@ -831,9 +838,37 @@ impl CompositeDevice {
         // Track the delay for chord events.
         let mut sleep_time = 0;
 
+        let src_cap = event.as_capability();
         // Translate the event using the device profile.
         let mut events = if self.device_profile.is_some() {
-            self.translate_event(&event).await?
+            self.translate_event(&event)
+                .await?
+                .into_iter()
+                // Filter out input-cancelling events that do not come from same
+                // capability as the initiator
+                .filter_map(|event| {
+                    let target_cap = event.as_capability();
+                    let pressed = event.pressed();
+                    match self.exclusive_inputs.entry(target_cap) {
+                        Entry::Vacant(e) => {
+                            if pressed {
+                                e.insert(src_cap.clone());
+                            }
+                            Some(event)
+                        }
+                        Entry::Occupied(e) => {
+                            if e.get() == &src_cap {
+                                if !pressed {
+                                    e.remove();
+                                }
+                                Some(event)
+                            } else {
+                                None
+                            }
+                        }
+                    }
+                })
+                .collect()
         } else {
             vec![event]
         };
