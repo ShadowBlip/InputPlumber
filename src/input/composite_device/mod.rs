@@ -838,45 +838,12 @@ impl CompositeDevice {
         // Track the delay for chord events.
         let mut sleep_time = 0;
 
-        let src_cap = event.as_capability();
         // Translate the event using the device profile.
         let mut events = if self.device_profile.is_some() {
             self.translate_event(&event)
                 .await?
                 .into_iter()
-                // Filter out input-cancelling events that do not come from same
-                // capability as the initiator
-                .filter_map(|event| {
-                    let target_cap = event.as_capability();
-                    // Handle only button presses
-                    if !matches!(
-                        target_cap,
-                        Capability::Gamepad(Gamepad::Button(_))
-                            | Capability::Keyboard(_)
-                            | Capability::Mouse(Mouse::Button(_))
-                    ) {
-                        return Some(event);
-                    }
-                    let pressed = event.pressed();
-                    match self.exclusive_inputs.entry(target_cap) {
-                        Entry::Vacant(e) => {
-                            if pressed {
-                                e.insert(src_cap.clone());
-                            }
-                            Some(event)
-                        }
-                        Entry::Occupied(e) => {
-                            if e.get() == &src_cap {
-                                if !pressed {
-                                    e.remove();
-                                }
-                                Some(event)
-                            } else {
-                                None
-                            }
-                        }
-                    }
-                })
+                .filter_map(|event| self.filter_event(event))
                 .collect()
         } else {
             vec![event]
@@ -992,6 +959,42 @@ impl CompositeDevice {
         }
         log::debug!("No other buttons are pressed and this is not the first in the list. Do not hold input.");
         false
+    }
+    // Filter out input-cancelling events that do not come from same
+    // capability as the initiator
+    fn filter_event(&mut self, event: NativeEvent) -> Option<NativeEvent> {
+        let Some(src_cap) = event.get_source_capability() else {
+            return Some(event);
+        };
+        let target_cap = event.as_capability();
+        // Handle only button presses
+        if !matches!(
+            target_cap,
+            Capability::Gamepad(Gamepad::Button(_))
+                | Capability::Keyboard(_)
+                | Capability::Mouse(Mouse::Button(_))
+        ) {
+            return Some(event);
+        }
+        let pressed = event.pressed();
+        match self.exclusive_inputs.entry(target_cap) {
+            Entry::Vacant(e) => {
+                if pressed {
+                    e.insert(src_cap.clone());
+                }
+                Some(event)
+            }
+            Entry::Occupied(e) => {
+                if e.get() == &src_cap {
+                    if !pressed {
+                        e.remove();
+                    }
+                    Some(event)
+                } else {
+                    None
+                }
+            }
+        }
     }
 
     /// Writes the given event to the appropriate target device.
