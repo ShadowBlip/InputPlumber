@@ -156,8 +156,11 @@ pub struct CompositeDevice {
     /// List of currently active buttons and keys. Used to block "up" events for
     /// keys that have already been handled.
     active_inputs: Vec<Capability>,
-    /// Mapping of target and source capabilities preventing input release events
-    /// coming from capabilities that didn't start the event
+    /// Mapping preventing input release events to come from capability that
+    /// didn't start the input in the first place.
+    /// The key value pairs are:
+    ///  - KEY   - Target capability
+    ///  - VALUE - Source capability
     exclusive_inputs: HashMap<Capability, Capability>,
 }
 
