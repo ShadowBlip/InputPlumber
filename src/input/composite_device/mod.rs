@@ -3,7 +3,10 @@ pub mod command;
 
 use std::{
     borrow::Borrow,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{
+        hash_map::{Entry, HashMap},
+        BTreeSet, HashSet,
+    },
     error::Error,
 };
 
@@ -153,6 +156,12 @@ pub struct CompositeDevice {
     /// List of currently active buttons and keys. Used to block "up" events for
     /// keys that have already been handled.
     active_inputs: Vec<Capability>,
+    /// Mapping preventing input release events to come from capability that
+    /// didn't start the input in the first place.
+    /// The key value pairs are:
+    ///  - KEY   - Target capability
+    ///  - VALUE - Source capability
+    exclusive_inputs: HashMap<Capability, Capability>,
 }
 
 impl CompositeDevice {
@@ -203,6 +212,7 @@ impl CompositeDevice {
             intercept_mode_target_cap: Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
             intercept_active_inputs: Vec::new(),
             active_inputs: Vec::new(),
+            exclusive_inputs: HashMap::new(),
         };
 
         // Load the capability map if one was defined
@@ -833,7 +843,11 @@ impl CompositeDevice {
 
         // Translate the event using the device profile.
         let mut events = if self.device_profile.is_some() {
-            self.translate_event(&event).await?
+            self.translate_event(&event)
+                .await?
+                .into_iter()
+                .filter_map(|event| self.filter_event(event))
+                .collect()
         } else {
             vec![event]
         };
@@ -948,6 +962,42 @@ impl CompositeDevice {
         }
         log::debug!("No other buttons are pressed and this is not the first in the list. Do not hold input.");
         false
+    }
+    // Filter out input-cancelling events that do not come from same
+    // capability as the initiator
+    fn filter_event(&mut self, event: NativeEvent) -> Option<NativeEvent> {
+        let Some(src_cap) = event.get_source_capability() else {
+            return Some(event);
+        };
+        let target_cap = event.as_capability();
+        // Handle only button presses
+        if !matches!(
+            target_cap,
+            Capability::Gamepad(Gamepad::Button(_))
+                | Capability::Keyboard(_)
+                | Capability::Mouse(Mouse::Button(_))
+        ) {
+            return Some(event);
+        }
+        let pressed = event.pressed();
+        match self.exclusive_inputs.entry(target_cap) {
+            Entry::Vacant(e) => {
+                if pressed {
+                    e.insert(src_cap.clone());
+                }
+                Some(event)
+            }
+            Entry::Occupied(e) => {
+                if e.get() == &src_cap {
+                    if !pressed {
+                        e.remove();
+                    }
+                    Some(event)
+                } else {
+                    None
+                }
+            }
+        }
     }
 
     /// Writes the given event to the appropriate target device.
