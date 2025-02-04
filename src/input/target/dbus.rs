@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error};
 use zbus::Connection;
 
 use crate::{
-    dbus::interface::target::dbus::TargetDBusInterface,
+    dbus::interface::target::{dbus::TargetDBusInterface, TargetInterface},
     input::{
         capability::{Capability, Gamepad, GamepadButton},
         event::{
@@ -300,16 +300,23 @@ impl TargetInputDevice for DBusDevice {
         dbus: Connection,
         path: String,
         _client: TargetDeviceClient,
+        type_id: String,
     ) {
         log::debug!("Starting dbus interface: {path}");
         self.dbus_path = Some(path.clone());
         tokio::task::spawn(async move {
+            let generic_interface = TargetInterface::new("DBusDevice".into(), type_id);
             let iface = TargetDBusInterface::new();
-            if let Err(e) = dbus.object_server().at(path.clone(), iface).await {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
+            let object_server = dbus.object_server();
+            let (gen_result, result) = tokio::join!(
+                object_server.at(path.clone(), generic_interface),
+                object_server.at(path.clone(), iface)
+            );
+            if gen_result.is_err() || result.is_err() {
+                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
             } else {
-                log::debug!("Started dbus interface on {path}");
-            };
+                log::debug!("Started dbus interface: {path}");
+            }
         });
     }
 
@@ -368,15 +375,16 @@ impl TargetInputDevice for DBusDevice {
     fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
         log::debug!("Stopping dbus interface for {path}");
         tokio::task::spawn(async move {
-            let result = dbus
-                .object_server()
-                .remove::<TargetDBusInterface, String>(path.clone())
-                .await;
-            if let Err(e) = result {
-                log::error!("Failed to stop dbus interface {path}: {e:?}");
+            let object_server = dbus.object_server();
+            let (target, generic) = tokio::join!(
+                object_server.remove::<TargetDBusInterface, String>(path.clone()),
+                object_server.remove::<TargetInterface, String>(path.clone())
+            );
+            if generic.is_err() || target.is_err() {
+                log::debug!("Failed to stop dbus interface: {path} generic: {generic:?} type-specific: {target:?}");
             } else {
                 log::debug!("Stopped dbus interface for {path}");
-            };
+            }
         });
     }
 }
