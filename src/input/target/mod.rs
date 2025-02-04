@@ -10,7 +10,7 @@ use horipad_steam::HoripadSteamDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
-use crate::dbus::interface::target::gamepad::TargetGamepadInterface;
+use crate::dbus::interface::target::{gamepad::TargetGamepadInterface, TargetInterface};
 
 use super::{
     capability::Capability,
@@ -244,17 +244,31 @@ impl TryFrom<&str> for TargetDeviceTypeId {
 /// a composite device, and are sent to a target device to be emitted.
 pub trait TargetInputDevice {
     /// Start the DBus interface for this target device
-    fn start_dbus_interface(&mut self, dbus: Connection, path: String, client: TargetDeviceClient) {
+    fn start_dbus_interface(
+        &mut self,
+        dbus: Connection,
+        path: String,
+        client: TargetDeviceClient,
+        type_id: String,
+    ) {
         log::debug!("Starting dbus interface: {path}");
         log::trace!("Using device client: {client:?}");
         tokio::task::spawn(async move {
             let name = "Gamepad".to_string();
+            let generic_interface = TargetInterface::new(name.clone(), type_id);
             let iface = TargetGamepadInterface::new(name);
-            if let Err(e) = dbus.object_server().at(path.clone(), iface).await {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
+
+            let object_server = dbus.object_server();
+            let (gen_result, result) = tokio::join!(
+                object_server.at(path.clone(), generic_interface),
+                object_server.at(path.clone(), iface)
+            );
+
+            if gen_result.is_err() || result.is_err() {
+                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
             } else {
-                log::debug!("Started dbus interface on {path}");
-            };
+                log::debug!("Started dbus interface: {path}");
+            }
         });
     }
 
@@ -280,15 +294,16 @@ pub trait TargetInputDevice {
     fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
         log::debug!("Stopping dbus interface for {path}");
         tokio::task::spawn(async move {
-            let result = dbus
-                .object_server()
-                .remove::<TargetGamepadInterface, String>(path.clone())
-                .await;
-            if let Err(e) = result {
-                log::error!("Failed to stop dbus interface {path}: {e:?}");
+            let object_server = dbus.object_server();
+            let (target, generic) = tokio::join!(
+                object_server.remove::<TargetGamepadInterface, String>(path.clone()),
+                object_server.remove::<TargetInterface, String>(path.clone())
+            );
+            if generic.is_err() || target.is_err() {
+                log::debug!("Failed to stop dbus interface: {path} generic: {generic:?} type-specific: {target:?}");
             } else {
                 log::debug!("Stopped dbus interface for {path}");
-            };
+            }
         });
     }
 
@@ -410,7 +425,12 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                 let mut implementation = self.implementation.lock().unwrap();
 
                 // Start the DBus interface for the device
-                implementation.start_dbus_interface(self.dbus.clone(), dbus_path.clone(), client);
+                implementation.start_dbus_interface(
+                    self.dbus.clone(),
+                    dbus_path.clone(),
+                    client,
+                    self.type_id.as_str().to_owned(),
+                );
 
                 log::debug!("Target device running: {dbus_path}");
                 loop {

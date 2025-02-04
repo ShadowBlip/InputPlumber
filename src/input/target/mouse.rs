@@ -8,7 +8,7 @@ use evdev::{
 use zbus::Connection;
 
 use crate::{
-    dbus::interface::target::mouse::TargetMouseInterface,
+    dbus::interface::target::{mouse::TargetMouseInterface, TargetInterface},
     input::{
         capability::{Capability, Mouse, MouseButton},
         composite_device::client::CompositeDeviceClient,
@@ -138,15 +138,28 @@ impl MouseDevice {
 }
 
 impl TargetInputDevice for MouseDevice {
-    fn start_dbus_interface(&mut self, dbus: Connection, path: String, client: TargetDeviceClient) {
+    fn start_dbus_interface(
+        &mut self,
+        dbus: Connection,
+        path: String,
+        client: TargetDeviceClient,
+        type_id: String,
+    ) {
         log::debug!("Starting dbus interface: {path}");
         tokio::task::spawn(async move {
+            let generic_interface = TargetInterface::new("Mouse".into(), type_id);
             let iface = TargetMouseInterface::new(client);
-            if let Err(e) = dbus.object_server().at(path.clone(), iface).await {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
+
+            let gen_result = dbus
+                .object_server()
+                .at(path.clone(), generic_interface)
+                .await;
+            let result = dbus.object_server().at(path.clone(), iface).await;
+            if gen_result.is_err() || result.is_err() {
+                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
             } else {
-                log::debug!("Started dbus interface on {path}");
-            };
+                log::debug!("Started dbus interface: {path}");
+            }
         });
     }
 
@@ -188,15 +201,16 @@ impl TargetInputDevice for MouseDevice {
     fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
         log::debug!("Stopping dbus interface for {path}");
         tokio::task::spawn(async move {
-            let result = dbus
-                .object_server()
-                .remove::<TargetMouseInterface, String>(path.clone())
-                .await;
-            if let Err(e) = result {
-                log::error!("Failed to stop dbus interface {path}: {e:?}");
+            let object_server = dbus.object_server();
+            let (target, generic) = tokio::join!(
+                object_server.remove::<TargetMouseInterface, String>(path.clone()),
+                object_server.remove::<TargetInterface, String>(path.clone())
+            );
+            if generic.is_err() || target.is_err() {
+                log::debug!("Failed to stop dbus interface: {path} generic: {generic:?} type-specific: {target:?}");
             } else {
                 log::debug!("Stopped dbus interface for {path}");
-            };
+            }
         });
     }
 
