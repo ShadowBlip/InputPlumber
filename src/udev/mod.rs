@@ -13,6 +13,7 @@ use udev::Enumerator;
 
 use self::device::Device;
 
+const RULE_PRIORITY: &str = "73";
 const RULES_PREFIX: &str = "/run/udev/rules.d";
 
 /// Hide the given input device from regular users.
@@ -42,14 +43,14 @@ pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
-KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 {path}"
+ACTION=="add", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", SYMLINK+="inputplumber/%k", TAG-="uaccess", RUN:="{chmod_cmd} 000 {path}"
 LABEL="inputplumber_end"
 "#
     );
 
     // Write the udev rule
     fs::create_dir_all(RULES_PREFIX)?;
-    let rule_path = format!("{RULES_PREFIX}/96-inputplumber-hide-{name}.rules");
+    let rule_path = format!("{RULES_PREFIX}/{RULE_PRIORITY}-inputplumber-hide-{name}.rules");
     fs::write(rule_path, rule)?;
 
     // Reload udev
@@ -66,7 +67,7 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
     let Some(parent) = device.get_parent() else {
         return Err("Unable to determine parent for device".into());
     };
-    let rule_path = format!("{RULES_PREFIX}/96-inputplumber-hide-{name}.rules");
+    let rule_path = format!("{RULES_PREFIX}/{RULE_PRIORITY}-inputplumber-hide-{name}.rules");
     fs::remove_file(rule_path)?;
 
     // Reload udev
@@ -83,7 +84,7 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
             continue;
         };
         let filename = entry.file_name().to_string_lossy().to_string();
-        if !filename.starts_with("96-inputplumber-hide") {
+        if !filename.starts_with(format!("{RULE_PRIORITY}-inputplumber-hide").as_str()) {
             continue;
         }
         let path = entry.path().to_string_lossy().to_string();
