@@ -175,6 +175,11 @@
           "type": "boolean",
           "default": false
         },
+        "passthrough": {
+          "description": "If true, events will be read from this device, but the source device will not be hidden or grabbed. Defaults to false.",
+          "type": "boolean",
+          "default": false
+        },
         "udev": {
           "$ref": "#/definitions/Udev"
         },
@@ -189,6 +194,9 @@
         },
         "config": {
           "$ref": "#/definitions/SourceDeviceConfig"
+        },
+        "events": {
+          "$ref": "#/definitions/EventsConfig"
         },
         "unique": {
           "description": "If false, any devices matching this description will be added to the existing composite device. Defaults to true.",
@@ -422,6 +430,27 @@
         "y",
         "z"
       ]
+    },
+    "EventsConfig": {
+      "type": "object",
+      "description": "Defines which events are included or excluded from input processing by the source device",
+      "additionalProperties": false,
+      "properties": {
+        "exclude": {
+          "description": "Events to exclude from being processed by a source device",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "include": {
+          "description": "Events to include and be processed by a source device",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }

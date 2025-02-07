@@ -470,7 +470,8 @@ impl Manager {
             device,
             self.next_composite_dbus_path()?,
             capability_map,
-        )?;
+        )
+        .await?;
 
         // Check to see if there's already a CompositeDevice for
         // these source devices.
