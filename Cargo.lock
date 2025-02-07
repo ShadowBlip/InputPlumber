@@ -935,7 +935,7 @@ dependencies = [
 
 [[package]]
 name = "inputplumber"
-version = "0.44.0"
+version = "0.44.1"
 dependencies = [
  "clap 4.5.27",
  "clap_complete",
