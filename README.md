@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/ShadowBlip/InputPlumber/stargazers"><img src="https://img.shields.io/github/stars/ShadowBlip/InputPlumber" /></a>
   <a href="https://github.com/ShadowBlip/InputPlumber/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ShadowBlip/InputPlumber" /></a>
-  <a href="https://discord.gg/fKsUbrt"><img src="https://img.shields.io/badge/discord-server-%235865F2" /></a>
+  <a href="https://discord.gg/Ea9ABXhtkv"><img alt="Discord" src="https://img.shields.io/discord/721211671124770837?label=discord" /></a>
   <br>
 </p>
 
@@ -76,7 +76,7 @@ any other supported input event. Input profiles are defined as YAML configuratio
 files that can be loaded on-demand for any device that InputPlumber manages. The
 format of an input profile config is defined by the [Device Profile Schema](rootfs/usr/share/inputplumber/schema/device_profile_v1.json) to make it easier to create profiles.
 
-Typically input profiles should be generated using an external tool, but you 
+Typically input profiles should be generated using an external tool, but you
 can manually create your own profiles using any text editor. If you use an editor
 that supports the [YAML Language Server](https://github.com/redhat-developer/yaml-language-server)
 you can write profiles with auto-complete and usage information.
@@ -127,7 +127,7 @@ input device you want to intercept input from. The intercept mode can be one
 of three values:
 
 - `0` (NONE) - No inputs are intercepted and re-routed
-- `1` (PASS) - No inputs are intercepted and re-routed *except* for gamepad `Guide` events. Upon receiving a gamepad `Guide` event, the device is automatically switched to intercept mode `2` (ALL).
+- `1` (PASS) - No inputs are intercepted and re-routed _except_ for gamepad `Guide` events. Upon receiving a gamepad `Guide` event, the device is automatically switched to intercept mode `2` (ALL).
 - `2` (ALL) - All inputs are intercepted and re-routed over DBus
 - `3` (GAMEPAD_ONLY) - All gamepad inputs are intercepted and re-routed over DBus
 
