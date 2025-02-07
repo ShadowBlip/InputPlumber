@@ -138,20 +138,3 @@ jobs:
           git add .SRCINFO PKGBUILD
           git commit -m "Update to $(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)"
           git push origin master
-
-      - name: Checkout AUR git
-        run: git clone ssh://aur@aur.archlinux.org/inputplumber-git.git
-
-      - name: Build git package
-        working-directory: inputplumber-git
-        run: make in-docker
-
-      - name: Commit and publish git package
-        shell: bash
-        working-directory: inputplumber-git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "shadowblip+github-actions[bot]@users.noreply.github.com"
-          git add .SRCINFO PKGBUILD
-          git commit -m "Update to $(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)"
-          git push origin master
