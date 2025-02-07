@@ -18,7 +18,8 @@ use crate::{
 };
 
 use super::{
-    client::TargetDeviceClient, InputError, OutputError, TargetInputDevice, TargetOutputDevice,
+    client::TargetDeviceClient, InputError, OutputError, TargetDeviceTypeId, TargetInputDevice,
+    TargetOutputDevice,
 };
 
 /// Configuration of the target touchpad device.
@@ -143,11 +144,11 @@ impl TargetInputDevice for MouseDevice {
         dbus: Connection,
         path: String,
         client: TargetDeviceClient,
-        type_id: String,
+        type_id: TargetDeviceTypeId,
     ) {
         log::debug!("Starting dbus interface: {path}");
         tokio::task::spawn(async move {
-            let generic_interface = TargetInterface::new("Mouse".into(), type_id);
+            let generic_interface = TargetInterface::new(&type_id);
             let iface = TargetMouseInterface::new(client);
 
             let gen_result = dbus

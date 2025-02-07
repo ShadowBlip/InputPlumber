@@ -14,7 +14,9 @@ use crate::{
     },
 };
 
-use super::{client::TargetDeviceClient, TargetInputDevice, TargetOutputDevice};
+use super::{
+    client::TargetDeviceClient, TargetDeviceTypeId, TargetInputDevice, TargetOutputDevice,
+};
 
 /// The threshold for axis inputs to be considered "pressed"
 const AXIS_THRESHOLD: f64 = 0.60;
@@ -300,12 +302,12 @@ impl TargetInputDevice for DBusDevice {
         dbus: Connection,
         path: String,
         _client: TargetDeviceClient,
-        type_id: String,
+        type_id: TargetDeviceTypeId,
     ) {
         log::debug!("Starting dbus interface: {path}");
         self.dbus_path = Some(path.clone());
         tokio::task::spawn(async move {
-            let generic_interface = TargetInterface::new("DBusDevice".into(), type_id);
+            let generic_interface = TargetInterface::new(&type_id);
             let iface = TargetDBusInterface::new();
             let object_server = dbus.object_server();
             let (gen_result, result) = tokio::join!(

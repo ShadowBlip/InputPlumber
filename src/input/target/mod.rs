@@ -249,14 +249,13 @@ pub trait TargetInputDevice {
         dbus: Connection,
         path: String,
         client: TargetDeviceClient,
-        type_id: String,
+        type_id: TargetDeviceTypeId,
     ) {
         log::debug!("Starting dbus interface: {path}");
         log::trace!("Using device client: {client:?}");
         tokio::task::spawn(async move {
-            let name = "Gamepad".to_string();
-            let generic_interface = TargetInterface::new(name.clone(), type_id);
-            let iface = TargetGamepadInterface::new(name);
+            let generic_interface = TargetInterface::new(&type_id);
+            let iface = TargetGamepadInterface::new(type_id.name().to_owned());
 
             let object_server = dbus.object_server();
             let (gen_result, result) = tokio::join!(
@@ -429,7 +428,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                     self.dbus.clone(),
                     dbus_path.clone(),
                     client,
-                    self.type_id.as_str().to_owned(),
+                    self.type_id,
                 );
 
                 log::debug!("Target device running: {dbus_path}");
