@@ -14,7 +14,10 @@ use crate::{
     },
 };
 
-use super::{client::TargetDeviceClient, InputError, TargetInputDevice, TargetOutputDevice};
+use super::{
+    client::TargetDeviceClient, InputError, TargetDeviceTypeId, TargetInputDevice,
+    TargetOutputDevice,
+};
 
 #[derive(Debug)]
 pub struct KeyboardDevice {
@@ -221,11 +224,11 @@ impl TargetInputDevice for KeyboardDevice {
         dbus: Connection,
         path: String,
         client: TargetDeviceClient,
-        type_id: String,
+        type_id: TargetDeviceTypeId,
     ) {
         log::debug!("Starting dbus interface: {path}");
         tokio::task::spawn(async move {
-            let generic_interface = TargetInterface::new("Keyboard".into(), type_id);
+            let generic_interface = TargetInterface::new(&type_id);
             let iface = TargetKeyboardInterface::new(client);
 
             let object_server = dbus.object_server();
