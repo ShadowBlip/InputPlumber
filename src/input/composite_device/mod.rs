@@ -165,7 +165,7 @@ pub struct CompositeDevice {
 }
 
 impl CompositeDevice {
-    pub fn new(
+    pub async fn new(
         conn: Connection,
         manager: mpsc::Sender<ManagerCommand>,
         config: CompositeDeviceConfig,
@@ -239,7 +239,7 @@ impl CompositeDevice {
             }
         }
 
-        if let Err(e) = device.add_source_device(device_info) {
+        if let Err(e) = device.add_source_device(device_info).await {
             return Err(e.to_string().into());
         }
 
@@ -596,18 +596,6 @@ impl CompositeDevice {
     /// consume.
     async fn run_source_devices(&mut self) -> Result<(), Box<dyn Error>> {
         // Keep a list of all the tasks
-
-        // Hide all source devices
-        // TODO: Make this configurable
-        for source_path in self.source_device_paths.clone() {
-            // Skip hiding IIO devices
-            if source_path.starts_with("/dev/iio:") {
-                log::debug!("Skipping hiding IIO device: {source_path}");
-                continue;
-            }
-            log::debug!("Hiding device: {}", source_path);
-            hide_device(source_path).await?;
-        }
 
         log::debug!("Starting new source devices");
         // Start listening for events from all source devices
@@ -1392,7 +1380,7 @@ impl CompositeDevice {
 
     /// Executed whenever a source device is added to this [CompositeDevice].
     async fn on_source_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        if let Err(e) = self.add_source_device(device) {
+        if let Err(e) = self.add_source_device(device).await {
             return Err(e.to_string().into());
         }
         self.run_source_devices().await?;
@@ -1437,14 +1425,15 @@ impl CompositeDevice {
     }
 
     /// Creates and adds a source device using the given [SourceDeviceInfo]
-    fn add_source_device(
+    async fn add_source_device(
         &mut self,
         device: UdevDevice,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Check to see if this source device should be blocked.
         let mut is_blocked = false;
         let mut is_blocked_evdev = false;
-        if let Some(source_config) = self.config.get_matching_device(&device) {
+        let source_config = self.config.get_matching_device(&device);
+        if let Some(source_config) = source_config.as_ref() {
             if let Some(blocked) = source_config.blocked {
                 is_blocked = blocked;
             }
@@ -1452,33 +1441,37 @@ impl CompositeDevice {
 
         let subsystem = device.subsystem();
 
+        // Hide the device if specified
+        let should_passthru = source_config
+            .as_ref()
+            .and_then(|c| c.passthrough)
+            .unwrap_or(false);
+        let should_hide = !should_passthru && subsystem.as_str() != "iio";
+        if should_hide {
+            let source_path = device.devnode();
+            log::debug!("Hiding device: {}", source_path);
+            if let Err(e) = hide_device(source_path.as_str()).await {
+                log::warn!("Failed to hide device '{source_path}': {e:?}");
+            }
+        }
+
         let source_device = match subsystem.as_str() {
             "input" => {
-                // Get any defined config for the event device
-                let config = self.config.get_matching_device(&device);
-
                 log::debug!("Adding source device: {:?}", device.name());
                 if is_blocked {
                     is_blocked_evdev = true;
                 }
-                let device = EventDevice::new(device, self.client(), config, is_blocked)?;
+                let device = EventDevice::new(device, self.client(), source_config.clone())?;
                 SourceDevice::Event(device)
             }
             "hidraw" => {
                 log::debug!("Adding source device: {:?}", device.name());
-                let device = HidRawDevice::new(device, self.client())?;
+                let device = HidRawDevice::new(device, self.client(), source_config.clone())?;
                 SourceDevice::HidRaw(device)
             }
             "iio" => {
-                // Get any defined config for the IIO device
-                let config = if let Some(device_config) = self.config.get_matching_device(&device) {
-                    device_config.iio
-                } else {
-                    None
-                };
-
                 log::debug!("Adding source device: {:?}", device.name());
-                let device = IioDevice::new(device, self.client(), config)?;
+                let device = IioDevice::new(device, self.client(), source_config.clone())?;
                 SourceDevice::Iio(device)
             }
             _ => {

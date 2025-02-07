@@ -1,10 +1,12 @@
 pub mod blocked;
 pub mod gamepad;
+pub mod keyboard;
 pub mod touchscreen;
 
 use std::{collections::HashMap, error::Error, time::Duration};
 
 use evdev::{Device, EventType};
+use keyboard::KeyboardEventDevice;
 use touchscreen::TouchscreenEventDevice;
 
 use crate::{
@@ -21,6 +23,7 @@ enum DriverType {
     Blocked,
     Gamepad,
     Touchscreen,
+    Keyboard,
 }
 
 /// [EventDevice] represents an input device using the input event subsystem.
@@ -29,6 +32,7 @@ pub enum EventDevice {
     Blocked(SourceDriver<BlockedEventDevice>),
     Gamepad(SourceDriver<GamepadEventDevice>),
     Touchscreen(SourceDriver<TouchscreenEventDevice>),
+    Keyboard(SourceDriver<KeyboardEventDevice>),
 }
 
 impl SourceDeviceCompatible for EventDevice {
@@ -37,6 +41,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Blocked(source_driver) => source_driver.info_ref(),
             EventDevice::Gamepad(source_driver) => source_driver.info_ref(),
             EventDevice::Touchscreen(source_driver) => source_driver.info_ref(),
+            EventDevice::Keyboard(source_driver) => source_driver.info_ref(),
         }
     }
 
@@ -45,6 +50,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Blocked(source_driver) => source_driver.get_id(),
             EventDevice::Gamepad(source_driver) => source_driver.get_id(),
             EventDevice::Touchscreen(source_driver) => source_driver.get_id(),
+            EventDevice::Keyboard(source_driver) => source_driver.get_id(),
         }
     }
 
@@ -53,6 +59,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Blocked(source_driver) => source_driver.client(),
             EventDevice::Gamepad(source_driver) => source_driver.client(),
             EventDevice::Touchscreen(source_driver) => source_driver.client(),
+            EventDevice::Keyboard(source_driver) => source_driver.client(),
         }
     }
 
@@ -61,6 +68,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Blocked(source_driver) => source_driver.run().await,
             EventDevice::Gamepad(source_driver) => source_driver.run().await,
             EventDevice::Touchscreen(source_driver) => source_driver.run().await,
+            EventDevice::Keyboard(source_driver) => source_driver.run().await,
         }
     }
 
@@ -71,6 +79,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             EventDevice::Gamepad(source_driver) => source_driver.get_capabilities(),
             EventDevice::Touchscreen(source_driver) => source_driver.get_capabilities(),
+            EventDevice::Keyboard(source_driver) => source_driver.get_capabilities(),
         }
     }
 
@@ -79,6 +88,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Blocked(source_driver) => source_driver.get_device_path(),
             EventDevice::Gamepad(source_driver) => source_driver.get_device_path(),
             EventDevice::Touchscreen(source_driver) => source_driver.get_device_path(),
+            EventDevice::Keyboard(source_driver) => source_driver.get_device_path(),
         }
     }
 }
@@ -87,9 +97,9 @@ impl EventDevice {
     pub fn new(
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
-        config: Option<config::SourceDevice>,
-        is_blocked: bool,
+        conf: Option<config::SourceDevice>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let is_blocked = conf.as_ref().and_then(|c| c.blocked).unwrap_or(false);
         let driver_type = EventDevice::get_driver_type(&device_info, is_blocked);
 
         match driver_type {
@@ -99,20 +109,33 @@ impl EventDevice {
                     buffer_size: 4096,
                 };
                 let device = BlockedEventDevice::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new_with_options(composite_device, device, device_info, options);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
                 Ok(Self::Blocked(source_device))
             }
             DriverType::Gamepad => {
                 let device = GamepadEventDevice::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Gamepad(source_device))
             }
             DriverType::Touchscreen => {
-                let config = config.and_then(|c| c.config).and_then(|c| c.touchscreen);
-                let device = TouchscreenEventDevice::new(device_info.clone(), config)?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let touch_config = conf
+                    .as_ref()
+                    .and_then(|c| c.config.clone())
+                    .and_then(|c| c.touchscreen);
+                let device = TouchscreenEventDevice::new(device_info.clone(), touch_config)?;
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Touchscreen(source_device))
+            }
+            DriverType::Keyboard => {
+                let device = KeyboardEventDevice::new(device_info.clone(), &conf)?;
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                Ok(Self::Keyboard(source_device))
             }
         }
     }
@@ -132,6 +155,9 @@ impl EventDevice {
         }
         if properties.contains_key("ID_INPUT_JOYSTICK") {
             return DriverType::Gamepad;
+        }
+        if properties.contains_key("ID_INPUT_KEYBOARD") {
+            return DriverType::Keyboard;
         }
 
         log::debug!("Unknown input device, falling back to gamepad implementation");

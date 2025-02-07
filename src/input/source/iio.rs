@@ -83,20 +83,21 @@ impl IioDevice {
     pub fn new(
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
-        config: Option<config::IIO>,
+        conf: Option<config::SourceDevice>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver_type = IioDevice::get_driver_type(&device_info);
+        let iio_config = conf.as_ref().and_then(|c| c.iio.clone());
 
         match driver_type {
             DriverType::Unknown => Err("No driver for iio interface found".into()),
             DriverType::BmiImu => {
-                let device = BmiImu::new(device_info.clone(), config)?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let device = BmiImu::new(device_info.clone(), iio_config)?;
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::BmiImu(source_device))
             }
             DriverType::AccelGryo3D => {
-                let device = AccelGyro3dImu::new(device_info.clone(), config)?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let device = AccelGyro3dImu::new(device_info.clone(), iio_config)?;
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::AccelGryo3D(source_device))
             }
         }
