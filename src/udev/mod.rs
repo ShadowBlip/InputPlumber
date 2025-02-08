@@ -13,8 +13,53 @@ use udev::Enumerator;
 
 use self::device::Device;
 
-const RULE_PRIORITY: &str = "73";
+const RULE_PRIORITY: &str = "59";
 const RULES_PREFIX: &str = "/run/udev/rules.d";
+
+/// Hide all removable input devices from regular users.
+pub async fn block_joysticks() -> Result<(), Box<dyn Error>> {
+    // Find the chmod command to use for hiding
+    let chmod_cmd = if Path::new("/bin/chmod").exists() {
+        "/bin/chmod"
+    } else {
+        "/usr/bin/chmod"
+    };
+
+    let rule = format!(
+        r#"# Hide all evdev devices that are not InputPlumber virtual devices
+ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="js[0-9]*|event[0-9]*", ENV{{ID_INPUT_JOYSTICK}}=="1", ENV{{INPUTPLUMBER_VIRT}}!="1", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
+
+# Hide all Horipad Steam Controller hidraw devices
+ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ATTR{{idVendor}}=="0F0D", ATTR{{idProduct}}=="0196", ENV{{INPUTPLUMBER_VIRT}}!="1", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
+ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ATTR{{idVendor}}=="0F0D", ATTR{{idProduct}}=="01AB", ENV{{INPUTPLUMBER_VIRT}}!="1", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
+
+# Hide all PlayStation hidraw devices
+ACTION=="add|change", SUBSYSTEMS=="hid", DRIVERS=="playstation", GOTO="playstation_start"
+GOTO="playstation_end"
+LABEL="playstation_start"
+ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ENV{{INPUTPLUMBER_VIRT}}!="1", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
+LABEL="playstation_end"
+"#
+    );
+
+    // Write the udev rule
+    fs::create_dir_all(RULES_PREFIX)?;
+    let rule_path = format!("{RULES_PREFIX}/51-inputplumber-hide-joysticks.rules");
+    fs::write(rule_path, rule)?;
+
+    reload_all().await?;
+
+    Ok(())
+}
+
+/// Unhide all removable input devices from regular users.
+pub async fn unblock_joysticks() -> Result<(), Box<dyn Error>> {
+    let rule_path = format!("{RULES_PREFIX}/51-inputplumber-hide-joysticks.rules");
+    fs::remove_file(rule_path)?;
+    reload_all().await?;
+
+    Ok(())
+}
 
 /// Hide the given input device from regular users.
 pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
@@ -43,7 +88,7 @@ pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
-ACTION=="add", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", SYMLINK+="inputplumber/%k", TAG-="uaccess", RUN:="{chmod_cmd} 000 {path}"
+ACTION=="add|change", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 {path}", SYMLINK+="inputplumber/%k"
 LABEL="inputplumber_end"
 "#
     );

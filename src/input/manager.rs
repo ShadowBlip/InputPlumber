@@ -40,8 +40,10 @@ use crate::input::source::iio;
 use crate::input::target::TargetDevice;
 use crate::input::target::TargetDeviceTypeId;
 use crate::udev;
+use crate::udev::block_joysticks;
 use crate::udev::device::AttributeGetter;
 use crate::udev::device::UdevDevice;
+use crate::udev::unblock_joysticks;
 
 use super::composite_device::client::CompositeDeviceClient;
 use super::target::client::TargetDeviceClient;
@@ -350,8 +352,13 @@ impl Manager {
                     }
                     self.manage_all_devices = manage_all_devices;
 
-                    // If management of all devices was enabled, trigger device discovery
+                    // If management of all devices was enabled, add the needed udev rules and trigger
+                    // device discovery
                     if manage_all_devices {
+                        if let Err(e) = block_joysticks().await {
+                            log::error!("Failed to set udev rules to block source devices. Double input is possible. {e:?}");
+                        }
+
                         let cmd_tx = self.tx.clone();
                         tokio::task::spawn(async move {
                             if let Err(e) = Manager::discover_all_devices(&cmd_tx).await {
@@ -363,6 +370,10 @@ impl Manager {
 
                     // If management was disabled, stop any composite devices that
                     // are not auto-managed.
+                    if let Err(e) = unblock_joysticks().await {
+                        log::error!("Failed to unset udev rules blocking source devices. Input devices may be unavailable. {e:?}");
+                    }
+
                     for (dbus_path, config) in self.used_configs.iter() {
                         if let Some(options) = config.options.as_ref() {
                             let auto_managed = options.auto_manage.unwrap_or(false);
@@ -1015,12 +1026,15 @@ impl Manager {
 
                     // Check if the virtual device is using the bluetooth bus
                     // TODO: Can we get properties from UdevDevice::get_attribute_from_tree?
+                    let bus_id = device.get_attribute_from_tree("id/bustype");
                     let id_bus = device_info.properties.get("ID_BUS");
 
-                    log::debug!("Bus ID for {dev_path}: {id_bus:?}");
+                    log::debug!("Bus ID for {dev_path}: udev: {id_bus:?}, UdevDevice: {bus_id:?}");
                     let is_bluetooth = {
                         if let Some(bus) = id_bus {
                             bus == "bluetooth"
+                        } else if let Some(bus) = bus_id {
+                            bus == "0005"
                         } else {
                             false
                         }
