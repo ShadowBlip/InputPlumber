@@ -7,8 +7,11 @@ use evdev::{
 };
 use nix::fcntl::{FcntlArg, OFlag};
 use packed_struct::types::SizedInteger;
+use packed_struct::PrimitiveEnum;
 
-use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
+use crate::drivers::steam_deck::hid_report::{
+    CommandType, PackedHapticReport, PackedRumbleReport, PadSide,
+};
 use crate::{
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
@@ -27,6 +30,7 @@ pub struct GamepadEventDevice {
     ff_effects: HashMap<i16, FFEffect>,
     ff_effects_dualsense: Option<i16>,
     ff_effects_deck: Option<i16>,
+    haptic_effects_deck: Option<i16>,
     hat_state: HashMap<AbsoluteAxisCode, i32>,
 }
 
@@ -58,6 +62,7 @@ impl GamepadEventDevice {
             ff_effects: HashMap::new(),
             ff_effects_dualsense: None,
             ff_effects_deck: None,
+            haptic_effects_deck: None,
             hat_state: HashMap::new(),
         })
     }
@@ -241,6 +246,104 @@ impl GamepadEventDevice {
 
         Ok(())
     }
+
+    // Process Steam Deck Haptic events.
+    fn process_haptic_ff(&mut self, report: PackedHapticReport) -> Result<(), Box<dyn Error>> {
+        // If no effect was uploaded to handle Steam Deck force feedback, upload one.
+        if self.ff_effects_deck.is_none() {
+            let effect_data = FFEffectData {
+                direction: 0,
+                trigger: FFTrigger {
+                    button: 0,
+                    interval: 0,
+                },
+                replay: FFReplay {
+                    length: 50,
+                    delay: 0,
+                },
+                kind: FFEffectKind::Rumble {
+                    strong_magnitude: 0,
+                    weak_magnitude: 0,
+                },
+            };
+            log::debug!("Uploading FF effect data");
+            let effect = self.device.upload_ff_effect(effect_data)?;
+            let id = effect.id() as i16;
+            self.ff_effects.insert(id, effect);
+            self.ff_effects_deck = Some(id);
+        }
+
+        let effect_id = self.ff_effects_deck.unwrap();
+        let effect = self.ff_effects.get_mut(&effect_id).unwrap();
+
+        let intensity = report.intensity.to_primitive() + 1;
+        let scaled_gain = (report.gain + 24) as u8 * intensity;
+        let normalized_gain = normalize_unsigned_value(scaled_gain as f64, 150.0);
+        let new_gain = normalized_gain * u16::MAX as f64;
+        let new_gain = new_gain as u16;
+
+        let left_speed = match report.side {
+            PadSide::Left => new_gain,
+            PadSide::Right => 0,
+            PadSide::Both => new_gain,
+        };
+
+        let left_speed = match report.cmd_type {
+            CommandType::Off => 0,
+            CommandType::Tick => left_speed,
+            CommandType::Click => left_speed,
+        };
+
+        let right_speed = match report.side {
+            PadSide::Left => 0,
+            PadSide::Right => new_gain,
+            PadSide::Both => new_gain,
+        };
+
+        let right_speed = match report.cmd_type {
+            CommandType::Off => 0,
+            CommandType::Tick => right_speed,
+            CommandType::Click => right_speed,
+        };
+
+        let length = match report.cmd_type {
+            CommandType::Off => 0,
+            CommandType::Tick => 50,
+            CommandType::Click => 150,
+        };
+
+        log::debug!("Got FF event data, Left Speed: {left_speed}, Right Speed: {right_speed}, Length: {length}");
+
+        // Stop playing the effect if values are set to zero
+        if left_speed == 0 && right_speed == 0 {
+            log::trace!("Stopping FF effect");
+            effect.stop()?;
+            return Ok(());
+        }
+
+        // Set the values of the effect and play it
+        let effect_data = FFEffectData {
+            direction: 0,
+            trigger: FFTrigger {
+                button: 0,
+                interval: 25,
+            },
+            replay: FFReplay {
+                length: length,
+                delay: 0,
+            },
+            kind: FFEffectKind::Rumble {
+                strong_magnitude: left_speed,
+                weak_magnitude: right_speed,
+            },
+        };
+        log::trace!("Updating effect data");
+        effect.update(effect_data)?;
+        log::trace!("Playing effect with data: {:?}", effect_data);
+        effect.play(1)?;
+
+        Ok(())
+    }
 }
 
 impl SourceInputDevice for GamepadEventDevice {
@@ -387,9 +490,15 @@ impl SourceOutputDevice for GamepadEventDevice {
                 Ok(())
             }
             OutputEvent::Uinput(_) => Ok(()),
-            OutputEvent::SteamDeckHaptics(_report) => Ok(()),
+            OutputEvent::SteamDeckHaptics(report) => {
+                log::debug!("Received Steam Deck Haptic Output Report");
+                if let Err(e) = self.process_haptic_ff(report) {
+                    log::error!("Failed to process Steam Deck Haptic Output Report: {e:?}")
+                }
+                Ok(())
+            }
             OutputEvent::SteamDeckRumble(report) => {
-                log::debug!("Received Steam Deck FFB Output Report");
+                log::debug!("Received Steam Deck Force Feedback Report");
                 if let Err(e) = self.process_deck_ff(report) {
                     log::error!("Failed to process Steam Deck Force Feedback Report: {e:?}")
                 }
@@ -456,4 +565,10 @@ impl Debug for GamepadEventDevice {
             .field("hat_state", &self.hat_state)
             .finish()
     }
+}
+
+// Returns a value between 0.0 and 1.0 based on the given value with its
+// maximum.
+fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
+    raw_value / max
 }
