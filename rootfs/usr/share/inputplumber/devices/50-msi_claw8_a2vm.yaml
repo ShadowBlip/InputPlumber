@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: MSI Claw 8
+name: MSI Claw 8 AI+ A2VM
 
 # Only allow a single source device per composite device of this type.
 single_source: false
