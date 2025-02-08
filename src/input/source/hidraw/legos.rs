@@ -1,9 +1,17 @@
-use std::{error::Error, fmt::Debug};
+use std::{collections::HashMap, error::Error, fmt::Debug, u8};
+
+use evdev::{FFEffectData, FFEffectKind, InputEvent};
+use mio::unix::pipe::new;
+use packed_struct::{types::SizedInteger, PrimitiveEnum};
 
 use crate::{
-    drivers::legos::{
-        driver::{self, Driver},
-        event,
+    drivers::{
+        dualsense::hid_report::SetStatePackedOutputData,
+        legos::{
+            driver::{self, Driver},
+            event,
+        },
+        steam_deck::hid_report::{PackedHapticReport, PadSide},
     },
     input::{
         capability::{
@@ -11,7 +19,8 @@ use crate::{
             Touchpad,
         },
         event::{native::NativeEvent, value::InputValue},
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
+        output_event::OutputEvent,
+        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -19,6 +28,7 @@ use crate::{
 /// Legion Go Controller source device implementation
 pub struct LegionSController {
     driver: Driver,
+    ff_evdev_effects: HashMap<i16, FFEffectData>,
 }
 
 impl LegionSController {
@@ -26,7 +36,115 @@ impl LegionSController {
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info.devnode())?;
-        Ok(Self { driver })
+        Ok(Self {
+            driver,
+            ff_evdev_effects: HashMap::new(),
+        })
+    }
+
+    /// Process the given evdev force feedback event.
+    fn process_evdev_ff(&mut self, input_event: InputEvent) -> Result<(), Box<dyn Error>> {
+        // Get the code (effect id) and value of the event
+        let (code, value) =
+            if let evdev::EventSummary::ForceFeedback(_, code, value) = input_event.destructure() {
+                (code, value)
+            } else {
+                log::debug!("Unhandled evdev output event: {:?}", input_event);
+                return Ok(());
+            };
+
+        // Find the effect data for this event
+        let effect_id = code.0 as i16;
+        let Some(effect_data) = self.ff_evdev_effects.get(&effect_id) else {
+            log::warn!("No effect id found: {}", code.0);
+            return Ok(());
+        };
+
+        // The value determines if the effect should be playing or not.
+        if value == 0 {
+            if let Err(e) = self.driver.haptic_rumble(0, 0) {
+                log::debug!("Failed to stop haptic rumble: {:?}", e);
+                return Ok(());
+            }
+        }
+
+        // Perform the rumble based on the effect
+        // TODO: handle effect duration, etc.
+        match effect_data.kind {
+            FFEffectKind::Damper => (),
+            FFEffectKind::Inertia => (),
+            FFEffectKind::Constant {
+                level: _,
+                envelope: _,
+            } => (),
+            FFEffectKind::Ramp {
+                start_level: _,
+                end_level: _,
+                envelope: _,
+            } => (),
+            FFEffectKind::Periodic {
+                waveform: _,
+                period: _,
+                magnitude: _,
+                offset: _,
+                phase: _,
+                envelope: _,
+            } => (),
+            FFEffectKind::Spring { condition: _ } => (),
+            FFEffectKind::Friction { condition: _ } => (),
+            FFEffectKind::Rumble {
+                strong_magnitude,
+                weak_magnitude,
+            } => {
+                // Set rumble values based on the effect data
+                let left_speed = (strong_magnitude / 256) as u8;
+                let right_speed = (weak_magnitude / 256) as u8;
+
+                // Do rumble
+                if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
+                    let err = format!("Failed to do haptic rumble: {:?}", e);
+                    return Err(err.into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Process dualsense force feedback output reports
+    fn process_dualsense_ff(
+        &mut self,
+        report: SetStatePackedOutputData,
+    ) -> Result<(), Box<dyn Error>> {
+        // Set the rumble values based on the DualSense output report
+        let left_speed = report.rumble_emulation_left;
+        let right_speed = report.rumble_emulation_right;
+
+        if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
+            let err = format!("Failed to do haptic rumble: {:?}", e);
+            return Err(err.into());
+        }
+
+        Ok(())
+    }
+
+    fn process_haptic_ff(
+        &self,
+        report: PackedHapticReport,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let intensity = report.intensity.to_primitive() + 1;
+        let scaled_gain = (report.gain + 24) as u8 * intensity;
+        let normalized_gain = normalize_unsigned_value(scaled_gain as f64, 150.0);
+        let new_gain = normalized_gain * u8::MAX as f64;
+        let new_gain = new_gain as u8;
+
+        match report.side {
+            PadSide::Left => self.driver.haptic_rumble(new_gain, 0)?,
+            PadSide::Right => self.driver.haptic_rumble(0, new_gain)?,
+            PadSide::Both => self.driver.haptic_rumble(new_gain, new_gain)?,
+        }
+
+        Ok(())
     }
 }
 
@@ -44,7 +162,34 @@ impl SourceInputDevice for LegionSController {
     }
 }
 
-impl SourceOutputDevice for LegionSController {}
+impl SourceOutputDevice for LegionSController {
+    /// Write the given output event to the source device. Output events are
+    /// events that flow from an application (like a game) to the physical
+    /// input device, such as force feedback events.
+    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+        log::trace!("Received output event: {:?}", event);
+        match event {
+            OutputEvent::Evdev(input_event) => {
+                self.process_evdev_ff(input_event)?;
+            }
+            OutputEvent::DualSense(report) => {
+                log::debug!("Received DualSense output report");
+                if report.use_rumble_not_haptics || report.enable_improved_rumble_emulation {
+                    self.process_dualsense_ff(report)?;
+                }
+            }
+            OutputEvent::Uinput(_) => (),
+            OutputEvent::SteamDeckHaptics(report) => self.process_haptic_ff(report)?,
+            OutputEvent::SteamDeckRumble(report) => {
+                let l_speed = (report.left_speed.to_primitive() / 256) as u8;
+                let r_speed = (report.right_speed.to_primitive() / 256) as u8;
+                self.driver.haptic_rumble(l_speed, r_speed)?;
+            }
+        }
+
+        Ok(())
+    }
+}
 
 impl Debug for LegionSController {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

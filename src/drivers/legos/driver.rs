@@ -3,14 +3,15 @@ use std::{error::Error, ffi::CString};
 use hidapi::HidDevice;
 use packed_struct::{types::SizedInteger, PackedStruct};
 
-use crate::drivers::legos::hid_report::ReportType;
-
 use super::{
     event::{
         AxisEvent, BinaryInput, ButtonEvent, Event, InertialEvent, InertialInput, JoyAxisInput,
         TriggerEvent, TriggerInput,
     },
-    hid_report::{InertialInputDataReport, XInputDataReport},
+    hid_report::{
+        InertialInputDataReport, InputReportType, OutputReportType, RumbleOutputDataReport,
+        XInputDataReport,
+    },
 };
 
 // Hardware ID's
@@ -53,7 +54,6 @@ impl Driver {
         if info.vendor_id() != VID || info.product_id() != PID {
             return Err(format!("Device '{fmtpath}' is not a Legion Go S Controller").into());
         }
-
         Ok(Self {
             device,
             accel_state: None,
@@ -95,6 +95,28 @@ impl Driver {
         };
 
         Ok(events)
+    }
+
+    /// Writes the given output state to the gamepad. This can be used to change
+    /// the color of LEDs, activate rumble, etc.
+    pub fn write(&self, buf: &[u8]) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let _bytes_written = self.device.write(buf)?;
+
+        Ok(())
+    }
+
+    pub fn haptic_rumble(
+        &self,
+        l_motor_speed: u8,
+        r_motor_speed: u8,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let mut report = RumbleOutputDataReport::default();
+        report.l_motor_speed = l_motor_speed;
+        report.r_motor_speed = r_motor_speed;
+        log::debug!("Got rumble event: {report:?}");
+
+        let buf = report.pack()?;
+        self.write(&buf)
     }
 
     /// Unpacks the buffer into a [XinputDataReport] structure and updates
@@ -307,8 +329,8 @@ impl Driver {
         //log::debug!(" ---- End Report ----");
 
         let report_type = match input_report.report_id {
-            1 => ReportType::AccelData,
-            2 => ReportType::GyroData,
+            1 => InputReportType::AccelData,
+            2 => InputReportType::GyroData,
             _ => {
                 let report_id = input_report.report_id;
                 return Err(format!("Unknown report type: {report_id}").into());
@@ -316,14 +338,14 @@ impl Driver {
         };
 
         match report_type {
-            ReportType::AccelData => {
+            InputReportType::AccelData => {
                 // Update the state
                 let old_state = self.update_accel_state(input_report);
                 // Translate the state into a stream of input events
                 let events = self.translate_accel_data(old_state);
                 Ok(events)
             }
-            ReportType::GyroData => {
+            InputReportType::GyroData => {
                 // Update the state
                 let old_state = self.update_gyro_state(input_report);
                 // Translate the state into a stream of input events
