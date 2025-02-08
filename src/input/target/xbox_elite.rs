@@ -115,7 +115,7 @@ impl XboxEliteController {
         ff.insert(FFEffectCode::FF_GAIN);
 
         // Identify to the kernel as an Xbox One Elite
-        let id = InputId::new(BusType(3), 0x045e, 0x0b00, 0x0001);
+        let id = InputId::new(BusType(3), 0x045e, 0x0b00, 0xaced);
 
         // Build the device
         let device = VirtualDeviceBuilder::new()?
