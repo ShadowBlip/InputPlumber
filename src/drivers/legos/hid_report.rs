@@ -2,19 +2,32 @@
 use packed_struct::prelude::*;
 
 /// Different reports types
-pub enum ReportType {
+pub enum InputReportType {
     AccelData = 0x01,
     GyroData = 0x02,
 }
 
-impl ReportType {
+impl InputReportType {
     pub fn to_u8(&self) -> u8 {
         match self {
-            ReportType::AccelData => ReportType::AccelData as u8,
-            ReportType::GyroData => ReportType::GyroData as u8,
+            InputReportType::AccelData => InputReportType::AccelData as u8,
+            InputReportType::GyroData => InputReportType::GyroData as u8,
         }
     }
 }
+
+pub enum OutputReportType {
+    RumbleData = 0x04,
+}
+
+impl OutputReportType {
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            &OutputReportType::RumbleData => OutputReportType::RumbleData as u8,
+        }
+    }
+}
+
 //XInputData
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "32")]
@@ -144,4 +157,43 @@ pub struct InertialInputDataReport {
     pub y: Integer<i16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "7..=8", endian = "lsb")]
     pub z: Integer<i16, packed_bits::Bits<16>>,
+}
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "9")]
+pub struct RumbleOutputDataReport {
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+    #[packed_field(bytes = "1")]
+    pub unk_1: u8,
+    #[packed_field(bytes = "2")]
+    pub unk_2: u8,
+    #[packed_field(bytes = "3")]
+    pub unk_3: u8,
+    #[packed_field(bytes = "4")]
+    pub l_motor_speed: u8,
+    #[packed_field(bytes = "5")]
+    pub r_motor_speed: u8,
+    #[packed_field(bytes = "6")]
+    pub work_mode: u8,
+    #[packed_field(bytes = "7")]
+    pub l_motor_feature: u8,
+    #[packed_field(bytes = "8")]
+    pub r_motor_feature: u8,
+}
+
+impl Default for RumbleOutputDataReport {
+    fn default() -> Self {
+        Self {
+            report_id: OutputReportType::RumbleData.to_u8(),
+            unk_1: 0x00,
+            unk_2: 0x08,
+            unk_3: 0x00,
+            l_motor_speed: 0x00,
+            r_motor_speed: 0x00,
+            work_mode: 0x00,
+            l_motor_feature: 0x00,
+            r_motor_feature: 0x00,
+        }
+    }
 }
