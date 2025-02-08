@@ -26,21 +26,21 @@ source_devices:
   - group: gamepad
     blocked: true
     evdev:
-      name: "{Sony Interactive Entertainment DualSense Wireless Controller,DualSense Wireless Controller}"
+      name: "*DualSense Wireless Controller"
       vendor_id: 054c
       product_id: 0ce6
       handler: event*
   - group: gamepad
     blocked: true
     evdev:
-      name: "{Sony Interactive Entertainment DualSense Wireless Controller Touchpad,DualSense Wireless Controller Touchpad}"
+      name: "*DualSense Wireless Controller Touchpad"
       vendor_id: 054c
       product_id: 0ce6
       handler: event*
   - group: gamepad
     blocked: true
     evdev:
-      name: "{Sony Interactive Entertainment DualSense Wireless Controller Motion Sensors,DualSense Wireless Controller Motion Sensors}"
+      name: "*DualSense Wireless Controller Motion Sensors"
       vendor_id: 054c
       product_id: 0ce6
       handler: event*
