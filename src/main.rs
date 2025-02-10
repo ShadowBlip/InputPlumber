@@ -1,5 +1,4 @@
 use clap::Parser;
-use inputplumber::udev::unblock_joysticks;
 use std::env;
 use std::error::Error;
 use std::process;
@@ -63,9 +62,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::spawn(async move {
             tokio::signal::ctrl_c().await.unwrap();
             log::info!("Un-hiding all devices");
-            if let Err(e) = unblock_joysticks().await {
-                log::error!("Unable to unblock normal joysticks: {e:?}");
-            }
             if let Err(e) = unhide_all().await {
                 log::error!("Unable to un-hide devices: {:?}", e);
             }
