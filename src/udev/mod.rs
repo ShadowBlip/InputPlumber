@@ -13,67 +13,8 @@ use udev::Enumerator;
 
 use self::device::Device;
 
-const RULE_PRIORITY: &str = "59";
+const RULE_HIDE_DEVICE_PRIORITY: &str = "50";
 const RULES_PREFIX: &str = "/run/udev/rules.d";
-
-/// Hide all removable input devices from regular users.
-pub async fn block_joysticks() -> Result<(), Box<dyn Error>> {
-    // Find the chmod command to use for hiding
-    let chmod_cmd = if Path::new("/bin/chmod").exists() {
-        "/bin/chmod"
-    } else {
-        "/usr/bin/chmod"
-    };
-
-    const IP_CMD: &str = "/home/william/Projects/InputPlumber/target/debug/inputplumber";
-
-    let rule = format!(
-        r#"# InputPlumber device hiding rules
-# Managed by InputPlumber, this file will be autoremoved during configuration changes.
-
-# Query InputPlumber to see if the given device is being managed by InputPlumber.
-# If it is, add the INPUTPLUMBER_VIRT property to the device.
-ACTION=="add|change", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", IMPORT{{program}}="{IP_CMD} query %p"
-
-# Create symlinks for all virtual InputPlumber devices
-ACTION=="add|change", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", ENV{{INPUTPLUMBER_VIRT}}=="1", SYMLINK+="inputplumber/by-targets/%k", GOTO="inputplumber_end"
-
-# Hide all evdev gamepads that are not InputPlumber virtual devices
-ACTION=="add|change", KERNEL=="js[0-9]*|event[0-9]*", ENV{{ID_INPUT_JOYSTICK}}=="1", ENV{{INPUTPLUMBER_VIRT}}!="1", SYMLINK+="inputplumber/by-hidden/%k", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
-
-# Hide all Horipad Steam Controller hidraw devices
-ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ATTR{{idVendor}}=="0F0D", ATTR{{idProduct}}=="0196", ENV{{INPUTPLUMBER_VIRT}}!="1", SYMLINK+="inputplumber/by-hidden/%k", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
-ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ATTR{{idVendor}}=="0F0D", ATTR{{idProduct}}=="01AB", ENV{{INPUTPLUMBER_VIRT}}!="1", SYMLINK+="inputplumber/by-hidden/%k", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
-
-# Hide all PlayStation hidraw devices
-ACTION=="add|change", SUBSYSTEMS=="hid", DRIVERS=="playstation", GOTO="playstation_start"
-GOTO="playstation_end"
-LABEL="playstation_start"
-ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ENV{{INPUTPLUMBER_VIRT}}!="1", SYMLINK+="inputplumber/by-hidden/%k", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
-LABEL="playstation_end"
-
-LABEL="inputplumber_end"
-"#
-    );
-
-    // Write the udev rule
-    fs::create_dir_all(RULES_PREFIX)?;
-    let rule_path = format!("{RULES_PREFIX}/51-inputplumber-hide-joysticks.rules");
-    fs::write(rule_path, rule)?;
-
-    reload_all().await?;
-
-    Ok(())
-}
-
-/// Unhide all removable input devices from regular users.
-pub async fn unblock_joysticks() -> Result<(), Box<dyn Error>> {
-    let rule_path = format!("{RULES_PREFIX}/51-inputplumber-hide-joysticks.rules");
-    fs::remove_file(rule_path)?;
-    reload_all().await?;
-
-    Ok(())
-}
 
 /// Hide the given input device from regular users.
 pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
@@ -109,7 +50,8 @@ LABEL="inputplumber_end"
 
     // Write the udev rule
     fs::create_dir_all(RULES_PREFIX)?;
-    let rule_path = format!("{RULES_PREFIX}/{RULE_PRIORITY}-inputplumber-hide-{name}.rules");
+    let rule_path =
+        format!("{RULES_PREFIX}/{RULE_HIDE_DEVICE_PRIORITY}-inputplumber-hide-{name}.rules");
     fs::write(rule_path, rule)?;
 
     // Reload udev
@@ -126,7 +68,8 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
     let Some(parent) = device.get_parent() else {
         return Err("Unable to determine parent for device".into());
     };
-    let rule_path = format!("{RULES_PREFIX}/{RULE_PRIORITY}-inputplumber-hide-{name}.rules");
+    let rule_path =
+        format!("{RULES_PREFIX}/{RULE_HIDE_DEVICE_PRIORITY}-inputplumber-hide-{name}.rules");
     fs::remove_file(rule_path)?;
 
     // Reload udev
@@ -143,7 +86,8 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
             continue;
         };
         let filename = entry.file_name().to_string_lossy().to_string();
-        if !filename.starts_with(format!("{RULE_PRIORITY}-inputplumber-hide").as_str()) {
+        if !filename.starts_with(format!("{RULE_HIDE_DEVICE_PRIORITY}-inputplumber-hide").as_str())
+        {
             continue;
         }
         let path = entry.path().to_string_lossy().to_string();

@@ -8,15 +8,15 @@ kind: CompositeDevice
 # Name of the composite device mapping
 name: Horipad Steam
 
-# Only allow a CompositeDevice to manage at most the given number of
-# source devices. When this limit is reached, a new CompositeDevice will be
-# created for any new matching devices.
-maximum_sources: 2
-
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty,then the source devices will *always* be checked.
 # /sys/class/dmi/id/product_name
 matches: []
+
+# Only allow a CompositeDevice to manage at most the given number of
+# source devices. When this limit is reached, a new CompositeDevice will be
+# created for any new matching devices.
+maximum_sources: 2
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.

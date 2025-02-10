@@ -9,3 +9,4 @@ evdev:name:AT Translated Set 2 keyboard:dmi:*:svnAYANEO:*
 evdev:name:AT Translated Set 2 keyboard:dmi:*:svnOrangePi:pnNEO-01:*
   KEYBOARD_KEY_66=f15
   KEYBOARD_KEY_67=f16
+

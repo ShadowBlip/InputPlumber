@@ -46,15 +46,6 @@ pub enum Commands {
         #[command(subcommand)]
         cmd: TargetsCommand,
     },
-    /// Query input devices
-    Query {
-        /// Sysfs path to the device to query
-        sysfs_path: String,
-        #[arg(long, action)]
-        subsystem: Option<String>,
-        #[arg(long, action)]
-        udev: Option<bool>,
-    },
 }
 
 pub async fn main_cli(args: Args) -> Result<(), Box<dyn Error>> {
@@ -74,27 +65,6 @@ pub async fn main_cli(args: Args) -> Result<(), Box<dyn Error>> {
         Commands::Device { id: number, cmd } => handle_device(connection, cmd, number).await?,
         Commands::Devices { cmd } => handle_devices(connection, cmd).await?,
         Commands::Targets { cmd } => handle_targets(connection, cmd).await?,
-        Commands::Query {
-            udev,
-            sysfs_path,
-            subsystem,
-        } => {
-            // example:
-            //   inputplumber query /devices/pci0000:00/0000:00:08.3/0000:c3:00.4/usb7/7-1/7-1:1.0/input/input83/event11
-
-            // Check to see if the device is virtual
-            let is_virtual =
-                sysfs_path.contains("devices/virtual") || sysfs_path.contains("vhci_hcd");
-
-            if !is_virtual {
-                return Ok(());
-            }
-
-            // Bluetooth devices are virtual, so ensure ensure the device is not bluetooth
-
-            //println!("Found option: {udev:?}");
-            println!("INPUTPLUMBER_VIRT=1")
-        }
     }
 
     Ok(())
