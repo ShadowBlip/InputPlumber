@@ -25,20 +25,34 @@ pub async fn block_joysticks() -> Result<(), Box<dyn Error>> {
         "/usr/bin/chmod"
     };
 
+    const IP_CMD: &str = "/home/william/Projects/InputPlumber/target/debug/inputplumber";
+
     let rule = format!(
-        r#"# Hide all evdev devices that are not InputPlumber virtual devices
-ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="js[0-9]*|event[0-9]*", ENV{{ID_INPUT_JOYSTICK}}=="1", ENV{{INPUTPLUMBER_VIRT}}!="1", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
+        r#"# InputPlumber device hiding rules
+# Managed by InputPlumber, this file will be autoremoved during configuration changes.
+
+# Query InputPlumber to see if the given device is being managed by InputPlumber.
+# If it is, add the INPUTPLUMBER_VIRT property to the device.
+ACTION=="add|change", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", IMPORT{{program}}="{IP_CMD} query %p"
+
+# Create symlinks for all virtual InputPlumber devices
+ACTION=="add|change", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", ENV{{INPUTPLUMBER_VIRT}}=="1", SYMLINK+="inputplumber/by-targets/%k", GOTO="inputplumber_end"
+
+# Hide all evdev gamepads that are not InputPlumber virtual devices
+ACTION=="add|change", KERNEL=="js[0-9]*|event[0-9]*", ENV{{ID_INPUT_JOYSTICK}}=="1", ENV{{INPUTPLUMBER_VIRT}}!="1", SYMLINK+="inputplumber/by-hidden/%k", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
 
 # Hide all Horipad Steam Controller hidraw devices
-ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ATTR{{idVendor}}=="0F0D", ATTR{{idProduct}}=="0196", ENV{{INPUTPLUMBER_VIRT}}!="1", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
-ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ATTR{{idVendor}}=="0F0D", ATTR{{idProduct}}=="01AB", ENV{{INPUTPLUMBER_VIRT}}!="1", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
+ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ATTR{{idVendor}}=="0F0D", ATTR{{idProduct}}=="0196", ENV{{INPUTPLUMBER_VIRT}}!="1", SYMLINK+="inputplumber/by-hidden/%k", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
+ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ATTR{{idVendor}}=="0F0D", ATTR{{idProduct}}=="01AB", ENV{{INPUTPLUMBER_VIRT}}!="1", SYMLINK+="inputplumber/by-hidden/%k", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
 
 # Hide all PlayStation hidraw devices
 ACTION=="add|change", SUBSYSTEMS=="hid", DRIVERS=="playstation", GOTO="playstation_start"
 GOTO="playstation_end"
 LABEL="playstation_start"
-ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ENV{{INPUTPLUMBER_VIRT}}!="1", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
+ACTION=="add|change", SUBSYSTEM=="hidraw", KERNEL=="hidraw[0-9]*", ENV{{INPUTPLUMBER_VIRT}}!="1", SYMLINK+="inputplumber/by-hidden/%k", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 %p"
 LABEL="playstation_end"
+
+LABEL="inputplumber_end"
 "#
     );
 
@@ -88,7 +102,7 @@ pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
-ACTION=="add|change", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 {path}", SYMLINK+="inputplumber/%k"
+ACTION=="add|change", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 {path}", SYMLINK+="inputplumber/by-hidden/%k"
 LABEL="inputplumber_end"
 "#
     );
