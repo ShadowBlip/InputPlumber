@@ -20,9 +20,12 @@ matches: []
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
-    unique: true
-    evdev:
-      handler: js*
+    udev:
+      properties:
+        - name: ID_INPUT_JOYSTICK
+          value: "1"
+      sys_name: "event*"
+      subsystem: input
 
 # The target input device(s) to emulate by default
 target_devices:
