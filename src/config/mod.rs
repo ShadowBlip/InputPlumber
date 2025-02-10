@@ -303,15 +303,33 @@ pub struct DMIMatch {
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct SourceDevice {
+    /// Custom group identifier for the source device.
     pub group: String,
+    /// Devices that match the given evdev properties will be captured by InputPlumber
     pub evdev: Option<Evdev>,
+    /// Devices that match the given hidraw properties will be captured by InputPlumber
     pub hidraw: Option<Hidraw>,
+    /// Devices that match the given iio properties will be captured by InputPlumber
     pub iio: Option<IIO>,
+    /// Devices that match the given udev properties will be captured by InputPlumber
     pub udev: Option<Udev>,
+    /// Device configuration options are used to alter how the source device is managed
     pub config: Option<SourceDeviceConfig>,
+    /// If false, any devices matching this description will be added to the
+    /// existing composite device. Defaults to true.
     pub unique: Option<bool>,
+    /// If true, device will be grabbed but no events from this device will
+    /// reach target devices. Defaults to false.
     pub blocked: Option<bool>,
+    /// If true, this source device will be ignored and not managed by
+    /// InputPlumber. Defaults to false.
     pub ignore: Option<bool>,
+    /// If true, events will be read from this device, but the source device
+    /// will not be hidden or grabbed. Defaults to false.
+    pub passthrough: Option<bool>,
+    /// Defines which events are included or excluded from input processing by
+    /// the source device.
+    pub events: Option<EventsConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -403,6 +421,15 @@ pub struct MountMatrix {
     pub x: [f64; 3],
     pub y: [f64; 3],
     pub z: [f64; 3],
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct EventsConfig {
+    /// Events to exclude from being processed by a source device
+    pub exclude: Option<Vec<String>>,
+    /// Events to include and be processed by a source device
+    pub include: Option<Vec<String>>,
 }
 
 /// Defines a combined device

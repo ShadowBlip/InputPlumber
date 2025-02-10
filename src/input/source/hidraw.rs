@@ -18,15 +18,15 @@ use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
 
 use crate::{
-    constants::BUS_SOURCES_PREFIX, drivers, input::composite_device::client::CompositeDeviceClient,
-    udev::device::UdevDevice,
+    config, constants::BUS_SOURCES_PREFIX, drivers,
+    input::composite_device::client::CompositeDeviceClient, udev::device::UdevDevice,
 };
 
 use self::{
     dualsense::DualSenseController, fts3528::Fts3528Touchscreen,
     lego_dinput_combined::LegionControllerDCombined, lego_dinput_split::LegionControllerDSplit,
-    lego_fps_mode::LegionControllerFPS, lego_xinput::LegionControllerX,
-    legos::LegionSController, opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
+    lego_fps_mode::LegionControllerFPS, lego_xinput::LegionControllerX, legos::LegionSController,
+    opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
 };
 
 use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
@@ -178,6 +178,7 @@ impl HidRawDevice {
     pub fn new(
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
+        conf: Option<config::SourceDevice>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver_type = HidRawDevice::get_driver_type(&device_info);
 
@@ -189,8 +190,13 @@ impl HidRawDevice {
                     buffer_size: 2048,
                 };
                 let device = DualSenseController::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new_with_options(composite_device, device, device_info, options);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
                 Ok(Self::DualSense(source_device))
             }
             DriverType::SteamDeck => {
@@ -199,48 +205,53 @@ impl HidRawDevice {
                     buffer_size: 2048,
                 };
                 let device = DeckController::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new_with_options(composite_device, device, device_info, options);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
                 Ok(Self::SteamDeck(source_device))
             }
             DriverType::LegionGoDCombined => {
                 let device = LegionControllerDCombined::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::LegionGoDCombined(source_device))
             }
             DriverType::LegionGoDSplit => {
                 let device = LegionControllerDSplit::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::LegionGoDSplit(source_device))
             }
             DriverType::LegionGoFPS => {
                 let device = LegionControllerFPS::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::LegionGoFPS(source_device))
             }
             DriverType::LegionGoX => {
                 let device = LegionControllerX::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::LegionGoX(source_device))
             }
             DriverType::LegionGoS => {
                 let device = LegionSController::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::LegionGoS(source_device))
             }
             DriverType::OrangePiNeo => {
                 let device = OrangePiNeoTouchpad::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::OrangePiNeo(source_device))
             }
             DriverType::Fts3528Touchscreen => {
                 let device = Fts3528Touchscreen::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Fts3528Touchscreen(source_device))
             }
             DriverType::XpadUhid => {
                 let device = XpadUhid::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::XpadUhid(source_device))
             }
             DriverType::RogAlly => {
@@ -249,13 +260,18 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(500),
                     buffer_size: 1024,
                 };
-                let source_device =
-                    SourceDriver::new_with_options(composite_device, device, device_info, options);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
                 Ok(Self::RogAlly(source_device))
             }
             DriverType::HoripadSteam => {
                 let device = HoripadSteam::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info);
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::HoripadSteam(source_device))
             }
         }
@@ -308,7 +324,7 @@ impl HidRawDevice {
             return DriverType::LegionGoX;
         }
 
-	// Legion Go S
+        // Legion Go S
         if vid == drivers::legos::driver::VID && pid == drivers::legos::driver::PID {
             log::info!("Detected Legion Go S");
             return DriverType::LegionGoS;

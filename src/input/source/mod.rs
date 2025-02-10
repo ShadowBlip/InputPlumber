@@ -1,5 +1,7 @@
 use std::{
+    collections::HashSet,
     error::Error,
+    str::FromStr,
     sync::{Arc, Mutex, MutexGuard},
     thread,
     time::Duration,
@@ -9,7 +11,7 @@ use ::evdev::FFEffectData;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
-use crate::udev::device::UdevDevice;
+use crate::{config, udev::device::UdevDevice};
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,
@@ -170,6 +172,9 @@ impl Default for SourceDriverOptions {
 #[derive(Debug)]
 pub struct SourceDriver<T: SourceInputDevice + SourceOutputDevice> {
     options: SourceDriverOptions,
+    event_filter_enabled: bool,
+    event_include_list: HashSet<Capability>,
+    event_exclude_list: HashSet<Capability>,
     implementation: Arc<Mutex<T>>,
     device_info: UdevDevice,
     composite_device: CompositeDeviceClient,
@@ -183,10 +188,62 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
         composite_device: CompositeDeviceClient,
         device: T,
         device_info: UdevDevice,
+        config: Option<config::SourceDevice>,
     ) -> Self {
         let options = SourceDriverOptions::default();
+        Self::new_with_options(composite_device, device, device_info, options, config)
+    }
+
+    /// Create a new source device with the given implementation and options
+    pub fn new_with_options(
+        composite_device: CompositeDeviceClient,
+        device: T,
+        device_info: UdevDevice,
+        options: SourceDriverOptions,
+        config: Option<config::SourceDevice>,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(options.buffer_size);
+
+        // Check to see if the device configuration calls for event filtering
+        let mut events_exclude = HashSet::new();
+        let mut events_include = HashSet::new();
+        if let Some(conf) = config.as_ref() {
+            let events_to_exclude = conf
+                .events
+                .clone()
+                .and_then(|e| e.exclude)
+                .unwrap_or_default();
+            let events_to_include = conf
+                .events
+                .clone()
+                .and_then(|e| e.include)
+                .unwrap_or_default();
+
+            // Convert the capability strings into capabilities
+            events_exclude = events_to_exclude
+                .iter()
+                .filter_map(|cap| Capability::from_str(cap.as_str()).ok())
+                .collect();
+            events_include = events_to_include
+                .iter()
+                .filter_map(|cap| Capability::from_str(cap.as_str()).ok())
+                .collect();
+        }
+        let event_filter_enabled = !events_exclude.is_empty() || !events_include.is_empty();
+        if event_filter_enabled {
+            let devnode = device_info.devnode();
+            if !events_include.is_empty() {
+                log::debug!("Source device '{devnode}' filter includes events: {events_include:?}");
+            }
+            if !events_exclude.is_empty() {
+                log::debug!("Source device '{devnode}' filter excludes events: {events_exclude:?}");
+            }
+        }
+
         Self {
+            event_filter_enabled,
+            event_include_list: events_include,
+            event_exclude_list: events_exclude,
             options,
             implementation: Arc::new(Mutex::new(device)),
             device_info,
@@ -196,22 +253,39 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
         }
     }
 
-    /// Create a new source device with the given implementation and options
-    pub fn new_with_options(
-        composite_device: CompositeDeviceClient,
-        device: T,
-        device_info: UdevDevice,
-        options: SourceDriverOptions,
-    ) -> Self {
-        let (tx, rx) = mpsc::channel(options.buffer_size);
-        Self {
-            options,
-            implementation: Arc::new(Mutex::new(device)),
-            device_info,
-            composite_device,
-            tx,
-            rx,
+    /// Returns true if the given event capability should be filtered out.
+    fn should_filter(
+        exclude_list: &HashSet<Capability>,
+        include_list: &HashSet<Capability>,
+        cap: &Capability,
+    ) -> bool {
+        // If the exclude list is empty, assume that all events should be filtered
+        // EXCEPT for those in the include list.
+        if exclude_list.is_empty() {
+            // If the include list has the event, this event should not be filtered.
+            if include_list.contains(cap) {
+                return false;
+            }
+            return true;
         }
+
+        // If the include list is empty, assume that all events should be included
+        // EXCEPT for the ones in the exclude list.
+        if include_list.is_empty() {
+            if exclude_list.contains(cap) {
+                return true;
+            }
+            return false;
+        }
+
+        if exclude_list.contains(cap) {
+            return true;
+        }
+        if include_list.contains(cap) {
+            return false;
+        }
+
+        false
     }
 
     /// Returns a unique identifier for the source device (e.g. "hidraw://hidraw0")
@@ -221,7 +295,18 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
 
     /// Returns the possible input events this device is capable of emitting
     pub fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        self.implementation.lock().unwrap().get_capabilities()
+        let caps = { self.implementation.lock().unwrap().get_capabilities()? };
+
+        if self.event_filter_enabled {
+            return Ok(caps
+                .into_iter()
+                .filter(|cap| {
+                    !Self::should_filter(&self.event_exclude_list, &self.event_include_list, cap)
+                })
+                .collect());
+        }
+
+        Ok(caps)
     }
 
     /// Returns the path to the device (e.g. "/dev/input/event0")
@@ -252,6 +337,15 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                     // Poll the implementation for events
                     let events = implementation.poll()?;
                     for event in events.into_iter() {
+                        if self.event_filter_enabled
+                            && Self::should_filter(
+                                &self.event_exclude_list,
+                                &self.event_include_list,
+                                &event.as_capability(),
+                            )
+                        {
+                            continue;
+                        }
                         let event = Event::Native(event);
                         let result = self
                             .composite_device

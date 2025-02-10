@@ -16,9 +16,9 @@ use self::device::Device;
 const RULES_PREFIX: &str = "/run/udev/rules.d";
 
 /// Hide the given input device from regular users.
-pub async fn hide_device(path: String) -> Result<(), Box<dyn Error>> {
+pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
     // Get the device to hide
-    let device = get_device(path.clone()).await?;
+    let device = get_device(path.to_string()).await?;
     let name = device.name.clone();
     let Some(parent) = device.get_parent() else {
         return Err("Unable to determine parent for device".into());
