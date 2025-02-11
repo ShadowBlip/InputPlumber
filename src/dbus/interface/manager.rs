@@ -37,8 +37,35 @@ impl ManagerInterface {
     }
 
     #[zbus(property)]
-    async fn intercept_mode(&self) -> fdo::Result<String> {
-        Ok("InputPlumber".to_string())
+    async fn gamepad_order(&self) -> fdo::Result<Vec<String>> {
+        let (sender, mut receiver) = mpsc::channel(1);
+        self.tx
+            .send_timeout(
+                ManagerCommand::GetGamepadOrder { sender },
+                Duration::from_millis(500),
+            )
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+
+        // Read the response from the manager
+        let Some(response) = receiver.recv().await else {
+            return Err(fdo::Error::Failed("No response from manager".to_string()));
+        };
+
+        Ok(response)
+    }
+
+    #[zbus(property)]
+    async fn set_gamepad_order(&self, order: Vec<String>) -> zbus::Result<()> {
+        self.tx
+            .send_timeout(
+                ManagerCommand::SetGamepadOrder { dbus_paths: order },
+                Duration::from_millis(500),
+            )
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+
+        Ok(())
     }
 
     /// If set to 'true', InputPlumber will try to manage all input devices

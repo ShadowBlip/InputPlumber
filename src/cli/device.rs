@@ -76,6 +76,8 @@ impl Display for InterceptMode {
 pub enum DevicesCommand {
     /// List all running composite devices
     List,
+    /// List or set the player order of composite devices
+    Order { device_ids: Option<Vec<u8>> },
     /// Enable/disable managing all supported input devices
     ManageAll {
         #[arg(long, action)]
@@ -222,6 +224,45 @@ pub async fn handle_devices(conn: Connection, cmd: DevicesCommand) -> Result<(),
             manager.set_manage_all_devices(enable).await?;
             let verb = if enable { "Enabled" } else { "Disabled" };
             println!("{verb} management of all supported devices");
+        }
+        DevicesCommand::Order { device_ids } => {
+            let manager = ManagerInterfaceProxy::builder(&conn).build().await?;
+            if let Some(ids) = device_ids {
+                let paths: Vec<String> = ids
+                    .into_iter()
+                    .map(|id| format!("/org/shadowblip/InputPlumber/CompositeDevice{id}"))
+                    .collect();
+                manager.set_gamepad_order(paths).await?;
+            }
+
+            // Fetch the current gamepad order
+            let order = manager.gamepad_order().await?;
+
+            // Query information about each device
+            let mut devices = Vec::with_capacity(order.len());
+            for path in order {
+                let device = CompositeDeviceInterfaceProxy::builder(&conn)
+                    .path(path.clone())
+                    .unwrap()
+                    .build()
+                    .await;
+                let Some(device) = device.ok() else {
+                    continue;
+                };
+
+                let number = path.replace("/org/shadowblip/InputPlumber/CompositeDevice", "");
+                let name = device.name().await.unwrap_or_default();
+
+                let row = DeviceRow { id: number, name };
+
+                devices.push(row);
+            }
+
+            let mut table = Table::new(devices);
+            table
+                .with(Style::modern_rounded())
+                .with(Panel::header("Composite Devices"));
+            println!("{table}");
         }
     }
 

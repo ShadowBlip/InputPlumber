@@ -48,4 +48,5 @@ pub enum CompositeCommand {
     Stop,
     Suspend(mpsc::Sender<()>),
     Resume(mpsc::Sender<()>),
+    IsSuspended(mpsc::Sender<bool>),
 }

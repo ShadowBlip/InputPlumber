@@ -360,4 +360,15 @@ impl CompositeDeviceClient {
         }
         Err(ClientError::ChannelClosed)
     }
+
+    /// Returns true if the target devices are suspended
+    pub async fn is_suspended(&self) -> Result<bool, ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx.send(CompositeCommand::IsSuspended(tx)).await?;
+
+        if let Some(result) = rx.recv().await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
 }
