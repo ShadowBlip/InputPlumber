@@ -346,6 +346,13 @@ impl Manager {
                         continue;
                     };
 
+                    self.composite_device_targets
+                        .entry(device_path.clone())
+                        .and_modify(|paths| {
+                            paths.remove(&path);
+                        });
+                    log::debug!("Used target devices: {:?}", self.composite_device_targets);
+
                     let is_suspended = match device.is_suspended().await {
                         Ok(suspended) => suspended,
                         Err(e) => {
@@ -366,12 +373,6 @@ impl Manager {
                         .filter(|paf| paf.as_str() != device_path.as_str())
                         .collect();
                     log::info!("Gamepad order: {:?}", self.target_gamepad_order);
-
-                    self.composite_device_targets
-                        .entry(device_path)
-                        .and_modify(|paths| {
-                            paths.remove(&path);
-                        });
                 }
                 ManagerCommand::DeviceAdded { device } => {
                     let dev_name = device.name();
@@ -686,7 +687,7 @@ impl Manager {
                 paths.insert(target_path.to_string());
                 paths
             });
-        log::trace!("Used target devices: {:?}", self.composite_device_targets);
+        log::debug!("Used target devices: {:?}", self.composite_device_targets);
 
         log::debug!("Finished handling attach request for: {target_path}");
 
