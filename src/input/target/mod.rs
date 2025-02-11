@@ -216,6 +216,14 @@ impl TargetDeviceTypeId {
     pub fn name(&self) -> &str {
         self.name
     }
+
+    /// Returns true if the target type is a gamepad
+    pub fn is_gamepad(&self) -> bool {
+        !matches!(
+            self.id,
+            "dbus" | "null" | "touchscreen" | "touchpad" | "mouse" | "keyboard"
+        )
+    }
 }
 
 impl Display for TargetDeviceTypeId {

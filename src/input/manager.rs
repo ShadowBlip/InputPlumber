@@ -1,5 +1,6 @@
 use core::panic;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
 use std::time::Duration;
@@ -101,6 +102,12 @@ pub enum ManagerCommand {
     SystemWake {
         sender: mpsc::Sender<()>,
     },
+    GetGamepadOrder {
+        sender: mpsc::Sender<Vec<String>>,
+    },
+    SetGamepadOrder {
+        dbus_paths: Vec<String>,
+    },
 }
 
 /// Manages input devices
@@ -147,13 +154,16 @@ pub struct Manager {
     composite_device_sources: HashMap<String, Vec<SourceDevice>>,
     /// Map of target devices being used by a [CompositeDevice].
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<"/org/shadowblip/InputPlumber/devices/target/dbus0">}
-    composite_device_targets: HashMap<String, Vec<String>>,
+    composite_device_targets: HashMap<String, HashSet<String>>,
     /// Mapping of DBus path to its corresponding [CompositeDeviceConfig]
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <CompositeDeviceConfig>}
     used_configs: HashMap<String, CompositeDeviceConfig>,
     /// Mapping of target devices to their respective handles
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Handle>}
     target_devices: HashMap<String, TargetDeviceClient>,
+    /// List of composite device dbus paths with gamepad devices in player order.
+    /// E.g. ["/org/shadowblip/InputPlumber/CompositeDevice0"]
+    target_gamepad_order: Vec<String>,
     /// Defines whether or not InputPlumber should try to automatically manage all
     /// input devices that have a [CompositeDeviceConfig] definition
     manage_all_devices: bool,
@@ -193,6 +203,7 @@ impl Manager {
             composite_device_sources: HashMap::new(),
             composite_device_targets: HashMap::new(),
             manage_all_devices: false,
+            target_gamepad_order: vec![],
         }
     }
 
@@ -286,34 +297,19 @@ impl Manager {
                     sender,
                 } => {
                     log::debug!("Got request to attach target device {target_path} to device: {composite_path}");
-                    let Some(target) = self.target_devices.get(&target_path) else {
-                        let err = ManagerError::AttachTargetDeviceFailed(
-                            "Failed to find target device".into(),
-                        );
-                        log::error!("{err}");
+                    if let Err(err) = self
+                        .attach_target_device(target_path.as_str(), composite_path.as_str())
+                        .await
+                    {
+                        log::error!("Failed to attach {target_path} to {composite_path}: {err:?}");
                         if let Err(e) = sender.send(Err(err)).await {
                             log::error!("Failed to send response: {e:?}");
                         }
                         continue;
-                    };
-                    let Some(device) = self.composite_devices.get(&composite_path) else {
-                        let err = ManagerError::AttachTargetDeviceFailed(
-                            "Failed to find composite device".into(),
-                        );
-                        log::error!("{err}");
-                        if let Err(e) = sender.send(Err(err)).await {
-                            log::error!("Failed to send response: {e:?}");
-                        }
-                        continue;
-                    };
-
-                    // Send the attach command to the composite device
-                    let mut targets = HashMap::new();
-                    targets.insert(target_path.clone(), target.clone());
-                    if let Err(e) = device.attach_target_devices(targets).await {
-                        log::error!("Failed to send attach command: {e:?}");
                     }
-                    log::debug!("Finished handling attach request for: {target_path}");
+                    if let Err(e) = sender.send(Ok(())).await {
+                        log::error!("Failed to send response: {e:?}");
+                    }
                 }
                 ManagerCommand::StopTargetDevice { path } => {
                     log::debug!("Got request to stop target device: {path}");
@@ -329,6 +325,53 @@ impl Manager {
                 ManagerCommand::TargetDeviceStopped { path } => {
                     log::debug!("Target device stopped: {path}");
                     self.target_devices.remove(&path);
+
+                    // Lookup the compoiste device and see if it is suspended?
+                    // TODO: Use a different hashmap to map target device to composite device
+                    let mut device_path = None;
+                    for (composite_path, target_device_paths) in
+                        self.composite_device_targets.iter()
+                    {
+                        if target_device_paths.contains(&path) {
+                            device_path = Some(composite_path.clone());
+                            break;
+                        }
+                    }
+                    let Some(device_path) = device_path else {
+                        continue;
+                    };
+
+                    log::debug!("Found composite device for target device: {device_path}");
+                    let Some(device) = self.composite_devices.get(&device_path) else {
+                        continue;
+                    };
+
+                    let is_suspended = match device.is_suspended().await {
+                        Ok(suspended) => suspended,
+                        Err(e) => {
+                            log::error!("Failed to check if device is suspended: {e:?}");
+                            continue;
+                        }
+                    };
+
+                    // If the composite device is suspended, do not remove the
+                    // target device from the gamepad ordering.
+                    if is_suspended {
+                        continue;
+                    }
+
+                    self.target_gamepad_order = self
+                        .target_gamepad_order
+                        .drain(..)
+                        .filter(|paf| paf.as_str() != device_path.as_str())
+                        .collect();
+                    log::info!("Gamepad order: {:?}", self.target_gamepad_order);
+
+                    self.composite_device_targets
+                        .entry(device_path)
+                        .and_modify(|paths| {
+                            paths.remove(&path);
+                        });
                 }
                 ManagerCommand::DeviceAdded { device } => {
                     let dev_name = device.name();
@@ -413,8 +456,30 @@ impl Manager {
                     // Call the resume handler on each composite device and wait
                     // for a response.
                     let composite_devices = self.composite_devices.clone();
+                    let gamepad_order = self.target_gamepad_order.clone();
                     tokio::task::spawn(async move {
+                        // Resume any composite devices in gamepad order first
+                        for path in gamepad_order {
+                            let Some(device) = composite_devices.get(&path) else {
+                                continue;
+                            };
+                            if let Err(e) = device.resume().await {
+                                log::error!("Failed to call resume handler on device: {e:?}");
+                            }
+                        }
+
+                        // Resume any remaining composite devices
                         for device in composite_devices.values() {
+                            let is_suspended = match device.is_suspended().await {
+                                Ok(suspended) => suspended,
+                                Err(e) => {
+                                    log::error!("Failed to check if device is suspended: {e:?}");
+                                    continue;
+                                }
+                            };
+                            if !is_suspended {
+                                continue;
+                            }
                             if let Err(e) = device.resume().await {
                                 log::error!("Failed to call resume handler on device: {e:?}");
                             }
@@ -428,6 +493,16 @@ impl Manager {
 
                         log::info!("Finished preparing for system resume");
                     });
+                }
+                ManagerCommand::GetGamepadOrder { sender } => {
+                    log::debug!("Request for gamepad order");
+                    let order = self.target_gamepad_order.clone();
+                    if let Err(e) = sender.send(order).await {
+                        log::error!("Failed to send gamepad order: {e:?}");
+                    }
+                }
+                ManagerCommand::SetGamepadOrder { dbus_paths } => {
+                    self.set_gamepad_order(dbus_paths).await;
                 }
             }
         }
@@ -546,6 +621,78 @@ impl Manager {
         Ok(target_devices)
     }
 
+    /// Attach the given target device to the given composite device
+    async fn attach_target_device(
+        &mut self,
+        target_path: &str,
+        composite_path: &str,
+    ) -> Result<(), ManagerError> {
+        let Some(target) = self.target_devices.get(target_path) else {
+            let err = ManagerError::AttachTargetDeviceFailed("Failed to find target device".into());
+            return Err(err);
+        };
+        let Some(device) = self.composite_devices.get(composite_path) else {
+            let err =
+                ManagerError::AttachTargetDeviceFailed("Failed to find composite device".into());
+            return Err(err);
+        };
+
+        // Check the target device type
+        let target_type = match target.get_type().await {
+            Ok(kind) => kind,
+            Err(e) => {
+                let err = ManagerError::AttachTargetDeviceFailed(format!(
+                    "Failed to get target device type: {e:?}"
+                ));
+                return Err(err);
+            }
+        };
+        let Some(target_type) = TargetDeviceTypeId::try_from(target_type.as_str()).ok() else {
+            let err = ManagerError::AttachTargetDeviceFailed(
+                "Target device returned an invalid device type!".into(),
+            );
+            return Err(err);
+        };
+
+        // If the target device is a gamepad, maintain the order in which it
+        // was connected.
+        if target_type.is_gamepad()
+            && !self
+                .target_gamepad_order
+                .contains(&composite_path.to_owned())
+        {
+            self.target_gamepad_order.push(composite_path.to_string());
+            log::info!("Gamepad order: {:?}", self.target_gamepad_order);
+        }
+
+        // Send the attach command to the composite device
+        let mut targets = HashMap::new();
+        targets.insert(target_path.to_string(), target.clone());
+        if let Err(e) = device.attach_target_devices(targets).await {
+            let err = ManagerError::AttachTargetDeviceFailed(format!(
+                "Failed to send attach command: {e:?}"
+            ));
+            return Err(err);
+        }
+
+        // Track the composite device and target device
+        self.composite_device_targets
+            .entry(composite_path.to_string())
+            .and_modify(|paths| {
+                paths.insert(target_path.to_string());
+            })
+            .or_insert({
+                let mut paths = HashSet::new();
+                paths.insert(target_path.to_string());
+                paths
+            });
+        log::trace!("Used target devices: {:?}", self.composite_device_targets);
+
+        log::debug!("Finished handling attach request for: {target_path}");
+
+        Ok(())
+    }
+
     /// Create and start the given type of target device and return a mapping
     /// of the dbus path to the target device and sender to send messages to the
     /// device.
@@ -625,6 +772,40 @@ impl Manager {
         }
         device.set_dbus_devices(dbus_devices);
 
+        // Add the device to our maps
+        self.composite_devices
+            .insert(composite_path.clone(), client);
+        log::trace!("Managed source devices: {:?}", self.source_devices_used);
+        self.used_configs.insert(composite_path.clone(), config);
+        log::trace!("Used configs: {:?}", self.used_configs);
+        self.composite_device_targets.insert(
+            composite_path.to_string(),
+            HashSet::with_capacity(target_device_paths.len()),
+        );
+
+        // Run the device
+        let composite_path = String::from(device.dbus_path());
+        let composite_path_clone = composite_path.clone();
+        let tx = self.tx.clone();
+        let task = tokio::spawn(async move {
+            let targets = HashMap::new();
+            if let Err(e) = device.run(targets).await {
+                log::error!("Error running {composite_path}: {}", e.to_string());
+            }
+            log::debug!("Composite device stopped running: {composite_path}");
+            if let Err(e) = tx
+                .send(ManagerCommand::CompositeDeviceStopped(
+                    composite_path.clone(),
+                ))
+                .await
+            {
+                log::error!(
+                    "Error sending to composite device {composite_path} the stopped signal: {}",
+                    e.to_string()
+                );
+            }
+        });
+
         // Create target devices based on the configuration
         let mut target_devices = Vec::new();
         if let Some(target_devices_config) = target_types {
@@ -641,36 +822,31 @@ impl Manager {
             target_device_paths.push(target_path.clone());
         }
 
-        // Add the device to our maps
-        self.composite_devices
-            .insert(composite_path.clone(), client);
-        log::trace!("Managed source devices: {:?}", self.source_devices_used);
-        self.used_configs.insert(composite_path.clone(), config);
-        log::trace!("Used configs: {:?}", self.used_configs);
-        self.composite_device_targets
-            .insert(composite_path.clone(), target_device_paths);
-        log::trace!("Used target devices: {:?}", self.composite_device_targets);
-
-        // Run the device
-        let composite_path = String::from(device.dbus_path());
+        // Attach the target devices
         let tx = self.tx.clone();
-        Ok(tokio::spawn(async move {
-            if let Err(e) = device.run(targets).await {
-                log::error!("Error running {composite_path}: {}", e.to_string());
+        tokio::task::spawn(async move {
+            // Queue the target device attachment to the composite device
+            for target_path in targets.into_keys() {
+                let (sender, mut receiver) = mpsc::channel(1);
+                let result = tx
+                    .send(ManagerCommand::AttachTargetDevice {
+                        target_path,
+                        composite_path: composite_path_clone.clone(),
+                        sender,
+                    })
+                    .await;
+
+                if let Err(e) = result {
+                    log::error!("Failed to send target device attach command to manager: {e:?}");
+                    continue;
+                }
+                tokio::task::spawn(async move {
+                    receiver.recv().await;
+                });
             }
-            log::debug!("Composite device stopped running: {composite_path}");
-            if let Err(e) = tx
-                .send(ManagerCommand::CompositeDeviceStopped(
-                    composite_path.clone(),
-                ))
-                .await
-            {
-                log::error!(
-                    "Error sending to composite device {composite_path} the stopped signal: {}",
-                    e.to_string()
-                );
-            }
-        }))
+        });
+
+        Ok(task)
     }
 
     /// Called when a composite device stops running
@@ -711,6 +887,14 @@ impl Manager {
                 self.target_devices.remove(target_device_path);
             }
         }
+
+        // Remove the device from gamepad order
+        self.target_gamepad_order = self
+            .target_gamepad_order
+            .drain(..)
+            .filter(|paf| paf.as_str() != path.as_str())
+            .collect();
+        log::info!("Gamepad order: {:?}", self.target_gamepad_order);
 
         // Remove the composite device from our list
         self.composite_devices.remove::<String>(&path);
@@ -1589,5 +1773,62 @@ impl Manager {
     ) -> Result<(), Box<dyn Error>> {
         client.add_source_device(device).await?;
         Ok(())
+    }
+
+    /// Set the player order of the given composite device paths. Each device
+    /// will be suspended and resumed in player order.
+    async fn set_gamepad_order(&mut self, order: Vec<String>) {
+        log::info!("Setting player order to: {order:?}");
+
+        // Ensure the given paths are valid composite device paths
+        self.target_gamepad_order = order
+            .into_iter()
+            .filter(|path| {
+                let is_valid = self.composite_devices.contains_key(path);
+                if !is_valid {
+                    log::error!("Invalid composite device path to set gamepad order: {path}");
+                }
+                is_valid
+            })
+            .collect();
+
+        let manager_tx = self.tx.clone();
+        tokio::task::spawn(async move {
+            // Send suspend command to manager
+            let (tx, mut rx) = mpsc::channel(1);
+            if let Err(e) = manager_tx
+                .send(ManagerCommand::SystemSleep { sender: tx })
+                .await
+            {
+                log::error!("Failed to send system sleep command to manager: {e:?}");
+                return;
+            }
+
+            // Wait for all devices to suspend
+            if rx.recv().await.is_none() {
+                log::error!("Failed to get response from manager for system sleep command");
+                return;
+            }
+
+            // Sleep a little bit before resuming target devices
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            // Send wake command to manager
+            let (tx, mut rx) = mpsc::channel(1);
+            if let Err(e) = manager_tx
+                .send(ManagerCommand::SystemWake { sender: tx })
+                .await
+            {
+                log::error!("Failed to send system wake command to manager: {e:?}");
+                return;
+            }
+
+            // Wait for all devices to resume
+            if rx.recv().await.is_none() {
+                log::error!("Failed to get response from manager for system wake command");
+            }
+        });
+
+        //
     }
 }

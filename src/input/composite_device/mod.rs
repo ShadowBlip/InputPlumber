@@ -512,6 +512,13 @@ impl CompositeDevice {
                             log::error!("Failed to send resume response: {e:?}");
                         }
                     }
+                    CompositeCommand::IsSuspended(sender) => {
+                        let is_suspended = !self.target_devices_suspended.is_empty();
+                        log::debug!("Checking if device is suspended: {is_suspended}");
+                        if let Err(e) = sender.send(is_suspended).await {
+                            log::error!("Failed to send suspended response: {e:?}");
+                        }
+                    }
                 }
             }
 
@@ -2064,9 +2071,6 @@ impl CompositeDevice {
         // Clear the list of suspended target devices
         self.target_devices_suspended.clear();
 
-        // Create a list of target devices that should be stopped on suspend
-        let mut targets_to_stop = HashMap::new();
-
         // Record what target devices are currently used so they can be restored
         // when the system is resumed.
         for (path, target) in self.target_devices.clone().into_iter() {
@@ -2078,21 +2082,7 @@ impl CompositeDevice {
                 }
             };
 
-            // The "deck" target device does not support suspend
-            if target_type.as_str() == "deck" {
-                targets_to_stop.insert(path, target);
-            }
-
             self.target_devices_suspended.push(target_type);
-        }
-        log::info!(
-            "Target devices before suspend: {:?}",
-            self.target_devices_suspended
-        );
-
-        // Tear down any target devices that do not support suspend
-        for (path, target) in targets_to_stop.into_iter() {
-            log::info!("Stopping target device: {path}");
             self.target_devices.remove(&path);
             for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
                 target_devices.remove(&path);
@@ -2104,6 +2094,10 @@ impl CompositeDevice {
             // Wait a few beats to ensure that the target device is really gone
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
+        log::info!(
+            "Target devices before suspend: {:?}",
+            self.target_devices_suspended
+        );
     }
 
     /// Called when notified by the input manager that system resume is about
@@ -2113,12 +2107,6 @@ impl CompositeDevice {
             "Restoring target devices: {:?}",
             self.target_devices_suspended
         );
-
-        // Only handle resume if a deck controller target device was used
-        if !self.target_devices_suspended.contains(&"deck".to_string()) {
-            self.target_devices_suspended.clear();
-            return;
-        }
 
         // Set the target devices back to the ones used before suspend
         if let Err(err) = self
