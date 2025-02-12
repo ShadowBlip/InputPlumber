@@ -276,6 +276,7 @@ pub struct CompositeDeviceConfigOptions {
     /// If this is false, InputPlumber will not try to manage the device unless
     /// an external service enables management of all devices.
     pub auto_manage: Option<bool>,
+    pub persist: Option<bool>,
 }
 
 /// Defines a platform match for loading a [CompositeDeviceConfig]

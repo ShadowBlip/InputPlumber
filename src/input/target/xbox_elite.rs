@@ -14,6 +14,7 @@ use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, 
 use crate::input::composite_device::client::CompositeDeviceClient;
 use crate::input::event::evdev::EvdevEvent;
 use crate::input::event::native::{NativeEvent, ScheduledNativeEvent};
+use crate::input::event::value::InputValue;
 use crate::input::output_capability::OutputCapability;
 use crate::input::output_event::{OutputEvent, UinputOutputEvent};
 
@@ -228,6 +229,19 @@ impl TargetInputDevice for XboxEliteController {
             return None;
         }
         Some(self.queued_events.drain(..).collect())
+    }
+
+    /// Clear any local state on the target device.
+    fn clear_state(&mut self) {
+        let caps = self.get_capabilities().unwrap_or_else(|_| {
+            log::error!("No target device capabilities found while clearing state.");
+            Vec::new()
+        });
+        for cap in caps {
+            let ev = NativeEvent::new(cap, InputValue::Bool(false));
+            self.queued_events
+                .push(ScheduledNativeEvent::new(ev, Duration::from_millis(0)));
+        }
     }
 }
 
