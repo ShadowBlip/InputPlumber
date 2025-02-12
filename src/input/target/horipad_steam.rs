@@ -1,5 +1,5 @@
 //! Emulates a Horipad Steam Controller as a target input device.
-use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
+use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File};
 
 use packed_struct::prelude::*;
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
@@ -321,15 +321,7 @@ impl TargetInputDevice for HoripadSteamDevice {
 
     /// Clear any local state on the target device.
     fn clear_state(&mut self) {
-        let caps = self.get_capabilities().unwrap_or_else(|_| {
-            log::error!("No target device capabilities found while clearing state.");
-            Vec::new()
-        });
-        for cap in caps {
-            let ev = NativeEvent::new(cap, InputValue::Bool(false));
-            self.queued_events
-                .push(ScheduledNativeEvent::new(ev, Duration::from_millis(0)));
-        }
+        self.state = Default::default();
     }
 }
 

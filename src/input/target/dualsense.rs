@@ -982,15 +982,12 @@ impl TargetInputDevice for DualSenseDevice {
 
     /// Clear any local state on the target device.
     fn clear_state(&mut self) {
-        let caps = self.get_capabilities().unwrap_or_else(|_| {
-            log::error!("No target device capabilities found while clearing state.");
-            Vec::new()
-        });
-        for cap in caps {
-            let ev = NativeEvent::new(cap, InputValue::Bool(false));
-            self.queued_events
-                .push(ScheduledNativeEvent::new(ev, Duration::from_millis(0)));
-        }
+        self.state = match self.state {
+            PackedInputDataReport::Usb(_) => PackedInputDataReport::Usb(Default::default()),
+            PackedInputDataReport::Bluetooth(_) => {
+                PackedInputDataReport::Bluetooth(Default::default())
+            }
+        };
     }
 }
 
