@@ -46,6 +46,8 @@ pub enum Commands {
         #[command(subcommand)]
         cmd: TargetsCommand,
     },
+    /// Query a given device
+    Query { udev: Option<bool> },
 }
 
 pub async fn main_cli(args: Args) -> Result<(), Box<dyn Error>> {
@@ -65,6 +67,10 @@ pub async fn main_cli(args: Args) -> Result<(), Box<dyn Error>> {
         Commands::Device { id: number, cmd } => handle_device(connection, cmd, number).await?,
         Commands::Devices { cmd } => handle_devices(connection, cmd).await?,
         Commands::Targets { cmd } => handle_targets(connection, cmd).await?,
+        Commands::Query { udev } => {
+            println!("Got udev: {udev:?}");
+            //
+        }
     }
 
     Ok(())

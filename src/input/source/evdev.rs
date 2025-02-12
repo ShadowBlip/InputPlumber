@@ -1,10 +1,12 @@
 pub mod blocked;
+pub mod cec;
 pub mod gamepad;
 pub mod keyboard;
 pub mod touchscreen;
 
 use std::{collections::HashMap, error::Error, time::Duration};
 
+use cec::CecEventDevice;
 use evdev::{Device, EventType};
 use keyboard::KeyboardEventDevice;
 use touchscreen::TouchscreenEventDevice;
@@ -24,6 +26,7 @@ enum DriverType {
     Gamepad,
     Touchscreen,
     Keyboard,
+    Cec,
 }
 
 /// [EventDevice] represents an input device using the input event subsystem.
@@ -33,6 +36,7 @@ pub enum EventDevice {
     Gamepad(SourceDriver<GamepadEventDevice>),
     Touchscreen(SourceDriver<TouchscreenEventDevice>),
     Keyboard(SourceDriver<KeyboardEventDevice>),
+    Cec(SourceDriver<CecEventDevice>),
 }
 
 impl SourceDeviceCompatible for EventDevice {
@@ -42,6 +46,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Gamepad(source_driver) => source_driver.info_ref(),
             EventDevice::Touchscreen(source_driver) => source_driver.info_ref(),
             EventDevice::Keyboard(source_driver) => source_driver.info_ref(),
+            EventDevice::Cec(source_driver) => source_driver.info_ref(),
         }
     }
 
@@ -51,6 +56,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Gamepad(source_driver) => source_driver.get_id(),
             EventDevice::Touchscreen(source_driver) => source_driver.get_id(),
             EventDevice::Keyboard(source_driver) => source_driver.get_id(),
+            EventDevice::Cec(source_driver) => source_driver.get_id(),
         }
     }
 
@@ -60,6 +66,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Gamepad(source_driver) => source_driver.client(),
             EventDevice::Touchscreen(source_driver) => source_driver.client(),
             EventDevice::Keyboard(source_driver) => source_driver.client(),
+            EventDevice::Cec(source_driver) => source_driver.client(),
         }
     }
 
@@ -69,6 +76,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Gamepad(source_driver) => source_driver.run().await,
             EventDevice::Touchscreen(source_driver) => source_driver.run().await,
             EventDevice::Keyboard(source_driver) => source_driver.run().await,
+            EventDevice::Cec(source_driver) => source_driver.run().await,
         }
     }
 
@@ -80,6 +88,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Gamepad(source_driver) => source_driver.get_capabilities(),
             EventDevice::Touchscreen(source_driver) => source_driver.get_capabilities(),
             EventDevice::Keyboard(source_driver) => source_driver.get_capabilities(),
+            EventDevice::Cec(source_driver) => source_driver.get_capabilities(),
         }
     }
 
@@ -89,6 +98,7 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Gamepad(source_driver) => source_driver.get_device_path(),
             EventDevice::Touchscreen(source_driver) => source_driver.get_device_path(),
             EventDevice::Keyboard(source_driver) => source_driver.get_device_path(),
+            EventDevice::Cec(source_driver) => source_driver.get_device_path(),
         }
     }
 }
@@ -137,6 +147,11 @@ impl EventDevice {
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Keyboard(source_device))
             }
+            DriverType::Cec => {
+                let device = CecEventDevice::new(device_info.clone(), &conf)?;
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                Ok(Self::Cec(source_device))
+            }
         }
     }
 
@@ -147,6 +162,13 @@ impl EventDevice {
         log::debug!("Finding driver for interface: {:?}", device);
         if is_blocked {
             return DriverType::Blocked;
+        }
+
+        let attributes = device.get_attributes();
+        if let Some(protocols) = attributes.get("protocols") {
+            if protocols.as_str() == "[cec]" {
+                return DriverType::Cec;
+            }
         }
 
         let properties = device.get_properties();

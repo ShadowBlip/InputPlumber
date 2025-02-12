@@ -1381,6 +1381,56 @@ impl Manager {
                 log::debug!("Finished adding event device {id}");
             }
 
+            "cec" => {
+                if device.devnode().is_empty() {
+                    log::warn!("cec device discarded for missing devnode: {dev_name} ({dev_sysname}) at {dev_path}");
+                    return Ok(());
+                }
+
+                log::debug!("cec device added: {} ({})", device.name(), device.sysname());
+
+                // Create a DBus interface for the event device
+                let conn = self.dbus.clone();
+                let path = iio::get_dbus_path(sys_name.clone());
+
+                log::debug!("Attempting to listen on dbus for device {dev_name} ({dev_sysname}) | {dev_path}");
+                let dbus_path = path.clone();
+                task::spawn(async move {
+                    let result = SourceUdevDeviceInterface::listen_on_dbus(
+                        conn.clone(),
+                        dbus_path.as_str(),
+                        sysname.as_str(),
+                        dev.clone(),
+                    )
+                    .await;
+                    if let Err(e) = result {
+                        log::error!("Error creating source udev dbus interface: {e:?}");
+                    }
+
+                    //let result = SourceCecInterface::listen_on_dbus(conn, sysname, dev).await;
+                    //if let Err(e) = result {
+                    //    log::error!("Error creating source evdev dbus interface: {e:?}");
+                    //}
+                    log::debug!("Finished adding source device on dbus");
+                });
+
+                // Add the device as a source device
+                self.source_device_dbus_paths.insert(id.clone(), path);
+
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
+                    return Ok(());
+                } else {
+                    log::trace!("Device {dev_name} ({dev_sysname}) is real - {dev_path}");
+                }
+
+                // Signal that a source device was added
+                log::debug!("Spawing task to add source device: {id}");
+                self.on_source_device_added(id.clone(), device).await?;
+                log::debug!("Finished adding event device {id}");
+            }
+
             _ => {
                 return Err(format!("Device subsystem not supported: {subsystem:?}").into());
             }
@@ -1428,6 +1478,11 @@ impl Manager {
                         .remove::<SourceIioImuInterface, ObjectPath>(path.clone())
                         .await
                 }
+                //"cec" => {
+                //    conn.object_server()
+                //        .remove::<SourceCecInterface, ObjectPath>(path.clone())
+                //        .await
+                //}
                 _ => Err(zbus::Error::Failure(format!(
                     "Invalid subsystem: '{subsystem}'"
                 ))),
@@ -1542,10 +1597,12 @@ impl Manager {
                     let subsystem = {
                         match base_path.as_str() {
                             "/dev" => {
-                                if !name.starts_with("hidraw") {
-                                    None
-                                } else {
+                                if name.starts_with("hidraw") {
                                     Some("hidraw")
+                                } else if name.starts_with("cec") {
+                                    Some("cec")
+                                } else {
+                                    None
                                 }
                             }
                             "/dev/input" => Some("input"),
@@ -1647,6 +1704,9 @@ impl Manager {
         let iio_devices = udev::discover_devices("iio")?;
         let iio_devices = iio_devices.into_iter().map(|dev| dev.into()).collect();
         Manager::discover_devices(cmd_tx, iio_devices).await?;
+        let cec_devices = udev::discover_devices("cec")?;
+        let cec_devices = cec_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(cmd_tx, cec_devices).await?;
 
         Ok(())
     }

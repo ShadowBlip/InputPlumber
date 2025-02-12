@@ -24,6 +24,7 @@ libiio = "*"
 libevdev = "*"
 
 [dependencies]
+cec-rs = "11.0.2"
 clap = { version = "4.5.27", features = ["derive"] }
 clap_complete = "4.5.42"
 env_logger = "0.11.3"

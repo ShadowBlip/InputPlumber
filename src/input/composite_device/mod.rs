@@ -34,7 +34,9 @@ use crate::{
             Event,
         },
         output_event::UinputOutputEvent,
-        source::{evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, SourceDevice},
+        source::{
+            cec::CecDevice, evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, SourceDevice,
+        },
     },
     udev::{device::UdevDevice, hide_device, unhide_device},
 };
@@ -1453,6 +1455,11 @@ impl CompositeDevice {
                 log::debug!("Adding source device: {:?}", device.name());
                 let device = IioDevice::new(device, self.client(), source_config.clone())?;
                 SourceDevice::Iio(device)
+            }
+            "cec" => {
+                log::debug!("Adding source device: {:?}", device.name());
+                let device = CecDevice::new(device, self.client(), source_config.clone())?;
+                SourceDevice::Cec(device)
             }
             _ => {
                 return Err(format!(
