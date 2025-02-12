@@ -160,7 +160,9 @@ impl EventDevice {
             return DriverType::Keyboard;
         }
 
-        log::debug!("Unknown input device, falling back to gamepad implementation");
+        let devnode = device.devnode();
+        log::debug!("Unknown input device '{devnode}', falling back to gamepad implementation. Device had udev properties: {properties:?}");
+
         DriverType::Gamepad
     }
 }
