@@ -43,7 +43,8 @@ pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
-KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", RUN:="{chmod_cmd} 000 {path}", SYMLINK+="inputplumber/by-hidden/%k"
+KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 /dev/input/%k", SYMLINK+="inputplumber/by-hidden/%k"
+KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 /dev/%k", SYMLINK+="inputplumber/by-hidden/%k"
 LABEL="inputplumber_end"
 "#
     );

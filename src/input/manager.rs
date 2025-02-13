@@ -213,7 +213,9 @@ impl Manager {
     pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Delay initial discovery by a short amount of time to allow udev
         // rules to process for the first time.
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        // TODO: Figure out a better way to prevent udev from not running hiding
+        // rules too early in boot.
+        tokio::time::sleep(Duration::from_millis(4000)).await;
 
         let dbus_for_listen_on_dbus = self.dbus.clone();
 
@@ -793,8 +795,7 @@ impl Manager {
         let composite_path_clone = composite_path.clone();
         let tx = self.tx.clone();
         let task = tokio::spawn(async move {
-            let targets = HashMap::new();
-            if let Err(e) = device.run(targets).await {
+            if let Err(e) = device.run().await {
                 log::error!("Error running {composite_path}: {}", e.to_string());
             }
             log::debug!("Composite device stopped running: {composite_path}");
