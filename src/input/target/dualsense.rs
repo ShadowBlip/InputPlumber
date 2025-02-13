@@ -979,6 +979,16 @@ impl TargetInputDevice for DualSenseDevice {
         let _ = self.device.destroy();
         Ok(())
     }
+
+    /// Clear any local state on the target device.
+    fn clear_state(&mut self) {
+        self.state = match self.state {
+            PackedInputDataReport::Usb(_) => PackedInputDataReport::Usb(Default::default()),
+            PackedInputDataReport::Bluetooth(_) => {
+                PackedInputDataReport::Bluetooth(Default::default())
+            }
+        };
+    }
 }
 
 impl TargetOutputDevice for DualSenseDevice {

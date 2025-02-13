@@ -317,7 +317,9 @@ pub trait TargetInputDevice {
     /// Clear any local state on the target device. This is typically called
     /// whenever the composite device has entered intercept mode to indicate
     /// that the target device should stop sending input.
-    fn clear_state(&mut self) {}
+    fn clear_state(&mut self) {
+        log::debug!("Generic clear state called. Do nothing.");
+    }
 
     /// Called when the target device has been attached to a composite device.
     fn on_composite_device_attached(

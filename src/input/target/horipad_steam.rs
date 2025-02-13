@@ -318,6 +318,11 @@ impl TargetInputDevice for HoripadSteamDevice {
         let _ = self.device.destroy();
         Ok(())
     }
+
+    /// Clear any local state on the target device.
+    fn clear_state(&mut self) {
+        self.state = Default::default();
+    }
 }
 
 impl TargetOutputDevice for HoripadSteamDevice {

@@ -925,30 +925,25 @@ impl Manager {
             };
             log::debug!("Checking if existing composite device {composite_device:?} with config {:?} is missing device: {id:?}", config.name);
 
-            // If the CompositeDevice only allows a single source device, skip its
-            // consideration.
-            if config.single_source.unwrap_or(false) {
-                log::trace!("{:?} is a single source device. Skipping.", config.name);
-                continue;
-            }
-            if config.maximum_sources.unwrap_or(0) == 1 {
-                log::trace!("{:?} is a single source device. Skipping.", config.name);
-                continue;
-            }
             log::trace!(
                 "Composite device has {} source devices defined",
                 config.source_devices.len()
             );
+
+            let max_sources = config.maximum_sources.unwrap_or_else(|| {
+                if config.single_source.unwrap_or(false) {
+                    1
+                } else {
+                    0
+                }
+            });
 
             // If the CompositeDevice only allows a maximum number of source devices,
             // check to see if that limit has been reached. If that limit is reached,
             // then a new CompositeDevice will be created for the source device.
             // If maximum_sources is less than 1 (e.g. 0, -1) then consider
             // the maximum to be 'unlimited'.
-            if let Some(max_sources) = config
-                .maximum_sources
-                .filter(|max_sources| *max_sources > 0)
-            {
+            if max_sources > 0 {
                 // Check to see how many source devices this composite device is
                 // currently managing.
                 if self
