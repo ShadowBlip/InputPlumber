@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use ::procfs::CpuInfo;
@@ -210,6 +211,10 @@ impl Manager {
     /// Starts listening for [Command] messages to be sent from clients and
     /// dispatch those events.
     pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Delay initial discovery by a short amount of time to allow udev
+        // rules to process for the first time.
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
         let dbus_for_listen_on_dbus = self.dbus.clone();
 
         let cmd_tx_all_devices = self.tx.clone();
@@ -546,8 +551,7 @@ impl Manager {
             device,
             self.next_composite_dbus_path()?,
             capability_map,
-        )
-        .await?;
+        )?;
 
         // Check to see if there's already a CompositeDevice for
         // these source devices.
@@ -1552,6 +1556,13 @@ impl Manager {
                         log::trace!("No supported subsystem detected for {base_path}/{name}");
                         continue;
                     };
+
+                    // Ensure the path is a valid devnode
+                    let full_path = PathBuf::from(format!("{base_path}/{name}"));
+                    if full_path.is_dir() {
+                        log::trace!("Devnode path {base_path}/{name} is a directory. Skipping.");
+                        continue;
+                    }
 
                     // Wait until the device has initialized with udev
                     const MAX_TRIES: u8 = 80;
