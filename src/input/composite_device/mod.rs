@@ -113,6 +113,9 @@ pub struct CompositeDevice {
     source_devices: HashMap<String, SourceDeviceClient>,
     /// Source devices that this composite device will consume.
     source_devices_discovered: Vec<SourceDevice>,
+    /// Source devices that should be hidden before they are started. This
+    /// is a list of devnode paths to hide (e.g. ["/dev/input/event10", "/dev/hidraw1"])
+    source_devices_to_hide: Vec<String>,
     /// HashSet of source devices that are blocked from passing their input events to target
     /// events.
     source_devices_blocked: HashSet<String>,
@@ -165,7 +168,7 @@ pub struct CompositeDevice {
 }
 
 impl CompositeDevice {
-    pub async fn new(
+    pub fn new(
         conn: Connection,
         manager: mpsc::Sender<ManagerCommand>,
         config: CompositeDeviceConfig,
@@ -195,6 +198,7 @@ impl CompositeDevice {
             rx,
             source_devices: HashMap::new(),
             source_devices_discovered: Vec::new(),
+            source_devices_to_hide: Vec::new(),
             source_devices_blocked: HashSet::new(),
             source_device_paths: Vec::new(),
             source_device_tasks: JoinSet::new(),
@@ -239,7 +243,7 @@ impl CompositeDevice {
             }
         }
 
-        if let Err(e) = device.add_source_device(device_info).await {
+        if let Err(e) = device.add_source_device(device_info) {
             return Err(e.to_string().into());
         }
 
@@ -602,7 +606,13 @@ impl CompositeDevice {
     /// Start and run the source devices that this composite device will
     /// consume.
     async fn run_source_devices(&mut self) -> Result<(), Box<dyn Error>> {
-        // Keep a list of all the tasks
+        // Hide the device if specified
+        for source_path in self.source_devices_to_hide.drain(..) {
+            log::debug!("Hiding device: {}", source_path);
+            if let Err(e) = hide_device(source_path.as_str()).await {
+                log::warn!("Failed to hide device '{source_path}': {e:?}");
+            }
+        }
 
         log::debug!("Starting new source devices");
         // Start listening for events from all source devices
@@ -1387,7 +1397,7 @@ impl CompositeDevice {
 
     /// Executed whenever a source device is added to this [CompositeDevice].
     async fn on_source_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        if let Err(e) = self.add_source_device(device).await {
+        if let Err(e) = self.add_source_device(device) {
             return Err(e.to_string().into());
         }
         self.run_source_devices().await?;
@@ -1432,7 +1442,7 @@ impl CompositeDevice {
     }
 
     /// Creates and adds a source device using the given [SourceDeviceInfo]
-    async fn add_source_device(
+    fn add_source_device(
         &mut self,
         device: UdevDevice,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -1456,10 +1466,7 @@ impl CompositeDevice {
         let should_hide = !should_passthru && subsystem.as_str() != "iio";
         if should_hide {
             let source_path = device.devnode();
-            log::debug!("Hiding device: {}", source_path);
-            if let Err(e) = hide_device(source_path.as_str()).await {
-                log::warn!("Failed to hide device '{source_path}': {e:?}");
-            }
+            self.source_devices_to_hide.push(source_path);
         }
 
         let source_device = match subsystem.as_str() {
