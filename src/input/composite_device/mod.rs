@@ -281,6 +281,16 @@ impl CompositeDevice {
         // Start all source devices
         self.run_source_devices().await?;
 
+        // Set persist value from config if set, used to determine
+        // if CompositeDevice self-closes after all SourceDevices have
+        // been removed.
+        let persist = self
+            .config
+            .options
+            .as_ref()
+            .map(|options| options.persist.unwrap_or(false))
+            .unwrap_or(false);
+
         // Loop and listen for command events
         log::debug!("CompositeDevice started");
         let mut buffer = Vec::with_capacity(BUFFER_SIZE);
@@ -362,12 +372,6 @@ impl CompositeDevice {
                         log::debug!("Detected source device stopped: {}", device.devnode());
                         if let Err(e) = self.on_source_device_removed(device).await {
                             log::error!("Failed to remove source device: {:?}", e);
-                        }
-                        if self.source_devices_used.is_empty() {
-                            log::debug!(
-                                "No source devices remain. Stopping CompositeDevice {dbus_path}"
-                            );
-                            break 'main;
                         }
                     }
                     CompositeCommand::SourceDeviceRemoved(device) => {
@@ -492,10 +496,20 @@ impl CompositeDevice {
             }
 
             // If no source devices remain after processing the queue, stop
-            // the device.
+            // the device unless configured to persist.
             if devices_removed && self.source_devices_used.is_empty() {
-                log::debug!("No source devices remain. Stopping CompositeDevice {dbus_path}");
-                break 'main;
+                if persist {
+                    log::debug!("No source devices remain, but CompositeDevice {dbus_path} has persist enabled. Clearing target devices states.");
+                    for (path, target) in &self.target_devices {
+                        log::debug!("Clearing target device: {path}");
+                        if let Err(e) = target.clear_state().await {
+                            log::error!("Failed to clear target device state {path}: {e:?}");
+                        }
+                    }
+                } else {
+                    log::debug!("No source devices remain. Stopping CompositeDevice {dbus_path}");
+                    break 'main;
+                }
             }
         }
         log::info!("CompositeDevice stopping: {dbus_path}");

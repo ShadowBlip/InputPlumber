@@ -831,6 +831,11 @@ impl TargetInputDevice for SteamDeckDevice {
         log::debug!("Finished stopping");
         Ok(())
     }
+
+    /// Clear any local state on the target device.
+    fn clear_state(&mut self) {
+        self.state = Default::default();
+    }
 }
 
 impl TargetOutputDevice for SteamDeckDevice {
