@@ -211,12 +211,6 @@ impl Manager {
     /// Starts listening for [Command] messages to be sent from clients and
     /// dispatch those events.
     pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        // Delay initial discovery by a short amount of time to allow udev
-        // rules to process for the first time.
-        // TODO: Figure out a better way to prevent udev from not running hiding
-        // rules too early in boot.
-        tokio::time::sleep(Duration::from_millis(4000)).await;
-
         let dbus_for_listen_on_dbus = self.dbus.clone();
 
         let cmd_tx_all_devices = self.tx.clone();
