@@ -43,7 +43,8 @@ pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
-ACTION=="add|change", KERNEL=="hidraw[0-9]*|js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 {path}", SYMLINK+="inputplumber/by-hidden/%k"
+KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 /dev/input/%k", SYMLINK+="inputplumber/by-hidden/%k"
+KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN:="{chmod_cmd} 000 /dev/%k", SYMLINK+="inputplumber/by-hidden/%k"
 LABEL="inputplumber_end"
 "#
     );
@@ -102,12 +103,14 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
 
 /// Trigger udev to evaluate rules on the children of the given parent device path
 async fn reload_children(parent: String) -> Result<(), Box<dyn Error>> {
+    log::debug!("Reloading udev rules: udevadm control --reload-rules");
     let _ = Command::new("udevadm")
         .args(["control", "--reload-rules"])
         .output()
         .await?;
 
     for action in ["remove", "add"] {
+        log::debug!("Retriggering udev rules: udevadm trigger --action {action} -b {parent}");
         let _ = Command::new("udevadm")
             .args(["trigger", "--action", action, "-b", parent.as_str()])
             .output()
@@ -119,11 +122,13 @@ async fn reload_children(parent: String) -> Result<(), Box<dyn Error>> {
 
 /// Trigger udev to evaluate rules on the children of the given parent device path
 async fn reload_all() -> Result<(), Box<dyn Error>> {
+    log::debug!("Reloading udev rules: udevadm control --reload-rules");
     let _ = Command::new("udevadm")
         .args(["control", "--reload-rules"])
         .output()
         .await?;
 
+    log::debug!("Retriggering udev rules: udevadm trigger");
     let _ = Command::new("udevadm").arg("trigger").output().await?;
 
     Ok(())

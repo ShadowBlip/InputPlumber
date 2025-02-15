@@ -113,6 +113,9 @@ pub struct CompositeDevice {
     source_devices: HashMap<String, SourceDeviceClient>,
     /// Source devices that this composite device will consume.
     source_devices_discovered: Vec<SourceDevice>,
+    /// Source devices that should be hidden before they are started. This
+    /// is a list of devnode paths to hide (e.g. ["/dev/input/event10", "/dev/hidraw1"])
+    source_devices_to_hide: Vec<String>,
     /// HashSet of source devices that are blocked from passing their input events to target
     /// events.
     source_devices_blocked: HashSet<String>,
@@ -165,7 +168,7 @@ pub struct CompositeDevice {
 }
 
 impl CompositeDevice {
-    pub async fn new(
+    pub fn new(
         conn: Connection,
         manager: mpsc::Sender<ManagerCommand>,
         config: CompositeDeviceConfig,
@@ -195,6 +198,7 @@ impl CompositeDevice {
             rx,
             source_devices: HashMap::new(),
             source_devices_discovered: Vec::new(),
+            source_devices_to_hide: Vec::new(),
             source_devices_blocked: HashSet::new(),
             source_device_paths: Vec::new(),
             source_device_tasks: JoinSet::new(),
@@ -239,7 +243,7 @@ impl CompositeDevice {
             }
         }
 
-        if let Err(e) = device.add_source_device(device_info).await {
+        if let Err(e) = device.add_source_device(device_info) {
             return Err(e.to_string().into());
         }
 
@@ -269,48 +273,13 @@ impl CompositeDevice {
 
     /// Starts the [CompositeDevice] and listens for events from all source
     /// devices to translate the events and send them to the appropriate target.
-    pub async fn run(
-        &mut self,
-        targets: HashMap<String, TargetDeviceClient>,
-    ) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting composite device");
 
         let dbus_path = self.dbus_path.clone();
 
         // Start all source devices
         self.run_source_devices().await?;
-
-        // Keep track of all target devices
-        for (path, target) in targets.iter() {
-            if let Err(e) = target.set_composite_device(self.client()).await {
-                return Err(
-                    format!("Failed to set composite device for target device: {:?}", e).into(),
-                );
-            }
-
-            // Query the target device for its capabilities
-            let caps = match target.get_capabilities().await {
-                Ok(caps) => caps,
-                Err(e) => {
-                    return Err(format!("Failed to get target capabilities: {e:?}").into());
-                }
-            };
-
-            // Track the target device by capabilities it has
-            for cap in caps {
-                self.target_devices_by_capability
-                    .entry(cap)
-                    .and_modify(|devices| {
-                        devices.insert(path.clone());
-                    })
-                    .or_insert_with(|| {
-                        let mut devices = HashSet::new();
-                        devices.insert(path.clone());
-                        devices
-                    });
-            }
-        }
-        self.target_devices = targets;
 
         // Set persist value from config if set, used to determine
         // if CompositeDevice self-closes after all SourceDevices have
@@ -616,7 +585,14 @@ impl CompositeDevice {
     /// Start and run the source devices that this composite device will
     /// consume.
     async fn run_source_devices(&mut self) -> Result<(), Box<dyn Error>> {
-        // Keep a list of all the tasks
+        // Hide the device if specified
+        for source_path in self.source_devices_to_hide.drain(..) {
+            log::debug!("Hiding device: {}", source_path);
+            if let Err(e) = hide_device(source_path.as_str()).await {
+                log::warn!("Failed to hide device '{source_path}': {e:?}");
+            }
+            log::debug!("Finished hiding device: {source_path}");
+        }
 
         log::debug!("Starting new source devices");
         // Start listening for events from all source devices
@@ -665,7 +641,7 @@ impl CompositeDevice {
             log::trace!("Blocking event! {:?}", raw_event);
             return Ok(());
         }
-        //log::trace!("Received event: {:?} from {device_id}", raw_event);
+        log::trace!("Received event: {:?} from {device_id}", raw_event);
 
         // Convert the event into a NativeEvent
         let event: NativeEvent = match raw_event {
@@ -1401,7 +1377,7 @@ impl CompositeDevice {
 
     /// Executed whenever a source device is added to this [CompositeDevice].
     async fn on_source_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        if let Err(e) = self.add_source_device(device).await {
+        if let Err(e) = self.add_source_device(device) {
             return Err(e.to_string().into());
         }
         self.run_source_devices().await?;
@@ -1446,7 +1422,7 @@ impl CompositeDevice {
     }
 
     /// Creates and adds a source device using the given [SourceDeviceInfo]
-    async fn add_source_device(
+    fn add_source_device(
         &mut self,
         device: UdevDevice,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -1470,10 +1446,7 @@ impl CompositeDevice {
         let should_hide = !should_passthru && subsystem.as_str() != "iio";
         if should_hide {
             let source_path = device.devnode();
-            log::debug!("Hiding device: {}", source_path);
-            if let Err(e) = hide_device(source_path.as_str()).await {
-                log::warn!("Failed to hide device '{source_path}': {e:?}");
-            }
+            self.source_devices_to_hide.push(source_path);
         }
 
         let source_device = match subsystem.as_str() {
@@ -1867,6 +1840,7 @@ impl CompositeDevice {
 
         // Create new target devices using the input manager
         for kind in device_types_to_start {
+            // Ask the input manager to create a target device
             log::debug!("Requesting to create device: {kind}");
             let (sender, mut receiver) = mpsc::channel(1);
             self.manager
@@ -1885,29 +1859,44 @@ impl CompositeDevice {
                 }
             };
 
-            // Attach the target device
+            // Ask the input manager to attach the target device to this composite
+            // device. Note that this *must* be run in an async task to prevent
+            // deadlocking.
             log::debug!("Requesting to attach target device {target_path} to {composite_path}");
-            let (sender, mut receiver) = mpsc::channel(1);
-            self.manager
-                .send(ManagerCommand::AttachTargetDevice {
-                    target_path: target_path.clone(),
-                    composite_path: composite_path.clone(),
-                    sender,
-                })
-                .await?;
-            let Some(response) = receiver.recv().await else {
-                log::warn!("Channel closed waiting for response from input manager");
-                continue;
-            };
-            if let Err(e) = response {
-                log::error!("Failed to attach target device: {e:?}");
-            }
+            let manager = self.manager.clone();
+            let target_path_clone = target_path.clone();
+            let composite_path_clone = composite_path.clone();
+            tokio::task::spawn(async move {
+                let (sender, mut receiver) = mpsc::channel(1);
+                let result = manager
+                    .send(ManagerCommand::AttachTargetDevice {
+                        target_path: target_path_clone,
+                        composite_path: composite_path_clone,
+                        sender,
+                    })
+                    .await;
+                if let Err(e) = result {
+                    log::warn!(
+                        "Failed to send attach request to input manager: {}",
+                        e.to_string()
+                    );
+                    return;
+                }
+                let Some(response) = receiver.recv().await else {
+                    log::warn!("Channel closed waiting for response from input manager");
+                    return;
+                };
+                if let Err(e) = response {
+                    log::error!("Failed to attach target device: {e:?}");
+                }
+            });
 
             // Enqueue the target device to wait for the attachment message from
             // the input manager to prevent multiple calls to set_target_devices()
             // from mangling attachment.
             self.target_devices_queued.insert(target_path);
         }
+
         // Signal change in target devices to DBus
         // TODO: Check this
         //self.signal_targets_changed().await;
@@ -1990,10 +1979,6 @@ impl CompositeDevice {
             }
             log::debug!("Attached device {path} to {dbus_path}");
 
-            // Add the target device
-            self.target_devices_queued.remove(&path);
-            self.target_devices.insert(path.clone(), target);
-
             // Track the target device by capabilities it has
             for cap in caps {
                 self.target_devices_by_capability
@@ -2007,7 +1992,12 @@ impl CompositeDevice {
                         devices
                     });
             }
+
+            // Add the target device
+            self.target_devices_queued.remove(&path);
+            self.target_devices.insert(path.clone(), target);
         }
+
         // TODO: check this
         //self.signal_targets_changed().await;
 

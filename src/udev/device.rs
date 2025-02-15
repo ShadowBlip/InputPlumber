@@ -359,6 +359,7 @@ pub struct UdevDevice {
     vendor_id: Option<u16>,
     product_id: Option<u16>,
     bus_type: Option<u16>,
+    properties: HashMap<String, String>,
 }
 
 impl UdevDevice {
@@ -387,15 +388,20 @@ impl UdevDevice {
 
         // Try to look up the syspath of the device
         let result = ::udev::Device::from_subsystem_sysname(subsystem.clone(), name.to_string());
-        let syspath = match result {
+        let syspath = match result.as_ref() {
             Ok(device) => device.syspath().to_string_lossy().to_string(),
             Err(_) => "".to_string(),
+        };
+        let properties = match result {
+            Ok(device) => device.get_properties(),
+            Err(_) => HashMap::new(),
         };
 
         Self {
             devnode,
             subsystem,
             syspath,
+            properties,
             sysname: name.to_string(),
             name: None,
             vendor_id: None,
@@ -614,6 +620,10 @@ impl UdevDevice {
 
     /// Returns the value of the given property from the device
     pub fn get_property(&self, property: &str) -> Option<String> {
+        // Use cached properties if they exist
+        if let Some(value) = self.properties.get(property) {
+            return Some(value.to_owned());
+        }
         let Ok(device) = self.get_device() else {
             return None;
         };
@@ -623,6 +633,10 @@ impl UdevDevice {
     /// Returns the value of the given property from the first device in the
     /// device tree.
     pub fn get_property_from_tree(&self, property: &str) -> Option<String> {
+        // Use cached properties if they exist
+        if let Some(value) = self.properties.get(property) {
+            return Some(value.to_owned());
+        }
         let Ok(device) = self.get_device() else {
             return None;
         };
@@ -631,6 +645,10 @@ impl UdevDevice {
 
     /// Returns device properties for the device. E.g. {"ID_INPUT": "1", ...}
     pub fn get_properties(&self) -> HashMap<String, String> {
+        // Use cached properties if they exist
+        if !self.properties.is_empty() {
+            return self.properties.clone();
+        }
         let Ok(device) = self.get_device() else {
             return HashMap::new();
         };
@@ -652,12 +670,14 @@ impl From<::udev::Device> for UdevDevice {
             .to_string();
         let sysname = device.sysname().to_string_lossy().to_string();
         let syspath = device.syspath().to_string_lossy().to_string();
+        let properties = device.get_properties();
 
         Self {
             devnode,
             subsystem,
             sysname,
             syspath,
+            properties,
             name: Some(device.name()),
             vendor_id: Some(device.id_vendor()),
             product_id: Some(device.id_product()),
@@ -726,7 +746,9 @@ impl Device {
         let match_rule = match subsystem.as_str() {
             "hidraw" => {
                 let name = self.name.clone();
-                Some(format!(r#"SUBSYSTEMS=="{subsystem}", KERNEL=="{name}""#))
+                Some(format!(
+                    r#"ACTION=="add|change", SUBSYSTEMS=="{subsystem}", KERNEL=="{name}""#
+                ))
             }
             "input" => {
                 let rule_fn = || {
@@ -735,7 +757,7 @@ impl Device {
                     let pid = self.get_product_id()?;
 
                     Some(format!(
-                        r#"SUBSYSTEMS=="{subsystem}", KERNELS=="{device_name}", ATTRS{{id/vendor}}=="{vid}", ATTRS{{id/product}}=="{pid}""#
+                        r#"ACTION=="add|change", SUBSYSTEMS=="{subsystem}", KERNELS=="{device_name}", ATTRS{{id/vendor}}=="{vid}", ATTRS{{id/product}}=="{pid}""#
                     ))
                 };
                 rule_fn()
