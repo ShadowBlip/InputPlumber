@@ -13,7 +13,8 @@ use udev::Enumerator;
 
 use self::device::Device;
 
-const RULE_HIDE_DEVICE_PRIORITY: &str = "50";
+const RULE_HIDE_DEVICE_EARLY_PRIORITY: &str = "50";
+const RULE_HIDE_DEVICE_LATE_PRIORITY: &str = "96";
 const RULES_PREFIX: &str = "/run/udev/rules.d";
 
 /// Hide the given input device from regular users.
@@ -36,7 +37,7 @@ pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
         "/usr/bin/chmod"
     };
 
-    // Create a udev rule to hide the device
+    // Create an early udev rule to hide the device
     let rule = format!(
         r#"# Hides devices stemming from {name}
 # Managed by InputPlumber, this file will be autoremoved during configuration changes.
@@ -48,11 +49,28 @@ KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", R
 LABEL="inputplumber_end"
 "#
     );
-
-    // Write the udev rule
     fs::create_dir_all(RULES_PREFIX)?;
-    let rule_path =
-        format!("{RULES_PREFIX}/{RULE_HIDE_DEVICE_PRIORITY}-inputplumber-hide-{name}.rules");
+    let rule_path = format!(
+        "{RULES_PREFIX}/{RULE_HIDE_DEVICE_EARLY_PRIORITY}-inputplumber-hide-{name}-early.rules"
+    );
+    fs::write(rule_path, rule)?;
+
+    // Create a late udev rule to hide the device. This is needed for devices that
+    // are available at boot time because the early rule will not be applied.
+    let rule = format!(
+        r#"# Hides devices stemming from {name}
+# Managed by InputPlumber, this file will be autoremoved during configuration changes.
+{match_rule}, GOTO="inputplumber_valid"
+GOTO="inputplumber_end"
+LABEL="inputplumber_valid"
+KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/input/%k"
+KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/%k"
+LABEL="inputplumber_end"
+"#
+    );
+    let rule_path = format!(
+        "{RULES_PREFIX}/{RULE_HIDE_DEVICE_LATE_PRIORITY}-inputplumber-hide-{name}-late.rules"
+    );
     fs::write(rule_path, rule)?;
 
     // Reload udev
@@ -69,8 +87,13 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
     let Some(parent) = device.get_parent() else {
         return Err("Unable to determine parent for device".into());
     };
-    let rule_path =
-        format!("{RULES_PREFIX}/{RULE_HIDE_DEVICE_PRIORITY}-inputplumber-hide-{name}.rules");
+    let rule_path = format!(
+        "{RULES_PREFIX}/{RULE_HIDE_DEVICE_EARLY_PRIORITY}-inputplumber-hide-{name}-early.rules"
+    );
+    fs::remove_file(rule_path)?;
+    let rule_path = format!(
+        "{RULES_PREFIX}/{RULE_HIDE_DEVICE_LATE_PRIORITY}-inputplumber-hide-{name}-late.rules"
+    );
     fs::remove_file(rule_path)?;
 
     // Reload udev
@@ -87,8 +110,7 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
             continue;
         };
         let filename = entry.file_name().to_string_lossy().to_string();
-        if !filename.starts_with(format!("{RULE_HIDE_DEVICE_PRIORITY}-inputplumber-hide").as_str())
-        {
+        if !filename.contains("-inputplumber-hide-") {
             continue;
         }
         let path = entry.path().to_string_lossy().to_string();
