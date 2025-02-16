@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, time::Duration};
 
-use industrial_io::{Channel, ChannelType, Device};
+use industrial_io::{Channel, ChannelType, Device, Direction};
 
 use crate::drivers::iio_imu::info::MountMatrix;
 
@@ -42,7 +42,7 @@ impl Driver {
         let mount_matrix = if let Some(matrix) = matrix {
             // Use the provided mount matrix if it is defined
             matrix
-        } else if let Some(mount) = device.find_channel("mount", false) {
+        } else if let Some(mount) = device.find_channel("mount", Direction::Input) {
             // Read from the matrix
             let matrix_str = mount.attr_read_str("matrix")?;
             log::debug!("Found mount matrix: {matrix_str}");

@@ -24,38 +24,38 @@ libiio = "*"
 libevdev = "*"
 
 [dependencies]
-clap = { version = "4.5.27", features = ["derive"] }
-clap_complete = "4.5.42"
-env_logger = "0.11.3"
+clap = { version = "4.5.29", features = ["derive"] }
+clap_complete = "4.5.44"
+env_logger = "0.11.6"
 evdev = { git = "https://github.com/emberian/evdev.git", features = [
   "tokio",
 ], rev = "42b58ee08508b7799322a13bf89121a1d29cf0a2" }
 glob-match = "0.2.1"
-hidapi = "2.6.1"
-industrial-io = "0.5.2"
+hidapi = "2.6.3"
+industrial-io = "0.6.0"
 #evdev = { version = "0.12.1", features = ["tokio"] }
-inotify = "0.10.2"
+inotify = "0.11.0"
 # Omit trace logging for release builds
-log = { version = "0.4.22", features = [
+log = { version = "0.4.25", features = [
   "max_level_trace",
   "release_max_level_debug",
 ] }
-mio = { version = "0.8.11", features = ["os-poll", "os-ext", "net"] }
+mio = { version = "1.0.3", features = ["os-poll", "os-ext", "net"] }
 nix = { version = "0.29.0", features = ["fs"] }
 packed_struct = "0.10.1"
-procfs = "0.16.0"
-rand = "0.8.5"
-serde = { version = "1.0.204", features = ["derive"] }
+procfs = "0.17.0"
+rand = "0.9.0"
+serde = { version = "1.0.217", features = ["derive"] }
 serde_yaml = "0.9.34"
-tabled = { version = "0.17.0", features = ["ansi"] }
-thiserror = "1.0.61"
-tokio = { version = "*", features = ["full"] }
-udev = { version = "^0.8", features = ["mio"] }
-uhid-virt = "0.0.7"
+tabled = { version = "0.18.0", features = ["ansi"] }
+thiserror = "1.0.69"
+tokio = { version = "1.43.0", features = ["full"] }
+udev = { version = "0.9.3", features = ["mio"] }
+uhid-virt = "0.0.8"
 virtual-usb = { git = "https://github.com/ShadowBlip/virtual-usb-rs.git", rev = "4bca5c6fb9f2b63944a286854405e3e7e0b5d259" }
 xdg = "2.5.2"
-zbus = { version = "4.3.1", default-features = false, features = ["tokio"] }
-zbus_macros = "4.3.1"
+zbus = { version = "5.5.0", default-features = false, features = ["tokio"] }
+zbus_macros = "5.5.0"
 
 [profile.release]
 debug = false
