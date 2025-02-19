@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use debug::DebugDevice;
 use horipad_steam::HoripadSteamDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
@@ -42,6 +43,7 @@ use self::xbox_series::XboxSeriesController;
 pub mod client;
 pub mod command;
 pub mod dbus;
+pub mod debug;
 pub mod dualsense;
 pub mod horipad_steam;
 pub mod keyboard;
@@ -210,6 +212,10 @@ impl TargetDeviceTypeId {
                 id: "unified-gamepad",
                 name: "InputPlumber Unified Gamepad",
             },
+            TargetDeviceTypeId {
+                id: "debug",
+                name: "Debug Device",
+            },
         ]
     }
 
@@ -227,7 +233,7 @@ impl TargetDeviceTypeId {
     pub fn is_gamepad(&self) -> bool {
         !matches!(
             self.id,
-            "dbus" | "null" | "touchscreen" | "touchpad" | "mouse" | "keyboard"
+            "dbus" | "null" | "touchscreen" | "touchpad" | "mouse" | "keyboard" | "debug"
         )
     }
 }
@@ -582,6 +588,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
 pub enum TargetDevice {
     Null,
     DBus(TargetDriver<DBusDevice>),
+    Debug(TargetDriver<DebugDevice>),
     DualSense(TargetDriver<DualSenseDevice>),
     HoripadSteam(TargetDriver<HoripadSteamDevice>),
     Keyboard(TargetDriver<KeyboardDevice>),
@@ -603,6 +610,11 @@ impl TargetDevice {
                 let device = DBusDevice::new(dbus.clone());
                 let driver = TargetDriver::new(id, device, dbus);
                 Ok(Self::DBus(driver))
+            }
+            "debug" => {
+                let device = DebugDevice::new(dbus.clone());
+                let driver = TargetDriver::new(id, device, dbus);
+                Ok(Self::Debug(driver))
             }
             "deck" => {
                 let device = SteamDeckDevice::new()?;
@@ -713,6 +725,7 @@ impl TargetDevice {
         match self {
             TargetDevice::Null => vec!["null".try_into().unwrap()],
             TargetDevice::DBus(_) => vec!["dbus".try_into().unwrap()],
+            TargetDevice::Debug(_) => vec!["debug".try_into().unwrap()],
             TargetDevice::DualSense(_) => vec![
                 "ds5".try_into().unwrap(),
                 "ds5-usb".try_into().unwrap(),
@@ -743,6 +756,7 @@ impl TargetDevice {
         match self {
             TargetDevice::Null => "null",
             TargetDevice::DBus(_) => "dbus",
+            TargetDevice::Debug(_) => "debug",
             TargetDevice::DualSense(_) => "gamepad",
             TargetDevice::HoripadSteam(_) => "gamepad",
             TargetDevice::Keyboard(_) => "keyboard",
@@ -762,6 +776,7 @@ impl TargetDevice {
         match self {
             TargetDevice::Null => None,
             TargetDevice::DBus(device) => Some(device.client()),
+            TargetDevice::Debug(device) => Some(device.client()),
             TargetDevice::DualSense(device) => Some(device.client()),
             TargetDevice::HoripadSteam(device) => Some(device.client()),
             TargetDevice::Keyboard(device) => Some(device.client()),
@@ -781,6 +796,7 @@ impl TargetDevice {
         match self {
             TargetDevice::Null => Ok(()),
             TargetDevice::DBus(device) => device.run(dbus_path).await,
+            TargetDevice::Debug(device) => device.run(dbus_path).await,
             TargetDevice::DualSense(device) => device.run(dbus_path).await,
             TargetDevice::HoripadSteam(device) => device.run(dbus_path).await,
             TargetDevice::Keyboard(device) => device.run(dbus_path).await,

@@ -30,6 +30,7 @@ env_logger = "0.11.6"
 evdev = { git = "https://github.com/emberian/evdev.git", features = [
   "tokio",
 ], rev = "42b58ee08508b7799322a13bf89121a1d29cf0a2" }
+futures = "0.3.31"
 glob-match = "0.2.1"
 hidapi = "2.6.3"
 industrial-io = "0.6.0"
@@ -45,6 +46,7 @@ nix = { version = "0.29.0", features = ["fs"] }
 packed_struct = "0.10.1"
 procfs = "0.17.0"
 rand = "0.9.0"
+ratatui = "0.29.0"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_yaml = "0.9.34"
 tabled = { version = "0.18.0", features = ["ansi"] }
