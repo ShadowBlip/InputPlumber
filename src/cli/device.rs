@@ -11,6 +11,10 @@ use crate::cli::get_managed_objects;
 use crate::dbus::interface::composite_device::CompositeDeviceInterfaceProxy;
 use crate::dbus::interface::manager::ManagerInterfaceProxy;
 
+use super::ui::menu::device_test_menu::DeviceTestMenu;
+use super::ui::menu::Menu;
+use super::ui::TextUserInterface;
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum DeviceCommand {
     /// Display information about the composite device
@@ -23,6 +27,8 @@ pub enum DeviceCommand {
     Stop,
     /// Manage the intercept mode of the composite device.
     InterceptMode { mode: Option<InterceptMode> },
+    /// Test the inputs for the device
+    Test,
 }
 
 #[derive(ValueEnum, Debug, Clone)]
@@ -175,6 +181,21 @@ pub async fn handle_device(
             }
             let mode: InterceptMode = device.intercept_mode().await.unwrap_or_default().into();
             println!("Current intercept mode: {mode}");
+        }
+        DeviceCommand::Test => {
+            // Run the TUI for the testing interface
+            let mut tui = TextUserInterface::new();
+            let menu = DeviceTestMenu::new(&conn, path.as_str()).await?;
+            let task =
+                tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+                    if let Err(e) = tui.run(menu.into()) {
+                        return Err(e.to_string().into());
+                    }
+                    Ok(())
+                });
+            if let Err(e) = task.await? {
+                return Err(e.to_string().into());
+            }
         }
     }
 
