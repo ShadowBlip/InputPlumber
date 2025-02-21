@@ -1,4 +1,4 @@
-use std::{error::Error, ffi::OsStr, time::Duration};
+use std::{error::Error, time::Duration};
 
 use udev::Device;
 
@@ -49,8 +49,7 @@ impl Driver {
                     //TODO: Figure out why this fails and manually running the same thing
                     //doesn't.
                     //set_attribute(device, "apply", "1")?;
-                    let result =
-                        parent.set_attribute_value(OsStr::new("apply_all"), OsStr::new("1"));
+                    let result = parent.set_attribute_value("apply_all", "1");
                     match result {
                         Ok(_) => log::debug!("set apply_all to 1"),
                         Err(e) => return Err(format!("Could set apply_all to 1: {e:?}").into()),

@@ -70,14 +70,14 @@ impl DualSenseHardware {
     pub fn new(model: ModelType, bus_type: BusType) -> Self {
         // "e8:47:3a:d6:e7:74"
         //let mac_addr = [0x74, 0xe7, 0xd6, 0x3a, 0x47, 0xe8];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mac_addr: [u8; 6] = [
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
+            rng.random(),
+            rng.random(),
+            rng.random(),
+            rng.random(),
+            rng.random(),
+            rng.random(),
         ];
         log::debug!(
             "Creating new DualSense Edge device using MAC Address: {:?}",
@@ -94,14 +94,14 @@ impl DualSenseHardware {
 
 impl Default for DualSenseHardware {
     fn default() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mac_addr: [u8; 6] = [
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
+            rng.random(),
+            rng.random(),
+            rng.random(),
+            rng.random(),
+            rng.random(),
+            rng.random(),
         ];
         Self {
             model: ModelType::Normal,

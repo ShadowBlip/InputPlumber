@@ -337,7 +337,7 @@ impl CompositeDevice {
                     }
                     CompositeCommand::SetInterceptMode(mode) => self.set_intercept_mode(mode).await,
                     CompositeCommand::GetInterceptMode(sender) => {
-                        if let Err(e) = sender.send(self.intercept_mode.clone()).await {
+                        if let Err(e) = sender.send(self.intercept_mode).await {
                             log::error!("Failed to send intercept mode: {:?}", e);
                         }
                     }
@@ -408,7 +408,7 @@ impl CompositeDevice {
                         let profile = match DeviceProfile::from_yaml(profile) {
                             Ok(p) => p,
                             Err(e) => {
-                                if let Err(er) = sender.send(Err(e.to_string().into())).await {
+                                if let Err(er) = sender.send(Err(e.to_string())).await {
                                     log::error!("Failed to send failed to load profile: {er:?}");
                                 }
                                 continue;
@@ -427,7 +427,7 @@ impl CompositeDevice {
                         let profile = match DeviceProfile::from_yaml_file(path) {
                             Ok(p) => p,
                             Err(e) => {
-                                if let Err(er) = sender.send(Err(e.to_string().into())).await {
+                                if let Err(er) = sender.send(Err(e.to_string())).await {
                                     log::error!("Failed to send failed to load profile: {er:?}");
                                 }
                                 continue;
@@ -2028,7 +2028,7 @@ impl CompositeDevice {
             // Emit the target devices changed signal
             let iface = iface_ref.get().await;
             if let Err(e) = iface
-                .target_devices_changed(iface_ref.signal_context())
+                .target_devices_changed(iface_ref.signal_emitter())
                 .await
             {
                 log::error!("Failed to send target devices changed signal: {e:?}");
@@ -2061,7 +2061,7 @@ impl CompositeDevice {
             // Emit the target devices changed signal
             let iface = iface_ref.get().await;
             if let Err(e) = iface
-                .source_device_paths_changed(iface_ref.signal_context())
+                .source_device_paths_changed(iface_ref.signal_emitter())
                 .await
             {
                 log::error!("Failed to send source devices changed signal: {e:?}");

@@ -146,7 +146,7 @@ impl CompositeDeviceInterface {
     }
 
     /// Directly write to the composite device's target devices with the given button event list
-    async fn send_button_chord(&self, mut events: Vec<String>) -> fdo::Result<()> {
+    async fn send_button_chord(&self, events: Vec<String>) -> fdo::Result<()> {
         // Store built native events to send in a command to the CompositeDevice
         let mut chord: Vec<NativeEvent> = Vec::new();
 
@@ -169,7 +169,7 @@ impl CompositeDeviceInterface {
             };
         }
         // Reverse the order for up events
-        events = events.into_iter().rev().collect();
+        let events: Vec<String> = events.into_iter().rev().collect();
         for event_str in events {
             // Create a NativeEvent
             let cap = Capability::from_str(event_str.as_str()).map_err(|_| {

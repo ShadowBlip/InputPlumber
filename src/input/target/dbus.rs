@@ -226,7 +226,7 @@ impl DBusDevice {
                         false => 0.0,
                     };
                     TargetDBusInterface::input_event(
-                        iface_ref.signal_context(),
+                        iface_ref.signal_emitter(),
                         event.action.as_string(),
                         value,
                     )
@@ -234,7 +234,7 @@ impl DBusDevice {
                 }
                 InputValue::Float(value) => {
                     TargetDBusInterface::input_event(
-                        iface_ref.signal_context(),
+                        iface_ref.signal_emitter(),
                         event.action.as_string(),
                         value,
                     )
@@ -249,7 +249,7 @@ impl DBusDevice {
                 } => {
                     // Send the input event signal
                     TargetDBusInterface::touch_event(
-                        iface_ref.signal_context(),
+                        iface_ref.signal_emitter(),
                         event.action.as_string(),
                         index as u32,
                         is_touching,

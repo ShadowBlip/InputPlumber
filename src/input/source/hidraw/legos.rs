@@ -1,7 +1,6 @@
-use std::{collections::HashMap, error::Error, fmt::Debug, u8};
+use std::{collections::HashMap, error::Error, fmt::Debug};
 
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
-use mio::unix::pipe::new;
 use packed_struct::{types::SizedInteger, PrimitiveEnum};
 
 use crate::{
