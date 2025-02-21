@@ -1,4 +1,4 @@
-use zbus::{fdo, object_server::SignalContext};
+use zbus::{fdo, object_server::SignalEmitter};
 use zbus_macros::interface;
 
 /// The [TargetDBusInterface] provides a DBus interface that can be exposed for managing
@@ -29,7 +29,7 @@ impl TargetDBusInterface {
     /// Emitted when an input event occurs
     #[zbus(signal)]
     pub async fn input_event(
-        ctxt: &SignalContext<'_>,
+        ctxt: &SignalEmitter<'_>,
         event: String,
         value: f64,
     ) -> zbus::Result<()>;
@@ -37,7 +37,7 @@ impl TargetDBusInterface {
     /// Emitted when a touch event occurs.
     #[zbus(signal)]
     pub async fn touch_event(
-        ctxt: &SignalContext<'_>,
+        ctxt: &SignalEmitter<'_>,
         event: String,
         index: u32,
         is_touching: bool,

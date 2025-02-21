@@ -18,7 +18,7 @@ pub const VID: u16 = 0x2808;
 pub const PID: u16 = 0x1015;
 /// Size of the HID packet
 const PACKET_SIZE: usize = 60;
-/// Timeout in milliseconds for reading an HID packet
+// Timeout in milliseconds for reading an HID packet
 //const HID_TIMEOUT: i32 = 5000;
 
 /// State of a touch event and when it was last touched for detecting "up" events
