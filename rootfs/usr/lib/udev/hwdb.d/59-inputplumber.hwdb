@@ -10,3 +10,6 @@ evdev:name:AT Translated Set 2 keyboard:dmi:*:svnOrangePi:pnNEO-01:*
   KEYBOARD_KEY_66=f15
   KEYBOARD_KEY_67=f16
 
+# Unified Gamepad
+hid:b0003g0001v00001D50p0000616A
+ ID_INPUT_UNIFIED=1

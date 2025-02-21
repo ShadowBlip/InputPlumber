@@ -441,6 +441,13 @@ impl CompositeDevice {
                             log::error!("Failed to send load profile result: {:?}", e);
                         }
                     }
+                    CompositeCommand::UpdateSourceCapabilities(_device_id, _capabilities) => (),
+                    CompositeCommand::UpdateTargetCapabilities(dbus_path, capabilities) => {
+                        log::debug!(
+                            "Updating target capabilities for '{dbus_path}': {capabilities:?}"
+                        );
+                        self.update_target_capabilities(dbus_path, capabilities);
+                    }
                     CompositeCommand::WriteEvent(event) => {
                         if let Err(e) = self.write_event(event).await {
                             log::error!("Failed to write event: {:?}", e);
@@ -1952,6 +1959,23 @@ impl CompositeDevice {
         }
 
         Ok(target_caps)
+    }
+
+    /// Update the target capabilities of the given target device
+    fn update_target_capabilities(&mut self, dbus_path: String, capabilities: HashSet<Capability>) {
+        // Track the target device by capabilities it has
+        for cap in capabilities.into_iter() {
+            self.target_devices_by_capability
+                .entry(cap)
+                .and_modify(|devices| {
+                    devices.insert(dbus_path.clone());
+                })
+                .or_insert_with(|| {
+                    let mut devices = HashSet::new();
+                    devices.insert(dbus_path.clone());
+                    devices
+                });
+        }
     }
 
     /// Attach the given target devices to the composite device
