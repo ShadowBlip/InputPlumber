@@ -47,10 +47,10 @@
         "name": {
           "type": "string"
         },
-        "source_event": {
+        "target_event": {
           "$ref": "#/definitions/Event"
         },
-        "target_events": {
+        "source_events": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/Event"
@@ -59,8 +59,8 @@
       },
       "required": [
         "name",
-        "source_event",
-        "target_events"
+        "source_events",
+        "target_event"
       ]
     },
     "Event": {
