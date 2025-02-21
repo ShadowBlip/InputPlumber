@@ -331,7 +331,7 @@ impl AttributeSetter for ::udev::Device {
         match self.attribute_value(attribute) {
             Some(_) => {
                 log::trace!("Set '{attribute}' on {:?}", self.syspath(),);
-                Ok(self.set_attribute_value(OsStr::new(attribute), OsStr::new(value))?)
+                Ok(self.set_attribute_value(attribute, value)?)
             }
             None => {
                 if let Some(mut parent) = self.parent() {

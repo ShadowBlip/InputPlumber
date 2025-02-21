@@ -328,10 +328,7 @@ impl GamepadEventDevice {
                 button: 0,
                 interval: 25,
             },
-            replay: FFReplay {
-                length: length,
-                delay: 0,
-            },
+            replay: FFReplay { length, delay: 0 },
             kind: FFEffectKind::Rumble {
                 strong_magnitude: left_speed,
                 weak_magnitude: right_speed,

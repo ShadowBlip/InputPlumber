@@ -9,8 +9,7 @@ use super::{
         TriggerEvent, TriggerInput,
     },
     hid_report::{
-        InertialInputDataReport, InputReportType, OutputReportType, RumbleOutputDataReport,
-        XInputDataReport,
+        InertialInputDataReport, InputReportType, RumbleOutputDataReport, XInputDataReport,
     },
 };
 
