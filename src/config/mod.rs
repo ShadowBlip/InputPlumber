@@ -340,6 +340,7 @@ pub struct SourceDevice {
 pub struct SourceDeviceConfig {
     pub touchscreen: Option<TouchscreenConfig>,
     pub imu: Option<ImuConfig>,
+    pub led: Option<LedConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -362,6 +363,12 @@ pub struct TouchscreenConfig {
 #[serde(rename_all = "snake_case")]
 pub struct ImuConfig {
     pub mount_matrix: Option<MountMatrix>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct LedConfig {
+    pub fixed_color: Option<LedFixedColor>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -423,7 +430,6 @@ pub struct IIO {
 pub struct Led {
     pub id: Option<String>,
     pub name: Option<String>,
-    pub led_fixed_color: Option<LedFixedColor>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -730,7 +736,7 @@ impl CompositeDeviceConfig {
         true
     }
 
-    /// Returns true if a given iio device is within a list of iio configs.
+    /// Returns true if a given led device is within a list of led configs.
     pub fn has_matching_led(&self, device: &UdevDevice, led_config: &Led) -> bool {
         log::trace!("Checking led config: {:?} against {:?}", led_config, device);
 
