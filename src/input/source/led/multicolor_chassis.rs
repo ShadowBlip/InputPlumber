@@ -1,6 +1,10 @@
 use crate::{
     config::LedFixedColor,
-    input::source::{SourceInputDevice, SourceOutputDevice},
+    input::{
+        capability::Capability,
+        output_event::OutputEvent,
+        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+    },
     udev::device::UdevDevice,
 };
 use std::{error::Error, fmt::Debug, path::PathBuf};
@@ -22,6 +26,7 @@ pub enum MultiColorChassisError {
 }
 
 enum IndexType {
+    #[allow(clippy::upper_case_acronyms)]
     RGB,
 }
 
@@ -29,7 +34,7 @@ enum IndexType {
 pub struct MultiColorChassis {
     multi_intensity_path: PathBuf,
     multi_index_map: Vec<IndexType>,
-    fixed_color: Option<LedFixedColor>,
+    current_color: Option<LedFixedColor>,
 }
 
 impl MultiColorChassis {
@@ -52,8 +57,7 @@ impl MultiColorChassis {
             .map_err(|err| Box::new(MultiColorChassisError::MultiIndexError(err)))?;
         let multi_index_strings = contents
             .split_whitespace()
-            .into_iter()
-            .map(|str| String::from(str))
+            .map(String::from)
             .collect::<Vec<String>>();
         let mut multi_index_map = Vec::<IndexType>::with_capacity(multi_index_strings.len());
         for idx in multi_index_strings.iter() {
@@ -68,13 +72,13 @@ impl MultiColorChassis {
         }
 
         let result = Self {
-            fixed_color,
+            current_color: fixed_color,
             multi_intensity_path,
             multi_index_map,
         };
 
         // Immediatly set the user-defined color if one is provided
-        if let Some(color) = result.fixed_color.as_ref() {
+        if let Some(color) = result.current_color.as_ref() {
             result.write_color(color.r, color.g, color.b)?
         };
 
@@ -87,13 +91,11 @@ impl MultiColorChassis {
         let contents = (self
             .multi_index_map
             .iter()
-            .zip(contents.split_whitespace().into_iter())
-            .map(|(index_type, index_value)| match index_type {
+            .zip(contents.split_whitespace())
+            .map(|(index_type, _index_value)| match index_type {
                 IndexType::RGB => {
-                    (((r as u32) << 16u32) | ((g as u32) << 8u32) | ((b as u32) << 0u32))
-                        .to_string()
+                    (((r as u32) << 16u32) | ((g as u32) << 8u32) | (b as u32)).to_string()
                 }
-                _ => String::from(index_value),
             })
             .collect::<Vec<String>>())
         .join(" ");
@@ -111,57 +113,29 @@ impl Debug for MultiColorChassis {
 }
 
 impl SourceInputDevice for MultiColorChassis {
-    fn poll(
-        &mut self,
-    ) -> Result<Vec<crate::input::event::native::NativeEvent>, crate::input::source::InputError>
-    {
+    fn poll(&mut self) -> Result<Vec<crate::input::event::native::NativeEvent>, InputError> {
         Ok(Vec::new())
     }
 
-    fn get_capabilities(
-        &self,
-    ) -> Result<Vec<crate::input::capability::Capability>, crate::input::source::InputError> {
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(Vec::new())
     }
 }
 
 impl SourceOutputDevice for MultiColorChassis {
-    fn write_event(
-        &mut self,
-        event: crate::input::output_event::OutputEvent,
-    ) -> Result<(), crate::input::source::OutputError> {
-        //log::trace!("Received output event: {event:?}");
-        let _ = event;
-        Ok(())
-    }
-
-    fn upload_effect(
-        &mut self,
-        effect: evdev::FFEffectData,
-    ) -> Result<i16, crate::input::source::OutputError> {
-        //log::trace!("Received upload effect: {effect:?}");
-        let _ = effect;
-        Ok(-1)
-    }
-
-    fn update_effect(
-        &mut self,
-        effect_id: i16,
-        effect: evdev::FFEffectData,
-    ) -> Result<(), crate::input::source::OutputError> {
-        //log::trace!("Received update effect: {effect_id:?} {effect:?}");
-        let _ = effect;
-        let _ = effect_id;
-        Ok(())
-    }
-
-    fn erase_effect(&mut self, effect_id: i16) -> Result<(), crate::input::source::OutputError> {
-        //log::trace!("Received erase effect: {effect_id:?}");
-        let _ = effect_id;
-        Ok(())
-    }
-
-    fn stop(&mut self) -> Result<(), crate::input::source::OutputError> {
+    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+        log::trace!("Received output event: {event:?}");
+        match event {
+            OutputEvent::DualSense(report) => {
+                if !report.allow_led_color {
+                    return Ok(());
+                }
+                self.write_color(report.led_red, report.led_green, report.led_blue)?;
+            }
+            _ => {
+                return Ok(());
+            }
+        }
         Ok(())
     }
 }

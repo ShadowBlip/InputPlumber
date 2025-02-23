@@ -1471,15 +1471,9 @@ impl CompositeDevice {
                 SourceDevice::Iio(device)
             }
             "leds" => {
-                // Get any defined config for the IIO device
-                let config = if let Some(device_config) = self.config.get_matching_device(&device) {
-                    device_config.led
-                } else {
-                    None
-                };
-
                 log::debug!("Adding source device: {:?}", device.name());
-                SourceDevice::Led(LedDevice::new(device, self.client(), config)?)
+                let device = LedDevice::new(device, self.client(), source_config.clone())?;
+                SourceDevice::Led(device)
             }
             _ => {
                 return Err(format!(

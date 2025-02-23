@@ -1375,7 +1375,7 @@ impl Manager {
             "leds" => {
                 log::debug!("LED device added: {} ({})", device.name(), device.sysname());
 
-                // Create a DBus interface for the event device
+                // Create a DBus interface for the LED device
                 let conn = self.dbus.clone();
                 log::debug!("Attempting to listen on dbus for {dev_path} | {sysname}");
                 task::spawn(async move {
@@ -1398,7 +1398,7 @@ impl Manager {
                 // Signal that a source device was added
                 log::debug!("Spawing task to add source device: {id}");
                 self.on_source_device_added(id.clone(), device).await?;
-                log::debug!("Finished adding event device {id}");
+                log::debug!("Finished adding LED device {id}");
             }
 
             _ => {
@@ -1669,7 +1669,7 @@ impl Manager {
         Manager::discover_devices(cmd_tx, iio_devices).await?;
         let led_devices = udev::discover_devices("leds")?;
         let led_devices = led_devices.into_iter().map(|dev| dev.into()).collect();
-        Manager::discover_devices(&cmd_tx, led_devices).await?;
+        Manager::discover_devices(cmd_tx, led_devices).await?;
 
         Ok(())
     }
