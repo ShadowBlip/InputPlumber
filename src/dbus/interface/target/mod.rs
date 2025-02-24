@@ -3,6 +3,8 @@ pub mod gamepad;
 pub mod keyboard;
 pub mod mouse;
 pub mod touchscreen;
+pub mod udev;
+//pub mod unified_gamepad;
 
 use zbus::fdo;
 use zbus_macros::interface;

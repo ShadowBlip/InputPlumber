@@ -17,12 +17,14 @@ use crate::input::event::native::{NativeEvent, ScheduledNativeEvent};
 use crate::input::event::value::InputValue;
 use crate::input::output_capability::OutputCapability;
 use crate::input::output_event::{OutputEvent, UinputOutputEvent};
+use crate::udev::device::UdevDevice;
 
 use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
 #[derive(Debug)]
 pub struct XboxSeriesController {
     device: VirtualDevice,
+    device_info: UdevDevice,
     axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
     queued_events: Vec<ScheduledNativeEvent>,
 }
@@ -30,9 +32,13 @@ pub struct XboxSeriesController {
 impl XboxSeriesController {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let axis_map = XboxSeriesController::get_abs_info();
-        let device = XboxSeriesController::create_virtual_device(&axis_map)?;
+        let mut device = XboxSeriesController::create_virtual_device(&axis_map)?;
+        let sys_path = device.get_syspath()?;
+        log::info!("Got sys path: {sys_path:?}");
+        let device_info = udev::Device::from_syspath(&sys_path)?;
         Ok(Self {
             device,
+            device_info: device_info.into(),
             axis_map,
             queued_events: Vec::new(),
         })

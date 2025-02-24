@@ -11,7 +11,12 @@ use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use unified_gamepad::UnifiedGamepadDevice;
 
-use crate::dbus::interface::target::{gamepad::TargetGamepadInterface, TargetInterface};
+use crate::{
+    dbus::interface::target::{
+        gamepad::TargetGamepadInterface, udev::TargetUdevDeviceInterface, TargetInterface,
+    },
+    udev::device::UdevDevice,
+};
 
 use super::{
     capability::Capability,
@@ -257,7 +262,14 @@ impl TryFrom<&str> for TargetDeviceTypeId {
 /// input events. Input events originate from source devices, are processed by
 /// a composite device, and are sent to a target device to be emitted.
 pub trait TargetInputDevice {
-    /// Start the DBus interface for this target device
+    /// Returns whether or not the device is ready to start its dbus interfaces
+    /// and start receiving input events.
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    /// Start the DBus interface for this target device. Defaults to starting
+    /// the `Gamepad` interface.
     fn start_dbus_interface(
         &mut self,
         dbus: Connection,
@@ -268,20 +280,14 @@ pub trait TargetInputDevice {
         log::debug!("Starting dbus interface: {path}");
         log::trace!("Using device client: {client:?}");
         tokio::task::spawn(async move {
-            let generic_interface = TargetInterface::new(&type_id);
             let iface = TargetGamepadInterface::new(type_id.name().to_owned());
 
             let object_server = dbus.object_server();
-            let (gen_result, result) = tokio::join!(
-                object_server.at(path.clone(), generic_interface),
-                object_server.at(path.clone(), iface)
-            );
-
-            if gen_result.is_err() || result.is_err() {
-                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
+            if let Err(e) = object_server.at(path.clone(), iface).await {
+                log::debug!("Failed to start dbus interface for {path}: {e}");
+                return;
             }
+            log::debug!("Started dbus interface: {path}");
         });
     }
 
@@ -296,6 +302,12 @@ pub trait TargetInputDevice {
         Ok(vec![])
     }
 
+    /// Returns the device information for the target device. This information
+    /// is required to start the dbus interfaces. If the device information
+    /// is not available yet, then this can return `None`, but it must return
+    /// valid device information at some point in the future.
+    fn get_device_info(&self) -> Result<Option<UdevDevice>, InputError>;
+
     /// Returns scheduled events that should be written later. This function will
     /// be called every poll iteration by the [TargetDriver] and schedule the
     /// events to be written at the specified time.
@@ -303,20 +315,20 @@ pub trait TargetInputDevice {
         None
     }
 
-    /// Stop the DBus interface for this target device
+    /// Stop the DBus interface for this target device. Defaults to stopping the
+    /// `Gamepad` interface.
     fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
         log::debug!("Stopping dbus interface for {path}");
         tokio::task::spawn(async move {
             let object_server = dbus.object_server();
-            let (target, generic) = tokio::join!(
-                object_server.remove::<TargetGamepadInterface, String>(path.clone()),
-                object_server.remove::<TargetInterface, String>(path.clone())
-            );
-            if generic.is_err() || target.is_err() {
-                log::debug!("Failed to stop dbus interface: {path} generic: {generic:?} type-specific: {target:?}");
-            } else {
-                log::debug!("Stopped dbus interface for {path}");
+            if let Err(e) = object_server
+                .remove::<TargetGamepadInterface, String>(path.clone())
+                .await
+            {
+                log::debug!("Failed to stop dbus interface {path}: {e}");
+                return;
             }
+            log::debug!("Stopped dbus interface for {path}");
         });
     }
 
@@ -438,17 +450,34 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                 let mut composite_device = self.composite_device;
                 let mut rx = self.rx;
                 let mut implementation = self.implementation.lock().unwrap();
-
-                // Start the DBus interface for the device
-                implementation.start_dbus_interface(
-                    self.dbus.clone(),
-                    dbus_path.clone(),
-                    client,
-                    self.type_id,
-                );
+                let mut has_started = false;
 
                 log::debug!("Target device running: {dbus_path}");
                 loop {
+                    // Start the dbus interfaces for the device if they haven't
+                    // started yet.
+                    if !has_started {
+                        let device_info = implementation.get_device_info()?;
+                        if let Some(info) = device_info {
+                            // Start the DBus interfaces for the device
+                            Self::start_dbus_interface(
+                                info,
+                                self.dbus.clone(),
+                                dbus_path.clone(),
+                                client.clone(),
+                                self.type_id,
+                            );
+                            implementation.start_dbus_interface(
+                                self.dbus.clone(),
+                                dbus_path.clone(),
+                                client.clone(),
+                                self.type_id,
+                            );
+
+                            has_started = true;
+                        }
+                    }
+
                     // Find any scheduled events that are ready to be sent
                     let mut ready_events = vec![];
                     let mut i = 0;
@@ -509,6 +538,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
 
                 // Stop the device
                 log::debug!("Target device stopping: {dbus_path}");
+                Self::stop_dbus_interface(self.dbus.clone(), dbus_path.clone());
                 implementation.stop_dbus_interface(self.dbus, dbus_path.clone());
                 implementation.stop()?;
                 log::debug!("Target device stopped: {dbus_path}");
@@ -522,6 +552,51 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
         }
 
         Ok(())
+    }
+
+    /// Start the DBus interfaces that all target devices implement.
+    fn start_dbus_interface(
+        device_info: UdevDevice,
+        dbus: Connection,
+        path: String,
+        client: TargetDeviceClient,
+        type_id: TargetDeviceTypeId,
+    ) {
+        log::debug!("Starting dbus interface: {path}");
+        log::trace!("Using device client: {client:?}");
+        tokio::task::spawn(async move {
+            let generic_interface = TargetInterface::new(&type_id);
+            let udev_interface = TargetUdevDeviceInterface::new(device_info);
+
+            let object_server = dbus.object_server();
+            let (gen_result, result) = tokio::join!(
+                object_server.at(path.clone(), generic_interface),
+                object_server.at(path.clone(), udev_interface)
+            );
+
+            if gen_result.is_err() || result.is_err() {
+                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
+            } else {
+                log::debug!("Started dbus interface: {path}");
+            }
+        });
+    }
+
+    /// Stop the DBus interfaces that all target devices implement for this target.
+    fn stop_dbus_interface(dbus: Connection, path: String) {
+        log::debug!("Stopping dbus interface for {path}");
+        tokio::task::spawn(async move {
+            let object_server = dbus.object_server();
+            let (target, generic) = tokio::join!(
+                object_server.remove::<TargetUdevDeviceInterface, String>(path.clone()),
+                object_server.remove::<TargetInterface, String>(path.clone())
+            );
+            if generic.is_err() || target.is_err() {
+                log::debug!("Failed to stop dbus interface: {path} generic: {generic:?} type-specific: {target:?}");
+            } else {
+                log::debug!("Stopped dbus interface for {path}");
+            }
+        });
     }
 
     /// Read commands sent to this device from the channel until it is
