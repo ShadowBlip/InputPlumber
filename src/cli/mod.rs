@@ -1,6 +1,7 @@
 pub mod device;
 pub mod source;
 pub mod target;
+pub mod ui;
 
 use std::error::Error;
 

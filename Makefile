@@ -93,7 +93,7 @@ target/release/$(NAME): $(ALL_RS) Cargo.lock
 all: build debug ## Build release and debug builds
 
 .PHONY: run
-run: setup debug ## Build and run
+run: debug ## Build and run
 	sudo LOG_LEVEL=$(LOG_LEVEL) ./target/debug/$(NAME)
 
 .PHONY: clean

@@ -1,4 +1,5 @@
 pub mod dbus;
+pub mod debug;
 pub mod gamepad;
 pub mod keyboard;
 pub mod mouse;
@@ -25,7 +26,10 @@ impl TargetInterface {
     }
 }
 
-#[interface(name = "org.shadowblip.Input.Target")]
+#[interface(
+    name = "org.shadowblip.Input.Target",
+    proxy(default_service = "org.shadowblip.InputPlumber",)
+)]
 impl TargetInterface {
     /// Name of the DBus device
     #[zbus(property)]
