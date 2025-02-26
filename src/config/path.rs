@@ -26,6 +26,10 @@ pub fn get_base_path() -> PathBuf {
 
 /// Returns the directory for input profiles (e.g. "/usr/share/inputplumber/profiles")
 pub fn get_profiles_path() -> PathBuf {
+    let rel_path = PathBuf::from("./rootfs/usr/share/inputplumber/profiles");
+    if rel_path.exists() && rel_path.is_dir() {
+        return rel_path;
+    }
     let base_path = get_base_path();
     base_path.join("profiles")
 }

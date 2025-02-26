@@ -12,7 +12,6 @@ use crate::dbus::interface::composite_device::CompositeDeviceInterfaceProxy;
 use crate::dbus::interface::manager::ManagerInterfaceProxy;
 
 use super::ui::menu::device_test_menu::DeviceTestMenu;
-use super::ui::menu::Menu;
 use super::ui::TextUserInterface;
 
 #[derive(Subcommand, Debug, Clone)]

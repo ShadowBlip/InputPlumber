@@ -1,4 +1,4 @@
-use std::{error::Error, i16, time::Duration};
+use std::{error::Error, time::Duration};
 
 use futures::StreamExt;
 use packed_struct::PackedStruct;
@@ -7,14 +7,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     prelude::*,
     symbols::border,
-    text::{Line, Text},
-    widgets::{
-        canvas::{Canvas, Circle},
-        Block, Gauge, Paragraph, Widget,
-    },
+    widgets::{Block, Widget},
 };
 use tokio::sync::mpsc;
-use zbus::Connection;
+use zbus::{fdo::ObjectManagerProxy, Connection};
 
 use crate::{
     cli::ui::{
@@ -24,12 +20,11 @@ use crate::{
         },
         InterfaceCommand,
     },
+    config::path::get_profiles_path,
+    constants::{BUS_NAME, BUS_PREFIX},
     dbus::interface::{
         composite_device::CompositeDeviceInterfaceProxy,
-        target::{
-            debug::{TargetDebugInterface, TargetDebugInterfaceProxy},
-            TargetInterfaceProxy,
-        },
+        target::{debug::TargetDebugInterfaceProxy, TargetInterfaceProxy},
     },
     drivers::unified_gamepad::{
         capability::InputCapability,
@@ -42,16 +37,19 @@ use crate::{
     input::target::TargetDeviceTypeId,
 };
 
-use super::{Menu, MenuWidget};
+use super::MenuWidget;
 
 /// Menu for testing an input device
 #[derive(Debug)]
 pub struct DeviceTestMenu {
     conn: Connection,
     capability_report: Option<InputCapabilityReport>,
+    rx_disconnect: mpsc::Receiver<()>,
     rx_reports: mpsc::Receiver<Vec<u8>>,
     rx_capabilities: mpsc::Receiver<Vec<u8>>,
     device_path: String,
+    profile: Option<String>,
+    profile_path: Option<String>,
     target_device_types: Vec<TargetDeviceTypeId>,
     intercept_mode: u32,
     ui_buttons: Vec<ButtonGauge>,
@@ -78,9 +76,27 @@ impl DeviceTestMenu {
                 .build()
                 .await?;
             let device_type = target_device.device_type().await?;
-            let device_type = TargetDeviceTypeId::try_from(device_type.as_str()).unwrap();
+            let device_type =
+                TargetDeviceTypeId::try_from(device_type.as_str()).map_err(|e| e.to_string())?;
             target_device_types.push(device_type);
         }
+
+        // Save the current profile path so it can be restored
+        let profile_path = {
+            let path = device.profile_path().await?;
+            if path.is_empty() {
+                None
+            } else {
+                Some(path)
+            }
+        };
+        let profile = 'profile: {
+            if profile_path.is_some() {
+                break 'profile None;
+            }
+            let data = device.get_profile_yaml().await?;
+            Some(data)
+        };
 
         // Save the current intercept mode so it can be restored
         let intercept_mode = device.intercept_mode().await?;
@@ -99,21 +115,39 @@ impl DeviceTestMenu {
             device.set_intercept_mode(0).await?;
         }
 
+        // Set the debug profile
+        {
+            let profile_dir = get_profiles_path();
+            let profile_path = profile_dir.join("debug.yaml");
+            let profile_path = profile_path.to_string_lossy().to_string();
+            device.load_profile_path(profile_path).await?;
+        }
+
         // Create channels to listen for input reports
         let (tx_reports, rx_reports) = mpsc::channel(2048);
         let (tx_capabilities, rx_capabilities) = mpsc::channel(16);
+        let (tx_disconnect, rx_disconnect) = mpsc::channel(1);
 
         // Spawn a task to listen for input reports
         let conn_clone = conn.clone();
         let path_clone = dbus_path.to_string();
         tokio::task::spawn(async move {
-            let _ = Self::listen_for_signals(&conn_clone, path_clone, tx_reports, tx_capabilities)
-                .await;
+            let _ = Self::listen_for_signals(
+                &conn_clone,
+                path_clone,
+                tx_disconnect,
+                tx_reports,
+                tx_capabilities,
+            )
+            .await;
         });
 
         Ok(Self {
             conn: conn.clone(),
             device_path: dbus_path.to_string(),
+            profile,
+            profile_path,
+            rx_disconnect,
             rx_reports,
             rx_capabilities,
             capability_report: None,
@@ -126,6 +160,47 @@ impl DeviceTestMenu {
             ui_touch: Default::default(),
         })
     }
+
+    // Stop the test, restoring the device state
+    fn stop(&self) {
+        // Restore the state of the device
+        let conn = self.conn.clone();
+        let dbus_path = self.device_path.clone();
+        let target_device_types = self.target_device_types.clone();
+        let intercept_mode = self.intercept_mode;
+        let profile = self.profile.clone();
+        let profile_path = self.profile_path.clone();
+        tokio::task::spawn(async move {
+            // Create a reference to the composite device
+            let device = CompositeDeviceInterfaceProxy::builder(&conn)
+                .path(dbus_path)
+                .unwrap()
+                .build()
+                .await
+                .unwrap();
+
+            // Restore the profile
+            if let Some(profile_path) = profile_path {
+                let _ = device.load_profile_path(profile_path).await;
+            } else if let Some(profile) = profile {
+                let _ = device.load_profile_from_yaml(profile).await;
+            }
+
+            // Restore the target devices of the device
+            let target_devices = target_device_types
+                .clone()
+                .into_iter()
+                .map(|kind| kind.as_str().to_string())
+                .collect();
+            let _ = device.set_target_devices(target_devices).await;
+
+            // Restore the intercept mode
+            let _ = device.set_intercept_mode(intercept_mode).await;
+        });
+
+        // Wait a beat for the target devices to be restored
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
 }
 
 impl DeviceTestMenu {
@@ -133,6 +208,7 @@ impl DeviceTestMenu {
     async fn listen_for_signals(
         conn: &Connection,
         dbus_path: String,
+        tx_disconnect: mpsc::Sender<()>,
         tx_reports: mpsc::Sender<Vec<u8>>,
         tx_capabilities: mpsc::Sender<Vec<u8>>,
     ) -> Result<(), Box<dyn Error>> {
@@ -158,13 +234,12 @@ impl DeviceTestMenu {
             }
         }
         let Some(target_path) = debug_target_path else {
-            panic!("Failed to find target debug device!");
+            return Err("Failed to find target debug device!".to_string().into());
         };
 
         // Get a reference to the debug target device
         let debug_device = TargetDebugInterfaceProxy::builder(conn)
-            .path(target_path)
-            .unwrap()
+            .path(target_path)?
             .build()
             .await?;
 
@@ -176,8 +251,8 @@ impl DeviceTestMenu {
         let mut receive_report = debug_device.receive_input_report().await?;
         tokio::task::spawn(async move {
             while let Some(signal) = receive_report.next().await {
-                let args = signal.args().unwrap();
-                tx_reports.send(args.data).await.unwrap();
+                let Ok(args) = signal.args() else { break };
+                let _ = tx_reports.send(args.data).await;
             }
         });
 
@@ -185,8 +260,26 @@ impl DeviceTestMenu {
         let mut receive_caps = debug_device.receive_input_capability_report_changed().await;
         tokio::task::spawn(async move {
             while let Some(change) = receive_caps.next().await {
-                let value = change.get().await.unwrap();
-                tx_capabilities.send(value).await.unwrap();
+                let Ok(value) = change.get().await else { break };
+                let _ = tx_capabilities.send(value).await;
+            }
+        });
+
+        // Get a reference to the object manager to listen for controller disconnects
+        let object_manager = ObjectManagerProxy::builder(conn)
+            .destination(BUS_NAME)?
+            .path(BUS_PREFIX)?
+            .build()
+            .await?;
+        let mut ifaces_removed = object_manager.receive_interfaces_removed().await?;
+        tokio::task::spawn(async move {
+            while let Some(change) = ifaces_removed.next().await {
+                let Ok(args) = change.args() else { break };
+                let path = args.object_path.to_string();
+                if path != dbus_path {
+                    continue;
+                }
+                let _ = tx_disconnect.send(()).await;
             }
         });
 
@@ -286,7 +379,17 @@ impl DeviceTestMenu {
 
 impl MenuWidget for DeviceTestMenu {
     fn update(&mut self) -> Vec<InterfaceCommand> {
-        if self.rx_capabilities.is_closed() || self.rx_reports.is_closed() {
+        if self.rx_capabilities.is_closed()
+            || self.rx_reports.is_closed()
+            || self.rx_disconnect.is_closed()
+        {
+            self.stop();
+            return vec![InterfaceCommand::Quit];
+        }
+
+        // Check to see if the device has disconnected
+        if !self.rx_disconnect.is_empty() {
+            self.stop();
             return vec![InterfaceCommand::Quit];
         }
 
@@ -294,6 +397,7 @@ impl MenuWidget for DeviceTestMenu {
         let mut capabilities_updated = false;
         while !self.rx_capabilities.is_empty() {
             let Some(data) = self.rx_capabilities.blocking_recv() else {
+                self.stop();
                 return vec![InterfaceCommand::Quit];
             };
             self.capability_report = InputCapabilityReport::unpack(data.as_slice()).ok();
@@ -309,7 +413,12 @@ impl MenuWidget for DeviceTestMenu {
             self.ui_gyro.clear();
             self.ui_touch.clear();
 
-            for cap in self.capability_report.as_ref().unwrap().get_capabilities() {
+            let Some(capability_report) = self.capability_report.as_ref() else {
+                self.stop();
+                return vec![InterfaceCommand::Quit];
+            };
+
+            for cap in capability_report.get_capabilities() {
                 match cap.value_type {
                     ValueType::None => (),
                     ValueType::Bool => {
@@ -359,6 +468,7 @@ impl MenuWidget for DeviceTestMenu {
         let mut state_bytes = None;
         while !self.rx_reports.is_empty() {
             let Some(data) = self.rx_reports.blocking_recv() else {
+                self.stop();
                 return vec![InterfaceCommand::Quit];
             };
             state_bytes = Some(data);
@@ -475,32 +585,7 @@ impl MenuWidget for DeviceTestMenu {
             return commands;
         }
 
-        // Restore the state of the device
-        let conn = self.conn.clone();
-        let dbus_path = self.device_path.clone();
-        let target_device_types = self.target_device_types.clone();
-        let intercept_mode = self.intercept_mode;
-        tokio::task::spawn(async move {
-            // Restore the target devices of the device
-            let device = CompositeDeviceInterfaceProxy::builder(&conn)
-                .path(dbus_path)
-                .unwrap()
-                .build()
-                .await
-                .unwrap();
-            let target_devices = target_device_types
-                .clone()
-                .into_iter()
-                .map(|kind| kind.as_str().to_string())
-                .collect();
-            device.set_target_devices(target_devices).await.unwrap();
-
-            // Restore the intercept mode
-            device.set_intercept_mode(intercept_mode).await.unwrap();
-        });
-
-        // Wait a beat for the target devices to be restored
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        self.stop();
 
         commands
     }
@@ -542,45 +627,6 @@ impl Widget for &DeviceTestMenu {
         // Bottom-right
         let bottom_right_layout = bottom_layout[1];
         self.render_touch(bottom_right_layout, buf);
-
-        //let block = Block::bordered().title("Buttons").border_set(border::THICK);
-        //block.render(outer_layout[0], buf);
-
-        // Buttons, Triggers, Axes, Gyro/Accel, Touch
-
-        //let title = Line::from(" Counter App Tutorial ".bold());
-        //let instructions = Line::from(vec![
-        //    " Decrement ".into(),
-        //    "<Left>".blue().bold(),
-        //    " Increment ".into(),
-        //    "<Right>".blue().bold(),
-        //    " Quit ".into(),
-        //    "<Q> ".blue().bold(),
-        //]);
-        //let block = Block::bordered()
-        //    .title(title.centered())
-        //    .title_bottom(instructions.centered())
-        //    .border_set(border::THICK);
-
-        //let counter_text = Text::from(vec![Line::from(vec![
-        //    "Value: ".into(),
-        //    "1".to_string().yellow(),
-        //])]);
-
-        //// Create a layout for multiple gauges
-        //use Constraint::{Length, Min, Percentage, Ratio};
-        //let [area1, area2] = Layout::horizontal([Ratio(1, 2); 2]).areas(area);
-        //let mut button_gauge = ButtonGauge::new("A Button");
-        //button_gauge.set_value(true);
-        //button_gauge.render(area1, buf);
-
-        //let gauge = AxisGauge::new("Left Stick");
-        //gauge.render(area2, buf);
-
-        //Paragraph::new(counter_text)
-        //    .centered()
-        //    .block(block)
-        //    .render(area, buf);
     }
 }
 
