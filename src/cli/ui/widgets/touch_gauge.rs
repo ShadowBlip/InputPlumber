@@ -6,18 +6,22 @@ use ratatui::{
     },
 };
 
+use crate::drivers::unified_gamepad::capability::InputCapability;
+
 #[derive(Debug, Default)]
 pub struct TouchGauge {
     text: String,
+    capability: InputCapability,
     x: f64,
     y: f64,
     touching: bool,
 }
 
 impl TouchGauge {
-    pub fn new(text: &str) -> Self {
+    pub fn new(capability: InputCapability, text: &str) -> Self {
         Self {
             text: text.to_string(),
+            capability,
             x: 0.0,
             y: 0.0,
             touching: false,
@@ -28,6 +32,10 @@ impl TouchGauge {
         self.x = x;
         self.y = y;
         self.touching = touching;
+    }
+
+    pub fn sort_value(&self) -> u32 {
+        self.capability as u32
     }
 }
 
