@@ -6,17 +6,21 @@ use ratatui::{
     },
 };
 
+use crate::drivers::unified_gamepad::capability::InputCapability;
+
 #[derive(Debug, Default)]
 pub struct AxisGauge {
+    capability: InputCapability,
     text: String,
     x: f64,
     y: f64,
 }
 
 impl AxisGauge {
-    pub fn new(text: &str) -> Self {
+    pub fn new(capability: InputCapability, text: &str) -> Self {
         Self {
             text: text.to_string(),
+            capability,
             x: 0.0,
             y: 0.0,
         }
@@ -25,6 +29,10 @@ impl AxisGauge {
     pub fn set_value(&mut self, x: f64, y: f64) {
         self.x = x;
         self.y = y;
+    }
+
+    pub fn sort_value(&self) -> u32 {
+        self.capability as u32
     }
 }
 

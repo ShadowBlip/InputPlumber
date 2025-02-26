@@ -5,16 +5,20 @@ use ratatui::{
     widgets::{Block, Gauge, Widget},
 };
 
+use crate::drivers::unified_gamepad::capability::InputCapability;
+
 #[derive(Debug, Default)]
 pub struct TriggerGauge {
     text: String,
+    capability: InputCapability,
     value: f64,
 }
 
 impl TriggerGauge {
-    pub fn new(text: &str) -> Self {
+    pub fn new(capability: InputCapability, text: &str) -> Self {
         Self {
             text: text.to_string(),
+            capability,
             value: 0.0,
         }
     }
@@ -24,6 +28,10 @@ impl TriggerGauge {
             return;
         }
         self.value = value;
+    }
+
+    pub fn sort_value(&self) -> u32 {
+        self.capability as u32
     }
 }
 

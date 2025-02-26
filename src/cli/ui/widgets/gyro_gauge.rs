@@ -5,6 +5,8 @@ use ratatui::{
     widgets::{Block, Gauge, LineGauge, Widget},
 };
 
+use crate::drivers::unified_gamepad::capability::InputCapability;
+
 enum Axis {
     X,
     Y,
@@ -14,15 +16,17 @@ enum Axis {
 #[derive(Debug, Default)]
 pub struct GyroGauge {
     text: String,
+    capability: InputCapability,
     x: f64,
     y: f64,
     z: f64,
 }
 
 impl GyroGauge {
-    pub fn new(text: &str) -> Self {
+    pub fn new(capability: InputCapability, text: &str) -> Self {
         Self {
             text: text.to_string(),
+            capability,
             x: 0.0,
             y: 0.0,
             z: 0.0,
@@ -33,6 +37,10 @@ impl GyroGauge {
         self.x = x;
         self.y = y;
         self.z = z;
+    }
+
+    pub fn sort_value(&self) -> u32 {
+        self.capability as u32
     }
 
     fn render_axis(&self, axis: Axis, area: Rect, buf: &mut Buffer) {
