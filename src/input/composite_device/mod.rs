@@ -83,9 +83,11 @@ pub struct CompositeDevice {
     capabilities: HashSet<Capability>,
     /// Capability mapping for the CompositeDevice
     capability_map: Option<CapabilityMap>,
-    /// Name of the currently loaded [DeviceProfile] for the CompositeDevice.
-    /// The [DeviceProfile] is used to translate input events.
-    device_profile: Option<String>,
+    /// Currently loaded [DeviceProfile] for the [CompositeDevice]. The [DeviceProfile]
+    /// is used to translate input events.
+    device_profile: Option<DeviceProfile>,
+    /// Path to the currently loaded [DeviceProfile] for the CompositeDevice.
+    device_profile_path: Option<String>,
     /// Map of profile source events to translate to one or more profile mapping
     /// configs that define how the source event should be translated.
     device_profile_config_map: HashMap<Capability, Vec<ProfileMapping>>,
@@ -189,6 +191,7 @@ impl CompositeDevice {
             capabilities: HashSet::new(),
             capability_map,
             device_profile: None,
+            device_profile_path: None,
             device_profile_config_map: HashMap::new(),
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
@@ -230,8 +233,8 @@ impl CompositeDevice {
         let profile_dir = get_profiles_path();
         let profile_path = profile_dir.join("default.yaml");
         let profile_path = profile_path.to_string_lossy().to_string();
-        let profile = DeviceProfile::from_yaml_file(profile_path)?;
-        device.load_device_profile(profile)?;
+        let profile = DeviceProfile::from_yaml_file(profile_path.clone())?;
+        device.load_device_profile(Some(profile), Some(profile_path))?;
 
         // If a capability map is defined, add those target capabilities to
         // the hashset of implemented capabilities.
@@ -262,9 +265,11 @@ impl CompositeDevice {
         let conn = self.conn.clone();
         let client = self.client();
         let path = String::from(self.dbus_path());
+        let profile = self.device_profile.clone();
+        let profile_path = self.device_profile_path.clone();
         Ok(tokio::spawn(async move {
             log::debug!("Starting dbus interface: {path}");
-            let iface = CompositeDeviceInterface::new(client);
+            let iface = CompositeDeviceInterface::new(client, profile, profile_path);
             if let Err(e) = conn.object_server().at(path.clone(), iface).await {
                 log::debug!("Failed to start dbus interface {path}: {e:?}");
             } else {
@@ -400,7 +405,11 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::GetProfileName(sender) => {
-                        let profile_name = self.device_profile.clone().unwrap_or_default();
+                        let profile_name = self
+                            .device_profile
+                            .as_ref()
+                            .map(|profile| profile.name.clone())
+                            .unwrap_or_default();
                         if let Err(e) = sender.send(profile_name).await {
                             log::error!("Failed to send profile name: {:?}", e);
                         }
@@ -416,17 +425,23 @@ impl CompositeDevice {
                                 continue;
                             }
                         };
-                        let result = match self.load_device_profile(profile) {
+                        let result = match self.load_device_profile(Some(profile.clone()), None) {
                             Ok(_) => Ok(()),
                             Err(e) => Err(e.to_string()),
                         };
+                        CompositeDeviceInterface::update_profile(
+                            &self.conn,
+                            &self.dbus_path,
+                            Some(profile),
+                            None,
+                        );
                         if let Err(e) = sender.send(result).await {
                             log::error!("Failed to send load profile result: {:?}", e);
                         }
                     }
                     CompositeCommand::LoadProfilePath(path, sender) => {
                         log::debug!("Loading profile from path: {path}");
-                        let profile = match DeviceProfile::from_yaml_file(path) {
+                        let profile = match DeviceProfile::from_yaml_file(path.clone()) {
                             Ok(p) => p,
                             Err(e) => {
                                 if let Err(er) = sender.send(Err(e.to_string())).await {
@@ -435,10 +450,18 @@ impl CompositeDevice {
                                 continue;
                             }
                         };
-                        let result = match self.load_device_profile(profile) {
+                        let result = match self
+                            .load_device_profile(Some(profile.clone()), Some(path.clone()))
+                        {
                             Ok(_) => Ok(()),
                             Err(e) => Err(e.to_string()),
                         };
+                        CompositeDeviceInterface::update_profile(
+                            &self.conn,
+                            &self.dbus_path,
+                            Some(profile),
+                            Some(path),
+                        );
                         if let Err(e) = sender.send(result).await {
                             log::error!("Failed to send load profile result: {:?}", e);
                         }
@@ -1530,15 +1553,28 @@ impl CompositeDevice {
         Ok(())
     }
 
-    /// Load the given device profile from the given path
-    pub fn load_device_profile(&mut self, profile: DeviceProfile) -> Result<(), Box<dyn Error>> {
-        log::debug!("Loading device profile {}", profile.name);
+    /// Load the given device profile
+    pub fn load_device_profile(
+        &mut self,
+        profile: Option<DeviceProfile>,
+        profile_path: Option<String>,
+    ) -> Result<(), Box<dyn Error>> {
         // Remove all outdated capability mappings.
         log::debug!("Clearing old device profile mappings");
         self.device_profile_config_map.clear();
 
-        // Load and parse the device profile
-        self.device_profile = Some(profile.name.clone());
+        // Load the device profile
+        self.device_profile = profile;
+        self.device_profile_path = profile_path;
+        let Some(profile) = self.device_profile.as_ref() else {
+            log::debug!("Unloaded device profile");
+            return Ok(());
+        };
+        if let Some(path) = self.device_profile_path.as_ref() {
+            log::info!("Loading device profile `{}` from: {path}", profile.name);
+        } else {
+            log::info!("Loading device profile {}", profile.name);
+        }
 
         // Loop through every mapping in the profile, extract the source and target events,
         // and map them into our profile map.
@@ -1566,7 +1602,7 @@ impl CompositeDevice {
         }
 
         // Set the target devices to use if it is defined in the profile
-        if let Some(target_devices) = profile.target_devices {
+        if let Some(target_devices) = profile.target_devices.clone() {
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
                 if let Err(e) = tx
