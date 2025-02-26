@@ -3,13 +3,17 @@ use std::str::FromStr;
 use zbus::{
     fdo,
     zvariant::{self, Value},
+    Connection,
 };
 use zbus_macros::interface;
 
-use crate::input::{
-    capability::{Capability, Gamepad, Mouse},
-    composite_device::{client::CompositeDeviceClient, InterceptMode},
-    event::{native::NativeEvent, value::InputValue},
+use crate::{
+    config::DeviceProfile,
+    input::{
+        capability::{Capability, Gamepad, Mouse},
+        composite_device::{client::CompositeDeviceClient, InterceptMode},
+        event::{native::NativeEvent, value::InputValue},
+    },
 };
 
 /// The [CompositeDeviceInterface] provides a DBus interface that can be exposed for managing
@@ -17,20 +21,27 @@ use crate::input::{
 /// [CompositeDevice] is listening on.
 pub struct CompositeDeviceInterface {
     composite_device: CompositeDeviceClient,
+    profile: Option<DeviceProfile>,
+    profile_path: Option<String>,
 }
 
 impl CompositeDeviceInterface {
-    pub fn new(composite_device: CompositeDeviceClient) -> CompositeDeviceInterface {
-        CompositeDeviceInterface { composite_device }
+    pub fn new(
+        composite_device: CompositeDeviceClient,
+        profile: Option<DeviceProfile>,
+        profile_path: Option<String>,
+    ) -> CompositeDeviceInterface {
+        CompositeDeviceInterface {
+            composite_device,
+            profile,
+            profile_path,
+        }
     }
 }
 
 #[interface(
     name = "org.shadowblip.Input.CompositeDevice",
-    proxy(
-        default_service = "org.shadowblip.InputPlumber",
-        default_path = "/org/shadowblip/InputPlumber/Manager"
-    )
+    proxy(default_service = "org.shadowblip.InputPlumber",)
 )]
 impl CompositeDeviceInterface {
     /// Name of the composite device
@@ -45,10 +56,18 @@ impl CompositeDeviceInterface {
     /// Name of the currently loaded profile
     #[zbus(property)]
     async fn profile_name(&self) -> fdo::Result<String> {
-        self.composite_device
-            .get_profile_name()
-            .await
-            .map_err(|e| fdo::Error::Failed(e.to_string()))
+        let name = self
+            .profile
+            .as_ref()
+            .map(|profile| profile.name.clone())
+            .unwrap_or_default();
+        Ok(name)
+    }
+
+    /// Optional path to the currently loaded profile
+    #[zbus(property)]
+    async fn profile_path(&self) -> fdo::Result<String> {
+        Ok(self.profile_path.clone().unwrap_or_default())
     }
 
     /// Stop the composite device and all target devices
@@ -57,6 +76,13 @@ impl CompositeDeviceInterface {
             .stop()
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))
+    }
+
+    /// Returns the currently loaded profile encoded in YAML format
+    async fn get_profile_yaml(&self) -> fdo::Result<String> {
+        let data =
+            serde_yaml::to_string(&self.profile).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        Ok(data)
     }
 
     /// Load the device profile from the given path
@@ -362,5 +388,45 @@ impl CompositeDeviceInterface {
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(paths)
+    }
+}
+
+impl CompositeDeviceInterface {
+    /// Update the profile
+    pub fn update_profile(
+        conn: &Connection,
+        path: &str,
+        profile: Option<DeviceProfile>,
+        profile_path: Option<String>,
+    ) {
+        let conn = conn.clone();
+        let path = path.to_string();
+        tokio::task::spawn(async move {
+            // Get the object instance at the given path so we can send DBus signal
+            // updates
+            let iface_ref = match conn
+                .object_server()
+                .interface::<_, Self>(path.clone())
+                .await
+            {
+                Ok(iface) => iface,
+                Err(e) => {
+                    log::error!("Failed to get DBus interface {path}: {e:?}");
+                    return;
+                }
+            };
+
+            let mut iface = iface_ref.get_mut().await;
+            iface.profile = profile;
+            let result = iface.profile_name_changed(iface_ref.signal_emitter()).await;
+            if let Err(e) = result {
+                log::error!("Failed to signal property changed: {e}");
+            }
+            iface.profile_path = profile_path;
+            let result = iface.profile_path_changed(iface_ref.signal_emitter()).await;
+            if let Err(e) = result {
+                log::error!("Failed to signal property changed: {e}");
+            }
+        });
     }
 }
