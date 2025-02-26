@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/device_profile_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: DeviceProfile
+
+# Name of the device profile
+name: Debug
+
+# Profile mappings
+mapping: []
