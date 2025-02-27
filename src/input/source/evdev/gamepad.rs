@@ -9,6 +9,8 @@ use nix::fcntl::{FcntlArg, OFlag};
 use packed_struct::types::SizedInteger;
 use packed_struct::PrimitiveEnum;
 
+use crate::config::capability_map::CapabilityMapConfig;
+use crate::config::SourceDevice;
 use crate::drivers::steam_deck::hid_report::{
     CommandType, PackedHapticReport, PackedRumbleReport, PadSide,
 };
@@ -26,6 +28,7 @@ use crate::{
 /// Source device implementation for evdev gamepads
 pub struct GamepadEventDevice {
     device: Device,
+    capability_map: Option<CapabilityMapConfig>,
     axes_info: HashMap<AbsoluteAxisCode, AbsInfo>,
     ff_effects: HashMap<i16, FFEffect>,
     ff_effects_dualsense: Option<i16>,
@@ -36,11 +39,17 @@ pub struct GamepadEventDevice {
 
 impl GamepadEventDevice {
     /// Create a new [Gamepad] source device from the given udev info
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        config: &Option<SourceDevice>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = device_info.devnode();
         log::debug!("Opening device at: {}", path);
         let mut device = Device::open(path.clone())?;
         device.grab()?;
+
+        // Load the capability map, if one was defined
+        let capability_map = config.as_ref().and_then(|c| c.load_capability_map());
 
         // Set the device to do non-blocking reads
         // TODO: use epoll to wake up when data is available
@@ -58,6 +67,7 @@ impl GamepadEventDevice {
 
         Ok(Self {
             device,
+            capability_map,
             axes_info,
             ff_effects: HashMap::new(),
             ff_effects_dualsense: None,

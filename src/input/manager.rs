@@ -18,9 +18,9 @@ use zbus::zvariant::ObjectPath;
 use zbus::Connection;
 
 use crate::bluetooth::device1::Device1Proxy;
+use crate::config::capability_map::CapabilityMapConfig;
 use crate::config::path::get_capability_maps_paths;
 use crate::config::path::get_devices_paths;
-use crate::config::CapabilityMap;
 use crate::config::CompositeDeviceConfig;
 use crate::config::SourceDevice;
 use crate::constants::BUS_PREFIX;
@@ -1689,7 +1689,7 @@ impl Manager {
 
     /// Loads all capability mappings in all default locations and returns a hashmap
     /// of the CapabilityMap ID and the [CapabilityMap].
-    pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMap> {
+    pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMapConfig> {
         let mut mappings = HashMap::new();
         let paths = get_capability_maps_paths();
 
@@ -1715,7 +1715,7 @@ impl Manager {
 
                 // Try to load the composite device profile
                 log::trace!("Found file: {}", file.path().display());
-                let mapping = CapabilityMap::from_yaml_file(file.path().display().to_string());
+                let mapping = CapabilityMapConfig::from_yaml_file(file.path());
                 if mapping.is_err() {
                     log::warn!(
                         "Failed to parse capability mapping: {}",
@@ -1724,7 +1724,7 @@ impl Manager {
                     continue;
                 }
                 let map = mapping.unwrap();
-                mappings.insert(map.id.clone(), map);
+                mappings.insert(map.id(), map);
             }
         }
 

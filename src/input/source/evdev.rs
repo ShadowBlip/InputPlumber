@@ -5,12 +5,18 @@ pub mod touchscreen;
 
 use std::{collections::HashMap, error::Error, time::Duration};
 
-use evdev::{Device, EventType};
+use evdev::{AbsInfo, AbsoluteAxisCode, Device, EventType, InputEvent};
 use keyboard::KeyboardEventDevice;
 use touchscreen::TouchscreenEventDevice;
 
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
+    config::{self, capability_map::CapabilityMappingV2},
+    constants::BUS_SOURCES_PREFIX,
+    input::{
+        capability::Capability,
+        composite_device::client::CompositeDeviceClient,
+        event::{evdev::EvdevEvent, native::NativeEvent},
+    },
     udev::device::UdevDevice,
 };
 
@@ -119,7 +125,7 @@ impl EventDevice {
                 Ok(Self::Blocked(source_device))
             }
             DriverType::Gamepad => {
-                let device = GamepadEventDevice::new(device_info.clone())?;
+                let device = GamepadEventDevice::new(device_info.clone(), &conf)?;
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Gamepad(source_device))
             }
@@ -268,4 +274,64 @@ pub fn get_capabilities(handler: &str) -> Result<HashMap<EventType, Vec<u16>>, B
     }
 
     Ok(capabilities)
+}
+
+/// Used to translate evdev events into native inputplumber events using a
+/// capability map.
+pub struct EventTranslator {
+    capability_map: EvdevCapabilityMapping,
+    axes_info: HashMap<AbsoluteAxisCode, AbsInfo>,
+    hat_state: HashMap<AbsoluteAxisCode, i32>,
+}
+
+impl EventTranslator {
+    pub fn translate(&mut self, event: InputEvent) -> Option<NativeEvent> {
+        None
+    }
+}
+
+pub struct EvdevCapabilityMapping {
+    pub event_type: EventType,
+    pub target_capability: Capability,
+    // EventSummary
+}
+
+impl From<&CapabilityMappingV2> for EvdevCapabilityMapping {
+    fn from(value: &CapabilityMappingV2) -> Self {
+        let capability = value.target_event.into();
+
+        Self {
+            event_type,
+            target_capability: capability,
+        }
+    }
+}
+
+impl EvdevCapabilityMapping {
+    pub fn matches(&self, event: InputEvent) -> bool {
+        match event.destructure() {
+            evdev::EventSummary::Synchronization(
+                synchronization_event,
+                synchronization_code,
+                _,
+            ) => todo!(),
+            evdev::EventSummary::Key(key_event, key_code, _) => todo!(),
+            evdev::EventSummary::RelativeAxis(relative_axis_event, relative_axis_code, _) => {
+                todo!()
+            }
+            evdev::EventSummary::AbsoluteAxis(absolute_axis_event, absolute_axis_code, _) => {
+                todo!()
+            }
+            evdev::EventSummary::Misc(misc_event, misc_code, _) => todo!(),
+            evdev::EventSummary::Switch(switch_event, switch_code, _) => todo!(),
+            evdev::EventSummary::Led(led_event, led_code, _) => todo!(),
+            evdev::EventSummary::Sound(sound_event, sound_code, _) => todo!(),
+            evdev::EventSummary::Repeat(repeat_event, repeat_code, _) => todo!(),
+            evdev::EventSummary::ForceFeedback(ffevent, ffeffect_code, _) => todo!(),
+            evdev::EventSummary::Power(power_event, power_code, _) => todo!(),
+            evdev::EventSummary::ForceFeedbackStatus(ffstatus_event, ffstatus_code, _) => todo!(),
+            evdev::EventSummary::UInput(uinput_event, uinput_code, _) => todo!(),
+            evdev::EventSummary::Other(other_event, other_code, _) => todo!(),
+        }
+    }
 }

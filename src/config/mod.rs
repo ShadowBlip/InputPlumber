@@ -1,9 +1,12 @@
+pub mod capability_map;
 pub mod path;
 
 use std::io;
 
 use ::procfs::CpuInfo;
+use capability_map::CapabilityMapConfig;
 use glob_match::glob_match;
+use path::get_capability_maps_paths;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -333,6 +336,20 @@ pub struct SourceDevice {
     /// Defines which events are included or excluded from input processing by
     /// the source device.
     pub events: Option<EventsConfig>,
+    /// The ID of a device event mapping in the 'capability_maps' directory
+    pub capability_map_id: Option<String>,
+}
+
+impl SourceDevice {
+    /// Loads the capability map associated with this [SourceDevice]
+    pub fn load_capability_map(&self) -> Option<CapabilityMapConfig> {
+        let capability_map_id = self.capability_map_id.as_ref()?;
+        let paths = get_capability_maps_paths();
+
+        // TODO: Implement this
+
+        None
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -467,8 +484,13 @@ pub struct CompositeDeviceConfig {
     pub kind: String,
     pub name: String,
     pub matches: Vec<Match>,
-    pub single_source: Option<bool>, // DEPRECATED; use 'maximum_sources' instead
+    #[deprecated(since = "0.49.2", note = "please use `maximum_sources` instead")]
+    pub single_source: Option<bool>,
     pub maximum_sources: Option<i32>,
+    #[deprecated(
+        since = "0.49.2",
+        note = "please use `<SourceDevice>.capability_map_id` instead"
+    )]
     pub capability_map_id: Option<String>,
     pub source_devices: Vec<SourceDevice>,
     pub target_devices: Option<Vec<String>>,
