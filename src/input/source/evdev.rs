@@ -10,7 +10,9 @@ use keyboard::KeyboardEventDevice;
 use touchscreen::TouchscreenEventDevice;
 
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
+    config::{self},
+    constants::BUS_SOURCES_PREFIX,
+    input::composite_device::client::CompositeDeviceClient,
     udev::device::UdevDevice,
 };
 
@@ -119,7 +121,7 @@ impl EventDevice {
                 Ok(Self::Blocked(source_device))
             }
             DriverType::Gamepad => {
-                let device = GamepadEventDevice::new(device_info.clone())?;
+                let device = GamepadEventDevice::new(device_info.clone(), &conf)?;
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Gamepad(source_device))
             }

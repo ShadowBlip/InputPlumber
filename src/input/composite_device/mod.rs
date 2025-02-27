@@ -20,8 +20,8 @@ use zbus::Connection;
 
 use crate::{
     config::{
-        path::get_profiles_path, CapabilityMap, CapabilityMapping, CompositeDeviceConfig,
-        DeviceProfile, ProfileMapping,
+        capability_map::CapabilityMapConfig, path::get_profiles_path, CapabilityMapping,
+        CompositeDeviceConfig, DeviceProfile, ProfileMapping,
     },
     dbus::interface::{
         composite_device::CompositeDeviceInterface, source::iio_imu::SourceIioImuInterface,
@@ -82,7 +82,7 @@ pub struct CompositeDevice {
     /// Capabilities describe all input capabilities from all source devices
     capabilities: HashSet<Capability>,
     /// Capability mapping for the CompositeDevice
-    capability_map: Option<CapabilityMap>,
+    capability_map: Option<CapabilityMapConfig>,
     /// Currently loaded [DeviceProfile] for the [CompositeDevice]. The [DeviceProfile]
     /// is used to translate input events.
     device_profile: Option<DeviceProfile>,
@@ -178,7 +178,7 @@ impl CompositeDevice {
         config: CompositeDeviceConfig,
         device_info: UdevDevice,
         dbus_path: String,
-        capability_map: Option<CapabilityMap>,
+        capability_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating CompositeDevice with config: {}", config.name);
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
@@ -238,9 +238,21 @@ impl CompositeDevice {
 
         // If a capability map is defined, add those target capabilities to
         // the hashset of implemented capabilities.
+        // TODO: REVIEW THIS, MAY NOT BE NEEDED
         if let Some(map) = device.capability_map.as_ref() {
-            for mapping in map.mapping.clone() {
-                let cap = mapping.target_event.clone().into();
+            let caps: Vec<Capability> = match map {
+                CapabilityMapConfig::V1(map) => map
+                    .mapping
+                    .iter()
+                    .map(|mapping| mapping.target_event.clone().into())
+                    .collect(),
+                CapabilityMapConfig::V2(map) => map
+                    .mapping
+                    .iter()
+                    .map(|mapping| mapping.target_event.clone().into())
+                    .collect(),
+            };
+            for cap in caps {
                 if cap == Capability::NotImplemented {
                     continue;
                 }

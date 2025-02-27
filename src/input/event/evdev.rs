@@ -1,3 +1,5 @@
+pub mod translator;
+
 use std::collections::HashMap;
 
 use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, RelativeAxisCode};
@@ -160,12 +162,24 @@ impl EvdevEvent {
                 KeyCode::BTN_START => Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
                 KeyCode::BTN_SELECT => Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
                 KeyCode::BTN_MODE => Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-                KeyCode::BTN_TRIGGER_HAPPY5 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
-                KeyCode::BTN_TRIGGER_HAPPY6 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
-                KeyCode::BTN_TRIGGER_HAPPY7 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
-                KeyCode::BTN_TRIGGER_HAPPY8 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
-                KeyCode::BTN_TRIGGER_HAPPY9 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3)),
-                KeyCode::BTN_TRIGGER_HAPPY10 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle3)),
+                KeyCode::BTN_TRIGGER_HAPPY5 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY6 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY7 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY8 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY9 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY10 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle3))
+                }
                 KeyCode::BTN_THUMBL => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick))
                 }

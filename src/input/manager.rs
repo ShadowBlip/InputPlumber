@@ -2,7 +2,6 @@ use core::panic;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
-use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -18,10 +17,10 @@ use zbus::zvariant::ObjectPath;
 use zbus::Connection;
 
 use crate::bluetooth::device1::Device1Proxy;
+use crate::config::capability_map::CapabilityMapConfig;
 use crate::config::path::get_capability_maps_paths;
 use crate::config::path::get_devices_paths;
 use crate::config::path::get_multidir_sorted_files;
-use crate::config::CapabilityMap;
 use crate::config::CompositeDeviceConfig;
 use crate::config::SourceDevice;
 use crate::constants::BUS_PREFIX;
@@ -1690,18 +1689,18 @@ impl Manager {
 
     /// Loads all capability mappings in all default locations and returns a hashmap
     /// of the CapabilityMap ID and the [CapabilityMap].
-    pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMap> {
+    pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMapConfig> {
         let mut mappings = HashMap::new();
         let paths = get_capability_maps_paths();
         let files = get_multidir_sorted_files(paths.as_slice(), |entry| {
-            entry.path().extension().unwrap() == "yaml"
+            entry.path().extension().unwrap_or_default() == "yaml"
         });
 
         // Look at each file in the directory and try to load them
         for file in files {
             // Try to load the capability map
             log::trace!("Found file: {}", file.display());
-            let mapping = CapabilityMap::from_yaml_file(file.display().to_string());
+            let mapping = CapabilityMapConfig::from_yaml_file(file);
             if mapping.is_err() {
                 log::warn!(
                     "Failed to parse capability mapping: {}",
@@ -1710,7 +1709,7 @@ impl Manager {
                 continue;
             }
             let map = mapping.unwrap();
-            mappings.insert(map.id.clone(), map);
+            mappings.insert(map.id(), map);
         }
 
         mappings
