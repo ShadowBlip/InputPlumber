@@ -643,7 +643,46 @@ impl From<NativeEvent> for StateUpdate {
                     }
                 },
             },
-            Capability::Touchscreen(_) => Self::default(),
+            Capability::Touchscreen(touch) => match touch {
+                Touch::Motion => {
+                    let value = match event.get_value() {
+                        InputValue::Touch {
+                            index,
+                            is_touching,
+                            pressure,
+                            x,
+                            y,
+                        } => TouchValue {
+                            index: Integer::from_primitive(index),
+                            is_touching,
+                            pressure: pressure
+                                .map(|p| (p * u8::MAX as f64) as u8)
+                                .unwrap_or(u8::MAX),
+                            x: x.map(|x| (x * u16::MAX as f64) as u16).unwrap_or(0),
+                            y: y.map(|y| (y * u16::MAX as f64) as u16).unwrap_or(0),
+                        },
+                        _ => {
+                            return Self::default();
+                        }
+                    };
+                    let value = ValueUpdate::Touch(value);
+
+                    Self { capability, value }
+                }
+                Touch::Button(_) => {
+                    let value = match event.get_value() {
+                        InputValue::Bool(value) => BoolUpdate { value },
+                        InputValue::Float(value) => BoolUpdate { value: value > 0.5 },
+                        _ => {
+                            // Cannot convert other values to bool
+                            return Self::default();
+                        }
+                    };
+                    let value = ValueUpdate::Bool(value);
+
+                    Self { capability, value }
+                }
+            },
         }
     }
 }
@@ -676,7 +715,7 @@ impl From<Capability> for InputCapability {
                     GamepadButton::DPadLeft => Self::GamepadButtonDpadLeft,
                     GamepadButton::DPadRight => Self::GamepadButtonDpadRight,
                     GamepadButton::LeftBumper => Self::GamepadButtonLeftBumper,
-                    GamepadButton::LeftTop => Self::default(),
+                    GamepadButton::LeftTop => Self::GamepadButtonLeftTop,
                     GamepadButton::LeftTrigger => Self::GamepadButtonLeftTrigger,
                     GamepadButton::LeftPaddle1 => Self::GamepadButtonLeftPaddle1,
                     GamepadButton::LeftPaddle2 => Self::GamepadButtonLeftPaddle2,
@@ -684,7 +723,7 @@ impl From<Capability> for InputCapability {
                     GamepadButton::LeftStick => Self::GamepadButtonLeftStick,
                     GamepadButton::LeftStickTouch => Self::GamepadButtonLeftStickTouch,
                     GamepadButton::RightBumper => Self::GamepadButtonRightBumper,
-                    GamepadButton::RightTop => Self::default(),
+                    GamepadButton::RightTop => Self::GamepadButtonRightTop,
                     GamepadButton::RightTrigger => Self::GamepadButtonRightTrigger,
                     GamepadButton::RightPaddle1 => Self::GamepadButtonRightPaddle1,
                     GamepadButton::RightPaddle2 => Self::GamepadButtonRightPaddle2,
@@ -727,7 +766,10 @@ impl From<Capability> for InputCapability {
                     Touch::Button(_) => Self::TouchpadCenterButton,
                 },
             },
-            Capability::Touchscreen(_) => Self::default(),
+            Capability::Touchscreen(touch) => match touch {
+                Touch::Motion => Self::TouchscreenMotion,
+                Touch::Button(_) => Self::default(),
+            },
         }
     }
 }
@@ -750,7 +792,7 @@ impl From<Capability> for InputCapabilityInfo {
                 Gamepad::Gyro => Self::new(capability, ValueType::Int16Vector3),
             },
             Capability::Mouse(_) => Self::default(),
-            Capability::Keyboard(_) => Self::default(),
+            Capability::Keyboard(_) => Self::new(capability, ValueType::Bool),
             Capability::Touchpad(touchpad) => match touchpad {
                 Touchpad::LeftPad(pad) => match pad {
                     Touch::Motion => Self::new(capability, ValueType::Touch),

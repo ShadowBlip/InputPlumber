@@ -640,6 +640,12 @@ pub enum InputCapability {
     GamepadButtonRightStick = 0x13e,
 
     /* Non-standard gamepad codes */
+    /// Dedicated button to open an on-screen keyboard
+    GamepadButtonKeyboard = 0x304,
+    /// Dedicated button to take screenshots
+    GamepadButtonScreenshot = 0x305,
+    /// Dedicated mute button, Sony DualSense Mute
+    GamepadButtonMute = 0x306,
     /// Left back paddle button, Xbox P3, Steam Deck L4
     GamepadButtonLeftPaddle1 = 0x307,
     /// Left back paddle button, Xbox P4, Steam Deck L5
@@ -657,12 +663,10 @@ pub enum InputCapability {
     /// Touch binary sensor for right stick
     GamepadButtonRightStickTouch = 0x30e,
 
-    /// Dedicated button to open an on-screen keyboard
-    GamepadButtonKeyboard = 0x304,
-    /// Dedicated button to take screenshots
-    GamepadButtonScreenshot = 0x305,
-    /// Dedicated mute button, Sony DualSense Mute
-    GamepadButtonMute = 0x306,
+    /// Top left button next to the left trigger, Ayaneo LC
+    GamepadButtonLeftTop = 0x30f,
+    /// Top left button next to the left trigger, Ayaneo RC
+    GamepadButtonRightTop = 0x310,
 
     /// Left analog stick
     GamepadAxisLeftStick = 0x400,
@@ -704,4 +708,9 @@ pub enum InputCapability {
     TouchpadCenterButton = 0x704,
     /// Right touchpad button press
     TouchpadRightButton = 0x705,
+
+    /// 'Main' Touchscreen touch motion
+    TouchscreenMotion = 0x710,
+    /// Top touchscreen motion for dualscreen touch devices
+    TouchscreenTopMotion = 0x711,
 }
