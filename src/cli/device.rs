@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::path::PathBuf;
 
+use clap::builder::PossibleValuesParser;
 use clap::{Subcommand, ValueEnum};
 use tabled::settings::{Panel, Style};
 use tabled::{Table, Tabled};
@@ -10,6 +11,8 @@ use zbus::Connection;
 use crate::cli::get_managed_objects;
 use crate::dbus::interface::composite_device::CompositeDeviceInterfaceProxy;
 use crate::dbus::interface::manager::ManagerInterfaceProxy;
+use crate::dbus::interface::target::TargetInterfaceProxy;
+use crate::input::target::TargetDeviceTypeId;
 
 use super::ui::menu::device_test_menu::DeviceTestMenu;
 use super::ui::TextUserInterface;
@@ -18,16 +21,58 @@ use super::ui::TextUserInterface;
 pub enum DeviceCommand {
     /// Display information about the composite device
     Info,
-    /// Get the capabilities of the composite device
+    /// Get input capabilities
     Capabilities,
-    /// Load the input profile from the given path
-    LoadProfile { path: String },
+    /// Manage input profile
+    Profile {
+        #[command(subcommand)]
+        cmd: ProfileCommand,
+    },
     /// Stop InputPlumber from managing the device
     Stop,
-    /// Manage the intercept mode of the composite device.
-    InterceptMode { mode: Option<InterceptMode> },
-    /// Test the inputs for the device
+    /// Manage intercept mode
+    Intercept {
+        #[command(subcommand)]
+        cmd: InterceptCommand,
+    },
+    /// Manage target devices
+    Targets {
+        #[command(subcommand)]
+        cmd: TargetsCommand,
+    },
+    /// Test input menu
     Test,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ProfileCommand {
+    /// Get the name of the currently loaded profile
+    Name,
+    /// Get the path to the currently loaded profile
+    Path,
+    /// Load the input profile from the given path
+    Load { path: String },
+    /// Dump the current input profile in YAML format
+    Dump,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum InterceptCommand {
+    /// Get the current intercept mode of the composite device
+    Get,
+    /// Set the intercept mode of the composite device.
+    Set { mode: InterceptMode },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TargetsCommand {
+    /// List the current target devices
+    List,
+    /// Set the target devices
+    Set {
+        #[arg(value_parser = PossibleValuesParser::new(TargetDeviceTypeId::supported_types().iter().map(|f| f.as_str().to_string()).collect::<Vec<String>>()))]
+        targets: Vec<String>,
+    },
 }
 
 #[derive(ValueEnum, Debug, Clone)]
@@ -154,33 +199,78 @@ pub async fn handle_device(
             let caps = device.capabilities().await.unwrap_or_default();
             println!("{caps:?}");
         }
-        DeviceCommand::LoadProfile { path } => {
-            let path_buf = PathBuf::from(path.clone());
-            if !path_buf.exists() {
-                return Err(format!("No input profile exists at path: {path}").into());
+        DeviceCommand::Profile { cmd } => match cmd {
+            ProfileCommand::Name => {
+                let name = device.profile_name().await.unwrap_or_default();
+                println!("Current profile name: '{name}'");
             }
-            let abs_path = std::fs::canonicalize(&path_buf)
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            if let Err(e) = device.load_profile_path(abs_path).await {
-                return Err(format!("Failed to load input profile {path}: {e:?}").into());
+            ProfileCommand::Path => {
+                let path = device.profile_path().await.unwrap_or_default();
+                println!("Current profile path: '{path}'");
             }
-            println!("Successfully loaded profile: {path}");
-        }
+            ProfileCommand::Load { path } => {
+                let path_buf = PathBuf::from(path.clone());
+                if !path_buf.exists() {
+                    return Err(format!("No input profile exists at path: {path}").into());
+                }
+                let abs_path = std::fs::canonicalize(&path_buf)
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
+                if let Err(e) = device.load_profile_path(abs_path).await {
+                    return Err(format!("Failed to load input profile {path}: {e:?}").into());
+                }
+                println!("Successfully loaded profile: {path}");
+            }
+            ProfileCommand::Dump => {
+                let data = device.get_profile_yaml().await?;
+                println!("{data}");
+            }
+        },
         DeviceCommand::Stop => {
             device.stop().await?;
             println!("Stopped device {num}");
         }
-        DeviceCommand::InterceptMode { mode } => {
-            if let Some(mode) = mode {
+        DeviceCommand::Intercept { cmd } => match cmd {
+            InterceptCommand::Get => {
+                let mode: InterceptMode = device.intercept_mode().await.unwrap_or_default().into();
+                println!("Current intercept mode: {mode}");
+            }
+            InterceptCommand::Set { mode } => {
                 device.set_intercept_mode(mode.clone().into()).await?;
                 println!("Set intercept mode to: {mode}");
-                return Ok(());
             }
-            let mode: InterceptMode = device.intercept_mode().await.unwrap_or_default().into();
-            println!("Current intercept mode: {mode}");
-        }
+        },
+        DeviceCommand::Targets { cmd } => match cmd {
+            TargetsCommand::List => {
+                let target_paths = device.target_devices().await?;
+                let mut entries = vec![];
+                for path in target_paths {
+                    let target = TargetInterfaceProxy::builder(&conn)
+                        .path(path)?
+                        .build()
+                        .await?;
+                    let device_name = target.name().await?;
+                    let device_type = target.device_type().await?;
+                    let entry = DeviceRow {
+                        id: device_type,
+                        name: device_name,
+                    };
+                    entries.push(entry);
+                }
+
+                let mut table = Table::new(entries);
+                table
+                    .with(Style::modern_rounded())
+                    .with(Panel::header("Target Devices"));
+
+                println!("{table}");
+            }
+            TargetsCommand::Set { targets } => {
+                device.set_target_devices(targets.clone()).await?;
+                println!("Set target devices to: {targets:?}");
+            }
+        },
         DeviceCommand::Test => {
             // Run the TUI for the testing interface
             let mut tui = TextUserInterface::new();

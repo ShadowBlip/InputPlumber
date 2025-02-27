@@ -24,7 +24,7 @@ libiio = "*"
 libevdev = "*"
 
 [dependencies]
-clap = { version = "4.5.29", features = ["derive"] }
+clap = { version = "4.5.29", features = ["derive", "string"] }
 clap_complete = "4.5.44"
 env_logger = "0.11.6"
 evdev = { git = "https://github.com/emberian/evdev.git", features = [
