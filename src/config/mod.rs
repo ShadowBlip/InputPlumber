@@ -505,60 +505,56 @@ impl CompositeDeviceConfig {
             .collect()
     }
 
-    /// Returns a [SourceDevice] if it matches the given [UdevDevice].
+    /// Returns a [SourceDevice] if it matches the given [UdevDevice]. Will return
+    /// the first [SourceDevice] match found if multiple matches exist.
     pub fn get_matching_device(&self, udevice: &UdevDevice) -> Option<SourceDevice> {
-        // Check udev matches first
         for config in self.source_devices.iter() {
-            let Some(udev_config) = config.udev.as_ref() else {
-                continue;
-            };
+            // Check udev matches first
+            if let Some(udev_config) = config.udev.as_ref() {
+                if self.has_matching_udev(udevice, udev_config) {
+                    return Some(config.clone());
+                }
+            }
 
-            if self.has_matching_udev(udevice, udev_config) {
-                return Some(config.clone());
+            // Use subsystem-specific device matching
+            let subsystem = udevice.subsystem();
+            match subsystem.as_str() {
+                "input" => {
+                    let Some(evdev_config) = config.evdev.as_ref() else {
+                        continue;
+                    };
+                    if self.has_matching_evdev(udevice, evdev_config) {
+                        return Some(config.clone());
+                    }
+                }
+                "hidraw" => {
+                    let Some(hidraw_config) = config.hidraw.as_ref() else {
+                        continue;
+                    };
+                    if self.has_matching_hidraw(udevice, hidraw_config) {
+                        return Some(config.clone());
+                    }
+                }
+                "iio" => {
+                    let Some(iio_config) = config.iio.as_ref() else {
+                        continue;
+                    };
+                    if self.has_matching_iio(udevice, iio_config) {
+                        return Some(config.clone());
+                    }
+                }
+                "leds" => {
+                    let Some(led_config) = config.led.as_ref() else {
+                        continue;
+                    };
+                    if self.has_matching_led(udevice, led_config) {
+                        return Some(config.clone());
+                    }
+                }
+                _ => (),
             }
         }
 
-        // Deprecated method for device matching based on subsystem
-        let subsystem = udevice.subsystem();
-        match subsystem.as_str() {
-            "input" => {
-                for config in self.source_devices.iter() {
-                    if let Some(evdev_config) = config.evdev.as_ref() {
-                        if self.has_matching_evdev(udevice, evdev_config) {
-                            return Some(config.clone());
-                        }
-                    }
-                }
-            }
-            "hidraw" => {
-                for config in self.source_devices.iter() {
-                    if let Some(hidraw_config) = config.hidraw.as_ref() {
-                        if self.has_matching_hidraw(udevice, hidraw_config) {
-                            return Some(config.clone());
-                        }
-                    }
-                }
-            }
-            "iio" => {
-                for config in self.source_devices.iter() {
-                    if let Some(iio_config) = config.iio.as_ref() {
-                        if self.has_matching_iio(udevice, iio_config) {
-                            return Some(config.clone());
-                        }
-                    }
-                }
-            }
-            "leds" => {
-                for config in self.source_devices.iter() {
-                    if let Some(led_config) = config.led.as_ref() {
-                        if self.has_matching_led(udevice, led_config) {
-                            return Some(config.clone());
-                        }
-                    }
-                }
-            }
-            _ => (),
-        };
         None
     }
 
