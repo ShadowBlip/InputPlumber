@@ -228,18 +228,38 @@ impl InputCapabilityReport {
                     let value = UInt16Value::unpack(buffer)?;
                     Value::UInt16(value)
                 }
+                ValueType::UInt32 => todo!(),
+                ValueType::UInt64 => todo!(),
+                ValueType::Int8 => todo!(),
+                ValueType::Int16 => todo!(),
+                ValueType::Int32 => todo!(),
+                ValueType::Int64 => todo!(),
+                ValueType::UInt8Vector2 => todo!(),
                 ValueType::UInt16Vector2 => {
                     let slice = &report.data[byte_start..byte_end];
                     let buffer = slice.try_into()?;
                     let value = UInt16Vector2Value::unpack(buffer)?;
                     Value::UInt16Vector2(value)
                 }
+                ValueType::UInt32Vector2 => todo!(),
+                ValueType::UInt64Vector2 => todo!(),
+                ValueType::Int8Vector2 => todo!(),
+                ValueType::Int16Vector2 => todo!(),
+                ValueType::Int32Vector2 => todo!(),
+                ValueType::Int64Vector2 => todo!(),
+                ValueType::UInt8Vector3 => todo!(),
+                ValueType::UInt16Vector3 => todo!(),
+                ValueType::UInt32Vector3 => todo!(),
+                ValueType::UInt64Vector3 => todo!(),
+                ValueType::Int8Vector3 => todo!(),
                 ValueType::Int16Vector3 => {
                     let slice = &report.data[byte_start..byte_end];
                     let buffer = slice.try_into()?;
                     let value = Int16Vector3Value::unpack(buffer)?;
                     Value::Int16Vector3(value)
                 }
+                ValueType::Int32Vector3 => todo!(),
+                ValueType::Int64Vector3 => todo!(),
                 ValueType::Touch => {
                     let slice = &report.data[byte_start..byte_end];
                     let buffer = slice.try_into()?;

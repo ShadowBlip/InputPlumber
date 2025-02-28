@@ -98,19 +98,63 @@ pub enum FeatureReportType {
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default, Ord, PartialOrd, Eq)]
 pub enum ValueType {
     #[default]
-    None,
+    None = 0x00,
     /// Bool values take up 1 bit in the input report
-    Bool,
+    Bool = 0x01,
+
     /// Uint8 values take up 1 byte in the input report
-    UInt8,
+    UInt8 = 0x02,
     /// Uint16 values take up 2 bytes in the input report
-    UInt16,
-    /// UInt16Vector2 vales take up 4 bytes in the input report
-    UInt16Vector2,
-    /// Int16Vector3 vales take up 6 bytes in the input report
-    Int16Vector3,
+    UInt16 = 0x03,
+    /// Uint32 values take up 4 bytes in the input report
+    UInt32 = 0x04,
+    /// Uint64 values take up 8 bytes in the input report
+    UInt64 = 0x05,
+    /// Int8 values take up 1 byte in the input report
+    Int8 = 0x06,
+    /// Int16 values take up 2 bytes in the input report
+    Int16 = 0x07,
+    /// Int32 values take up 4 bytes in the input report
+    Int32 = 0x08,
+    /// Int64 values take up 8 bytes in the input report
+    Int64 = 0x09,
+
+    /// UInt8Vector2 values take up 2 bytes in the input report
+    UInt8Vector2 = 0x12,
+    /// UInt16Vector2 values take up 4 bytes in the input report
+    UInt16Vector2 = 0x13,
+    /// UInt32Vector2 values take up 8 bytes in the input report
+    UInt32Vector2 = 0x14,
+    /// UInt64Vector2 values take up 16 bytes in the input report
+    UInt64Vector2 = 0x15,
+    /// Int8Vector2 values take up 2 bytes in the input report
+    Int8Vector2 = 0x16,
+    /// Int16Vector2 values take up 4 bytes in the input report
+    Int16Vector2 = 0x17,
+    /// Int32Vector2 values take up 8 bytes in the input report
+    Int32Vector2 = 0x18,
+    /// Int64Vector2 values take up 16 bytes in the input report
+    Int64Vector2 = 0x19,
+
+    /// UInt8Vector3 values take up 3 bytes in the input report
+    UInt8Vector3 = 0x22,
+    /// UInt16Vector3 values take up 6 bytes in the input report
+    UInt16Vector3 = 0x23,
+    /// UInt32Vector3 values take up 12 bytes in the input report
+    UInt32Vector3 = 0x24,
+    /// UInt64Vector3 values take up 24 bytes in the input report
+    UInt64Vector3 = 0x25,
+    /// Int8Vector3 values take up 3 bytes in the input report
+    Int8Vector3 = 0x26,
+    /// Int16Vector3 values take up 6 bytes in the input report
+    Int16Vector3 = 0x27,
+    /// Int32Vector3 values take up 12 bytes in the input report
+    Int32Vector3 = 0x28,
+    /// Int64Vector3 values take up 24 bytes in the input report
+    Int64Vector3 = 0x29,
+
     /// Touch values takes up 6 bytes in the input report
-    Touch,
+    Touch = 0x30,
 }
 
 impl ValueType {
@@ -121,8 +165,28 @@ impl ValueType {
             ValueType::Bool => BoolValue::packed_bits(),
             ValueType::UInt8 => UInt8Value::packed_bits(),
             ValueType::UInt16 => UInt16Value::packed_bits(),
+            ValueType::UInt32 => todo!(),
+            ValueType::UInt64 => todo!(),
+            ValueType::Int8 => todo!(),
+            ValueType::Int16 => todo!(),
+            ValueType::Int32 => todo!(),
+            ValueType::Int64 => todo!(),
+            ValueType::UInt8Vector2 => todo!(),
             ValueType::UInt16Vector2 => UInt16Vector2Value::packed_bits(),
+            ValueType::UInt32Vector2 => todo!(),
+            ValueType::UInt64Vector2 => todo!(),
+            ValueType::Int8Vector2 => todo!(),
+            ValueType::Int16Vector2 => todo!(),
+            ValueType::Int32Vector2 => todo!(),
+            ValueType::Int64Vector2 => todo!(),
+            ValueType::UInt8Vector3 => todo!(),
+            ValueType::UInt16Vector3 => todo!(),
+            ValueType::UInt32Vector3 => todo!(),
+            ValueType::UInt64Vector3 => todo!(),
+            ValueType::Int8Vector3 => todo!(),
             ValueType::Int16Vector3 => Int16Vector3Value::packed_bits(),
+            ValueType::Int32Vector3 => todo!(),
+            ValueType::Int64Vector3 => todo!(),
             ValueType::Touch => TouchValue::packed_bits(),
         }
     }
@@ -142,13 +206,33 @@ impl ValueType {
     /// be ordered first.
     pub fn order_priority(&self) -> u8 {
         match self {
-            ValueType::None => 6,
-            ValueType::Bool => 5,
-            ValueType::UInt8 => 4,
-            ValueType::UInt16 => 3,
-            ValueType::UInt16Vector2 => 2,
-            ValueType::Int16Vector3 => 1,
-            ValueType::Touch => 0,
+            ValueType::None => 100,
+            ValueType::Bool => 99,
+            ValueType::UInt8 => 98,
+            ValueType::UInt16 => 97,
+            ValueType::UInt32 => 96,
+            ValueType::UInt64 => 95,
+            ValueType::Int8 => 94,
+            ValueType::Int16 => 93,
+            ValueType::Int32 => 92,
+            ValueType::Int64 => 91,
+            ValueType::UInt8Vector2 => 90,
+            ValueType::UInt16Vector2 => 89,
+            ValueType::UInt32Vector2 => 88,
+            ValueType::UInt64Vector2 => 87,
+            ValueType::Int8Vector2 => 86,
+            ValueType::Int16Vector2 => 85,
+            ValueType::Int32Vector2 => 84,
+            ValueType::Int64Vector2 => 83,
+            ValueType::UInt8Vector3 => 82,
+            ValueType::UInt16Vector3 => 81,
+            ValueType::UInt32Vector3 => 80,
+            ValueType::UInt64Vector3 => 79,
+            ValueType::Int8Vector3 => 78,
+            ValueType::Int16Vector3 => 77,
+            ValueType::Int32Vector3 => 76,
+            ValueType::Int64Vector3 => 75,
+            ValueType::Touch => 74,
         }
     }
 }

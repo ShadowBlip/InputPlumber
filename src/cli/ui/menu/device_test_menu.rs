@@ -436,6 +436,13 @@ impl MenuWidget for DeviceTestMenu {
                         let trigger = TriggerGauge::new(cap.capability, label.as_str());
                         self.ui_triggers.push(trigger);
                     }
+                    ValueType::UInt32 => (),
+                    ValueType::UInt64 => (),
+                    ValueType::Int8 => (),
+                    ValueType::Int16 => (),
+                    ValueType::Int32 => (),
+                    ValueType::Int64 => (),
+                    ValueType::UInt8Vector2 => (),
                     ValueType::UInt16Vector2 => match cap.capability {
                         InputCapability::GamepadAxisLeftStick
                         | InputCapability::GamepadAxisRightStick => {
@@ -450,11 +457,24 @@ impl MenuWidget for DeviceTestMenu {
                             self.ui_touch.push(gauge);
                         }
                     },
+                    ValueType::UInt32Vector2 => (),
+                    ValueType::UInt64Vector2 => (),
+                    ValueType::Int8Vector2 => (),
+                    ValueType::Int16Vector2 => (),
+                    ValueType::Int32Vector2 => (),
+                    ValueType::Int64Vector2 => (),
+                    ValueType::UInt8Vector3 => (),
+                    ValueType::UInt16Vector3 => (),
+                    ValueType::UInt32Vector3 => (),
+                    ValueType::UInt64Vector3 => (),
+                    ValueType::Int8Vector3 => (),
                     ValueType::Int16Vector3 => {
                         let label = format!("{:?}", cap.capability);
                         let gauge = GyroGauge::new(cap.capability, label.as_str());
                         self.ui_gyro.push(gauge);
                     }
+                    ValueType::Int32Vector3 => (),
+                    ValueType::Int64Vector3 => (),
                     ValueType::Touch => {
                         let label = format!("{:?}", cap.capability);
                         let gauge = TouchGauge::new(cap.capability, label.as_str());
