@@ -35,6 +35,7 @@ pub enum Action {
     Keyboard,
     Screenshot,
     Touch,
+    Power,
 }
 
 impl Action {
@@ -66,6 +67,7 @@ impl Action {
             Action::Keyboard => "ui_osk",
             Action::Screenshot => "ui_screenshot",
             Action::Touch => "ui_touch",
+            Action::Power => "ui_power",
         }
     }
 
@@ -105,6 +107,7 @@ impl FromStr for Action {
             "ui_osk" => Ok(Action::Keyboard),
             "ui_screenshot" => Ok(Action::Screenshot),
             "ui_touch" => Ok(Action::Touch),
+            "ui_power" => Ok(Action::Power),
             _ => Err(()),
         }
     }
@@ -347,7 +350,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Keyboard::KeyMute => vec![Action::VolumeMute],
             Keyboard::KeyVolumeDown => vec![Action::VolumeDown],
             Keyboard::KeyVolumeUp => vec![Action::VolumeUp],
-            Keyboard::KeyPower => vec![Action::None],
+            Keyboard::KeyPower => vec![Action::Power],
             Keyboard::KeyKpEqual => vec![Action::None],
             Keyboard::KeyPause => vec![Action::None],
             Keyboard::KeyKpComma => vec![Action::None],
