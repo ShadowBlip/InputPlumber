@@ -23,7 +23,7 @@ and translate their input to a variety of virtual device formats.
 - [x] Emulate mouse, keyboard, and gamepad inputs
 - [x] Intercept and route input over DBus for overlay interface control
 - [x] Input mapping profiles to translate source input into the desired target input
-- [ ] Route input over the network
+- [x] Route input over the network
 
 ## Install
 

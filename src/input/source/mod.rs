@@ -9,10 +9,11 @@ use std::{
 
 use ::evdev::FFEffectData;
 use led::LedDevice;
+use network::NetworkDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
-use crate::{config, udev::device::UdevDevice};
+use crate::config;
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,
@@ -23,6 +24,7 @@ use super::{
     capability::Capability,
     composite_device::client::CompositeDeviceClient,
     event::{native::NativeEvent, Event},
+    info::{DeviceInfo, DeviceInfoRef},
     output_event::OutputEvent,
 };
 
@@ -32,6 +34,7 @@ pub mod evdev;
 pub mod hidraw;
 pub mod iio;
 pub mod led;
+pub mod network;
 
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
@@ -178,7 +181,7 @@ pub struct SourceDriver<T: SourceInputDevice + SourceOutputDevice> {
     event_include_list: HashSet<Capability>,
     event_exclude_list: HashSet<Capability>,
     implementation: Arc<Mutex<T>>,
-    device_info: UdevDevice,
+    device_info: DeviceInfo,
     composite_device: CompositeDeviceClient,
     tx: mpsc::Sender<SourceCommand>,
     rx: mpsc::Receiver<SourceCommand>,
@@ -189,7 +192,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     pub fn new(
         composite_device: CompositeDeviceClient,
         device: T,
-        device_info: UdevDevice,
+        device_info: DeviceInfo,
         config: Option<config::SourceDevice>,
     ) -> Self {
         let options = SourceDriverOptions::default();
@@ -200,7 +203,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     pub fn new_with_options(
         composite_device: CompositeDeviceClient,
         device: T,
-        device_info: UdevDevice,
+        device_info: DeviceInfo,
         options: SourceDriverOptions,
         config: Option<config::SourceDevice>,
     ) -> Self {
@@ -233,7 +236,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
         }
         let event_filter_enabled = !events_exclude.is_empty() || !events_include.is_empty();
         if event_filter_enabled {
-            let devnode = device_info.devnode();
+            let devnode = device_info.path();
             if !events_include.is_empty() {
                 log::debug!("Source device '{devnode}' filter includes events: {events_include:?}");
             }
@@ -313,7 +316,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
 
     /// Returns the path to the device (e.g. "/dev/input/event0")
     pub fn get_device_path(&self) -> String {
-        self.device_info.devnode()
+        self.device_info.path()
     }
 
     /// Returns a transmitter channel that can be used to send events to this device
@@ -322,8 +325,11 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     }
 
     /// Returns udev device information about the device as a reference
-    pub fn info_ref(&self) -> &UdevDevice {
-        &self.device_info
+    pub fn info_ref(&self) -> DeviceInfoRef {
+        match &self.device_info {
+            DeviceInfo::Udev(device) => device.into(),
+            DeviceInfo::Websocket(client) => client.into(),
+        }
     }
 
     /// Run the source device, consuming the device.
@@ -445,7 +451,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
 
 pub(crate) trait SourceDeviceCompatible {
     /// Returns a copy of the UdevDevice
-    fn get_device_ref(&self) -> &UdevDevice;
+    fn get_device_ref(&self) -> DeviceInfoRef;
 
     /// Returns a unique identifier for the source device.
     fn get_id(&self) -> String;
@@ -470,16 +476,18 @@ pub enum SourceDevice {
     HidRaw(HidRawDevice),
     Iio(IioDevice),
     Led(LedDevice),
+    Network(NetworkDevice),
 }
 
 impl SourceDevice {
     /// Returns a copy of the UdevDevice
-    pub fn get_device_ref(&self) -> &UdevDevice {
+    pub fn get_device_ref(&self) -> DeviceInfoRef {
         match self {
             SourceDevice::Event(device) => device.get_device_ref(),
             SourceDevice::HidRaw(device) => device.get_device_ref(),
             SourceDevice::Iio(device) => device.get_device_ref(),
             SourceDevice::Led(device) => device.get_device_ref(),
+            SourceDevice::Network(device) => device.get_device_ref(),
         }
     }
 
@@ -490,6 +498,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_id(),
             SourceDevice::Iio(device) => device.get_id(),
             SourceDevice::Led(device) => device.get_id(),
+            SourceDevice::Network(device) => device.get_id(),
         }
     }
 
@@ -500,6 +509,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.client(),
             SourceDevice::Iio(device) => device.client(),
             SourceDevice::Led(device) => device.client(),
+            SourceDevice::Network(device) => device.client(),
         }
     }
 
@@ -510,6 +520,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.run().await,
             SourceDevice::Iio(device) => device.run().await,
             SourceDevice::Led(device) => device.run().await,
+            SourceDevice::Network(device) => device.run().await,
         }
     }
 
@@ -520,6 +531,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_capabilities(),
             SourceDevice::Iio(device) => device.get_capabilities(),
             SourceDevice::Led(device) => device.get_capabilities(),
+            SourceDevice::Network(device) => device.get_capabilities(),
         }
     }
 
@@ -530,6 +542,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_device_path(),
             SourceDevice::Iio(device) => device.get_device_path(),
             SourceDevice::Led(device) => device.get_device_path(),
+            SourceDevice::Network(device) => device.get_device_path(),
         }
     }
 }

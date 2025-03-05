@@ -19,6 +19,7 @@ mod dmi;
 mod drivers;
 mod iio;
 mod input;
+mod network;
 mod udev;
 mod watcher;
 

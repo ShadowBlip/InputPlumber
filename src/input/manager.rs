@@ -43,11 +43,13 @@ use crate::input::source::iio;
 use crate::input::source::led;
 use crate::input::target::TargetDevice;
 use crate::input::target::TargetDeviceTypeId;
+use crate::network::websocket::{watch_websockets, WebsocketClient};
 use crate::udev;
 use crate::udev::device::AttributeGetter;
 use crate::udev::device::UdevDevice;
 
 use super::composite_device::client::CompositeDeviceClient;
+use super::info::DeviceInfo;
 use super::target::client::TargetDeviceClient;
 
 use crate::watcher;
@@ -68,13 +70,13 @@ pub enum ManagerError {
 /// Manager commands define all the different ways to interact with [Manager]
 /// over a channel. These commands are processed in an asyncronous thread and
 /// dispatched as they come in.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ManagerCommand {
     DeviceAdded {
-        device: UdevDevice,
+        device: DeviceInfo,
     },
     DeviceRemoved {
-        device: UdevDevice,
+        device: DeviceInfo,
     },
     CreateCompositeDevice {
         config: CompositeDeviceConfig,
@@ -239,6 +241,8 @@ impl Manager {
 
         log::debug!("Starting input manager task...");
 
+        tokio::spawn(watch_websockets(self.tx.clone()));
+
         let _ = tokio::join!(
             Self::discover_all_devices(&cmd_tx_all_devices),
             Self::watch_iio_devices(self.tx.clone()),
@@ -377,19 +381,32 @@ impl Manager {
                         .collect();
                     log::info!("Gamepad order: {:?}", self.target_gamepad_order);
                 }
-                ManagerCommand::DeviceAdded { device } => {
-                    let dev_name = device.name();
-                    let dev_sysname = device.sysname();
+                ManagerCommand::DeviceAdded { device } => match device {
+                    DeviceInfo::Udev(device) => {
+                        let dev_name = device.name();
+                        let dev_sysname = device.sysname();
 
-                    if let Err(e) = self.on_device_added(device).await {
-                        log::error!("Error adding device '{dev_name} ({dev_sysname})': {e}");
+                        if let Err(e) = self.on_udev_device_added(device).await {
+                            log::error!("Error adding device '{dev_name} ({dev_sysname})': {e}");
+                        }
                     }
-                }
-                ManagerCommand::DeviceRemoved { device } => {
-                    if let Err(e) = self.on_device_removed(device).await {
-                        log::error!("Error removing device: {e}");
+                    DeviceInfo::Websocket(client) => {
+                        if let Err(e) = self.on_websocket_device_added(client).await {
+                            log::error!("Error adding websocket client: {e}");
+                        }
                     }
-                }
+                },
+                ManagerCommand::DeviceRemoved { device } => match device {
+                    DeviceInfo::Udev(device) => {
+                        if let Err(e) = self.on_udev_device_removed(device).await {
+                            log::error!("Error removing device: {e}");
+                        }
+                    }
+                    DeviceInfo::Websocket(websocket_client) => {
+                        // TODO: implement
+                        log::error!("TODO: ADD REMOVE LOGIC FOR WEBSOCKETS");
+                    }
+                },
                 ManagerCommand::SetManageAllDevices(manage_all_devices) => {
                     log::debug!("Setting management of all devices to: {manage_all_devices}");
                     if self.manage_all_devices == manage_all_devices {
@@ -528,7 +545,7 @@ impl Manager {
     async fn create_composite_device_from_config(
         &mut self,
         config: &CompositeDeviceConfig,
-        device: UdevDevice,
+        device: DeviceInfo,
     ) -> Result<CompositeDevice, Box<dyn Error>> {
         // Lookup the capability map associated with this config if it exists
         let capability_map = if let Some(map_id) = config.capability_map_id.clone() {
@@ -916,7 +933,7 @@ impl Manager {
     async fn on_source_device_added(
         &mut self,
         id: String,
-        device: UdevDevice,
+        device: DeviceInfo,
     ) -> Result<(), Box<dyn Error>> {
         // Check all existing composite devices to see if this device is part of
         // their config
@@ -997,7 +1014,7 @@ impl Manager {
                 }
             }
 
-            log::info!("Found missing {} device, adding source device {id} to existing composite device: {composite_device:?}", device.subsystem());
+            log::info!("Found missing {} device, adding source device {id} to existing composite device: {composite_device:?}", device.kind());
             let Some(client) = self.composite_devices.get(composite_device.as_str()) else {
                 log::error!("No existing composite device found for key {composite_device:?}");
                 continue;
@@ -1060,7 +1077,7 @@ impl Manager {
                 }
                 log::info!(
                     "Found a matching {} device {id}, creating CompositeDevice",
-                    device.subsystem()
+                    device.kind()
                 );
                 let dev = self
                     .create_composite_device_from_config(&config, device)
@@ -1091,7 +1108,7 @@ impl Manager {
     /// Called when any source device is removed
     async fn on_source_device_removed(
         &mut self,
-        device: UdevDevice,
+        device: DeviceInfo,
         id: String,
     ) -> Result<(), Box<dyn Error>> {
         let dev_name = device.name();
@@ -1128,8 +1145,22 @@ impl Manager {
         Ok(())
     }
 
+    /// Called when a new network device has connected
+    async fn on_websocket_device_added(
+        &mut self,
+        client: WebsocketClient,
+    ) -> Result<(), Box<dyn Error>> {
+        // TODO: Create a dbus interface for the network device
+
+        log::debug!("Websocket client connected: {client:?}");
+        let id = client.get_id();
+        self.on_source_device_added(id, client.into()).await?;
+
+        Ok(())
+    }
+
     /// Called when a new device is detected by udev
-    async fn on_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
+    async fn on_udev_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
         let dev_path = device.devpath();
         let dev_name = device.name();
         let dev_sysname = device.sysname();
@@ -1220,7 +1251,8 @@ impl Manager {
 
                 // Signal that a source device was added
                 log::debug!("Spawning task to add source device: {id}");
-                self.on_source_device_added(id.clone(), device).await?;
+                self.on_source_device_added(id.clone(), device.into())
+                    .await?;
                 log::debug!("Finished adding {id}");
             }
             "hidraw" => {
@@ -1318,7 +1350,8 @@ impl Manager {
 
                 // Signal that a source device was added
                 log::debug!("Spawing task to add source device: {id}");
-                self.on_source_device_added(id.clone(), device).await?;
+                self.on_source_device_added(id.clone(), device.into())
+                    .await?;
                 log::debug!("Finished adding hidraw device {id}");
             }
 
@@ -1368,7 +1401,8 @@ impl Manager {
 
                 // Signal that a source device was added
                 log::debug!("Spawing task to add source device: {id}");
-                self.on_source_device_added(id.clone(), device).await?;
+                self.on_source_device_added(id.clone(), device.into())
+                    .await?;
                 log::debug!("Finished adding event device {id}");
             }
 
@@ -1397,7 +1431,8 @@ impl Manager {
                 }
                 // Signal that a source device was added
                 log::debug!("Spawing task to add source device: {id}");
-                self.on_source_device_added(id.clone(), device).await?;
+                self.on_source_device_added(id.clone(), device.into())
+                    .await?;
                 log::debug!("Finished adding LED device {id}");
             }
 
@@ -1409,7 +1444,7 @@ impl Manager {
         Ok(())
     }
 
-    async fn on_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
+    async fn on_udev_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
         let dev_name = device.name();
         let sys_name = device.sysname();
         let subsystem = device.subsystem();
@@ -1467,7 +1502,7 @@ impl Manager {
         log::debug!("Device ID: {id}");
 
         // Signal that a source device was removed
-        self.on_source_device_removed(device, id).await?;
+        self.on_source_device_removed(device.into(), id).await?;
 
         Ok(())
     }
@@ -1641,7 +1676,11 @@ impl Manager {
                 WatchEvent::Delete { name, base_path } => {
                     let device = UdevDevice::from_devnode(base_path.as_str(), name.as_str());
                     log::debug!("Got inotify remove action for {base_path}/{name}");
-                    let result = cmd_tx.send(ManagerCommand::DeviceRemoved { device }).await;
+                    let result = cmd_tx
+                        .send(ManagerCommand::DeviceRemoved {
+                            device: device.into(),
+                        })
+                        .await;
                     if let Err(e) = result {
                         log::error!("Unable to send command: {:?}", e);
                     }
@@ -1680,7 +1719,9 @@ impl Manager {
     ) -> Result<(), Box<dyn Error>> {
         for device in devices {
             manager_tx
-                .send(ManagerCommand::DeviceAdded { device })
+                .send(ManagerCommand::DeviceAdded {
+                    device: device.into(),
+                })
                 .await?;
         }
 
@@ -1804,7 +1845,7 @@ impl Manager {
 
     async fn add_device_to_composite_device(
         &self,
-        device: UdevDevice,
+        device: DeviceInfo,
         client: &CompositeDeviceClient,
     ) -> Result<(), Box<dyn Error>> {
         client.add_source_device(device).await?;

@@ -2,7 +2,9 @@ pub mod multicolor_chassis;
 use self::multicolor_chassis::MultiColorChassis;
 use super::{SourceDeviceCompatible, SourceDriver};
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
+    config,
+    constants::BUS_SOURCES_PREFIX,
+    input::{composite_device::client::CompositeDeviceClient, info::DeviceInfoRef},
     udev::device::UdevDevice,
 };
 use std::error::Error;
@@ -17,7 +19,7 @@ pub enum LedDevice {
 }
 
 impl SourceDeviceCompatible for LedDevice {
-    fn get_device_ref(&self) -> &UdevDevice {
+    fn get_device_ref(&self) -> DeviceInfoRef {
         match self {
             LedDevice::MultiColorChassis(source_driver) => source_driver.info_ref(),
         }
@@ -79,7 +81,8 @@ impl LedDevice {
                         None => None,
                     },
                 )?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::MultiColorChassis(source_device))
             }
         }

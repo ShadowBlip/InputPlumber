@@ -52,12 +52,16 @@ serde_yaml = "0.9.34"
 tabled = { version = "0.18.0", features = ["ansi"] }
 thiserror = "1.0.69"
 tokio = { version = "1.43.0", features = ["full"] }
+tokio-tungstenite = { version = "0.26.2" }
 udev = { version = "0.9.3", features = ["mio"] }
 uhid-virt = "0.0.8"
 virtual-usb = { git = "https://github.com/ShadowBlip/virtual-usb-rs.git", rev = "4bca5c6fb9f2b63944a286854405e3e7e0b5d259" }
 xdg = "2.5.2"
 zbus = { version = "5.5.0", default-features = false, features = ["tokio"] }
 zbus_macros = "5.5.0"
+
+#[features]
+#networking = ["dep:tokio-tungstenite"]
 
 [profile.release]
 debug = false
