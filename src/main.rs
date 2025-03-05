@@ -19,6 +19,8 @@ mod dbus;
 mod dmi;
 mod drivers;
 mod input;
+#[cfg(feature = "networking")]
+mod network;
 mod sync;
 mod udev;
 mod watcher;

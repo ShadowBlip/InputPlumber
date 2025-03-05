@@ -2,6 +2,8 @@ pub mod context;
 pub mod dbus;
 pub mod evdev;
 pub mod native;
+#[cfg(feature = "networking")]
+pub mod ucis;
 pub mod value;
 
 #[cfg(test)]

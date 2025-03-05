@@ -21,6 +21,9 @@ use crate::{
     udev::device::UdevDevice,
 };
 
+#[cfg(feature = "networking")]
+use crate::network::websocket::WebsocketClient;
+
 /// Represents all possible errors loading a [CompositeDevice]
 #[derive(Debug, Error)]
 pub enum LoadError {
@@ -250,6 +253,9 @@ pub struct SourceDevice {
     /// Devices that match the given tty propertied will be captured by InputPlumber
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tty: Option<Tty>,
+    /// Websocket clients that match the given websocket settings will be captured by InputPlumber
+    #[cfg(feature = "networking")]
+    pub websocket: Option<Websocket>,
     /// Device configuration options are used to alter how the source device is managed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<SourceDeviceConfig>,
@@ -444,6 +450,17 @@ pub struct MountMatrix {
     pub z: [f64; 3],
 }
 
+#[cfg(feature = "networking")]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct Websocket {
+    pub port: Option<u16>,
+    pub address: Option<String>,
+    pub tls: Option<bool>,
+    pub client_port: Option<u16>,
+    pub client_address: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct EventsConfig {
@@ -520,6 +537,8 @@ impl CompositeDeviceConfig {
         for config in self.source_devices.iter() {
             let matched_config = match device {
                 DeviceInfo::Udev(udevice) => self.get_matching_udev_device(config, udevice),
+                #[cfg(feature = "networking")]
+                DeviceInfo::Websocket(client) => self.get_matching_websocket_device(config, client),
             };
             if matched_config.is_some() {
                 return matched_config;
@@ -587,6 +606,59 @@ impl CompositeDeviceConfig {
         }
 
         None
+    }
+
+    #[cfg(feature = "networking")]
+    /// Returns a copy of the given [SourceDevice] config if it matches the given
+    /// [WebsocketClient].
+    fn get_matching_websocket_device(
+        &self,
+        config: &SourceDevice,
+        client: &WebsocketClient,
+    ) -> Option<SourceDevice> {
+        let websocket_config = config.websocket.as_ref()?;
+
+        if self.has_matching_websocket(client, websocket_config) {
+            return Some(config.clone());
+        }
+
+        None
+    }
+
+    #[cfg(feature = "networking")]
+    /// Returns true if the given websocket client matches the given config
+    pub fn has_matching_websocket(
+        &self,
+        client: &WebsocketClient,
+        websocket_config: &Websocket,
+    ) -> bool {
+        log::debug!("Checking websocket config: '{websocket_config:?}'");
+
+        if let Some(address) = websocket_config.address.as_ref() {
+            if !glob_match(address, client.server_addr.ip().to_string().as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(port) = websocket_config.port {
+            if port != client.server_addr.port() {
+                return false;
+            }
+        }
+
+        if let Some(client_addr) = websocket_config.client_address.as_ref() {
+            if !glob_match(client_addr, client.addr.ip().to_string().as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(port) = websocket_config.client_port {
+            if port != client.addr.port() {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Returns true if a given device matches the given udev config

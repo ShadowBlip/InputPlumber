@@ -1,8 +1,12 @@
+#[cfg(feature = "networking")]
+use crate::network::websocket::WebsocketClient;
 use crate::udev::device::UdevDevice;
 
 #[derive(Debug, Clone)]
 pub enum DeviceInfo {
     Udev(UdevDevice),
+    #[cfg(feature = "networking")]
+    Websocket(WebsocketClient),
 }
 
 impl DeviceInfo {
@@ -10,6 +14,8 @@ impl DeviceInfo {
     pub fn name(&self) -> String {
         match self {
             DeviceInfo::Udev(device) => device.name(),
+            #[cfg(feature = "networking")]
+            DeviceInfo::Websocket(client) => client.addr.to_string(),
         }
     }
 
@@ -18,6 +24,8 @@ impl DeviceInfo {
     pub fn get_id(&self) -> String {
         match self {
             DeviceInfo::Udev(device) => device.get_id(),
+            #[cfg(feature = "networking")]
+            DeviceInfo::Websocket(client) => client.get_id(),
         }
     }
 
@@ -25,6 +33,8 @@ impl DeviceInfo {
     pub fn path(&self) -> String {
         match self {
             DeviceInfo::Udev(device) => device.devnode(),
+            #[cfg(feature = "networking")]
+            DeviceInfo::Websocket(client) => format!("ws://{}", client.addr),
         }
     }
 
@@ -32,6 +42,8 @@ impl DeviceInfo {
     pub fn kind(&self) -> String {
         match self {
             DeviceInfo::Udev(device) => device.subsystem(),
+            #[cfg(feature = "networking")]
+            DeviceInfo::Websocket(_) => "websocket".into(),
         }
     }
 }
@@ -48,16 +60,27 @@ impl From<UdevDevice> for DeviceInfo {
     }
 }
 
+#[cfg(feature = "networking")]
+impl From<WebsocketClient> for DeviceInfo {
+    fn from(value: WebsocketClient) -> Self {
+        Self::Websocket(value)
+    }
+}
+
 /// Reference to device information
 #[derive(Debug, Clone)]
 pub enum DeviceInfoRef<'a> {
     Udev(&'a UdevDevice),
+    #[cfg(feature = "networking")]
+    Websocket(&'a WebsocketClient),
 }
 
 impl DeviceInfoRef<'_> {
     pub fn to_owned(&self) -> DeviceInfo {
         match self {
             DeviceInfoRef::Udev(device) => DeviceInfo::Udev(device.to_owned().clone()),
+            #[cfg(feature = "networking")]
+            DeviceInfoRef::Websocket(client) => DeviceInfo::Websocket(client.to_owned().clone()),
         }
     }
 }
@@ -65,5 +88,12 @@ impl DeviceInfoRef<'_> {
 impl<'a> From<&'a UdevDevice> for DeviceInfoRef<'a> {
     fn from(device: &'a UdevDevice) -> Self {
         Self::Udev(device)
+    }
+}
+
+#[cfg(feature = "networking")]
+impl<'a> From<&'a WebsocketClient> for DeviceInfoRef<'a> {
+    fn from(value: &'a WebsocketClient) -> Self {
+        Self::Websocket(value)
     }
 }

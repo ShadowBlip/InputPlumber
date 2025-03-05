@@ -9,6 +9,16 @@ PREFIX ?= /usr
 CACHE_DIR := .cache
 ENABLE_METRICS ?= 1
 
+# Cargo features to build with. Networking (websocket) support is enabled by
+# default; set FEATURES to an empty string to compile without it:
+#   make build FEATURES=""
+FEATURES ?= networking
+ifeq ($(FEATURES),)
+FEATURE_FLAGS := --no-default-features
+else
+FEATURE_FLAGS := --features "$(FEATURES)"
+endif
+
 ifeq ($(ARCH),x86_64)
 	ARCH_DEB = amd64
 endif
@@ -103,12 +113,12 @@ build: target/$(TARGET_ARCH)/$(BUILD_TYPE)/$(NAME)
 .PHONY: debug
 debug: target/$(TARGET_ARCH)/debug/$(NAME)  ## Build debug build
 target/$(TARGET_ARCH)/debug/$(NAME): $(ALL_RS) Cargo.lock
-	cargo build --target $(TARGET_ARCH)
+	cargo build --target $(TARGET_ARCH) $(FEATURE_FLAGS)
 
 .PHONY: release
 release: target/$(TARGET_ARCH)/release/$(NAME) ## Build release build
 target/$(TARGET_ARCH)/release/$(NAME): $(ALL_RS) Cargo.lock
-	cargo build --release --target $(TARGET_ARCH)
+	cargo build --release --target $(TARGET_ARCH) $(FEATURE_FLAGS)
 
 .PHONY: all
 all: build debug ## Build release and debug builds
@@ -132,8 +142,8 @@ format: ## Run rustfmt on all source files
 
 .PHONY: test
 test: test-autostart-rules ## Run all tests
-	cargo clippy --all -- -D warnings
-	cargo test -- --show-output
+	cargo clippy --all $(FEATURE_FLAGS) -- -D warnings
+	cargo test $(FEATURE_FLAGS) -- --show-output
 
 .PHONY: test-autostart-rules
 test-autostart-rules: ## Test to ensure autostart rules are up-to-date
@@ -145,7 +155,7 @@ test-polkit-usage: ## Test to ensure polkit policy exists for all actions
 
 .PHONY: generate
 generate: ## Generate schema definitions for configs
-	cargo run --bin generate
+	cargo run --bin generate $(FEATURE_FLAGS)
 
 .PHONY: setup
 setup: /usr/share/dbus-1/system.d/$(DBUS_NAME).conf ## Install dbus policies
@@ -260,7 +270,8 @@ in-docker:
 		-e ARCH=$(ARCH) \
 		-e TARGET_ARCH=$(TARGET_ARCH) \
 		-e BUILD_TYPE=$(BUILD_TYPE) \
-		-e PKG_CONFIG_SYSROOT_DIR="/usr/$(ARCH)-linux-gnu" \
+		-e FEATURES=$(FEATURES) \
+	-e PKG_CONFIG_SYSROOT_DIR="/usr/$(ARCH)-linux-gnu" \
 		--user $(shell id -u):$(shell id -g) \
 		$(IMAGE_NAME):$(IMAGE_TAG) \
 		make BUILD_TYPE=$(BUILD_TYPE) $(TARGET)

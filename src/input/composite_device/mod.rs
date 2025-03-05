@@ -43,6 +43,9 @@ use crate::{
     udev::{hide_device, unhide_device, HideFlag},
 };
 
+#[cfg(feature = "networking")]
+use crate::input::source::network::NetworkDevice;
+
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
 
 use super::{
@@ -1775,6 +1778,11 @@ impl CompositeDevice {
                         .into())
                     }
                 }
+            }
+            #[cfg(feature = "networking")]
+            DeviceInfo::Websocket(client) => {
+                let device = NetworkDevice::new(client, self.client(), source_config.clone())?;
+                SourceDevice::Network(device)
             }
         };
 
