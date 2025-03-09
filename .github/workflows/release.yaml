@@ -157,7 +157,7 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y wget git lsb-release wget software-properties-common gnupg curl build-essential devscripts debhelper
+          apt-get install -y wget git lsb-release software-properties-common gnupg curl build-essential devscripts debhelper
 
       - name: Install build dependencies
         id: install-build-deps
@@ -172,17 +172,15 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           . $HOME/.cargo/env
 
-      - name: Install cargo-deb
-        run: cargo install cargo-deb
-
-      - name: Build Debian package
-        run: cargo deb
+      - name: Build deb package
+        run: |
+          make dist-deb
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
           name: inputplumber_debian-bookworm.deb
-          path: target/debian/inputplumber_*.deb
+          path: dist/inputplumber_*.deb
           if-no-files-found: error
 
   publish-to-ubuntu-noble:
@@ -203,7 +201,7 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y wget git lsb-release wget software-properties-common gnupg curl build-essential devscripts debhelper
+          apt-get install -y wget git lsb-release software-properties-common gnupg curl build-essential devscripts debhelper
 
       - name: Install build dependencies
         id: install-build-deps
@@ -218,15 +216,13 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           . $HOME/.cargo/env
 
-      - name: Install cargo-deb
-        run: cargo install cargo-deb
-
-      - name: Build Debian package
-        run: cargo deb
+      - name: Build deb package
+        run: |
+          make dist-deb
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
           name: inputplumber_ubuntu-noble_amd64.deb
-          path: target/debian/inputplumber_*.deb
+          path: dist/inputplumber_*.deb
           if-no-files-found: error
