@@ -122,7 +122,7 @@ example:
 ##@ Distribution
 
 .PHONY: dist
-dist: dist/$(NAME).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist/$(NAME).raw ## Create all redistributable versions of the project
+dist: dist/$(NAME).tar.gz dist/$(NAME)_$(VERSION)-1_$(ARCH).deb dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist/$(NAME).raw ## Create all redistributable versions of the project
 
 .PHONY: dist-archive
 dist-archive: dist/$(NAME).tar.gz ## Build a redistributable archive of the project
@@ -133,6 +133,15 @@ dist/$(NAME).tar.gz: build $(ALL_ROOTFS)
 	mkdir -p dist
 	tar cvfz $@ -C $(CACHE_DIR) $(NAME)
 	cd dist && sha256sum $(NAME).tar.gz > $(NAME).tar.gz.sha256.txt
+
+.PHONY: dist-deb
+dist-deb: dist/$(NAME)_$(VERSION)-1_$(ARCH).deb ## Build a redistributable deb package
+dist/$(NAME)_$(VERSION)-1_$(ARCH).deb: target/release/$(NAME)
+	mkdir -p dist
+	cargo install cargo-deb
+	cargo deb
+	cp ./target/debian/$(NAME)_$(VERSION)-1_$(ARCH).deb dist
+	cd dist && sha256sum $(NAME)_$(VERSION)-1_$(ARCH).deb > $(NAME)_$(VERSION)-1_$(ARCH).deb.sha256.txt
 
 .PHONY: dist-rpm
 dist-rpm: dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Build a redistributable RPM package
