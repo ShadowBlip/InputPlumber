@@ -20,6 +20,7 @@ use zbus::Connection;
 use crate::bluetooth::device1::Device1Proxy;
 use crate::config::path::get_capability_maps_paths;
 use crate::config::path::get_devices_paths;
+use crate::config::path::get_multidir_sorted_files;
 use crate::config::CapabilityMap;
 use crate::config::CompositeDeviceConfig;
 use crate::config::SourceDevice;
@@ -1692,40 +1693,24 @@ impl Manager {
     pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMap> {
         let mut mappings = HashMap::new();
         let paths = get_capability_maps_paths();
+        let files = get_multidir_sorted_files(paths.as_slice(), |entry| {
+            entry.path().extension().unwrap() == "yaml"
+        });
 
-        // Look for capability mappings in all known locations
-        for path in paths.iter() {
-            let files = fs::read_dir(path);
-            if files.is_err() {
-                log::trace!("Failed to load directory {path:?}: {}", files.unwrap_err());
+        // Look at each file in the directory and try to load them
+        for file in files {
+            // Try to load the capability map
+            log::trace!("Found file: {}", file.display());
+            let mapping = CapabilityMap::from_yaml_file(file.display().to_string());
+            if mapping.is_err() {
+                log::warn!(
+                    "Failed to parse capability mapping: {}",
+                    mapping.unwrap_err()
+                );
                 continue;
             }
-            let mut files: Vec<_> = files.unwrap().map(|r| r.unwrap()).collect();
-            files.sort_by_key(|dir| dir.file_name());
-
-            // Look at each file in the directory and try to load them
-            for file in files {
-                let filename = file.file_name();
-                let filename = filename.as_os_str().to_str().unwrap();
-
-                // Skip any non-yaml files
-                if !filename.ends_with(".yaml") {
-                    continue;
-                }
-
-                // Try to load the composite device profile
-                log::trace!("Found file: {}", file.path().display());
-                let mapping = CapabilityMap::from_yaml_file(file.path().display().to_string());
-                if mapping.is_err() {
-                    log::warn!(
-                        "Failed to parse capability mapping: {}",
-                        mapping.unwrap_err()
-                    );
-                    continue;
-                }
-                let map = mapping.unwrap();
-                mappings.insert(map.id.clone(), map);
-            }
+            let map = mapping.unwrap();
+            mappings.insert(map.id.clone(), map);
         }
 
         mappings
@@ -1736,45 +1721,28 @@ impl Manager {
     /// to automatically create a [CompositeDevice].
     pub async fn load_device_configs(&self) -> Vec<CompositeDeviceConfig> {
         let task = task::spawn_blocking(move || {
+            log::trace!("Loading device configurations");
             let mut devices: Vec<CompositeDeviceConfig> = Vec::new();
             let paths = get_devices_paths();
+            let files = get_multidir_sorted_files(paths.as_slice(), |entry| {
+                entry.path().extension().unwrap_or_default() == "yaml"
+            });
 
-            // Look for composite device profiles in all known locations
-            for path in paths.iter() {
-                log::trace!("Checking {path:?} for composite device configs");
-                let files = fs::read_dir(path);
-                if files.is_err() {
-                    log::debug!("Failed to load directory {path:?}: {}", files.unwrap_err());
+            // Look at each file in the directory and try to load them
+            for file in files {
+                // Try to load the composite device profile
+                log::trace!("Found file: {}", file.display());
+                let device = CompositeDeviceConfig::from_yaml_file(file.display().to_string());
+                if device.is_err() {
+                    log::warn!(
+                        "Failed to parse composite device config '{}': {}",
+                        file.display(),
+                        device.unwrap_err()
+                    );
                     continue;
                 }
-                let mut files: Vec<_> = files.unwrap().map(|r| r.unwrap()).collect();
-                files.sort_by_key(|dir| dir.file_name());
-
-                // Look at each file in the directory and try to load them
-                for file in files {
-                    let filename = file.file_name();
-                    let filename = filename.as_os_str().to_str().unwrap();
-
-                    // Skip any non-yaml files
-                    if !filename.ends_with(".yaml") {
-                        continue;
-                    }
-
-                    // Try to load the composite device profile
-                    log::trace!("Found file: {}", file.path().display());
-                    let device =
-                        CompositeDeviceConfig::from_yaml_file(file.path().display().to_string());
-                    if device.is_err() {
-                        log::warn!(
-                            "Failed to parse composite device config '{}': {}",
-                            file.path().display(),
-                            device.unwrap_err()
-                        );
-                        continue;
-                    }
-                    let device = device.unwrap();
-                    devices.push(device);
-                }
+                let device = device.unwrap();
+                devices.push(device);
             }
 
             devices
