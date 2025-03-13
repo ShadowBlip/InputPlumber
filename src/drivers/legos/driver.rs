@@ -16,7 +16,7 @@ use super::{
 // Hardware ID's
 pub const VID: u16 = 0x1a86;
 pub const XINPUT_PID: u16 = 0xe310;
-pub const DINPUT_PID: u16 = 0xe310;
+pub const DINPUT_PID: u16 = 0xe311;
 pub const PIDS: [u16; 2] = [XINPUT_PID, DINPUT_PID];
 // Input report sizes
 const XINPUT_PACKET_SIZE: usize = 32;
