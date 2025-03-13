@@ -325,7 +325,7 @@ impl HidRawDevice {
         }
 
         // Legion Go S
-        if vid == drivers::legos::driver::VID && pid == drivers::legos::driver::PID {
+        if vid == drivers::legos::driver::VID && drivers::legos::driver::PIDS.contains(&pid) {
             log::info!("Detected Legion Go S");
             return DriverType::LegionGoS;
         }
