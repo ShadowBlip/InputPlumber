@@ -2076,7 +2076,7 @@ dependencies = [
 [[package]]
 name = "virtual-usb"
 version = "0.1.0"
-source = "git+https://github.com/ShadowBlip/virtual-usb-rs.git?rev=4bca5c6fb9f2b63944a286854405e3e7e0b5d259#4bca5c6fb9f2b63944a286854405e3e7e0b5d259"
+source = "git+https://github.com/ShadowBlip/virtual-usb-rs.git?rev=5c4c551a23b56f627a36d6775a5876c174be9eb3#5c4c551a23b56f627a36d6775a5876c174be9eb3"
 dependencies = [
  "libudev",
  "packed_struct",
