@@ -296,8 +296,12 @@ impl DeviceTestMenu {
         let inside_block = block.inner(area);
         block.render(area, buf);
 
+        // Calculate the number of rows/columns based on the number of
+        // ui elements.
+        let (columns, rows) = calculate_rows_columns(self.ui_buttons.len(), 9.0, 5.0);
+
         // Define the grid for the buttons
-        let cells = create_grid(inside_block, 5, 9);
+        let cells = create_grid(inside_block, rows, columns);
 
         // Render each gauge
         for (btn, area) in self.ui_buttons.iter().zip(cells.iter()) {
@@ -314,8 +318,12 @@ impl DeviceTestMenu {
         let inside_block = block.inner(area);
         block.render(area, buf);
 
+        // Calculate the number of rows/columns based on the number of
+        // ui elements.
+        let (columns, rows) = calculate_rows_columns(self.ui_triggers.len(), 1.0, 2.0);
+
         // Define the grid for the widgets
-        let cells = create_grid(inside_block, 4, 2);
+        let cells = create_grid(inside_block, rows, columns);
 
         // Render each gauge
         for (widget, area) in self.ui_triggers.iter().zip(cells.iter()) {
@@ -332,8 +340,12 @@ impl DeviceTestMenu {
         let inside_block = block.inner(area);
         block.render(area, buf);
 
+        // Calculate the number of rows/columns based on the number of
+        // ui elements.
+        let (columns, rows) = calculate_rows_columns(self.ui_axes.len(), 2.0, 1.0);
+
         // Define the grid for the buttons
-        let cells = create_grid(inside_block, 1, 2);
+        let cells = create_grid(inside_block, rows, columns);
 
         // Render each widget
         for (widget, area) in self.ui_axes.iter().zip(cells.iter()) {
@@ -350,7 +362,11 @@ impl DeviceTestMenu {
         let inside_block = block.inner(area);
         block.render(area, buf);
 
-        let cells = create_grid(inside_block, 1, 2);
+        // Calculate the number of rows/columns based on the number of
+        // ui elements.
+        let (columns, rows) = calculate_rows_columns(self.ui_gyro.len(), 2.0, 1.0);
+
+        let cells = create_grid(inside_block, rows, columns);
 
         // Render each gauge
         for (widget, area) in self.ui_gyro.iter().zip(cells.iter()) {
@@ -367,8 +383,12 @@ impl DeviceTestMenu {
         let inside_block = block.inner(area);
         block.render(area, buf);
 
+        // Calculate the number of rows/columns based on the number of
+        // ui elements.
+        let (columns, rows) = calculate_rows_columns(self.ui_touch.len(), 2.0, 1.0);
+
         // Define the grid for the widgets
-        let cells = create_grid(inside_block, 1, 2);
+        let cells = create_grid(inside_block, rows, columns);
 
         // Render each gauge
         for (widget, area) in self.ui_touch.iter().zip(cells.iter()) {
@@ -687,4 +707,32 @@ fn create_grid(area: Rect, rows: u16, columns: u16) -> Vec<Rect> {
     }
 
     cells
+}
+
+/// Calculates the number of rows/columns that can fit the given number of
+/// elements in a grid of the given aspect ratio. The aspect ratio should be
+/// two floats that describe the aspect ratio; i.e. (4.0, 3.0) would be a 4:3
+/// aspect ratio. Returns the width and height of the grid: (w, h).
+fn calculate_rows_columns(element_count: usize, width_ratio: f64, height_ratio: f64) -> (u16, u16) {
+    // Calculate the number of rows and columns as if we were going to fit them
+    // into a square grid.
+    let rows_columns = (element_count as f64).sqrt().ceil();
+
+    // Scale the width/height of the square grid based on the aspect ratio.
+    let mut width = (rows_columns * (width_ratio / height_ratio))
+        .ceil()
+        .max(1.0);
+    let mut height = (rows_columns * (height_ratio / width_ratio))
+        .ceil()
+        .max(1.0);
+
+    // Fit the exact number of elements, if possible
+    if width == 1.0 {
+        height = element_count as f64;
+    }
+    if height == 1.0 {
+        width = element_count as f64;
+    }
+
+    (width as u16, height as u16)
 }
