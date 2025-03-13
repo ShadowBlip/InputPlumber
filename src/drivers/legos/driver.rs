@@ -15,7 +15,9 @@ use super::{
 
 // Hardware ID's
 pub const VID: u16 = 0x1a86;
-pub const PID: u16 = 0xe310;
+pub const XINPUT_PID: u16 = 0xe310;
+pub const DINPUT_PID: u16 = 0xe310;
+pub const PIDS: [u16; 2] = [XINPUT_PID, DINPUT_PID];
 // Input report sizes
 const XINPUT_PACKET_SIZE: usize = 32;
 const INERTIAL_PACKET_SIZE: usize = 9;
@@ -50,7 +52,7 @@ impl Driver {
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
         let info = device.get_device_info()?;
-        if info.vendor_id() != VID || info.product_id() != PID {
+        if info.vendor_id() != VID || !PIDS.contains(&info.product_id()) {
             return Err(format!("Device '{fmtpath}' is not a Legion Go S Controller").into());
         }
         Ok(Self {
