@@ -4,6 +4,7 @@ pub mod gamepad;
 pub mod keyboard;
 pub mod mouse;
 pub mod touchscreen;
+pub mod websocket;
 
 use zbus::fdo;
 use zbus_macros::interface;

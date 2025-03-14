@@ -4,6 +4,7 @@ use tokio::sync::mpsc::{channel, error::SendError, Sender};
 
 use crate::config::CompositeDeviceConfig;
 use crate::input::event::native::NativeEvent;
+use crate::input::info::DeviceInfo;
 use crate::input::target::client::TargetDeviceClient;
 use crate::input::{capability::Capability, event::Event, output_event::OutputEvent};
 use crate::udev::device::UdevDevice;
@@ -207,7 +208,7 @@ impl CompositeDeviceClient {
     }
 
     /// Add the given source device to the composite device
-    pub async fn add_source_device(&self, device: UdevDevice) -> Result<(), ClientError> {
+    pub async fn add_source_device(&self, device: DeviceInfo) -> Result<(), ClientError> {
         self.tx
             .send(CompositeCommand::SourceDeviceAdded(device))
             .await?;
@@ -215,7 +216,7 @@ impl CompositeDeviceClient {
     }
 
     /// Remove the given source device from the composite device
-    pub async fn remove_source_device(&self, device: UdevDevice) -> Result<(), ClientError> {
+    pub async fn remove_source_device(&self, device: DeviceInfo) -> Result<(), ClientError> {
         self.tx
             .send(CompositeCommand::SourceDeviceRemoved(device))
             .await?;

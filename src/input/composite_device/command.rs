@@ -7,10 +7,10 @@ use crate::{
     input::{
         capability::Capability,
         event::{native::NativeEvent, Event},
+        info::DeviceInfo,
         output_event::OutputEvent,
         target::client::TargetDeviceClient,
     },
-    udev::device::UdevDevice,
 };
 
 use super::InterceptMode;
@@ -18,7 +18,7 @@ use super::InterceptMode;
 /// CompositeDevice commands define all the different ways to interact with [CompositeDevice]
 /// over a channel. These commands are processed in an asyncronous thread and
 /// dispatched as they come in.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum CompositeCommand {
     AttachTargetDevices(HashMap<String, TargetDeviceClient>),
     GetConfig(mpsc::Sender<CompositeDeviceConfig>),
@@ -39,9 +39,9 @@ pub enum CompositeCommand {
     SetInterceptActivation(Vec<Capability>, Capability),
     SetInterceptMode(InterceptMode),
     SetTargetDevices(Vec<String>),
-    SourceDeviceAdded(UdevDevice),
-    SourceDeviceRemoved(UdevDevice),
-    SourceDeviceStopped(UdevDevice),
+    SourceDeviceAdded(DeviceInfo),
+    SourceDeviceRemoved(DeviceInfo),
+    SourceDeviceStopped(DeviceInfo),
     UpdateSourceCapabilities(String, HashSet<Capability>),
     UpdateTargetCapabilities(String, HashSet<Capability>),
     WriteChordEvent(Vec<NativeEvent>),
