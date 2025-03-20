@@ -7,16 +7,13 @@ use crate::{
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
         legos::{
-            driver::{self, Driver},
-            event,
+            event, xinput_driver::XInputDriver, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
+            TRIGG_MAX,
         },
         steam_deck::hid_report::{PackedHapticReport, PadSide},
     },
     input::{
-        capability::{
-            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
-            Touchpad,
-        },
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         event::{native::NativeEvent, value::InputValue},
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
@@ -25,16 +22,16 @@ use crate::{
 };
 
 /// Legion Go Controller source device implementation
-pub struct LegionSController {
-    driver: Driver,
+pub struct LegionSXInputController {
+    driver: XInputDriver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
 }
 
-impl LegionSController {
+impl LegionSXInputController {
     /// Create a new Legion controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = Driver::new(device_info.devnode())?;
+        let driver = XInputDriver::new(device_info.devnode())?;
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
@@ -147,7 +144,7 @@ impl LegionSController {
     }
 }
 
-impl SourceInputDevice for LegionSController {
+impl SourceInputDevice for LegionSXInputController {
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
@@ -161,7 +158,7 @@ impl SourceInputDevice for LegionSController {
     }
 }
 
-impl SourceOutputDevice for LegionSController {
+impl SourceOutputDevice for LegionSXInputController {
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
@@ -190,7 +187,7 @@ impl SourceOutputDevice for LegionSController {
     }
 }
 
-impl Debug for LegionSController {
+impl Debug for LegionSXInputController {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LegionSController").finish()
     }
@@ -223,54 +220,33 @@ fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
 /// minimum and maximum axis ranges.
 fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
     match event {
-        event::AxisEvent::Touchpad(value) => {
-            let max = driver::PAD_X_MAX;
-            let x = normalize_unsigned_value(value.x as f64, max);
-
-            let max = driver::PAD_Y_MAX;
-            let y = normalize_unsigned_value(value.y as f64, max);
-
-            // If this is an UP event, don't override the position of X/Y
-            let (x, y) = if !value.is_touching {
-                (None, None)
-            } else {
-                (Some(x), Some(y))
-            };
-
-            InputValue::Touch {
-                index: value.index,
-                is_touching: value.is_touching,
-                pressure: Some(1.0),
-                x,
-                y,
-            }
-        }
         event::AxisEvent::LStick(value) => {
-            let min = driver::STICK_X_MIN;
-            let max = driver::STICK_X_MAX;
+            let min = STICK_X_MIN;
+            let max = STICK_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = driver::STICK_Y_MIN;
-            let max = driver::STICK_Y_MAX;
+            let min = STICK_Y_MIN;
+            let max = STICK_Y_MAX;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y);
 
             InputValue::Vector2 { x, y }
         }
         event::AxisEvent::RStick(value) => {
-            let min = driver::STICK_X_MIN;
-            let max = driver::STICK_X_MAX;
+            let min = STICK_X_MIN;
+            let max = STICK_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = driver::STICK_Y_MIN;
-            let max = driver::STICK_Y_MAX;
+            let min = STICK_Y_MIN;
+            let max = STICK_Y_MAX;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y);
 
             InputValue::Vector2 { x, y }
         }
+        _ => InputValue::None,
     }
 }
 
@@ -279,13 +255,14 @@ fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
 fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
     match event {
         event::TriggerEvent::ATriggerL(value) => {
-            let max = driver::TRIGG_MAX;
+            let max = TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
         event::TriggerEvent::ATriggerR(value) => {
-            let max = driver::TRIGG_MAX;
+            let max = TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
+        _ => InputValue::None,
     }
 }
 
@@ -378,20 +355,9 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
                 InputValue::Bool(value.pressed),
             ),
-            event::ButtonEvent::RPadPress(value) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::RPadTap(value) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
-                InputValue::Bool(value.pressed),
-            ),
+            _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
         },
         event::Event::Axis(axis) => match axis.clone() {
-            event::AxisEvent::Touchpad(_) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
-                normalize_axis_value(axis),
-            ),
             event::AxisEvent::LStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
                 normalize_axis_value(axis),
@@ -400,6 +366,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
                 normalize_axis_value(axis),
             ),
+            _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
         },
         event::Event::Trigger(trigg) => match trigg.clone() {
             event::TriggerEvent::ATriggerL(_) => NativeEvent::new(
@@ -410,31 +377,14 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
                 normalize_trigger_value(trigg),
             ),
+            _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
         },
-        event::Event::Inertia(motion) => match motion {
-            event::InertialEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Accelerometer),
-                InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
-                },
-            ),
-            event::InertialEvent::Gyro(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Gyro),
-                InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
-                },
-            ),
-        },
+        event::Event::Inertia(_) => NativeEvent::new(Capability::NotImplemented, InputValue::None),
     }
 }
 
 /// List of all capabilities that the Legion Go driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -457,10 +407,6 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-    Capability::Gamepad(Gamepad::Gyro),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
-    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Touch))),
-    Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];

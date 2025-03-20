@@ -1,66 +1,38 @@
 use std::{error::Error, ffi::CString};
 
 use hidapi::HidDevice;
-use packed_struct::{types::SizedInteger, PackedStruct};
+use packed_struct::PackedStruct;
 
 use super::{
-    event::{
-        AxisEvent, BinaryInput, ButtonEvent, Event, InertialEvent, InertialInput, JoyAxisInput,
-        TriggerEvent, TriggerInput,
-    },
-    hid_report::{
-        InertialInputDataReport, InputReportType, RumbleOutputDataReport, XInputDataReport,
-    },
+    event::{AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, TriggerEvent, TriggerInput},
+    hid_report::{RumbleOutputDataReport, XInputDataReport},
+    GP_IID, HID_TIMEOUT, PIDS, VID, XINPUT_PACKET_SIZE,
 };
 
-// Hardware ID's
-pub const VID: u16 = 0x1a86;
-pub const XINPUT_PID: u16 = 0xe310;
-pub const DINPUT_PID: u16 = 0xe311;
-pub const PIDS: [u16; 2] = [XINPUT_PID, DINPUT_PID];
-// Input report sizes
-const XINPUT_PACKET_SIZE: usize = 32;
-const INERTIAL_PACKET_SIZE: usize = 9;
-const HID_TIMEOUT: i32 = 10;
-// Input report axis ranges
-pub const PAD_X_MAX: f64 = 1024.0;
-pub const PAD_Y_MAX: f64 = 1024.0;
-pub const STICK_X_MAX: f64 = 127.0;
-pub const STICK_X_MIN: f64 = -127.0;
-pub const STICK_Y_MAX: f64 = 127.0;
-pub const STICK_Y_MIN: f64 = -127.0;
-pub const TRIGG_MAX: f64 = 255.0;
-pub const GYRO_SCALE: i16 = 2;
-
-pub struct Driver {
+pub struct XInputDriver {
     /// HIDRAW device instance
     device: HidDevice,
-    /// State for the IMU Accelerometer
-    accel_state: Option<InertialInputDataReport>,
-    /// State for the IMU Gyroscope
-    gyro_state: Option<InertialInputDataReport>,
     /// State for the internal gamepad  controller
     xinput_state: Option<XInputDataReport>,
-    /// Tracks if the bad data pushed when grabbing the gyro device
-    bad_data_passed: bool,
 }
 
-impl Driver {
+impl XInputDriver {
     pub fn new(path: String) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let fmtpath = path.clone();
         let path = CString::new(path)?;
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
         let info = device.get_device_info()?;
-        if info.vendor_id() != VID || !PIDS.contains(&info.product_id()) {
+
+        if info.vendor_id() != VID
+            || !PIDS.contains(&info.product_id())
+            || info.interface_number() != GP_IID
+        {
             return Err(format!("Device '{fmtpath}' is not a Legion Go S Controller").into());
         }
         Ok(Self {
             device,
-            accel_state: None,
-            gyro_state: None,
             xinput_state: None,
-            bad_data_passed: false,
         })
     }
 
@@ -70,39 +42,20 @@ impl Driver {
         let mut buf = [0; XINPUT_PACKET_SIZE];
         let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
 
-        let events = match bytes_read {
-            XINPUT_PACKET_SIZE => match self.handle_xinput_report(buf) {
-                Ok(events) => events,
-                Err(e) => {
-                    log::error!("Got error processing XinputDataReport: {e:?}");
-                    vec![]
-                }
-            },
+        if bytes_read != XINPUT_PACKET_SIZE {
+            return Ok(vec![]);
+        }
 
-            INERTIAL_PACKET_SIZE => {
-                let slice = &buf[..bytes_read];
-                // Handle the incoming input report
-                let sized_buf = slice.try_into()?;
-                match self.handle_inertial_report(sized_buf) {
-                    Ok(events) => events,
-                    Err(e) => {
-                        log::error!("Got error processing InertailInputDataReport: {e:?}");
-                        vec![]
-                    }
-                }
-            }
-
-            _ => vec![],
-        };
-
-        Ok(events)
+        match self.handle_xinput_report(buf) {
+            Ok(events) => Ok(events),
+            Err(_e) => Ok(vec![]),
+        }
     }
 
     /// Writes the given output state to the gamepad. This can be used to change
     /// the color of LEDs, activate rumble, etc.
     pub fn write(&self, buf: &[u8]) -> Result<(), Box<dyn Error + Send + Sync>> {
         let _bytes_written = self.device.write(buf)?;
-
         Ok(())
     }
 
@@ -116,29 +69,20 @@ impl Driver {
             r_motor_speed,
             ..Default::default()
         };
-        log::debug!("Got rumble event: {report:?}");
+        //log::debug!("Got rumble event: {report:?}");
 
         let buf = report.pack()?;
         self.write(&buf)
     }
 
-    /// Unpacks the buffer into a [XinputDataReport] structure and updates
+    /* GamePad */
+    /// Unpacks the buffer into a [XInputDataReport] structure and updates
     /// the internal xinput_state
     fn handle_xinput_report(
         &mut self,
         buf: [u8; XINPUT_PACKET_SIZE],
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let input_report = XInputDataReport::unpack(&buf)?;
-
-        // Hacky workaround. When the gyro and touch devices are grabbed the XInputDataReport is
-        // full of garbage. Since it doesn't have a report_id we cant reject it. This only seems
-        // to happen one time for the first device grabbed, so we can save a lot of checks in the
-        // future if we clear a bool once it happens.
-        if !self.bad_data_passed && input_report.is_bad_data() {
-            log::debug!("Got bad XInputDataReport, regecting it.");
-            self.bad_data_passed = true;
-            return Ok(vec![]);
-        }
 
         // Print input report for debugging
         //log::debug!("--- Input report ---");
@@ -264,11 +208,6 @@ impl Driver {
                 pressed: state.y2,
             })));
         }
-        if state.rpad_tap != old_state.rpad_tap {
-            events.push(Event::Button(ButtonEvent::RPadTap(BinaryInput {
-                pressed: state.rpad_tap,
-            })));
-        }
         if state.thumb_l != old_state.thumb_l {
             events.push(Event::Button(ButtonEvent::ThumbL(BinaryInput {
                 pressed: state.thumb_l,
@@ -304,123 +243,6 @@ impl Driver {
                 value: state.a_trigger_r,
             })));
         }
-        //TODO: When touchpad firmware is updated to use ABS events, enable this
-        //if state.touch_x != old_state.touch_x
-        //    || state.touch_y != old_state.touch_y
-        //    || state.rpad_touching != old_state.rpad_touching
-        //{
-        //    events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
-        //        x: state.touch_x,
-        //        y: state.touch_y,
-        //        index: 0,
-        //        is_touching: state.rpad_touching,
-        //    })))
-        //}
-
-        events
-    }
-
-    fn handle_inertial_report(
-        &mut self,
-        buf: [u8; INERTIAL_PACKET_SIZE],
-    ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let input_report = InertialInputDataReport::unpack(&buf)?;
-
-        // Print input report for debugging
-        //log::debug!("--- Input report ---");
-        //log::debug!("{input_report}");
-        //log::debug!(" ---- End Report ----");
-
-        let report_type = match input_report.report_id {
-            1 => InputReportType::AccelData,
-            2 => InputReportType::GyroData,
-            _ => {
-                let report_id = input_report.report_id;
-                return Err(format!("Unknown report type: {report_id}").into());
-            }
-        };
-
-        match report_type {
-            InputReportType::AccelData => {
-                // Update the state
-                let old_state = self.update_accel_state(input_report);
-                // Translate the state into a stream of input events
-                let events = self.translate_accel_data(old_state);
-                Ok(events)
-            }
-            InputReportType::GyroData => {
-                // Update the state
-                let old_state = self.update_gyro_state(input_report);
-                // Translate the state into a stream of input events
-                let events = self.translate_gyro_data(old_state);
-                Ok(events)
-            }
-        }
-    }
-
-    /// Update accel_state
-    fn update_accel_state(
-        &mut self,
-        input_report: InertialInputDataReport,
-    ) -> Option<InertialInputDataReport> {
-        let old_state = self.accel_state;
-        self.accel_state = Some(input_report);
-        old_state
-    }
-
-    /// Update gyro_state
-    fn update_gyro_state(
-        &mut self,
-        input_report: InertialInputDataReport,
-    ) -> Option<InertialInputDataReport> {
-        let old_state = self.gyro_state;
-        self.gyro_state = Some(input_report);
-        old_state
-    }
-
-    /// Translate the accel_state into individual events
-    fn translate_accel_data(&self, old_state: Option<InertialInputDataReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.accel_state else {
-            return events;
-        };
-
-        // Translate state changes into events if they have changed
-        let Some(old_state) = old_state else {
-            return events;
-        };
-        if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
-            events.push(Event::Inertia(InertialEvent::Accelerometer(
-                InertialInput {
-                    x: -state.x.to_primitive(),
-                    y: -state.y.to_primitive(),
-                    z: -state.z.to_primitive(),
-                },
-            )))
-        };
-
-        events
-    }
-
-    /// Translate the gyro_state into individual events
-    fn translate_gyro_data(&self, old_state: Option<InertialInputDataReport>) -> Vec<Event> {
-        let mut events = Vec::new();
-        let Some(state) = self.gyro_state else {
-            return events;
-        };
-
-        // Translate state changes into events if they have changed
-        let Some(old_state) = old_state else {
-            return events;
-        };
-
-        if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
-            events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-                x: -state.x.to_primitive() * GYRO_SCALE,
-                y: -state.y.to_primitive() * GYRO_SCALE,
-                z: -state.z.to_primitive() * GYRO_SCALE,
-            })))
-        };
 
         events
     }

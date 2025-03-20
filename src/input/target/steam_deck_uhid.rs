@@ -365,7 +365,6 @@ impl SteamDeckUhidDevice {
     fn handle_output(&mut self, data: Vec<u8>) -> Result<Vec<OutputEvent>, Box<dyn Error>> {
         // The first byte should be the report id
         let Some(report_id) = data.first() else {
-            log::warn!("Received empty output report.");
             return Ok(vec![]);
         };
 
@@ -691,7 +690,11 @@ impl TargetInputDevice for SteamDeckUhidDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
             Capability::Gamepad(Gamepad::Gyro),
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftStickForce)),
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTouchpadForce)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightStickForce)),
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Touch))),
