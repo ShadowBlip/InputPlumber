@@ -53,8 +53,8 @@ systemctl enable inputplumber.service
 systemctl start inputplumber.service
 
 %preun
-systemctl stop inputplumber.servce
-systemctl disable inputplumber.servce
+systemctl stop inputplumber.service
+systemctl disable inputplumber.service
 %systemd_preun inputplumber.service
 
 %files
