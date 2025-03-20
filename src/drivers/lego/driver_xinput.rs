@@ -147,7 +147,7 @@ impl Driver {
             }
         }
 
-        // If we did a click event, see if we shoudl release it. Accounts for click and drag.
+        // If we did a click event, see if we should release it. Accounts for click and drag.
         if !self.is_touching
             && self.is_tapped
             && (self.last_touch.elapsed() > Duration::from_millis(100))
@@ -283,19 +283,9 @@ impl Driver {
         };
 
         // Translate state changes into events if they have changed
-        let Some(_) = old_state else {
+        let Some(old_state) = old_state else {
             return events;
         };
-
-        // There is a "hold to tap" event built into the firmware, ignore this event.
-        if state.touch_x_0 == 314
-            && state.touch_y_0 == 512
-            && state.touch_x_1 == 682
-            && state.touch_y_1 == 512
-        {
-            log::debug!("Detected 'hold to press' event. Ignoring");
-            return events;
-        }
 
         // Axis events
         if !self.is_touching {
@@ -303,6 +293,22 @@ impl Driver {
             self.first_touch = Instant::now();
             log::trace!("Started TOUCH event");
         }
+
+        // There is a "hold to tap" event built into the firmware, ignore this event.
+        if state.touch_x_0 == 314
+            && state.touch_y_0 == 512
+            && state.touch_x_1 == 682
+            && state.touch_y_1 == 512
+        {
+            events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
+                index: 0,
+                is_touching: true,
+                x: old_state.touch_x_0,
+                y: old_state.touch_y_0,
+            })));
+            return events;
+        }
+
         events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
             index: 0,
             is_touching: true,

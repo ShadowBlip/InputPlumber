@@ -23,29 +23,55 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  # Touchpad
-  - group: mouse # Gampead Mode
+  # Mouse
+  - group: mouse
     blocked: true
     evdev:
       vendor_id: "1a86"
       product_id: "e310"
       name: "wch.cn Legion Go S Mouse"
       handler: event*
-  - group: mouse # Gampead Mode
+  - group: mouse
     blocked: true
     evdev:
       vendor_id: "1a86"
       product_id: "e311"
       name: "wch.cn Legion Go S Mouse"
       handler: event*
+  # Touchpad
+  - group: mouse
+    blocked: true
+    evdev:
+      vendor_id: "1a86"
+      product_id: "e310"
+      name: "wch.cn Legion Go S Touchpad"
+      handler: event*
+  - group: mouse
+    blocked: true
+    evdev:
+      vendor_id: "1a86"
+      product_id: "e311"
+      name: "wch.cn Legion Go S Touchpad"
+      handler: event*
+  # Mouse & Touchpad HIDRAW
+  - group: mouse
+    hidraw:
+      vendor_id: 0x1a86
+      product_id: 0xe310
+      interface_num: 2
+  - group: mouse
+    hidraw:
+      vendor_id: 0x1a86
+      product_id: 0xe311
+      interface_num: 2
 
   # Gamepad
-  - group: gamepad # Gamepad Mode
+  - group: gamepad
     hidraw:
       vendor_id: 0x1a86
       product_id: 0xe310
       interface_num: 6
-  - group: gamepad # Gamepad Mode
+  - group: gamepad
     hidraw:
       vendor_id: 0x1a86
       product_id: 0xe311

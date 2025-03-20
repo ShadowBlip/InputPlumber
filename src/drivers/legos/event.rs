@@ -57,10 +57,7 @@ pub enum ButtonEvent {
     /// Z-axis button on the right stick
     ThumbR(BinaryInput),
     /// Right touchpad click
-    //TODO: Wire this up with firmware update.
     RPadPress(BinaryInput),
-    /// Right touchpad tapped
-    RPadTap(BinaryInput),
 }
 
 /// Axis input contain (x, y) coordinates
@@ -68,8 +65,8 @@ pub enum ButtonEvent {
 pub struct TouchAxisInput {
     pub index: u8,
     pub is_touching: bool,
-    pub x: i8,
-    pub y: i8,
+    pub x: u16,
+    pub y: u16,
 }
 
 /// Axis input contain (x, y) coordinates
@@ -82,7 +79,6 @@ pub struct JoyAxisInput {
 /// Axis events are events that have (x, y) values
 #[derive(Clone, Debug)]
 pub enum AxisEvent {
-    //TODO: Wire this up with firmware update.
     Touchpad(TouchAxisInput),
     LStick(JoyAxisInput),
     RStick(JoyAxisInput),
@@ -114,4 +110,5 @@ pub struct TriggerInput {
 pub enum TriggerEvent {
     ATriggerL(TriggerInput),
     ATriggerR(TriggerInput),
+    RpadForce(TriggerInput),
 }
