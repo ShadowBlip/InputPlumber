@@ -439,21 +439,29 @@ impl MenuWidget for DeviceTestMenu {
             };
 
             for cap in capability_report.get_capabilities() {
+                let label = format!("{:?}", cap.capability);
+                let label = label
+                    .trim_start_matches("GamepadButton")
+                    .trim_start_matches("GamepadAxis")
+                    .trim_start_matches("GamepadTrigger")
+                    .trim_start_matches("Gamepad")
+                    .trim_start_matches("Touchpad")
+                    .trim_start_matches("Touchscreen")
+                    .trim_start_matches("Mouse")
+                    .trim_start_matches("Keyboard");
+
                 match cap.value_type {
                     ValueType::None => (),
                     ValueType::Bool => {
-                        let label = format!("{:?}", cap.capability);
-                        let button = ButtonGauge::new(cap.capability, label.as_str());
+                        let button = ButtonGauge::new(cap.capability, label);
                         self.ui_buttons.push(button);
                     }
                     ValueType::UInt8 => {
-                        let label = format!("{:?}", cap.capability);
-                        let trigger = TriggerGauge::new(cap.capability, label.as_str());
+                        let trigger = TriggerGauge::new(cap.capability, label);
                         self.ui_triggers.push(trigger);
                     }
                     ValueType::UInt16 => {
-                        let label = format!("{:?}", cap.capability);
-                        let trigger = TriggerGauge::new(cap.capability, label.as_str());
+                        let trigger = TriggerGauge::new(cap.capability, label);
                         self.ui_triggers.push(trigger);
                     }
                     ValueType::UInt32 => (),
@@ -466,14 +474,12 @@ impl MenuWidget for DeviceTestMenu {
                     ValueType::UInt16Vector2 => match cap.capability {
                         InputCapability::GamepadAxisLeftStick
                         | InputCapability::GamepadAxisRightStick => {
-                            let label = format!("{:?}", cap.capability);
-                            let gauge = AxisGauge::new(cap.capability, label.as_str());
+                            let gauge = AxisGauge::new(cap.capability, label);
                             self.ui_axes.push(gauge);
                         }
                         // Assume touch for everything else
                         _ => {
-                            let label = format!("{:?}", cap.capability);
-                            let gauge = TouchGauge::new(cap.capability, label.as_str());
+                            let gauge = TouchGauge::new(cap.capability, label);
                             self.ui_touch.push(gauge);
                         }
                     },
@@ -489,15 +495,13 @@ impl MenuWidget for DeviceTestMenu {
                     ValueType::UInt64Vector3 => (),
                     ValueType::Int8Vector3 => (),
                     ValueType::Int16Vector3 => {
-                        let label = format!("{:?}", cap.capability);
-                        let gauge = GyroGauge::new(cap.capability, label.as_str());
+                        let gauge = GyroGauge::new(cap.capability, label);
                         self.ui_gyro.push(gauge);
                     }
                     ValueType::Int32Vector3 => (),
                     ValueType::Int64Vector3 => (),
                     ValueType::Touch => {
-                        let label = format!("{:?}", cap.capability);
-                        let gauge = TouchGauge::new(cap.capability, label.as_str());
+                        let gauge = TouchGauge::new(cap.capability, label);
                         self.ui_touch.push(gauge);
                     }
                 }
@@ -542,31 +546,38 @@ impl MenuWidget for DeviceTestMenu {
         // Update the interface with the values
         let capabilities = capability_report.get_capabilities();
         for (cap, value) in capabilities.iter().zip(values.iter()) {
+            let label = format!("{:?}", cap.capability);
+            let label = label
+                .trim_start_matches("GamepadButton")
+                .trim_start_matches("GamepadAxis")
+                .trim_start_matches("GamepadTrigger")
+                .trim_start_matches("Gamepad")
+                .trim_start_matches("Touchpad")
+                .trim_start_matches("Touchscreen")
+                .trim_start_matches("Mouse")
+                .trim_start_matches("Keyboard");
+
             match value {
                 Value::None => (),
                 Value::Bool(value) => {
-                    let label = format!("{:?}", cap.capability);
-                    let mut button = ButtonGauge::new(cap.capability, label.as_str());
+                    let mut button = ButtonGauge::new(cap.capability, label);
                     button.set_value(value.value);
                     self.ui_buttons.push(button);
                 }
                 Value::UInt8(value) => {
-                    let label = format!("{:?}", cap.capability);
-                    let mut trigger = TriggerGauge::new(cap.capability, label.as_str());
+                    let mut trigger = TriggerGauge::new(cap.capability, label);
                     trigger.set_value(value.value as f64 / u8::MAX as f64);
                     self.ui_triggers.push(trigger);
                 }
                 Value::UInt16(value) => {
-                    let label = format!("{:?}", cap.capability);
-                    let mut trigger = TriggerGauge::new(cap.capability, label.as_str());
+                    let mut trigger = TriggerGauge::new(cap.capability, label);
                     trigger.set_value(value.value as f64 / u16::MAX as f64);
                     self.ui_triggers.push(trigger);
                 }
                 Value::UInt16Vector2(value) => match cap.capability {
                     InputCapability::GamepadAxisLeftStick
                     | InputCapability::GamepadAxisRightStick => {
-                        let label = format!("{:?}", cap.capability);
-                        let mut gauge = AxisGauge::new(cap.capability, label.as_str());
+                        let mut gauge = AxisGauge::new(cap.capability, label);
                         let (x, y) = {
                             let x = value.x as f64 / u16::MAX as f64;
                             // Convert from 0.0 - 1.0 to -1.0 - 1.0
@@ -582,8 +593,7 @@ impl MenuWidget for DeviceTestMenu {
                     }
                     // Assume touch for everything else
                     _ => {
-                        let label = format!("{:?}", cap.capability);
-                        let mut gauge = TouchGauge::new(cap.capability, label.as_str());
+                        let mut gauge = TouchGauge::new(cap.capability, label);
                         let (x, y) = {
                             let x = value.x as f64 / u16::MAX as f64;
                             let y = value.y as f64 / u16::MAX as f64;
@@ -594,8 +604,7 @@ impl MenuWidget for DeviceTestMenu {
                     }
                 },
                 Value::Int16Vector3(value) => {
-                    let label = format!("{:?}", cap.capability);
-                    let mut gauge = GyroGauge::new(cap.capability, label.as_str());
+                    let mut gauge = GyroGauge::new(cap.capability, label);
                     //let x = value.x / i16::MAX;
                     //let y = value.y / i16::MAX;
                     //let z = value.z / i16::MAX;
@@ -604,8 +613,7 @@ impl MenuWidget for DeviceTestMenu {
                     self.ui_gyro.push(gauge);
                 }
                 Value::Touch(value) => {
-                    let label = format!("{:?}", cap.capability);
-                    let mut gauge = TouchGauge::new(cap.capability, label.as_str());
+                    let mut gauge = TouchGauge::new(cap.capability, label);
                     let (x, y) = {
                         let x = value.x as f64 / u16::MAX as f64;
                         let y = value.y as f64 / u16::MAX as f64;
@@ -650,7 +658,7 @@ impl Widget for &DeviceTestMenu {
         // Split the area into two parts vertically
         let outer_layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+            .constraints(vec![Constraint::Percentage(28), Constraint::Percentage(72)])
             .split(area);
 
         // Top layout
