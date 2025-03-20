@@ -9,6 +9,7 @@ use std::{
     fmt::Debug,
     time::{Duration, Instant},
 };
+use tokio::sync::mpsc::{channel, Receiver};
 use virtual_usb::{
     usb::{
         hid::{HidInterfaceBuilder, HidReportType, HidRequest, HidSubclass, InterfaceProtocol},
@@ -21,8 +22,9 @@ use virtual_usb::{
 };
 
 use crate::{
+    config::CompositeDeviceConfig,
     drivers::steam_deck::{
-        driver::{PID, VID},
+        driver::VID,
         hid_report::{
             PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
             PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX,
@@ -47,55 +49,100 @@ use crate::{
 
 use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
+/// Target Device ProductIds, used to ID specific devices in SDL.
+#[derive(Debug, Clone)]
+pub enum ProductId {
+    SteamDeck = 0x1205,
+    ZotacZone = 0x12fc,
+    AsusRogAlly,
+    LenovoLegionGo,
+    LenovoLegionGoS,
+}
+
+impl ProductId {
+    pub fn to_u16(&self) -> u16 {
+        match self {
+            ProductId::SteamDeck => ProductId::SteamDeck as u16,
+            ProductId::ZotacZone => ProductId::ZotacZone as u16,
+            ProductId::AsusRogAlly => ProductId::AsusRogAlly as u16,
+            ProductId::LenovoLegionGo => ProductId::LenovoLegionGo as u16,
+            ProductId::LenovoLegionGoS => ProductId::LenovoLegionGoS as u16,
+        }
+    }
+}
+
+/// Configuration of the target SteamDeck device.
+#[derive(Debug, Clone)]
+pub struct SteamDeckConfig {
+    pub vendor: String,
+    pub name: String,
+    pub product_id: ProductId,
+}
+
+impl Default for SteamDeckConfig {
+    fn default() -> Self {
+        Self {
+            vendor: "Valve Corporation".to_string(),
+            name: "Steam Controller".to_string(),
+            product_id: ProductId::SteamDeck,
+        }
+    }
+}
+
 // The minimum amount of time that button up events must wait after
 // a button down event.
 const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
 
 pub struct SteamDeckDevice {
-    device: VirtualUSBDevice,
-    state: PackedInputDataReport,
+    config: SteamDeckConfig,
+    config_rx: Option<Receiver<SteamDeckConfig>>,
     /// Steam will send 'SetReport' commands with a report type, so it can fetch
     /// a particular result with 'GetReport'
     current_report: ReportType,
+    device: Option<VirtualUSBDevice>,
     lizard_mode_enabled: bool,
-    serial_number: String,
-    queued_events: Vec<ScheduledNativeEvent>,
-    pressed_events: HashMap<Capability, Instant>,
     output_event: Option<OutputEvent>,
+    pressed_events: HashMap<Capability, Instant>,
+    queued_events: Vec<ScheduledNativeEvent>,
+    serial_number: String,
+    state: PackedInputDataReport,
 }
 
 impl SteamDeckDevice {
     pub fn new() -> Result<Self, Box<dyn Error>> {
+        SteamDeckDevice::new_with_config(SteamDeckConfig::default())
+    }
+
+    /// Create a new emulated Steam Deck device with the given configuration.
+    pub fn new_with_config(config: SteamDeckConfig) -> Result<Self, Box<dyn Error>> {
         // Ensure the vhci_hcd kernel module is loaded
         log::debug!("Ensuring vhci_hcd kernel module is loaded");
         if let Err(e) = load_vhci_hcd() {
             return Err(e.to_string().into());
         }
 
-        // Create and start the virtual USB device
-        let mut device = SteamDeckDevice::create_virtual_device()?;
-        device.start()?;
-
         Ok(Self {
-            device,
-            state: PackedInputDataReport::default(),
+            config,
+            config_rx: None,
             current_report: ReportType::InputData,
+            device: None,
             lizard_mode_enabled: false,
-            serial_number: "INPU7PLUMB3R".to_string(),
-            queued_events: vec![],
-            pressed_events: HashMap::new(),
             output_event: None,
+            pressed_events: HashMap::new(),
+            queued_events: vec![],
+            serial_number: "INPU7PLUMB3R".to_string(),
+            state: PackedInputDataReport::default(),
         })
     }
 
     /// Create the virtual device to emulate
-    fn create_virtual_device() -> Result<VirtualUSBDevice, Box<dyn Error>> {
+    fn create_virtual_device(config: &SteamDeckConfig) -> Result<VirtualUSBDevice, Box<dyn Error>> {
         // Configuration values can be obtained from a real device with "sudo lsusb -v"
-        let virtual_device = VirtualUSBDeviceBuilder::new(VID, PID)
+        let virtual_device = VirtualUSBDeviceBuilder::new(VID, config.product_id.to_u16())
             .class(DeviceClass::UseInterface)
             .supported_langs(vec![LangId::EnglishUnitedStates])
-            .manufacturer("Valve Software")
-            .product("Steam Controller")
+            .manufacturer(&config.vendor.as_ref())
+            .product(&config.name.as_ref())
             .max_packet_size(64)
             .configuration(
                 ConfigurationBuilder::new()
@@ -718,6 +765,72 @@ impl SteamDeckDevice {
 }
 
 impl TargetInputDevice for SteamDeckDevice {
+    /// Start the driver when attached to a composite device.
+    fn on_composite_device_attached(
+        &mut self,
+        composite_device: CompositeDeviceClient,
+    ) -> Result<(), InputError> {
+        let (tx, rx) = channel(1);
+        let mut device_config = self.config.clone();
+
+        // Spawn a task to wait for the composite device config. This is done
+        // to prevent potential deadlocks if the composite device and target
+        // device are both waiting for a response from each other.
+        tokio::task::spawn(async move {
+            // Get the config for this composite_device.
+            let cd_config: CompositeDeviceConfig = match composite_device.get_config().await {
+                Ok(config) => config,
+                Err(e) => {
+                    log::error!("Failed to get composite device config. Got error: {e:?}");
+                    return;
+                }
+            };
+
+            match cd_config.name.as_str() {
+                "Lenovo Legion Go" => {
+                    device_config.vendor = "Lenovo".to_string();
+                    device_config.name = "Legion Go Controller".to_string();
+                    device_config.product_id = ProductId::LenovoLegionGo;
+                }
+                "Lenovo Legion Go S" => {
+                    device_config.vendor = "Lenovo".to_string();
+                    device_config.name = "Legion Go S Controller".to_string();
+                    device_config.product_id = ProductId::LenovoLegionGoS;
+                }
+                "ASUS ROG Ally" => {
+                    device_config.vendor = "ASUS".to_string();
+                    device_config.name = "ROG Ally Controller".to_string();
+                    device_config.product_id = ProductId::AsusRogAlly;
+                }
+                "ASUS ROG Ally X" => {
+                    device_config.vendor = "ASUS".to_string();
+                    device_config.name = "ROG Ally X Controller".to_string();
+                    device_config.product_id = ProductId::AsusRogAlly;
+                }
+                "Zotac Zone" => {
+                    device_config.vendor = "Zotac".to_string();
+                    device_config.name = "Zone Controller".to_string();
+                    device_config.product_id = ProductId::ZotacZone;
+                }
+                _ => {}
+            };
+
+            log::debug!(
+                "Found Steam Deck target config: {} {} PID: {:?}",
+                device_config.vendor,
+                device_config.name,
+                device_config.product_id.to_u16(),
+            );
+
+            if let Err(e) = tx.send(device_config).await {
+                log::error!("Failed to send device config to target device. Got error: {e:?}");
+            };
+        });
+
+        self.config_rx = Some(rx);
+        Ok(())
+    }
+
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
 
@@ -813,18 +926,24 @@ impl TargetInputDevice for SteamDeckDevice {
     /// Stop the virtual USB read/write threads
     fn stop(&mut self) -> Result<(), InputError> {
         log::debug!("Stopping virtual Deck controller");
-        self.device.stop();
-
-        // Read from the device
-        let xfer = self.device.blocking_read()?;
+        let xfer = {
+            let Some(device) = self.device.as_mut() else {
+                return Ok(());
+            };
+            device.stop();
+            device.blocking_read()?
+        };
 
         // Handle any non-standard transfers
         if let Some(xfer) = xfer {
             let reply = self.handle_xfer(xfer);
 
+            let Some(device) = self.device.as_mut() else {
+                return Ok(());
+            };
             // Write to the device if a reply is necessary
             if let Some(reply) = reply {
-                self.device.write(reply)?;
+                device.write(reply)?;
             }
         }
 
@@ -842,20 +961,47 @@ impl TargetOutputDevice for SteamDeckDevice {
     /// Update the virtual device with its current state, and read unhandled
     /// USB transfers.
     fn poll(&mut self, _: &Option<CompositeDeviceClient>) -> Result<Vec<OutputEvent>, OutputError> {
+        // Create and start the device if needed
+        if let Some(rx) = self.config_rx.as_mut() {
+            if rx.is_empty() {
+                // If the queue is empty, we're still waiting for a response from
+                // the composite device.
+                return Ok(vec![]);
+            }
+            let config = match rx.blocking_recv() {
+                Some(config) => config,
+                None => self.config.clone(),
+            };
+
+            let mut device = SteamDeckDevice::create_virtual_device(&config)?;
+            device.start()?;
+            self.device = Some(device);
+            self.config = config;
+            self.config_rx = None;
+        }
+
         // Increment the frame
         let frame = self.state.frame.to_primitive();
         self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
 
         // Read from the device
-        let xfer = self.device.blocking_read()?;
-
+        let xfer = {
+            let Some(device) = self.device.as_mut() else {
+                return Ok(vec![]);
+            };
+            device.blocking_read()?
+        };
         // Handle any non-standard transfers
         if let Some(xfer) = xfer {
             let reply = self.handle_xfer(xfer);
 
+            let Some(device) = self.device.as_mut() else {
+                return Ok(vec![]);
+            };
+
             // Write to the device if a reply is necessary
             if let Some(reply) = reply {
-                self.device.write(reply)?;
+                device.write(reply)?;
             }
         }
 
