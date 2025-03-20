@@ -33,7 +33,6 @@ pub struct GamepadEventDevice {
     ff_effects: HashMap<i16, FFEffect>,
     ff_effects_dualsense: Option<i16>,
     ff_effects_deck: Option<i16>,
-    haptic_effects_deck: Option<i16>,
     hat_state: HashMap<AbsoluteAxisCode, i32>,
 }
 
@@ -72,7 +71,6 @@ impl GamepadEventDevice {
             ff_effects: HashMap::new(),
             ff_effects_dualsense: None,
             ff_effects_deck: None,
-            haptic_effects_deck: None,
             hat_state: HashMap::new(),
         })
     }
@@ -150,7 +148,7 @@ impl GamepadEventDevice {
                     weak_magnitude: 0,
                 },
             };
-            log::debug!("Uploading FF effect data");
+            log::trace!("Uploading FF effect data");
             let effect = self.device.upload_ff_effect(effect_data)?;
             let id = effect.id() as i16;
             self.ff_effects.insert(id, effect);
@@ -211,7 +209,7 @@ impl GamepadEventDevice {
                     weak_magnitude: 0,
                 },
             };
-            log::debug!("Uploading FF effect data");
+            log::trace!("Uploading FF effect data");
             let effect = self.device.upload_ff_effect(effect_data)?;
             let id = effect.id() as i16;
             self.ff_effects.insert(id, effect);
@@ -224,7 +222,7 @@ impl GamepadEventDevice {
         let left_speed = report.left_speed.to_primitive();
         let right_speed = report.right_speed.to_primitive();
 
-        log::debug!("Got FF event data, Left Speed: {left_speed}, Right Speed: {right_speed}");
+        log::trace!("Got FF event data, Left Speed: {left_speed}, Right Speed: {right_speed}");
 
         // Stop playing the effect if values are set to zero
         if left_speed == 0 && right_speed == 0 {
@@ -276,7 +274,7 @@ impl GamepadEventDevice {
                     weak_magnitude: 0,
                 },
             };
-            log::debug!("Uploading FF effect data");
+            log::trace!("Uploading FF effect data");
             let effect = self.device.upload_ff_effect(effect_data)?;
             let id = effect.id() as i16;
             self.ff_effects.insert(id, effect);
@@ -322,7 +320,7 @@ impl GamepadEventDevice {
             CommandType::Click => 150,
         };
 
-        log::debug!("Got FF event data, Left Speed: {left_speed}, Right Speed: {right_speed}, Length: {length}");
+        log::trace!("Got FF event data, Left Speed: {left_speed}, Right Speed: {right_speed}, Length: {length}");
 
         // Stop playing the effect if values are set to zero
         if left_speed == 0 && right_speed == 0 {
@@ -524,7 +522,7 @@ impl SourceOutputDevice for GamepadEventDevice {
                 Ok(())
             }
             OutputEvent::DualSense(report) => {
-                log::debug!("Received DualSense output report");
+                log::trace!("Received DualSense output report");
                 if report.use_rumble_not_haptics || report.enable_improved_rumble_emulation {
                     if let Err(e) = self.process_dualsense_ff(report) {
                         log::error!("Failed to process dualsense output report: {e:?}");
@@ -534,14 +532,14 @@ impl SourceOutputDevice for GamepadEventDevice {
             }
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::SteamDeckHaptics(report) => {
-                log::debug!("Received Steam Deck Haptic Output Report");
+                log::trace!("Received Steam Deck Haptic Output Report");
                 if let Err(e) = self.process_haptic_ff(report) {
                     log::error!("Failed to process Steam Deck Haptic Output Report: {e:?}")
                 }
                 Ok(())
             }
             OutputEvent::SteamDeckRumble(report) => {
-                log::debug!("Received Steam Deck Force Feedback Report");
+                log::trace!("Received Steam Deck Force Feedback Report");
                 if let Err(e) = self.process_deck_ff(report) {
                     log::error!("Failed to process Steam Deck Force Feedback Report: {e:?}")
                 }
@@ -553,7 +551,7 @@ impl SourceOutputDevice for GamepadEventDevice {
     /// Upload the given force feedback effect data to the source device. Returns
     /// a device-specific id of the uploaded effect if it is successful.
     fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
-        log::debug!("Uploading FF effect data");
+        log::trace!("Uploading FF effect data");
         if self.device.supported_ff().is_none() {
             log::debug!("Device does not support FF effects");
             return Ok(-1);
@@ -570,7 +568,7 @@ impl SourceOutputDevice for GamepadEventDevice {
 
     /// Update the effect with the given id using the given effect data.
     fn update_effect(&mut self, effect_id: i16, effect: FFEffectData) -> Result<(), OutputError> {
-        log::debug!("Update FF effect {effect_id}");
+        log::trace!("Update FF effect {effect_id}");
         if self.device.supported_ff().is_none() {
             log::debug!("Device does not support FF effects");
             return Ok(());
@@ -589,7 +587,7 @@ impl SourceOutputDevice for GamepadEventDevice {
 
     /// Erase the effect with the given id from the source device.
     fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
-        log::debug!("Erasing FF effect data");
+        log::trace!("Erasing FF effect data");
         if self.device.supported_ff().is_none() {
             log::debug!("Device does not support FF effects");
             return Ok(());
