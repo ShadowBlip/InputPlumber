@@ -9,7 +9,8 @@ use super::{
         TriggerEvent, TriggerInput,
     },
     hid_report::{
-        InertialInputDataReport, InputReportType, RumbleOutputDataReport, XInputDataReport,
+        InertialInputDataReport, InputReportType, RumbleOutputDataReport, TouchInputDataReport,
+        XInputDataReport,
     },
 };
 
@@ -18,10 +19,13 @@ pub const VID: u16 = 0x1a86;
 pub const XINPUT_PID: u16 = 0xe310;
 pub const DINPUT_PID: u16 = 0xe311;
 pub const PIDS: [u16; 2] = [XINPUT_PID, DINPUT_PID];
+
 // Input report sizes
-const XINPUT_PACKET_SIZE: usize = 32;
 const INERTIAL_PACKET_SIZE: usize = 9;
+const TOUCH_PACKET_SIZE: usize = 10;
+const XINPUT_PACKET_SIZE: usize = 32;
 const HID_TIMEOUT: i32 = 10;
+
 // Input report axis ranges
 pub const PAD_X_MAX: f64 = 1024.0;
 pub const PAD_Y_MAX: f64 = 1024.0;
@@ -92,6 +96,18 @@ impl Driver {
                 }
             }
 
+            TOUCH_PACKET_SIZE => {
+                let slice = &buf[..bytes_read];
+                // Handle the incoming input report
+                let sized_buf = slice.try_into()?;
+                match self.handle_touch_report(sized_buf) {
+                    Ok(events) => events,
+                    Err(e) => {
+                        log::error!("Got error processing TouchInputDataReport: {e:?}");
+                        vec![]
+                    }
+                }
+            }
             _ => vec![],
         };
 
@@ -262,11 +278,6 @@ impl Driver {
                 pressed: state.y2,
             })));
         }
-        if state.rpad_tap != old_state.rpad_tap {
-            events.push(Event::Button(ButtonEvent::RPadTap(BinaryInput {
-                pressed: state.rpad_tap,
-            })));
-        }
         if state.thumb_l != old_state.thumb_l {
             events.push(Event::Button(ButtonEvent::ThumbL(BinaryInput {
                 pressed: state.thumb_l,
@@ -302,6 +313,11 @@ impl Driver {
                 value: state.a_trigger_r,
             })));
         }
+        //if state.rpad_tap != old_state.rpad_tap {
+        //    events.push(Event::Button(ButtonEvent::RPadTap(BinaryInput {
+        //        pressed: state.rpad_tap,
+        //    })));
+        //}
         //TODO: When touchpad firmware is updated to use ABS events, enable this
         //if state.touch_x != old_state.touch_x
         //    || state.touch_y != old_state.touch_y
@@ -421,5 +437,18 @@ impl Driver {
         };
 
         events
+    }
+
+    fn handle_touch_report(
+        &mut self,
+        buf: [u8; TOUCH_PACKET_SIZE],
+    ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
+        let input_report = TouchInputDataReport::unpack(&buf)?;
+
+        // Print input report for debugging
+        log::debug!("--- Input report ---");
+        log::debug!("{input_report}");
+        log::debug!(" ---- End Report ----");
+        Ok(vec![])
     }
 }
