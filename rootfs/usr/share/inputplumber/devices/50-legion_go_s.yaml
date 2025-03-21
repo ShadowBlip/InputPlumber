@@ -28,7 +28,14 @@ source_devices:
     blocked: true
     evdev:
       vendor_id: "1a86"
-      product_id: "{e310,e311}"
+      product_id: "e310"
+      name: "wch.cn Legion Go S Mouse"
+      handler: event*
+  - group: mouse # Gampead Mode
+    blocked: true
+    evdev:
+      vendor_id: "1a86"
+      product_id: "e311"
       name: "wch.cn Legion Go S Mouse"
       handler: event*
 
@@ -47,7 +54,14 @@ source_devices:
     blocked: true
     evdev:
       vendor_id: "1a86"
-      product_id: "{e310,e311}"
+      product_id: "e310"
+      name: "{QH Electronics Controller,Legion Go S}"
+      handler: event*
+  - group: gamepad
+    blocked: true
+    evdev:
+      vendor_id: "1a86"
+      product_id: "e311"
       name: "{QH Electronics Controller,Legion Go S}"
       handler: event*
 
