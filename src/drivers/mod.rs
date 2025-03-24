@@ -4,6 +4,7 @@ pub mod horipad_steam;
 pub mod iio_imu;
 pub mod lego;
 pub mod legos;
+pub mod msi_claw;
 pub mod opineo;
 pub mod rog_ally;
 pub mod steam_deck;

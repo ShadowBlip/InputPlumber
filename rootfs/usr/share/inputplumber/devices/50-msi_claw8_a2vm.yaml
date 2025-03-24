@@ -34,6 +34,12 @@ source_devices:
       vendor_id: "0db0"
       product_id: "1901"
       phys_path: "usb-0000:00:14.0-2/input0"
+  - group: gamepad
+    passthrough: true
+    hidraw:
+      vendor_id: 0x0db0
+      product_id: 0x1901
+      interface_num: 2
 
   # IMU
 
