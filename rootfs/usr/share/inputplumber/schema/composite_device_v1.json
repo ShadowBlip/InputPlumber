@@ -486,23 +486,23 @@
           }
         }
       }
-    }
-  },
-  "Color": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "r": {
-        "description": "Red channel color (0-255)",
-        "type": "number"
-      },
-      "g": {
-        "description": "Green channel color (0-255)",
-        "type": "number"
-      },
-      "b": {
-        "description": "Blue channel color (0-255)",
-        "type": "number"
+    },
+    "Color": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "r": {
+          "description": "Red channel color (0-255)",
+          "type": "number"
+        },
+        "g": {
+          "description": "Green channel color (0-255)",
+          "type": "number"
+        },
+        "b": {
+          "description": "Blue channel color (0-255)",
+          "type": "number"
+        }
       }
     }
   }
