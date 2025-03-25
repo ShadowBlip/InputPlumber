@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: Direct Input Gamepad
+
+# Unique identifier of the capability mapping
+id: dinput
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Trigger Happy
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_GAS
+    target_event:
+      gamepad:
+        trigger: RightTrigger
