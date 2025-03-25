@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use crate::config::CapabilityConfig;
+use crate::config::capability_map::CapabilityConfig;
 
 use super::event::dbus::Action;
 

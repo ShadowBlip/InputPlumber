@@ -20,8 +20,9 @@ use zbus::Connection;
 
 use crate::{
     config::{
-        path::get_profiles_path, CapabilityMap, CapabilityMapping, CompositeDeviceConfig,
-        DeviceProfile, ProfileMapping,
+        capability_map::{CapabilityMapConfigV1, NativeCapabilityMapping},
+        path::get_profiles_path,
+        CompositeDeviceConfig, DeviceProfile, ProfileMapping,
     },
     dbus::interface::{
         composite_device::CompositeDeviceInterface, source::iio_imu::SourceIioImuInterface,
@@ -82,7 +83,7 @@ pub struct CompositeDevice {
     /// Capabilities describe all input capabilities from all source devices
     capabilities: HashSet<Capability>,
     /// Capability mapping for the CompositeDevice
-    capability_map: Option<CapabilityMap>,
+    capability_map: Option<CapabilityMapConfigV1>,
     /// Currently loaded [DeviceProfile] for the [CompositeDevice]. The [DeviceProfile]
     /// is used to translate input events.
     device_profile: Option<DeviceProfile>,
@@ -103,7 +104,7 @@ pub struct CompositeDevice {
     translated_recent_events: HashSet<Capability>,
     /// Keep track of translated events we've emitted so we can send
     /// release events
-    emitted_mappings: HashMap<String, CapabilityMapping>,
+    emitted_mappings: HashMap<String, NativeCapabilityMapping>,
     /// The DBus path this [CompositeDevice] is listening on
     dbus_path: String,
     /// Mode defining how inputs should be routed
@@ -178,7 +179,7 @@ impl CompositeDevice {
         config: CompositeDeviceConfig,
         device_info: UdevDevice,
         dbus_path: String,
-        capability_map: Option<CapabilityMap>,
+        capability_map: Option<CapabilityMapConfigV1>,
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating CompositeDevice with config: {}", config.name);
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
