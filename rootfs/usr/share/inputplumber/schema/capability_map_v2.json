@@ -57,6 +57,15 @@
         }
       }
     },
+    "AxisDirection": {
+      "description": "The AxisDirection is used to determine if a button value should be mapped towards the maximum axis value or the minimum axis value. For example, when mapping a BTN_UP to an ABS_HAT0Y, the converted value should be positive, towards that axis's maximum value, whereas BTN_DOWN should be Negative, towards that axis's minimum value.",
+      "type": "string",
+      "enum": [
+        "none",
+        "positive",
+        "negative"
+      ]
+    },
     "CapabilityConfig": {
       "type": "object",
       "properties": {
@@ -145,6 +154,16 @@
         "event_type"
       ],
       "properties": {
+        "axis_direction": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AxisDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "event_code": {
           "$ref": "#/definitions/EventCode"
         },
@@ -156,7 +175,7 @@
             "integer",
             "null"
           ],
-          "format": "uint32",
+          "format": "uint16",
           "minimum": 0.0
         }
       }
@@ -290,7 +309,6 @@
         "KEY_SCALE",
         "KEY_KPCOMMA",
         "KEY_HANGEUL",
-        "KEY_HANGUEL",
         "KEY_HANJA",
         "KEY_YEN",
         "KEY_LEFTMETA",
@@ -320,10 +338,8 @@
         "KEY_PROG2",
         "KEY_WWW",
         "KEY_MSDOS",
-        "KEY_COFFEE",
         "KEY_SCREENLOCK",
         "KEY_ROTATE_DISPLAY",
-        "KEY_DIRECTION",
         "KEY_CYCLEWINDOWS",
         "KEY_MAIL",
         "KEY_BOOKMARKS",
@@ -370,7 +386,6 @@
         "KEY_PROG3",
         "KEY_PROG4",
         "KEY_ALL_APPLICATIONS",
-        "KEY_DASHBOARD",
         "KEY_SUSPEND",
         "KEY_CLOSE",
         "KEY_PLAY",
@@ -410,11 +425,9 @@
         "KEY_VIDEO_NEXT",
         "KEY_VIDEO_PREV",
         "KEY_BRIGHTNESS_CYCLE",
-        "KEY_BRIGHTNESS_ZERO",
         "KEY_BRIGHTNESS_AUTO",
         "KEY_DISPLAY_OFF",
         "KEY_WWAN",
-        "KEY_WIMAX",
         "KEY_RFKILL",
         "KEY_MICMUTE",
         "BTN_MISC",
@@ -450,17 +463,13 @@
         "BTN_BASE4",
         "BTN_BASE5",
         "BTN_BASE6",
-        "BTN_D_E_A_D",
-        "BTN_G_A_M_E_P_A_D",
-        "BTN_S_O_U_T_H",
-        "BTN_A",
+        "BTN_DEAD",
+        "BTN_GAMEPAD",
+        "BTN_SOUTH",
         "BTN_EAST",
-        "BTN_B",
         "BTN_C",
         "BTN_NORTH",
-        "BTN_X",
         "BTN_WEST",
-        "BTN_Y",
         "BTN_Z",
         "BTN_TL",
         "BTN_TR",
@@ -488,7 +497,7 @@
         "BTN_TOOL_DOUBLETAP",
         "BTN_TOOL_TRIPLETAP",
         "BTN_TOOL_QUADTAP",
-        "BTN_W_H_E_E_L",
+        "BTN_WHEEL",
         "BTN_GEAR_DOWN",
         "BTN_GEAR_UP",
         "KEY_OK",
@@ -512,11 +521,9 @@
         "KEY_SUBTITLE",
         "KEY_ANGLE",
         "KEY_FULL_SCREEN",
-        "KEY_ZOOM",
         "KEY_MODE",
         "KEY_KEYBOARD",
         "KEY_ASPECT_RATIO",
-        "KEY_SCREEN",
         "KEY_PC",
         "KEY_TV",
         "KEY_TV2",
@@ -573,7 +580,6 @@
         "KEY_ADDRESSBOOK",
         "KEY_MESSENGER",
         "KEY_DISPLAYTOGGLE",
-        "KEY_BRIGHTNESS_TOGGLE",
         "KEY_SPELLCHECK",
         "KEY_LOGOFF",
         "KEY_DOLLAR",
@@ -805,7 +811,6 @@
         "BTN_TRIGGER_HAPPY38",
         "BTN_TRIGGER_HAPPY39",
         "BTN_TRIGGER_HAPPY40",
-        "KEY_MIN_INTERESTING",
         "REL_X",
         "REL_Y",
         "REL_Z",
@@ -866,7 +871,6 @@
         "SW_TABLET_MODE",
         "SW_HEADPHONE_INSERT",
         "SW_RFKILL_ALL",
-        "SW_RADIO",
         "SW_MICROPHONE_INSERT",
         "SW_DOCK",
         "SW_LINEOUT_INSERT",
@@ -1173,16 +1177,6 @@
               "type": "null"
             }
           ]
-        },
-        "udev": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/UdevConfig"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       }
     },
@@ -1258,10 +1252,6 @@
           "type": "string"
         }
       }
-    },
-    "UdevConfig": {
-      "description": "A [UdevConfig] defines what attributes and properties to set on a udev device.",
-      "type": "object"
     }
   }
 }

@@ -1,8 +1,10 @@
 pub mod evdev;
+pub mod hidraw;
 
 use std::{io::Read, path::Path};
 
 use evdev::EvdevConfig;
+use hidraw::HidrawConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -128,26 +130,8 @@ pub struct CapabilityMapping {
 pub struct SourceMapping {
     pub evdev: Option<EvdevConfig>,
     pub hidraw: Option<HidrawConfig>,
-    pub udev: Option<UdevConfig>,
     pub capability: Option<CapabilityConfig>,
 }
-
-/// A [HidrawConfig] defines how to decode a particular event in an HID input
-/// report.
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub struct HidrawConfig {
-    pub report_id: u32,
-    pub input_type: String,
-    pub byte_start: u64,
-    pub bit_offset: u8,
-}
-
-/// A [UdevConfig] defines what attributes and properties to set on a udev
-/// device.
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub struct UdevConfig {}
 
 /// A [NativeCapabilityMapping] maps one or more native inputplumber events to
 /// a different native inputplumber event.
