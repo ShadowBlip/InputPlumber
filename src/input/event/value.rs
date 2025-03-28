@@ -1,5 +1,5 @@
 use crate::{
-    config::CapabilityConfig,
+    config::capability_map::CapabilityConfig,
     input::capability::{Capability, Gamepad, Mouse, Touch, Touchpad},
 };
 

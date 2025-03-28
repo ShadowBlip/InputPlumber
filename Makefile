@@ -108,6 +108,10 @@ format: ## Run rustfmt on all source files
 test: ## Run all tests
 	cargo test -- --show-output
 
+.PHONY: generate
+generate: ## Generate schema definitions for configs
+	cargo run --bin generate
+
 .PHONY: setup
 setup: /usr/share/dbus-1/system.d/$(DBUS_NAME).conf ## Install dbus policies
 /usr/share/dbus-1/system.d/$(DBUS_NAME).conf:

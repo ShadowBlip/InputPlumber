@@ -1,8 +1,10 @@
+pub mod capability_map;
 pub mod path;
 
 use std::io;
 
 use ::procfs::CpuInfo;
+use capability_map::CapabilityConfig;
 use glob_match::glob_match;
 
 use serde::{Deserialize, Serialize};
@@ -155,119 +157,6 @@ impl ProfileMapping {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct CapabilityMap {
-    pub version: u32,
-    pub kind: String,
-    pub name: String,
-    pub id: String,
-    pub mapping: Vec<CapabilityMapping>,
-    //pub filtered_events: Option<Vec<Capability>>,
-}
-
-impl CapabilityMap {
-    /// Load a [CapabilityMap] from the given YAML string
-    pub fn _from_yaml(content: String) -> Result<CapabilityMap, LoadError> {
-        let device: CapabilityMap = serde_yaml::from_str(content.as_str())?;
-        Ok(device)
-    }
-
-    /// Load a [CapabilityMap] from the given YAML file
-    pub fn from_yaml_file(path: String) -> Result<CapabilityMap, LoadError> {
-        let file = std::fs::File::open(path)?;
-        let device: CapabilityMap = serde_yaml::from_reader(file)?;
-        Ok(device)
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct CapabilityMapping {
-    pub name: String,
-    pub source_events: Vec<CapabilityConfig>,
-    pub target_event: CapabilityConfig,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct CapabilityConfig {
-    pub gamepad: Option<GamepadCapability>,
-    pub keyboard: Option<String>,
-    pub mouse: Option<MouseCapability>,
-    pub dbus: Option<String>,
-    pub touchpad: Option<TouchpadCapability>,
-    pub touchscreen: Option<TouchCapability>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct GamepadCapability {
-    pub axis: Option<AxisCapability>,
-    pub button: Option<String>,
-    pub trigger: Option<TriggerCapability>,
-    pub gyro: Option<GyroCapability>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct AxisCapability {
-    pub name: String,
-    pub direction: Option<String>,
-    pub deadzone: Option<f64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct TriggerCapability {
-    pub name: String,
-    pub deadzone: Option<f64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct GyroCapability {
-    pub name: String,
-    pub direction: Option<String>,
-    pub deadzone: Option<f64>,
-    pub axis: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct MouseCapability {
-    pub button: Option<String>,
-    pub motion: Option<MouseMotionCapability>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct MouseMotionCapability {
-    pub direction: Option<String>,
-    pub speed_pps: Option<u64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct TouchpadCapability {
-    pub name: String,
-    pub touch: TouchCapability,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct TouchCapability {
-    pub button: Option<String>,
-    pub motion: Option<TouchMotionCapability>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct TouchMotionCapability {
-    pub region: Option<String>,
-    pub speed_pps: Option<u64>,
-}
-
 /// Defines available options for loading a [CompositeDeviceConfig]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -333,6 +222,8 @@ pub struct SourceDevice {
     /// Defines which events are included or excluded from input processing by
     /// the source device.
     pub events: Option<EventsConfig>,
+    /// The ID of a device event mapping in the 'capability_maps' directory
+    pub capability_map_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
