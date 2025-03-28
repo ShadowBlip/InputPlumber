@@ -58,7 +58,7 @@
       }
     },
     "AxisDirection": {
-      "description": "The AxisDirection is used to determine if a button value should be mapped towards the maximum axis value or the minimum axis value. For example, when mapping a BTN_UP to an ABS_HAT0Y, the converted value should be positive, towards that axis's maximum value, whereas BTN_DOWN should be Negative, towards that axis's minimum value.",
+      "description": "The AxisDirection can be used to map one half of an axis to a particular capability. For example, you can map the negative values of `ABS_Y` to the `DPadDown` capability and the positive values of `ABS_Y` to `DPadUp`.",
       "type": "string",
       "enum": [
         "none",
@@ -939,7 +939,7 @@
           ]
         },
         {
-          "description": "Miscellaneous events that don't fall into other categories. For example, Key presses may send `MscSCAN` events before each KEY event",
+          "description": "Miscellaneous events that don't fall into other categories. For example, Key presses may send `MSC_SCAN` events before each KEY event",
           "type": "string",
           "enum": [
             "MSC"
@@ -967,21 +967,21 @@
           ]
         },
         {
-          "description": "There are no events of this type, to my knowledge, but represents metadata about key repeat configuration.",
+          "description": "Metadata about key repeat configuration.",
           "type": "string",
           "enum": [
             "REP"
           ]
         },
         {
-          "description": "Looking at the source of [`fftest`](https://github.com/flosse/linuxconsole/blob/master/utils/fftest.c) This seems to be sent to the device with a previusly obtained effect id as a code in order to toggle the effect.",
+          "description": "Sent to the device with a previusly obtained effect id as a code in order to toggle the effect.",
           "type": "string",
           "enum": [
             "FF"
           ]
         },
         {
-          "description": "I think this is unused?",
+          "description": "Used to trigger power events such as suspend or power off.",
           "type": "string",
           "enum": [
             "PWR"

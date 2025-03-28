@@ -11,11 +11,9 @@ pub struct EvdevConfig {
     pub axis_direction: Option<AxisDirection>,
 }
 
-/// The AxisDirection is used to determine if a button value should be mapped
-/// towards the maximum axis value or the minimum axis value. For example,
-/// when mapping a BTN_UP to an ABS_HAT0Y, the converted value should be
-/// positive, towards that axis's maximum value, whereas BTN_DOWN should
-/// be Negative, towards that axis's minimum value.
+/// The AxisDirection can be used to map one half of an axis to a particular
+/// capability. For example, you can map the negative values of `ABS_Y` to the
+/// `DPadDown` capability and the positive values of `ABS_Y` to `DPadUp`.
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AxisDirection {
@@ -41,7 +39,7 @@ pub enum EventType {
     /// Movement on an absolute axis. Used for things such as touch events and joysticks.
     Abs = 0x03,
     /// Miscellaneous events that don't fall into other categories. For example, Key presses may
-    /// send `MscSCAN` events before each KEY event
+    /// send `MSC_SCAN` events before each KEY event
     Msc = 0x04,
     /// Change in a switch value. Switches are boolean conditions and usually correspond to a
     /// toggle switch of some kind in hardware.
@@ -50,13 +48,11 @@ pub enum EventType {
     Led = 0x11,
     /// A sound was made.
     Snd = 0x12,
-    /// There are no events of this type, to my knowledge, but represents metadata about key
-    /// repeat configuration.
+    /// Metadata about key repeat configuration.
     Rep = 0x14,
-    /// Looking at the source of [`fftest`](https://github.com/flosse/linuxconsole/blob/master/utils/fftest.c)
-    /// This seems to be sent to the device with a previusly obtained effect id as a code in order to toggle the effect.
+    /// Sent to the device with a previusly obtained effect id as a code in order to toggle the effect.
     Ff = 0x15,
-    /// I think this is unused?
+    /// Used to trigger power events such as suspend or power off.
     Pwr = 0x16,
     /// A force feedback effect's state changed.
     FfStatus = 0x17,
