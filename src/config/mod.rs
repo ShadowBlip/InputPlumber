@@ -10,7 +10,11 @@ use thiserror::Error;
 
 use crate::{
     dmi::data::DMIData,
-    input::event::{native::NativeEvent, value::InputValue},
+    input::{
+        event::{native::NativeEvent, value::InputValue},
+        info::DeviceInfo,
+    },
+    network::websocket::WebsocketClient,
     udev::device::UdevDevice,
 };
 
@@ -316,6 +320,8 @@ pub struct SourceDevice {
     pub led: Option<Led>,
     /// Devices that match the given udev properties will be captured by InputPlumber
     pub udev: Option<Udev>,
+    /// Websocket clients that match the given websocket settings will be captured by InputPlumber
+    pub websocket: Option<Websocket>,
     /// Device configuration options are used to alter how the source device is managed
     pub config: Option<SourceDeviceConfig>,
     /// If false, any devices matching this description will be added to the
@@ -452,6 +458,17 @@ pub struct MountMatrix {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct Websocket {
+    pub port: Option<u16>,
+    pub address: Option<String>,
+    pub tls: Option<bool>,
+    pub client_port: Option<u16>,
+    pub client_address: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub struct EventsConfig {
     /// Events to exclude from being processed by a source device
     pub exclude: Option<Vec<String>>,
@@ -505,57 +522,118 @@ impl CompositeDeviceConfig {
             .collect()
     }
 
-    /// Returns a [SourceDevice] if it matches the given [UdevDevice]. Will return
+    /// Returns a [SourceDevice] if it matches the given [DeviceInfo]. Will return
     /// the first [SourceDevice] match found if multiple matches exist.
-    pub fn get_matching_device(&self, udevice: &UdevDevice) -> Option<SourceDevice> {
+    pub fn get_matching_device(&self, device: &DeviceInfo) -> Option<SourceDevice> {
         for config in self.source_devices.iter() {
-            // Check udev matches first
-            if let Some(udev_config) = config.udev.as_ref() {
-                if self.has_matching_udev(udevice, udev_config) {
-                    return Some(config.clone());
-                }
-            }
-
-            // Use subsystem-specific device matching
-            let subsystem = udevice.subsystem();
-            match subsystem.as_str() {
-                "input" => {
-                    let Some(evdev_config) = config.evdev.as_ref() else {
-                        continue;
-                    };
-                    if self.has_matching_evdev(udevice, evdev_config) {
-                        return Some(config.clone());
-                    }
-                }
-                "hidraw" => {
-                    let Some(hidraw_config) = config.hidraw.as_ref() else {
-                        continue;
-                    };
-                    if self.has_matching_hidraw(udevice, hidraw_config) {
-                        return Some(config.clone());
-                    }
-                }
-                "iio" => {
-                    let Some(iio_config) = config.iio.as_ref() else {
-                        continue;
-                    };
-                    if self.has_matching_iio(udevice, iio_config) {
-                        return Some(config.clone());
-                    }
-                }
-                "leds" => {
-                    let Some(led_config) = config.led.as_ref() else {
-                        continue;
-                    };
-                    if self.has_matching_led(udevice, led_config) {
-                        return Some(config.clone());
-                    }
-                }
-                _ => (),
+            let matched_config = match device {
+                DeviceInfo::Udev(udevice) => self.get_matching_udev_device(config, udevice),
+                DeviceInfo::Websocket(client) => self.get_matching_websocket_device(config, client),
+            };
+            if matched_config.is_some() {
+                return matched_config;
             }
         }
 
         None
+    }
+
+    /// Returns a copy of the given [SourceDevice] config if it matches the given
+    /// [UdevDevice].
+    fn get_matching_udev_device(
+        &self,
+        config: &SourceDevice,
+        udevice: &UdevDevice,
+    ) -> Option<SourceDevice> {
+        // Check udev matches first
+        if let Some(udev_config) = config.udev.as_ref() {
+            if self.has_matching_udev(udevice, udev_config) {
+                return Some(config.clone());
+            }
+        }
+
+        // Use subsystem-specific device matching
+        let subsystem = udevice.subsystem();
+        match subsystem.as_str() {
+            "input" => {
+                let evdev_config = config.evdev.as_ref()?;
+                if self.has_matching_evdev(udevice, evdev_config) {
+                    return Some(config.clone());
+                }
+            }
+            "hidraw" => {
+                let hidraw_config = config.hidraw.as_ref()?;
+                if self.has_matching_hidraw(udevice, hidraw_config) {
+                    return Some(config.clone());
+                }
+            }
+            "iio" => {
+                let iio_config = config.iio.as_ref()?;
+                if self.has_matching_iio(udevice, iio_config) {
+                    return Some(config.clone());
+                }
+            }
+            "leds" => {
+                let led_config = config.led.as_ref()?;
+                if self.has_matching_led(udevice, led_config) {
+                    return Some(config.clone());
+                }
+            }
+            _ => (),
+        }
+
+        None
+    }
+
+    /// Returns a copy of the given [SourceDevice] config if it matches the given
+    /// [WebsocketClient].
+    fn get_matching_websocket_device(
+        &self,
+        config: &SourceDevice,
+        client: &WebsocketClient,
+    ) -> Option<SourceDevice> {
+        let websocket_config = config.websocket.as_ref()?;
+
+        if self.has_matching_websocket(client, websocket_config) {
+            return Some(config.clone());
+        }
+
+        None
+    }
+
+    /// Returns true if the given websocket client matches the given config
+    pub fn has_matching_websocket(
+        &self,
+        client: &WebsocketClient,
+        websocket_config: &Websocket,
+    ) -> bool {
+        log::debug!("Checking websocket config: '{websocket_config:?}'");
+
+        if let Some(address) = websocket_config.address.as_ref() {
+            if !glob_match(address, client.server_addr.ip().to_string().as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(port) = websocket_config.port {
+            if port != client.server_addr.port() {
+                return false;
+            }
+        }
+
+        if let Some(client_addr) = websocket_config.client_address.as_ref() {
+            if !glob_match(client_addr, client.addr.ip().to_string().as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(port) = websocket_config.client_port {
+            if port != client.addr.port() {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Returns true if a given device matches the given udev config

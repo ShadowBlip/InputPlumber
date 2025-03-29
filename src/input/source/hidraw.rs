@@ -20,8 +20,11 @@ use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
 
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, drivers,
-    input::composite_device::client::CompositeDeviceClient, udev::device::UdevDevice,
+    config,
+    constants::BUS_SOURCES_PREFIX,
+    drivers,
+    input::{composite_device::client::CompositeDeviceClient, info::DeviceInfoRef},
+    udev::device::UdevDevice,
 };
 
 use self::{
@@ -70,7 +73,7 @@ pub enum HidRawDevice {
 }
 
 impl SourceDeviceCompatible for HidRawDevice {
-    fn get_device_ref(&self) -> &UdevDevice {
+    fn get_device_ref(&self) -> DeviceInfoRef {
         match self {
             HidRawDevice::DualSense(source_driver) => source_driver.info_ref(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.info_ref(),
@@ -203,7 +206,7 @@ impl HidRawDevice {
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
-                    device_info,
+                    device_info.into(),
                     options,
                     conf,
                 );
@@ -218,7 +221,7 @@ impl HidRawDevice {
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
-                    device_info,
+                    device_info.into(),
                     options,
                     conf,
                 );
@@ -226,32 +229,38 @@ impl HidRawDevice {
             }
             DriverType::LegionGoDCombined => {
                 let device = LegionControllerDCombined::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::LegionGoDCombined(source_device))
             }
             DriverType::LegionGoDSplit => {
                 let device = LegionControllerDSplit::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::LegionGoDSplit(source_device))
             }
             DriverType::LegionGoFPS => {
                 let device = LegionControllerFPS::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::LegionGoFPS(source_device))
             }
             DriverType::LegionGoX => {
                 let device = LegionControllerX::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::LegionGoX(source_device))
             }
             DriverType::LegionGoS => {
                 let device = LegionSController::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::LegionGoS(source_device))
             }
             DriverType::OrangePiNeo => {
                 let device = OrangePiNeoTouchpad::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::OrangePiNeo(source_device))
             }
             DriverType::MsiClaw => {
@@ -261,12 +270,14 @@ impl HidRawDevice {
             }
             DriverType::Fts3528Touchscreen => {
                 let device = Fts3528Touchscreen::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::Fts3528Touchscreen(source_device))
             }
             DriverType::XpadUhid => {
                 let device = XpadUhid::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::XpadUhid(source_device))
             }
             DriverType::RogAlly => {
@@ -278,7 +289,7 @@ impl HidRawDevice {
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
-                    device_info,
+                    device_info.into(),
                     options,
                     conf,
                 );
@@ -286,7 +297,8 @@ impl HidRawDevice {
             }
             DriverType::HoripadSteam => {
                 let device = HoripadSteam::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::HoripadSteam(source_device))
             }
         }
