@@ -2,7 +2,6 @@ use core::panic;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
-use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -57,6 +56,12 @@ use crate::watcher::WatchEvent;
 const DEV_PATH: &str = "/dev";
 const INPUT_PATH: &str = "/dev/input";
 const BUFFER_SIZE: usize = 20480;
+const VIRT_DEVICE_WHITELIST: &[&str] = &[
+    "Sunshine PS5 (virtual) pad",
+    "Sunshine X-Box One (virtual) pad",
+    "Sunshine gamepad (virtual) motion sensors",
+    "Sunshine Nintendo (virtual) pad",
+];
 
 #[derive(Error, Debug)]
 pub enum ManagerError {
@@ -1210,11 +1215,20 @@ impl Manager {
                         }
                     };
 
-                    if !is_bluetooth {
+                    // Some virtual gamepads we DO want to manage
+                    let device_name = device.get_attribute_from_tree("name").unwrap_or_default();
+                    let is_whitelisted = VIRT_DEVICE_WHITELIST.contains(&device_name.as_str());
+
+                    if !is_bluetooth && !is_whitelisted {
                         log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
                         return Ok(());
                     }
-                    log::debug!("{dev_name} ({dev_sysname}) is a virtual device node for a bluetooth device. Treating as real - {dev_path}")
+                    if is_bluetooth {
+                        log::debug!("{dev_name} ({dev_sysname}) is a virtual device node for a bluetooth device. Treating as real - {dev_path}");
+                    }
+                    if is_whitelisted {
+                        log::debug!("{dev_name} ({dev_sysname}) is a virtual device node for a whitelisted device. Treating as real - {dev_path}")
+                    }
                 } else {
                     log::trace!("{dev_name} ({dev_sysname}) is a real device - {dev_path}");
                 }
