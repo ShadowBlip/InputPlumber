@@ -17,7 +17,7 @@ use zbus::zvariant::ObjectPath;
 use zbus::Connection;
 
 use crate::bluetooth::device1::Device1Proxy;
-use crate::config::capability_map::CapabilityMapConfigV1;
+use crate::config::capability_map::CapabilityMapConfig;
 use crate::config::path::get_capability_maps_paths;
 use crate::config::path::get_devices_paths;
 use crate::config::path::get_multidir_sorted_files;
@@ -1704,7 +1704,7 @@ impl Manager {
 
     /// Loads all capability mappings in all default locations and returns a hashmap
     /// of the CapabilityMap ID and the [CapabilityMap].
-    pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMapConfigV1> {
+    pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMapConfig> {
         let mut mappings = HashMap::new();
         let paths = get_capability_maps_paths();
         let files = get_multidir_sorted_files(paths.as_slice(), |entry| {
@@ -1715,7 +1715,7 @@ impl Manager {
         for file in files {
             // Try to load the capability map
             log::trace!("Found file: {}", file.display());
-            let mapping = CapabilityMapConfigV1::from_yaml_file(file.display().to_string());
+            let mapping = CapabilityMapConfig::from_yaml_file(file.display().to_string());
             if mapping.is_err() {
                 log::warn!(
                     "Failed to parse capability mapping: {}",
@@ -1724,7 +1724,7 @@ impl Manager {
                 continue;
             }
             let map = mapping.unwrap();
-            mappings.insert(map.id.clone(), map);
+            mappings.insert(map.id(), map);
         }
 
         mappings

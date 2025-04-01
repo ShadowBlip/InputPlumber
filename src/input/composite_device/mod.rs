@@ -20,9 +20,8 @@ use zbus::Connection;
 
 use crate::{
     config::{
-        capability_map::{CapabilityMapConfigV1, NativeCapabilityMapping},
-        path::get_profiles_path,
-        CompositeDeviceConfig, DeviceProfile, ProfileMapping,
+        capability_map::CapabilityMapConfig, path::get_profiles_path, CompositeDeviceConfig,
+        DeviceProfile, ProfileMapping,
     },
     dbus::interface::{
         composite_device::CompositeDeviceInterface, source::iio_imu::SourceIioImuInterface,
@@ -83,7 +82,7 @@ pub struct CompositeDevice {
     /// Capabilities describe all input capabilities from all source devices
     capabilities: HashSet<Capability>,
     /// Capability mapping for the CompositeDevice
-    capability_map: Option<CapabilityMapConfigV1>,
+    capability_map: Option<CapabilityMapConfig>,
     /// Currently loaded [DeviceProfile] for the [CompositeDevice]. The [DeviceProfile]
     /// is used to translate input events.
     device_profile: Option<DeviceProfile>,
@@ -104,7 +103,7 @@ pub struct CompositeDevice {
     translated_recent_events: HashSet<Capability>,
     /// Keep track of translated events we've emitted so we can send
     /// release events
-    emitted_mappings: HashMap<String, NativeCapabilityMapping>,
+    emitted_mappings: HashSet<String>,
     /// The DBus path this [CompositeDevice] is listening on
     dbus_path: String,
     /// Mode defining how inputs should be routed
@@ -179,7 +178,7 @@ impl CompositeDevice {
         config: CompositeDeviceConfig,
         device_info: UdevDevice,
         dbus_path: String,
-        capability_map: Option<CapabilityMapConfigV1>,
+        capability_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating CompositeDevice with config: {}", config.name);
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
@@ -197,7 +196,7 @@ impl CompositeDevice {
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
             translated_recent_events: HashSet::new(),
-            emitted_mappings: HashMap::new(),
+            emitted_mappings: HashSet::new(),
             dbus_path,
             intercept_mode: InterceptMode::None,
             tx,
@@ -240,12 +239,25 @@ impl CompositeDevice {
         // If a capability map is defined, add those target capabilities to
         // the hashset of implemented capabilities.
         if let Some(map) = device.capability_map.as_ref() {
-            for mapping in map.mapping.clone() {
-                let cap = mapping.target_event.clone().into();
-                if cap == Capability::NotImplemented {
-                    continue;
+            match map {
+                CapabilityMapConfig::V1(config) => {
+                    for mapping in config.mapping.iter() {
+                        let cap = mapping.target_event.clone().into();
+                        if cap == Capability::NotImplemented {
+                            continue;
+                        }
+                        device.capabilities.insert(cap);
+                    }
                 }
-                device.capabilities.insert(cap);
+                CapabilityMapConfig::V2(config) => {
+                    for mapping in config.mapping.iter() {
+                        let cap = mapping.target_event.clone().into();
+                        if cap == Capability::NotImplemented {
+                            continue;
+                        }
+                        device.capabilities.insert(cap);
+                    }
+                }
             }
         }
 
@@ -1143,13 +1155,32 @@ impl CompositeDevice {
         };
 
         // Loop over each mapping and try to match source events
-        for mapping in map.mapping.iter() {
-            for source_event in mapping.source_events.iter() {
-                let cap = source_event.clone().into();
-                if cap == Capability::NotImplemented {
-                    continue;
+        match map {
+            CapabilityMapConfig::V1(config) => {
+                for mapping in config.mapping.iter() {
+                    for source_event in mapping.source_events.iter() {
+                        let cap = source_event.clone().into();
+                        if cap == Capability::NotImplemented {
+                            continue;
+                        }
+                        self.translatable_capabilities.push(cap);
+                    }
                 }
-                self.translatable_capabilities.push(cap);
+            }
+            CapabilityMapConfig::V2(config) => {
+                for mapping in config.mapping.iter() {
+                    for source_event in mapping.source_events.iter() {
+                        // Only translate source events that are `Capability` -> `Capability`
+                        let Some(capability_config) = source_event.capability.as_ref() else {
+                            continue;
+                        };
+                        let cap = capability_config.clone().into();
+                        if cap == Capability::NotImplemented {
+                            continue;
+                        }
+                        self.translatable_capabilities.push(cap);
+                    }
+                }
             }
         }
 
@@ -1184,7 +1215,7 @@ impl CompositeDevice {
     }
 
     /// Translates the given event into a different event based on the given
-    /// [CapabilityMap].
+    /// [CapabilityMapConfig].
     async fn translate_capability(&mut self, event: &NativeEvent) -> Result<(), Box<dyn Error>> {
         // Get the capability map to translate input events
         let Some(map) = self.capability_map.as_ref() else {
@@ -1228,63 +1259,136 @@ impl CompositeDevice {
         // they would release at the same time.
         let mut emit_queue = Vec::new();
 
-        // Loop over each mapping and try to match source events
-        for mapping in map.mapping.iter() {
-            // If the event was not pressed and it exists in the emitted_mappings array,
-            // then we need to check to see if ALL of its events no longer exist in
-            // translatable_active_inputs.
-            if !event.pressed() && self.emitted_mappings.contains_key(&mapping.name) {
-                let mut has_source_event_pressed = false;
+        // Handle the event based on whether this is a CapabilityMapV1 or CapabilityMapV2
+        match map {
+            CapabilityMapConfig::V1(config) => {
+                // Loop over each mapping and try to match source events
+                for mapping in config.mapping.iter() {
+                    // If the event was not pressed and it exists in the emitted_mappings array,
+                    // then we need to check to see if ALL of its events no longer exist in
+                    // translatable_active_inputs.
+                    if !event.pressed() && self.emitted_mappings.contains(&mapping.name) {
+                        let mut has_source_event_pressed = false;
 
-                // Loop through each source capability in the mapping
-                for source_event in mapping.source_events.iter() {
-                    let cap = source_event.clone().into();
-                    if cap == Capability::NotImplemented {
-                        continue;
-                    }
-                    if self.translatable_active_inputs.contains(&cap) {
-                        has_source_event_pressed = true;
-                        break;
-                    }
-                }
+                        // Loop through each source capability in the mapping
+                        for source_event in mapping.source_events.iter() {
+                            let cap = source_event.clone().into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            if self.translatable_active_inputs.contains(&cap) {
+                                has_source_event_pressed = true;
+                                break;
+                            }
+                        }
 
-                // If no more inputs are being pressed, send a release event.
-                if !has_source_event_pressed {
-                    let cap = mapping.target_event.clone().into();
-                    if cap == Capability::NotImplemented {
-                        continue;
+                        // If no more inputs are being pressed, send a release event.
+                        if !has_source_event_pressed {
+                            let cap = mapping.target_event.clone().into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            let event = NativeEvent::new(cap, InputValue::Bool(false));
+                            log::trace!("Adding event to emit queue: {:?}", event);
+                            emit_queue.push(event);
+                            self.emitted_mappings.remove(&mapping.name);
+                        }
                     }
-                    let event = NativeEvent::new(cap, InputValue::Bool(false));
-                    log::trace!("Adding event to emit queue: {:?}", event);
-                    emit_queue.push(event);
-                    self.emitted_mappings.remove(&mapping.name);
+
+                    // If the event is pressed, check for any matches to send a 'press' event
+                    if event.pressed() {
+                        let mut is_missing_source_event = false;
+                        for source_event in mapping.source_events.iter() {
+                            let cap = source_event.clone().into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            if !self.translatable_active_inputs.contains(&cap) {
+                                is_missing_source_event = true;
+                                break;
+                            }
+                        }
+
+                        if !is_missing_source_event {
+                            let cap = mapping.target_event.clone().into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            let event = NativeEvent::new(cap, InputValue::Bool(true));
+                            log::trace!("Adding event to emit queue: {:?}", event);
+                            emit_queue.push(event);
+                            self.emitted_mappings.insert(mapping.name.clone());
+                        }
+                    }
                 }
             }
+            CapabilityMapConfig::V2(config) => {
+                // Loop over each mapping and try to match source events
+                for mapping in config.mapping.iter() {
+                    // If the event was not pressed and it exists in the emitted_mappings array,
+                    // then we need to check to see if ALL of its events no longer exist in
+                    // translatable_active_inputs.
+                    if !event.pressed() && self.emitted_mappings.contains(&mapping.name) {
+                        let mut has_source_event_pressed = false;
 
-            // If the event is pressed, check for any matches to send a 'press' event
-            if event.pressed() {
-                let mut is_missing_source_event = false;
-                for source_event in mapping.source_events.iter() {
-                    let cap = source_event.clone().into();
-                    if cap == Capability::NotImplemented {
-                        continue;
-                    }
-                    if !self.translatable_active_inputs.contains(&cap) {
-                        is_missing_source_event = true;
-                        break;
-                    }
-                }
+                        // Loop through each source capability in the mapping
+                        for source_event in mapping.source_events.iter() {
+                            // Only `Capability` -> `Capability` mapping is supported here
+                            let Some(capability_config) = source_event.capability.as_ref() else {
+                                continue;
+                            };
+                            let cap = capability_config.clone().into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            if self.translatable_active_inputs.contains(&cap) {
+                                has_source_event_pressed = true;
+                                break;
+                            }
+                        }
 
-                if !is_missing_source_event {
-                    let cap = mapping.target_event.clone().into();
-                    if cap == Capability::NotImplemented {
-                        continue;
+                        // If no more inputs are being pressed, send a release event.
+                        if !has_source_event_pressed {
+                            let cap = mapping.target_event.clone().into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            let event = NativeEvent::new(cap, InputValue::Bool(false));
+                            log::trace!("Adding event to emit queue: {:?}", event);
+                            emit_queue.push(event);
+                            self.emitted_mappings.remove(&mapping.name);
+                        }
                     }
-                    let event = NativeEvent::new(cap, InputValue::Bool(true));
-                    log::trace!("Adding event to emit queue: {:?}", event);
-                    emit_queue.push(event);
-                    self.emitted_mappings
-                        .insert(mapping.name.clone(), mapping.clone());
+
+                    // If the event is pressed, check for any matches to send a 'press' event
+                    if event.pressed() {
+                        let mut is_missing_source_event = false;
+                        for source_event in mapping.source_events.iter() {
+                            // Only `Capability` -> `Capability` mapping is supported here
+                            let Some(capability_config) = source_event.capability.as_ref() else {
+                                continue;
+                            };
+                            let cap = capability_config.clone().into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            if !self.translatable_active_inputs.contains(&cap) {
+                                is_missing_source_event = true;
+                                break;
+                            }
+                        }
+
+                        if !is_missing_source_event {
+                            let cap = mapping.target_event.clone().into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            let event = NativeEvent::new(cap, InputValue::Bool(true));
+                            log::trace!("Adding event to emit queue: {:?}", event);
+                            emit_queue.push(event);
+                            self.emitted_mappings.insert(mapping.name.clone());
+                        }
+                    }
                 }
             }
         }
