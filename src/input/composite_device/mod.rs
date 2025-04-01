@@ -689,12 +689,7 @@ impl CompositeDevice {
         log::trace!("Received event: {:?} from {device_id}", raw_event);
 
         // Convert the event into a NativeEvent
-        let event: NativeEvent = match raw_event {
-            Event::Evdev(event) => event.into(),
-            Event::HIDRaw => todo!(),
-            Event::Native(event) => event,
-            Event::DBus(_) => todo!(),
-        };
+        let Event::Native(event) = raw_event;
         let cap = event.as_capability();
         log::trace!("Event capability: {:?}", cap);
 
