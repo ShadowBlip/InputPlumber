@@ -166,6 +166,9 @@ impl EvdevEvent {
                 KeyCode::BTN_TRIGGER_HAPPY8 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
                 KeyCode::BTN_TRIGGER_HAPPY9 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3)),
                 KeyCode::BTN_TRIGGER_HAPPY10 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle3)),
+                KeyCode::BTN_TRIGGER_HAPPY11 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
+                KeyCode::BTN_TRIGGER_HAPPY12 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
+                KeyCode::BTN_TRIGGER_HAPPY13 => Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
                 KeyCode::BTN_THUMBL => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick))
                 }

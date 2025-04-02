@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: flydigi-vader-4-pro
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty,then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# Only allow a single source device per composite device of this type.
+maximum_sources: 4
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x045e
+      product_id: 0x028e
+  - group: gamepad
+    evdev:
+      vendor_id: "045e"
+      product_id: "028e"
+      handler: event*
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - deck
+  - touchpad
+
+capability_map_id: flydigi-vader-4-pro
+
+options:
+  auto_manage: true
