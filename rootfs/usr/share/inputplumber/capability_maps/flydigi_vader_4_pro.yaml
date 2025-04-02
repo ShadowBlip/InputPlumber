@@ -48,9 +48,9 @@ mapping:
       touchpad:
         name: LeftPad
         touch:
-          button: Press
-        touchmotion:
-          region: top
+          button: Touch
+        motion:
+          region: top-left
           speed_pps: 800
   - name: RightPaddle3
     source_events:
@@ -60,9 +60,9 @@ mapping:
       touchpad:
         name: RightPad
         touch:
-          button: Press
-        #touchmotion:
-        #  region: top
-        #  speed_pps: 800
+          button: Touch
+        motion:
+          region: top-left
+          speed_pps: 800
 # List of events to filter from the source devices
 filtered_events: []
