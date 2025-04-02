@@ -14,7 +14,7 @@ name: flydigi-vader-4-pro
 matches: []
 
 # Only allow a single source device per composite device of this type.
-maximum_sources: 4
+maximum_sources: 1
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
