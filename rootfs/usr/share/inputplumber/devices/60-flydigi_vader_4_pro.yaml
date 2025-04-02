@@ -24,7 +24,8 @@ source_devices:
       properties:
         - name: ID_MODEL
           value: "Flydigi_VADER4"
-      subsystem: usb
+      sys_name: "event*"
+      subsystem: input
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
