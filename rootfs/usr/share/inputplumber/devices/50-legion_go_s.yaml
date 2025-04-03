@@ -51,14 +51,12 @@ source_devices:
       product_id: 0xe311
       interface_num: 6
   - group: gamepad
-    blocked: true
     evdev:
       vendor_id: "1a86"
       product_id: "e310"
       name: "{QH Electronics Controller,Legion Go S}"
       handler: event*
   - group: gamepad
-    blocked: true
     evdev:
       vendor_id: "1a86"
       product_id: "e311"
@@ -86,4 +84,4 @@ options:
 
 # The target input device(s) to emulate by default
 target_devices:
-  - deck
+  - deck-uhid

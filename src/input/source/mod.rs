@@ -41,7 +41,7 @@ const POLL_RATE: Duration = Duration::from_micros(2500);
 /// Possible errors for a source device client
 #[derive(Error, Debug)]
 pub enum InputError {
-    #[error("error occurred running device")]
+    #[error("InputError occurred running source device: {0}")]
     DeviceError(String),
 }
 
@@ -72,9 +72,9 @@ impl From<Box<dyn Error + Send + Sync>> for InputError {
 /// Possible errors for a source device client
 #[derive(Error, Debug)]
 pub enum OutputError {
-    #[error("behavior is not implemented")]
+    #[error("Output behavior is not implemented")]
     NotImplemented,
-    #[error("error occurred running device")]
+    #[error("OutputError occurred running source device: {0}")]
     DeviceError(String),
 }
 

@@ -8,6 +8,7 @@ use std::{
 
 use debug::DebugDevice;
 use horipad_steam::HoripadSteamDevice;
+use steam_deck_uhid::SteamDeckUhidDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use unified_gamepad::UnifiedGamepadDevice;
@@ -49,6 +50,7 @@ pub mod horipad_steam;
 pub mod keyboard;
 pub mod mouse;
 pub mod steam_deck;
+pub mod steam_deck_uhid;
 pub mod touchpad;
 pub mod touchscreen;
 pub mod unified_gamepad;
@@ -59,7 +61,7 @@ pub mod xbox_series;
 /// Possible errors for a target device client
 #[derive(Error, Debug)]
 pub enum InputError {
-    #[error("error occurred running device")]
+    #[error("InputError occurred running target device: {0}")]
     DeviceError(String),
 }
 
@@ -103,9 +105,9 @@ impl From<ClientError> for InputError {
 #[derive(Error, Debug)]
 pub enum OutputError {
     #[allow(dead_code)]
-    #[error("behavior is not implemented")]
+    #[error("Output behavior is not implemented")]
     NotImplemented,
-    #[error("error occurred running device")]
+    #[error("OutputError occurred running target device: {0}")]
     DeviceError(String),
 }
 
@@ -162,6 +164,10 @@ impl TargetDeviceTypeId {
             },
             TargetDeviceTypeId {
                 id: "deck",
+                name: "Valve Steam Deck Controller",
+            },
+            TargetDeviceTypeId {
+                id: "deck-uhid",
                 name: "Valve Steam Deck Controller",
             },
             TargetDeviceTypeId {
@@ -594,6 +600,7 @@ pub enum TargetDevice {
     Keyboard(TargetDriver<KeyboardDevice>),
     Mouse(TargetDriver<MouseDevice>),
     SteamDeck(TargetDriver<SteamDeckDevice>),
+    SteamDeckUhid(TargetDriver<SteamDeckUhidDevice>),
     Touchpad(TargetDriver<TouchpadDevice>),
     Touchscreen(TargetDriver<TouchscreenDevice>),
     XBox360(TargetDriver<XBox360Controller>),
@@ -624,6 +631,15 @@ impl TargetDevice {
                 };
                 let driver = TargetDriver::new_with_options(id, device, dbus, options);
                 Ok(Self::SteamDeck(driver))
+            }
+            "deck-uhid" => {
+                let device = SteamDeckUhidDevice::new()?;
+                let options = TargetDriverOptions {
+                    poll_rate: Duration::from_millis(4),
+                    buffer_size: 2048,
+                };
+                let driver = TargetDriver::new_with_options(id, device, dbus, options);
+                Ok(Self::SteamDeckUhid(driver))
             }
             "ds5" | "ds5-usb" | "ds5-bt" | "ds5-edge" | "ds5-edge-usb" | "ds5-edge-bt" => {
                 let hw = match id.as_str() {
@@ -738,6 +754,7 @@ impl TargetDevice {
             TargetDevice::Keyboard(_) => vec!["keyboard".try_into().unwrap()],
             TargetDevice::Mouse(_) => vec!["mouse".try_into().unwrap()],
             TargetDevice::SteamDeck(_) => vec!["deck".try_into().unwrap()],
+            TargetDevice::SteamDeckUhid(_) => vec!["deck-uhid".try_into().unwrap()],
             TargetDevice::Touchpad(_) => vec!["touchpad".try_into().unwrap()],
             TargetDevice::Touchscreen(_) => vec!["touchscreen".try_into().unwrap()],
             TargetDevice::XBox360(_) => {
@@ -762,6 +779,7 @@ impl TargetDevice {
             TargetDevice::Keyboard(_) => "keyboard",
             TargetDevice::Mouse(_) => "mouse",
             TargetDevice::SteamDeck(_) => "gamepad",
+            TargetDevice::SteamDeckUhid(_) => "gamepad",
             TargetDevice::Touchpad(_) => "touchpad",
             TargetDevice::Touchscreen(_) => "touchscreen",
             TargetDevice::XBox360(_) => "gamepad",
@@ -782,6 +800,7 @@ impl TargetDevice {
             TargetDevice::Keyboard(device) => Some(device.client()),
             TargetDevice::Mouse(device) => Some(device.client()),
             TargetDevice::SteamDeck(device) => Some(device.client()),
+            TargetDevice::SteamDeckUhid(device) => Some(device.client()),
             TargetDevice::Touchpad(device) => Some(device.client()),
             TargetDevice::Touchscreen(device) => Some(device.client()),
             TargetDevice::XBox360(device) => Some(device.client()),
@@ -802,6 +821,7 @@ impl TargetDevice {
             TargetDevice::Keyboard(device) => device.run(dbus_path).await,
             TargetDevice::Mouse(device) => device.run(dbus_path).await,
             TargetDevice::SteamDeck(device) => device.run(dbus_path).await,
+            TargetDevice::SteamDeckUhid(device) => device.run(dbus_path).await,
             TargetDevice::Touchpad(device) => device.run(dbus_path).await,
             TargetDevice::Touchscreen(device) => device.run(dbus_path).await,
             TargetDevice::XBox360(device) => device.run(dbus_path).await,
