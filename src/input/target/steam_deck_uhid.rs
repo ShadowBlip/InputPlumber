@@ -1,25 +1,18 @@
-use packed_struct::{
-    types::{Integer, SizedInteger},
-    PackedStruct,
-};
 use std::{
     cmp::Ordering,
     collections::HashMap,
     error::Error,
     fmt::Debug,
+    fs::File,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::{channel, Receiver};
-use virtual_usb::{
-    usb::{
-        hid::{HidInterfaceBuilder, HidReportType, HidRequest, HidSubclass, InterfaceProtocol},
-        ConfigurationBuilder, DeviceClass, Direction, EndpointBuilder, LangId, SynchronizationType,
-        TransferType, Type, UsageType,
-    },
-    usbip::UsbIpDirection,
-    vhci_hcd::load_vhci_hcd,
-    virtual_usb::{Reply, VirtualUSBDevice, VirtualUSBDeviceBuilder, Xfer},
+
+use packed_struct::{
+    types::{Integer, SizedInteger},
+    PackedStruct,
 };
+use tokio::sync::mpsc::{channel, Receiver};
+use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
     config::CompositeDeviceConfig,
@@ -30,7 +23,7 @@ use crate::{
             PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX,
             STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
-        report_descriptor::{CONTROLLER_DESCRIPTOR, KEYBOARD_DESCRIPTOR, MOUSE_DESCRIPTOR},
+        report_descriptor::CONTROLLER_DESCRIPTOR,
     },
     input::{
         capability::{
@@ -44,100 +37,49 @@ use crate::{
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
+        target::steam_deck::ProductId,
     },
 };
 
-use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
-
-/// Target Device ProductIds, used to ID specific devices in SDL.
-#[derive(Debug, Clone)]
-pub enum ProductId {
-    SteamDeck = 0x1205,
-    ZotacZone = 0x12fc,
-    AsusRogAlly,
-    LenovoLegionGo,
-    LenovoLegionGoS,
-}
-
-impl ProductId {
-    pub fn to_u16(&self) -> u16 {
-        match self {
-            ProductId::SteamDeck => ProductId::SteamDeck as u16,
-            ProductId::ZotacZone => ProductId::ZotacZone as u16,
-            ProductId::AsusRogAlly => ProductId::AsusRogAlly as u16,
-            ProductId::LenovoLegionGo => ProductId::LenovoLegionGo as u16,
-            ProductId::LenovoLegionGoS => ProductId::LenovoLegionGoS as u16,
-        }
-    }
-
-    pub fn to_u32(&self) -> u32 {
-        match self {
-            ProductId::SteamDeck => ProductId::SteamDeck as u32,
-            ProductId::ZotacZone => ProductId::ZotacZone as u32,
-            ProductId::AsusRogAlly => ProductId::AsusRogAlly as u32,
-            ProductId::LenovoLegionGo => ProductId::LenovoLegionGo as u32,
-            ProductId::LenovoLegionGoS => ProductId::LenovoLegionGoS as u32,
-        }
-    }
-}
-
-/// Configuration of the target SteamDeck device.
-#[derive(Debug, Clone)]
-pub struct SteamDeckConfig {
-    pub vendor: String,
-    pub name: String,
-    pub product_id: ProductId,
-}
-
-impl Default for SteamDeckConfig {
-    fn default() -> Self {
-        Self {
-            vendor: "Valve Corporation".to_string(),
-            name: "Steam Controller".to_string(),
-            product_id: ProductId::SteamDeck,
-        }
-    }
-}
+use super::{
+    steam_deck::{
+        denormalize_signed_value, denormalize_unsigned_to_signed_value, denormalize_unsigned_value,
+        SteamDeckConfig,
+    },
+    InputError, OutputError, TargetInputDevice, TargetOutputDevice,
+};
 
 // The minimum amount of time that button up events must wait after
 // a button down event.
 const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
 
-pub struct SteamDeckDevice {
+pub struct SteamDeckUhidDevice {
     config: SteamDeckConfig,
     config_rx: Option<Receiver<SteamDeckConfig>>,
     /// Steam will send 'SetReport' commands with a report type, so it can fetch
     /// a particular result with 'GetReport'
     current_report: ReportType,
-    device: Option<VirtualUSBDevice>,
+    device: Option<UHIDDevice<File>>,
     lizard_mode_enabled: bool,
-    output_event: Option<OutputEvent>,
     pressed_events: HashMap<Capability, Instant>,
     queued_events: Vec<ScheduledNativeEvent>,
     serial_number: String,
     state: PackedInputDataReport,
 }
 
-impl SteamDeckDevice {
+impl SteamDeckUhidDevice {
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        SteamDeckDevice::new_with_config(SteamDeckConfig::default())
+        SteamDeckUhidDevice::new_with_config(SteamDeckConfig::default())
     }
 
     /// Create a new emulated Steam Deck device with the given configuration.
     pub fn new_with_config(config: SteamDeckConfig) -> Result<Self, Box<dyn Error>> {
-        // Ensure the vhci_hcd kernel module is loaded
-        log::debug!("Ensuring vhci_hcd kernel module is loaded");
-        if let Err(e) = load_vhci_hcd() {
-            return Err(e.to_string().into());
-        }
-
         Ok(Self {
             config,
             config_rx: None,
             current_report: ReportType::InputData,
             device: None,
             lizard_mode_enabled: false,
-            output_event: None,
             pressed_events: HashMap::new(),
             queued_events: vec![],
             serial_number: "1NPU7PLUMB3R".to_string(),
@@ -146,395 +88,37 @@ impl SteamDeckDevice {
     }
 
     /// Create the virtual device to emulate
-    fn create_virtual_device(config: &SteamDeckConfig) -> Result<VirtualUSBDevice, Box<dyn Error>> {
-        // Configuration values can be obtained from a real device with "sudo lsusb -v"
-        let virtual_device = VirtualUSBDeviceBuilder::new(VID, config.product_id.to_u16())
-            .class(DeviceClass::UseInterface)
-            .supported_langs(vec![LangId::EnglishUnitedStates])
-            .manufacturer(config.vendor.as_ref())
-            .product(config.name.as_ref())
-            .max_packet_size(64)
-            .configuration(
-                ConfigurationBuilder::new()
-                    .max_power(500)
-                    // Mouse (iface 0)
-                    .interface(
-                        HidInterfaceBuilder::new()
-                            .country_code(0)
-                            .protocol(InterfaceProtocol::Mouse)
-                            .subclass(HidSubclass::None)
-                            .report_descriptor(&MOUSE_DESCRIPTOR)
-                            .endpoint_descriptor(
-                                EndpointBuilder::new()
-                                    .address_num(1)
-                                    .direction(Direction::In)
-                                    .transfer_type(TransferType::Interrupt)
-                                    .sync_type(SynchronizationType::NoSynchronization)
-                                    .usage_type(UsageType::Data)
-                                    .max_packet_size(0x0008)
-                                    .build(),
-                            )
-                            .build(),
-                    )
-                    // Keyboard (iface 1)
-                    .interface(
-                        HidInterfaceBuilder::new()
-                            .country_code(33)
-                            .protocol(InterfaceProtocol::Keyboard)
-                            .subclass(HidSubclass::Boot)
-                            .report_descriptor(&KEYBOARD_DESCRIPTOR)
-                            .endpoint_descriptor(
-                                EndpointBuilder::new()
-                                    .address_num(2)
-                                    .direction(Direction::In)
-                                    .transfer_type(TransferType::Interrupt)
-                                    .sync_type(SynchronizationType::NoSynchronization)
-                                    .usage_type(UsageType::Data)
-                                    .max_packet_size(0x0008)
-                                    .build(),
-                            )
-                            .build(),
-                    )
-                    // Controller (iface 2)
-                    .interface(
-                        HidInterfaceBuilder::new()
-                            .country_code(33)
-                            .protocol(InterfaceProtocol::None)
-                            .subclass(HidSubclass::None)
-                            .report_descriptor(&CONTROLLER_DESCRIPTOR)
-                            .endpoint_descriptor(
-                                EndpointBuilder::new()
-                                    .address_num(3)
-                                    .direction(Direction::In)
-                                    .transfer_type(TransferType::Interrupt)
-                                    .sync_type(SynchronizationType::NoSynchronization)
-                                    .usage_type(UsageType::Data)
-                                    .max_packet_size(0x0040)
-                                    .build(),
-                            )
-                            .build(),
-                    )
-                    // CDC
-                    //.interface(HidInterfaceBuilder::new().build())
-                    // CDC Data
-                    //.interface(HidInterfaceBuilder::new().build())
-                    .build(),
-            )
-            .build();
+    fn create_virtual_device(config: &SteamDeckConfig) -> Result<UHIDDevice<File>, Box<dyn Error>> {
+        let device = UHIDDevice::create(CreateParams {
+            name: config.name.clone(),
+            phys: String::from(""),
+            uniq: String::from(""),
+            bus: Bus::USB,
+            vendor: VID as u32,
+            product: config.product_id.to_u32(),
+            version: 0x1000,
+            country: 0,
+            rd_data: CONTROLLER_DESCRIPTOR.to_vec(),
+        })?;
 
-        Ok(virtual_device)
+        Ok(device)
     }
 
-    /// Handle any non-standard transfers
-    fn handle_xfer(&mut self, xfer: Xfer) -> Option<Reply> {
-        match xfer.direction() {
-            UsbIpDirection::Out => {
-                self.handle_xfer_out(xfer);
-                None
-            }
-            UsbIpDirection::In => self.handle_xfer_in(xfer),
-        }
-    }
+    /// Write the current device state to the device
+    fn write_state(&mut self) -> Result<(), Box<dyn Error>> {
+        let data = self.state.pack()?;
 
-    /// Handle any non-standard IN transfers (device -> host) for the gamepad iface
-    fn handle_xfer_in(&self, xfer: Xfer) -> Option<Reply> {
-        // IN transfers do not have a setup request.
-        let endpoint = xfer.ep;
-
-        // If a setup header exists, we need to reply to it.
-        if xfer.header().is_some() {
-            return self.handle_xfer_in_request(xfer);
+        // Write the state to the virtual HID
+        let Some(device) = self.device.as_mut() else {
+            return Ok(());
         };
 
-        // Create a reply based on the endpoint
-        let reply = match endpoint {
-            // Gamepad
-            3 => self.handle_xfer_in_gamepad(xfer),
-            // All other endpoints, write empty data for now
-            _ => Reply::from_xfer(xfer, &[]),
+        if let Err(e) = device.write(&data) {
+            let err = format!("Failed to write input data report: {:?}", e);
+            return Err(err.into());
         };
 
-        Some(reply)
-    }
-
-    // Handle IN transfers (device -> host) for feature requests
-    fn handle_xfer_in_request(&self, xfer: Xfer) -> Option<Reply> {
-        let setup = xfer.header()?;
-
-        // Only handle Class requests
-        if setup.request_type() != Type::Class {
-            log::warn!("Unknown request type");
-            return Some(Reply::from_xfer(xfer, &[]));
-        }
-
-        // Interpret the setup request as an HID request
-        let request = HidRequest::from(setup);
-
-        let reply = match request {
-            HidRequest::Unknown => {
-                log::warn!("Unknown HID request!");
-                Reply::from_xfer(xfer, &[])
-            }
-            HidRequest::GetReport(req) => {
-                //log::trace!("GetReport: {req}");
-                let _interface = req.interface.to_primitive();
-                //log::trace!("Got GetReport data for iface {interface}");
-                let report_type = req.report_type;
-
-                // Handle GetReport
-                match report_type {
-                    HidReportType::Input => Reply::from_xfer(xfer, &[]),
-                    HidReportType::Output => Reply::from_xfer(xfer, &[]),
-                    HidReportType::Feature => {
-                        // Reply based on the currently set report
-                        match self.current_report {
-                            ReportType::GetAttrib => {
-                                log::debug!("Sending attribute data");
-                                // No idea what these bytes mean, but this is
-                                // what is sent from the real device.
-                                let data = [
-                                    ReportType::GetAttrib as u8,
-                                    0x2d,
-                                    0x01,
-                                    0x05,
-                                    0x12,
-                                    0x00,
-                                    0x00,
-                                    0x02,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x0a,
-                                    0x2b,
-                                    0x12,
-                                    0xa9,
-                                    0x62,
-                                    0x04,
-                                    0xad,
-                                    0xf1,
-                                    0xe4,
-                                    0x65,
-                                    0x09,
-                                    0x2e,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x0b,
-                                    0xa0,
-                                    0x0f,
-                                    0x00,
-                                    0x00,
-                                    0x0d,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x0c,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x0e,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                ];
-                                Reply::from_xfer(xfer, &data)
-                            }
-                            ReportType::GetSerial => {
-                                // Reply with the serial number
-                                // [ReportType::GetSerial, 0x14, 0x01, ..serial?]?
-                                log::debug!("Sending serial number: {}", self.serial_number);
-                                let mut data = vec![ReportType::GetSerial as u8, 0x14, 0x01];
-                                let mut serial_data = self.serial_number.as_bytes().to_vec();
-                                data.append(&mut serial_data);
-                                data.resize(64, 0);
-                                Reply::from_xfer(xfer, data.as_slice())
-                            }
-                            // Don't care about other types
-                            _ => Reply::from_xfer(xfer, &[]),
-                        }
-                    }
-                }
-            }
-            // Ignore other types of requests
-            _ => Reply::from_xfer(xfer, &[]),
-        };
-
-        Some(reply)
-    }
-
-    // Handle IN transfers (device -> host) for the gamepad interface
-    fn handle_xfer_in_gamepad(&self, xfer: Xfer) -> Reply {
-        // Pack the state
-        let report_data = match self.state.pack() {
-            Ok(data) => data,
-            Err(e) => {
-                log::error!("Failed to pack input data report: {e:?}");
-                return Reply::from_xfer(xfer, &[]);
-            }
-        };
-
-        Reply::from_xfer(xfer, &report_data)
-    }
-
-    /// Handle any non-standard OUT transfers (host -> device) for the gamepad iface.
-    /// Out transfers do not have any replies.
-    fn handle_xfer_out(&mut self, xfer: Xfer) {
-        // OUT transfers (host -> device) are generally always to ep 0
-        //log::trace!("Got OUT transfer for endpoint: {}", xfer.ep);
-
-        let Some(setup) = xfer.header() else {
-            log::debug!("No setup request in OUT xfer");
-            return;
-        };
-
-        // Only handle Class requests
-        if setup.request_type() != Type::Class {
-            log::debug!("Unknown request type");
-            return;
-        }
-
-        // Interpret the setup request as an HID request
-        let request = HidRequest::from(setup);
-
-        match request {
-            HidRequest::Unknown => {
-                log::warn!("Unknown HID request!");
-            }
-            HidRequest::SetIdle(_req) => {
-                //log::trace!("SetIdle: {req}");
-            }
-            // The host wants to set the given report on the device
-            HidRequest::SetReport(req) => {
-                //log::trace!("SetReport: {req}");
-                let _interface = req.interface.to_primitive();
-                let data = xfer.data;
-                //log::trace!("Got SetReport data for iface {interface}: {data:?}");
-
-                // The first byte contains the report type
-                let Some(first_byte) = data.first() else {
-                    log::debug!("Unable to determine report type from empty report");
-                    return;
-                };
-
-                let Ok(report_type) = ReportType::try_from(*first_byte) else {
-                    log::debug!("Invalid report type: {first_byte}");
-                    return;
-                };
-
-                // https://github.com/libsdl-org/SDL/blob/f0363a0466f72655a1081fb96a90e1b9602ee571/src/joystick/hidapi/SDL_hidapi_steamdeck.c
-                match report_type {
-                    ReportType::InputData => (),
-                    ReportType::SetMappings => (),
-                    // ClearMappings gets called to take the controller out of lizard
-                    // mode so that Steam can control it directly.
-                    ReportType::ClearMappings => {
-                        //log::trace!("Disabling lizard mode");
-                        self.lizard_mode_enabled = false;
-                    }
-                    ReportType::GetMappings => (),
-                    ReportType::GetAttrib => {
-                        log::debug!("Attribute requested");
-                        self.current_report = ReportType::GetAttrib;
-                    }
-                    ReportType::GetAttribLabel => (),
-                    // DefaultMappings sets the device in lizard mode, so it can run
-                    // without Steam.
-                    ReportType::DefaultMappings => {
-                        log::debug!("Setting lizard mode enabled");
-                        self.lizard_mode_enabled = true;
-                    }
-                    ReportType::FactoryReset => (),
-                    // When Steam boots up, it writes to a register with this data:
-                    // Got SetReport data: [135, 3, 8, 7, 0, 0, 0, ...]
-                    ReportType::WriteRegister => (),
-                    ReportType::ClearRegister => (),
-                    ReportType::ReadRegister => (),
-                    ReportType::GetRegisterLabel => (),
-                    ReportType::GetRegisterMax => (),
-                    ReportType::GetRegisterDefault => (),
-                    ReportType::SetMode => (),
-                    ReportType::DefaultMouse => (),
-                    ReportType::TriggerHapticPulse => (),
-                    ReportType::RequestCommStatus => (),
-                    // Configure the next GET_REPORT call to return the serial
-                    // number.
-                    ReportType::GetSerial => {
-                        log::debug!("Serial number requested");
-                        self.current_report = ReportType::GetSerial;
-                    }
-                    ReportType::TriggerHapticCommand => {
-                        self.current_report = ReportType::TriggerHapticCommand;
-
-                        let buf = match data.as_slice().try_into() {
-                            Ok(buffer) => buffer,
-                            Err(e) => {
-                                log::error!("Failed to process Haptic Command: {e}");
-                                return;
-                            }
-                        };
-
-                        let packed_haptic_report = match PackedHapticReport::unpack(buf) {
-                            Ok(report) => report,
-                            Err(e) => {
-                                log::error!("Failed to process Haptic Command: {e}");
-                                return;
-                            }
-                        };
-                        //log::trace!("Got PackedHapticReport: {packed_haptic_report}");
-                        let event = OutputEvent::SteamDeckHaptics(packed_haptic_report);
-                        self.output_event = Some(event);
-                    }
-                    ReportType::TriggerRumbleCommand => {
-                        self.current_report = ReportType::TriggerRumbleCommand;
-
-                        let buf = match data.as_slice().try_into() {
-                            Ok(buffer) => buffer,
-                            Err(e) => {
-                                log::error!("Failed to process Rumble Command: {e}");
-                                return;
-                            }
-                        };
-
-                        let packed_rumble_report = match PackedRumbleReport::unpack(buf) {
-                            Ok(report) => report,
-                            Err(e) => {
-                                log::error!("Failed to process Rumble Command: {e}");
-                                return;
-                            }
-                        };
-                        //log::trace!("Got PackedRumbleReport: {packed_rumble_report}");
-                        let event = OutputEvent::SteamDeckRumble(packed_rumble_report);
-                        self.output_event = Some(event);
-                    }
-                    ReportType::UnknownC1 => (),
-                    ReportType::UnknownDc => (),
-                    ReportType::UnknownE2 => (),
-                }
-            }
-            // Ignore other types of requests
-            _ => {}
-        }
+        Ok(())
     }
 
     /// Update the internal controller state when events are emitted.
@@ -775,9 +359,194 @@ impl SteamDeckDevice {
             Capability::Touchscreen(_) => (),
         };
     }
+
+    /// Handle [OutputEvent::Output] events from the HIDRAW device. These are
+    /// events which should be forwarded back to source devices.
+    fn handle_output(&mut self, data: Vec<u8>) -> Result<Vec<OutputEvent>, Box<dyn Error>> {
+        // The first byte should be the report id
+        let Some(report_id) = data.first() else {
+            log::warn!("Received empty output report.");
+            return Ok(vec![]);
+        };
+
+        log::trace!("Got output report with ID: {report_id}");
+        Ok(vec![])
+    }
+
+    /// Handle [OutputEvent::GetReport] events from the HIDRAW device
+    fn handle_get_report(
+        &mut self,
+        id: u32,
+        _report_number: u8,
+        _report_type: uhid_virt::ReportType,
+    ) -> Result<(), Box<dyn Error>> {
+        let Some(device) = self.device.as_mut() else {
+            return Ok(());
+        };
+
+        let data = match self.current_report {
+            ReportType::GetAttrib => {
+                log::debug!("Sending attribute data");
+                // No idea what these bytes mean, but this is
+                // what is sent from the real device.
+                let data = [
+                    0x00,
+                    ReportType::GetAttrib as u8,
+                    0x2d,
+                    0x01,
+                    0x05,
+                    0x12,
+                    0x00,
+                    0x00,
+                    0x02,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0a,
+                    0x2b,
+                    0x12,
+                    0xa9,
+                    0x62,
+                    0x04,
+                    0xad,
+                    0xf1,
+                    0xe4,
+                    0x65,
+                    0x09,
+                    0x2e,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0b,
+                    0xa0,
+                    0x0f,
+                    0x00,
+                    0x00,
+                    0x0d,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0c,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0e,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ];
+                data.to_vec()
+            }
+            ReportType::GetSerial => {
+                // Reply with the serial number
+                // [ReportType::GetSerial, 0x14, 0x01, ..serial?]?
+                log::debug!("Sending serial number: {}", self.serial_number);
+                let mut data = vec![0x0, ReportType::GetSerial as u8, 0x14, 0x01];
+                let mut serial_data = self.serial_number.as_bytes().to_vec();
+                data.append(&mut serial_data);
+                data.resize(64, 0);
+                data
+            }
+            // Don't care about other types
+            _ => vec![],
+        };
+
+        // Write the report reply to the HIDRAW device
+        if let Err(e) = device.write_get_report_reply(id, 0, data) {
+            log::warn!("Failed to write get report reply: {:?}", e);
+            return Err(e.to_string().into());
+        }
+
+        Ok(())
+    }
+
+    fn handle_set_report(
+        &mut self,
+        id: u32,
+        _report_number: u8,
+        _report_type: uhid_virt::ReportType,
+        mut data: Vec<u8>,
+    ) -> Result<Vec<OutputEvent>, Box<dyn Error>> {
+        let Some(report_id) = data.get(1) else {
+            return Ok(vec![]);
+        };
+        self.current_report = match (*report_id).try_into() {
+            Ok(id) => id,
+            Err(_) => {
+                log::warn!("Unknown report id: {:#04x}", (*report_id));
+                return Ok(vec![]);
+            }
+        };
+        log::trace!("True Report ID: {:#04x}", (*report_id));
+        log::trace!("Raw data {}: {:?}", data.len(), data);
+        // uhid has an extra byte prepended, remove it.
+        data.remove(0);
+        let output_events = match self.current_report {
+            ReportType::TriggerHapticCommand => {
+                let buf = data.as_slice().try_into()?;
+                let packed_haptic_report = match PackedHapticReport::unpack(buf) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("Got error unpacking buffer as PackedHapticReport {e:?}");
+                        return Ok(vec![]);
+                    }
+                };
+                log::trace!("Got PackedHapticReport: {packed_haptic_report}");
+                let event = OutputEvent::SteamDeckHaptics(packed_haptic_report);
+                vec![event]
+            }
+            ReportType::TriggerRumbleCommand => {
+                let buf = data.as_slice().try_into()?;
+                let packed_rumble_report = match PackedRumbleReport::unpack(buf) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("Got error unpacking buffer as PackedRumbleReport {e:?}");
+                        return Ok(vec![]);
+                    }
+                };
+                log::trace!("Got PackedRumbleReport: {packed_rumble_report}");
+                let event = OutputEvent::SteamDeckRumble(packed_rumble_report);
+                vec![event]
+            }
+
+            _ => vec![],
+        };
+
+        let Some(device) = self.device.as_mut() else {
+            return Ok(vec![]);
+        };
+
+        // Write the report reply to the HIDRAW device
+        if let Err(e) = device.write_set_report_reply(id, 0) {
+            log::warn!("Failed to write set report reply: {:?}", e);
+            return Err(e.to_string().into());
+        }
+
+        Ok(output_events)
+    }
 }
 
-impl TargetInputDevice for SteamDeckDevice {
+impl TargetInputDevice for SteamDeckUhidDevice {
     /// Start the driver when attached to a composite device.
     fn on_composite_device_attached(
         &mut self,
@@ -846,6 +615,10 @@ impl TargetInputDevice for SteamDeckDevice {
 
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
+
+        // Increment the frame
+        let frame = self.state.frame.to_primitive();
+        self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
 
         // Check to see if this is a button event
         // In some cases, a button down and button up event can happen within
@@ -936,31 +709,12 @@ impl TargetInputDevice for SteamDeckDevice {
         Some(self.queued_events.drain(..).collect())
     }
 
-    /// Stop the virtual USB read/write threads
     fn stop(&mut self) -> Result<(), InputError> {
-        log::debug!("Stopping virtual Deck controller");
-        let xfer = {
-            let Some(device) = self.device.as_mut() else {
-                return Ok(());
-            };
-            device.stop();
-            device.blocking_read()?
+        let Some(device) = self.device.as_mut() else {
+            return Ok(());
         };
 
-        // Handle any non-standard transfers
-        if let Some(xfer) = xfer {
-            let reply = self.handle_xfer(xfer);
-
-            let Some(device) = self.device.as_mut() else {
-                return Ok(());
-            };
-            // Write to the device if a reply is necessary
-            if let Some(reply) = reply {
-                device.write(reply)?;
-            }
-        }
-
-        log::debug!("Finished stopping");
+        let _ = device.destroy();
         Ok(())
     }
 
@@ -970,7 +724,7 @@ impl TargetInputDevice for SteamDeckDevice {
     }
 }
 
-impl TargetOutputDevice for SteamDeckDevice {
+impl TargetOutputDevice for SteamDeckUhidDevice {
     /// Update the virtual device with its current state, and read unhandled
     /// USB transfers.
     fn poll(&mut self, _: &Option<CompositeDeviceClient>) -> Result<Vec<OutputEvent>, OutputError> {
@@ -986,45 +740,112 @@ impl TargetOutputDevice for SteamDeckDevice {
                 None => self.config.clone(),
             };
 
-            let mut device = SteamDeckDevice::create_virtual_device(&config)?;
-            device.start()?;
+            let device = SteamDeckUhidDevice::create_virtual_device(&config)?;
             self.device = Some(device);
             self.config = config;
             self.config_rx = None;
         }
 
-        // Increment the frame
-        let frame = self.state.frame.to_primitive();
-        self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
-
-        // Read from the device
-        let xfer = {
-            let Some(device) = self.device.as_mut() else {
-                return Ok(vec![]);
-            };
-            device.blocking_read()?
+        let Some(device) = self.device.as_mut() else {
+            return Ok(vec![]);
         };
-        // Handle any non-standard transfers
-        if let Some(xfer) = xfer {
-            let reply = self.handle_xfer(xfer);
 
-            let Some(device) = self.device.as_mut() else {
-                return Ok(vec![]);
-            };
+        let event = match device.read() {
+            Ok(event) => event,
+            Err(err) => match err {
+                StreamError::Io(_e) => {
+                    //log::error!("Error reading from UHID device: {e:?}");
+                    // Write the current state
+                    self.write_state()?;
+                    return Ok(vec![]);
+                }
+                StreamError::UnknownEventType(e) => {
+                    log::debug!("Unknown event type: {:?}", e);
+                    // Write the current state
+                    self.write_state()?;
+                    return Ok(vec![]);
+                }
+            },
+        };
 
-            // Write to the device if a reply is necessary
-            if let Some(reply) = reply {
-                device.write(reply)?;
+        // Match the type of UHID output event
+        let output_events = match event {
+            // This is sent when the HID device is started. Consider this as an answer to
+            // UHID_CREATE. This is always the first event that is sent.
+            uhid_virt::OutputEvent::Start { dev_flags: _ } => {
+                log::debug!("Start event received");
+                vec![]
             }
-        }
+            // This is sent when the HID device is stopped. Consider this as an answer to
+            // UHID_DESTROY.
+            uhid_virt::OutputEvent::Stop => {
+                log::debug!("Stop event received");
+                vec![]
+            }
+            // This is sent when the HID device is opened. That is, the data that the HID
+            // device provides is read by some other process. You may ignore this event but
+            // it is useful for power-management. As long as you haven't received this event
+            // there is actually no other process that reads your data so there is no need to
+            // send UHID_INPUT events to the kernel.
+            uhid_virt::OutputEvent::Open => {
+                log::debug!("Open event received");
+                vec![]
+            }
+            // This is sent when there are no more processes which read the HID data. It is
+            // the counterpart of UHID_OPEN and you may as well ignore this event.
+            uhid_virt::OutputEvent::Close => {
+                log::debug!("Close event received");
+                vec![]
+            }
+            // This is sent if the HID device driver wants to send raw data to the I/O
+            // device. You should read the payload and forward it to the device.
+            uhid_virt::OutputEvent::Output { data } => {
+                log::trace!("Got output data: {:?}", data);
+                self.handle_output(data)?
+            }
+            // This event is sent if the kernel driver wants to perform a GET_REPORT request
+            // on the control channel as described in the HID specs. The report-type and
+            // report-number are available in the payload.
+            // The kernel serializes GET_REPORT requests so there will never be two in
+            // parallel. However, if you fail to respond with a UHID_GET_REPORT_REPLY, the
+            // request might silently time out.
+            // Once you read a GET_REPORT request, you shall forward it to the HID device and
+            // remember the "id" field in the payload. Once your HID device responds to the
+            // GET_REPORT (or if it fails), you must send a UHID_GET_REPORT_REPLY to the
+            // kernel with the exact same "id" as in the request. If the request already
+            // timed out, the kernel will ignore the response silently. The "id" field is
+            // never re-used, so conflicts cannot happen.
+            uhid_virt::OutputEvent::GetReport {
+                id,
+                report_number,
+                report_type,
+            } => {
+                log::trace!(
+                    "Received GetReport event: id: {id}, num: {report_number}, type: {:?}",
+                    report_type
+                );
+                self.handle_get_report(id, report_number, report_type)?;
+                vec![]
+            }
+            // This is the SET_REPORT equivalent of UHID_GET_REPORT. On receipt, you shall
+            // send a SET_REPORT request to your HID device. Once it replies, you must tell
+            // the kernel about it via UHID_SET_REPORT_REPLY.
+            // The same restrictions as for UHID_GET_REPORT apply.
+            uhid_virt::OutputEvent::SetReport {
+                id,
+                report_number,
+                report_type,
+                data,
+            } => {
+                log::trace!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
+                self.handle_set_report(id, report_number, report_type, data)?
+            }
+        };
 
-        // Handle [OutputEvent] if it was created
-        let event = self.output_event.take();
-        if let Some(event) = event {
-            return Ok(vec![event]);
-        }
+        // Write the current state
+        self.write_state()?;
 
-        Ok(vec![])
+        Ok(output_events)
     }
 
     /// Returns the possible output events this device is capable of emitting
@@ -1037,10 +858,9 @@ impl TargetOutputDevice for SteamDeckDevice {
     }
 }
 
-impl Debug for SteamDeckDevice {
+impl Debug for SteamDeckUhidDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SteamDeckDevice")
-            .field("device", &self.device)
             .field("state", &self.state)
             .field("lizard_mode_enabled", &self.lizard_mode_enabled)
             .field("serial_number", &self.serial_number)
@@ -1048,33 +868,4 @@ impl Debug for SteamDeckDevice {
             .field("pressed_events", &self.pressed_events)
             .finish()
     }
-}
-
-/// Convert the given normalized signed value to the real value based on the given
-/// minimum and maximum axis range.
-pub fn denormalize_signed_value(normal_value: f64, min: f64, max: f64) -> i16 {
-    let mid = (max + min) / 2.0;
-    let normal_value_abs = normal_value.abs();
-    if normal_value >= 0.0 {
-        let maximum = max - mid;
-        let value = normal_value * maximum + mid;
-        value as i16
-    } else {
-        let minimum = min - mid;
-        let value = normal_value_abs * minimum + mid;
-        value as i16
-    }
-}
-
-/// Convert the given normalized unsigned value to the real value based on the given
-/// minimum and maximum axis range.
-pub fn denormalize_unsigned_to_signed_value(normal_value: f64, min: f64, max: f64) -> i16 {
-    let normal_value = (normal_value * 2.0) - 1.0;
-    denormalize_signed_value(normal_value, min, max)
-}
-
-/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
-/// the maximum axis range.
-pub fn denormalize_unsigned_value(normal_value: f64, max: f64) -> u16 {
-    (normal_value * max).round() as u16
 }

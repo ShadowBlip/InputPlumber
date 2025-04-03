@@ -103,18 +103,52 @@ pub struct XInputDataReport {
 impl XInputDataReport {
     /// Determines if the current report matches the bad data report.
     pub fn is_bad_data(&self) -> bool {
-        *self == bad_data
+        *self == bad_data_1 || *self == bad_data_2
     }
 }
 
 /// Signature of the bad data generated when grabbing the gyro device.
-const bad_data: XInputDataReport = XInputDataReport {
+const bad_data_1: XInputDataReport = XInputDataReport {
     y1: false,
     y2: true,
     view: false,
     menu: false,
     a: false,
     b: true,
+    x: false,
+    y: false,
+    lb: false,
+    d_trigger_l: false,
+    rb: false,
+    d_trigger_r: false,
+    legion: false,
+    quick_access: true,
+    thumb_l: false,
+    thumb_r: false,
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    l_stick_x: 2,
+    l_stick_y: 10,
+    r_stick_x: 0,
+    r_stick_y: 0,
+    rpad_touching: false,
+    rpad_tap: true,
+    touch_x: 0,
+    touch_y: 16,
+    a_trigger_l: 39,
+    a_trigger_r: 240,
+};
+
+/// Signature of the bad data generated when grabbing the touchpad device.
+const bad_data_2: XInputDataReport = XInputDataReport {
+    y1: false,
+    y2: true,
+    view: false,
+    menu: false,
+    a: true,
+    b: false,
     x: false,
     y: false,
     lb: false,

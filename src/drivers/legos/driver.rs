@@ -111,9 +111,11 @@ impl Driver {
         l_motor_speed: u8,
         r_motor_speed: u8,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let mut report = RumbleOutputDataReport::default();
-        report.l_motor_speed = l_motor_speed;
-        report.r_motor_speed = r_motor_speed;
+        let report = RumbleOutputDataReport {
+            l_motor_speed,
+            r_motor_speed,
+            ..Default::default()
+        };
         log::debug!("Got rumble event: {report:?}");
 
         let buf = report.pack()?;
@@ -128,10 +130,10 @@ impl Driver {
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let input_report = XInputDataReport::unpack(&buf)?;
 
-        // Hacky workaround. When the gyro device is grabbed the XInputDataReport is full of
-        // garbage. Since it doesn't have a report_id we cant reject it. This only seems to hapen
-        // one time, so we can save a lot of checks in the future if we clear a bool once it
-        // happens.
+        // Hacky workaround. When the gyro and touch devices are grabbed the XInputDataReport is
+        // full of garbage. Since it doesn't have a report_id we cant reject it. This only seems
+        // to happen one time for the first device grabbed, so we can save a lot of checks in the
+        // future if we clear a bool once it happens.
         if !self.bad_data_passed && input_report.is_bad_data() {
             log::debug!("Got bad XInputDataReport, regecting it.");
             self.bad_data_passed = true;

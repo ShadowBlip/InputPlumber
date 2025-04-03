@@ -28,6 +28,7 @@
             "type": "string",
             "enum": [
               "deck",
+              "deck-uhid",
               "ds5",
               "ds5-edge",
               "gamepad",
