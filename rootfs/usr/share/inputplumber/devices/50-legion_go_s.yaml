@@ -86,4 +86,4 @@ options:
 
 # The target input device(s) to emulate by default
 target_devices:
-  - deck
+  - deck-uhid
