@@ -1,3 +1,5 @@
+pub mod translator;
+
 use std::collections::HashMap;
 
 use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, RelativeAxisCode};
@@ -160,12 +162,24 @@ impl EvdevEvent {
                 KeyCode::BTN_START => Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
                 KeyCode::BTN_SELECT => Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
                 KeyCode::BTN_MODE => Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-                KeyCode::BTN_TRIGGER_HAPPY5 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
-                KeyCode::BTN_TRIGGER_HAPPY6 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
-                KeyCode::BTN_TRIGGER_HAPPY7 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
-                KeyCode::BTN_TRIGGER_HAPPY8 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
-                KeyCode::BTN_TRIGGER_HAPPY9 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3)),
-                KeyCode::BTN_TRIGGER_HAPPY10 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle3)),
+                KeyCode::BTN_TRIGGER_HAPPY5 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY6 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY7 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY8 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY9 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3))
+                }
+                KeyCode::BTN_TRIGGER_HAPPY10 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle3))
+                }
                 KeyCode::BTN_THUMBL => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick))
                 }
@@ -986,8 +1000,8 @@ fn normalize_signed_value(raw_value: i32, min: i32, max: i32) -> f64 {
     }
 }
 
-// Returns a value between 0.0 and 1.0 based on the given value with its
-// maximum.
+/// Returns a value between 0.0 and 1.0 based on the given value with its
+/// maximum.
 fn normalize_unsigned_value(raw_value: i32, max: i32) -> f64 {
     raw_value as f64 / max as f64
 }

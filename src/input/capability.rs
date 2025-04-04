@@ -116,11 +116,29 @@ impl From<CapabilityConfig> for Capability {
             }
 
             // Gyro
-            if let Some(_gyro_capability) = gamepad.gyro.as_ref() {
-                unimplemented!();
+            if let Some(gyro_capability) = gamepad.gyro.as_ref() {
+                let gyro = Gamepad::from_str(&gyro_capability.name);
+                if gyro.is_err() {
+                    log::error!("Invalid or unimplemented gyro: {}", gyro_capability.name);
+                    return Capability::NotImplemented;
+                }
+
+                return Capability::Gamepad(Gamepad::Gyro);
             }
 
-            // TODO: Accelerometer
+            // Accelerometer
+            if let Some(accelerometer_capability) = gamepad.accelerometer.as_ref() {
+                let accelerometer = Gamepad::from_str(&accelerometer_capability.name);
+                if accelerometer.is_err() {
+                    log::error!(
+                        "Invalid or unimplemented gyro: {}",
+                        accelerometer_capability.name
+                    );
+                    return Capability::NotImplemented;
+                }
+
+                return Capability::Gamepad(Gamepad::Accelerometer);
+            }
         }
 
         // Keyboard

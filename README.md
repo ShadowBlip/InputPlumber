@@ -224,21 +224,61 @@ and are referenced by their unique ID.
 A capability map configuration looks like this:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
-version: 1
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+version: 2
 kind: CapabilityMap
 name: OneXPlayer Type 1
 id: oxp1
 
-# List of mapped events that are activated by a specific set of activation keys.
+# List of mapped events
 mapping:
-  - name: Orange Button
+  - name: A to B
     source_events:
-      - keyboard: KeyLeftMeta
-      - keyboard: KeyD
+      - evdev:
+          event_type: KEY
+          event_code: BTN_SOUTH
+          value_type: button
     target_event:
       gamepad:
-        button: Guide
+        button: East
+
+  - name: B to A
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_EAST
+          value_type: button
+    target_event:
+      gamepad:
+        button: South
+
+  - name: X + Y to Start
+    mapping_type:
+      evdev: chord
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_WEST
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: BTN_NORTH
+          value_type: button
+    target_event:
+      gamepad:
+        button: Start
+
+  - name: X to Y delay
+    mapping_type:
+      evdev: delayed_chord
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_NORTH
+          value_type: button
+    target_event:
+      gamepad:
+        button: West
 ```
 
 ## License

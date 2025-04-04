@@ -1,14 +1,45 @@
 pub mod evdev;
 pub mod hidraw;
 
-use std::{io::Read, path::Path};
+use std::{collections::HashMap, io::Read, path::Path};
 
 use evdev::EvdevConfig;
 use hidraw::HidrawConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::LoadError;
+use super::{
+    path::{get_capability_maps_paths, get_multidir_sorted_files},
+    LoadError,
+};
+
+/// Loads all capability mappings in all default locations and returns a hashmap
+/// of the CapabilityMap ID and the [CapabilityMap].
+pub fn load_capability_mappings() -> HashMap<String, CapabilityMapConfig> {
+    let mut mappings = HashMap::new();
+    let paths = get_capability_maps_paths();
+    let files = get_multidir_sorted_files(paths.as_slice(), |entry| {
+        entry.path().extension().unwrap() == "yaml"
+    });
+
+    // Look at each file in the directory and try to load them
+    for file in files {
+        // Try to load the capability map
+        log::trace!("Found file: {}", file.display());
+        let mapping = CapabilityMapConfig::from_yaml_file(file.display().to_string());
+        if mapping.is_err() {
+            log::warn!(
+                "Failed to parse capability mapping: {}",
+                mapping.unwrap_err()
+            );
+            continue;
+        }
+        let map = mapping.unwrap();
+        mappings.insert(map.id(), map);
+    }
+
+    mappings
+}
 
 /// [CapabilityMapConfig] enumerates all versions of a capability map. Capability
 /// maps are used to fix or define the real capabilities of an input device.
@@ -89,7 +120,7 @@ impl CapabilityMapConfigV1 {
 
 /// [CapabilityMapConfigV2] are used to fix or define the real capabilities of
 /// an input device.
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityMapConfigV2 {
     pub version: u32,
@@ -116,16 +147,41 @@ impl CapabilityMapConfigV2 {
 
 /// A [CapabilityMapping] defines how to map source input to an inputplumber
 /// capability.
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityMapping {
     pub name: String,
+    pub mapping_type: Option<MappingType>,
     pub source_events: Vec<SourceMapping>,
     pub target_event: CapabilityConfig,
 }
 
+/// [MappingType] defines how source events should be translated
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct MappingType {
+    pub evdev: Option<EvdevMappingType>,
+}
+
+/// How evdev source events should be translated
+#[derive(Default, Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EvdevMappingType {
+    /// Source events will be treated as an inclusive match to emit a single
+    /// inputplumber event. Events emitted immediately upon match.
+    Chord,
+    /// Source events will be treated as an inclusive match to emit a single
+    /// inputplumber event. Events emitted after button is released.
+    DelayedChord,
+    /// Multiple source events will emit the same inputplumber event. Useful for mapping
+    /// axis where different directions are triggered by separate events or multiple
+    /// events to the same inputplumber event.
+    #[default]
+    MultiSource,
+}
+
 /// A [SourceMapping] defines input events to be mapped
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct SourceMapping {
     pub evdev: Option<EvdevConfig>,
@@ -135,7 +191,7 @@ pub struct SourceMapping {
 
 /// A [NativeCapabilityMapping] maps one or more native inputplumber events to
 /// a different native inputplumber event.
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct NativeCapabilityMapping {
     pub name: String,
@@ -143,7 +199,7 @@ pub struct NativeCapabilityMapping {
     pub target_event: CapabilityConfig,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityConfig {
     pub gamepad: Option<GamepadCapability>,
@@ -154,16 +210,17 @@ pub struct CapabilityConfig {
     pub touchscreen: Option<TouchCapability>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct GamepadCapability {
     pub axis: Option<AxisCapability>,
     pub button: Option<String>,
     pub trigger: Option<TriggerCapability>,
     pub gyro: Option<GyroCapability>,
+    pub accelerometer: Option<AccelerometerCapability>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct AxisCapability {
     pub name: String,
@@ -171,14 +228,14 @@ pub struct AxisCapability {
     pub deadzone: Option<f64>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct TriggerCapability {
     pub name: String,
     pub deadzone: Option<f64>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct GyroCapability {
     pub name: String,
@@ -187,35 +244,44 @@ pub struct GyroCapability {
     pub axis: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct AccelerometerCapability {
+    pub name: String,
+    pub direction: Option<String>,
+    pub deadzone: Option<f64>,
+    pub axis: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct MouseCapability {
     pub button: Option<String>,
     pub motion: Option<MouseMotionCapability>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct MouseMotionCapability {
     pub direction: Option<String>,
     pub speed_pps: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct TouchpadCapability {
     pub name: String,
     pub touch: TouchCapability,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct TouchCapability {
     pub button: Option<String>,
     pub motion: Option<TouchMotionCapability>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct TouchMotionCapability {
     pub region: Option<String>,
