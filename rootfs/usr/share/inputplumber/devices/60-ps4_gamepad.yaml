@@ -19,7 +19,7 @@ matches: []
 source_devices:
   - group: gamepad
     evdev:
-      name: Sony Interactive Entertainment Wireless Controller
+      name: "*Wireless Controller"
       vendor_id: 054c
       product_id: 09cc
       handler: event*
@@ -27,7 +27,7 @@ source_devices:
 
   - group: gamepad
     evdev:
-      name: Sony Interactive Entertainment Wireless Controller Motion Sensors
+      name: "*Wireless Controller Touchpad"
       vendor_id: 054c
       product_id: 09cc
       handler: event*
@@ -35,7 +35,7 @@ source_devices:
 
   - group: gamepad
     evdev:
-      name: Sony Interactive Entertainment Wireless Controller Touchpad
+      name: "*Wireless Controller Motion Sensors"
       vendor_id: 054c
       product_id: 09cc
       handler: event*
