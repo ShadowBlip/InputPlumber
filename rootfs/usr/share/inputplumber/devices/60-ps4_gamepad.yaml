@@ -9,7 +9,7 @@ kind: CompositeDevice
 name: Sony Interactive Entertainment Wireless Controller
 
 # Maximum number of source devices per CompositeDevice.
-maximum_sources: 2
+maximum_sources: 4
 
 # Only use this profile if *any* of the given matches matches. If this list is
 # empty then the source devices will *always* be checked.
@@ -17,10 +17,25 @@ maximum_sources: 2
 matches: []
 
 source_devices:
-  # Read events from the evdev device
   - group: gamepad
     evdev:
       name: Sony Interactive Entertainment Wireless Controller
+      vendor_id: 054c
+      product_id: 09cc
+      handler: event*
+    capability_map_id: swap_west_north
+
+  - group: gamepad
+    evdev:
+      name: Sony Interactive Entertainment Wireless Controller Motion Sensors
+      vendor_id: 054c
+      product_id: 09cc
+      handler: event*
+    capability_map_id: imu_generic
+
+  - group: gamepad
+    evdev:
+      name: Sony Interactive Entertainment Wireless Controller Touchpad
       vendor_id: 054c
       product_id: 09cc
       handler: event*
@@ -28,11 +43,9 @@ source_devices:
   # Block the hidraw device to prevent SDL usage of the device
   - group: gamepad
     blocked: true
-    unique: false
     hidraw:
       vendor_id: 0x054c
       product_id: 0x09cc
-      interface_num: 3
 
 # The target input device(s) to emulate by default
 target_devices:

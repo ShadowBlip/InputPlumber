@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: 8BitDo 8BitDo Pro 2
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# Maximum number of source devices per CompositeDevice.
+maximum_sources: 1
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: gamepad
+    udev:
+      attributes:
+        - name: id/vendor
+          value: "2dc8"
+        - name: id/product
+          value: "6006"
+      sys_name: "event*"
+      subsystem: input
+    capability_map_id: dinput_generic
+
+# The target input device(s) to emulate by default
+target_devices:
+  - xbox-elite
+  - mouse
+  - keyboard

@@ -132,6 +132,16 @@
         "target_event"
       ],
       "properties": {
+        "mapping_type": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MappingType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "type": "string"
         },
@@ -151,7 +161,8 @@
       "type": "object",
       "required": [
         "event_code",
-        "event_type"
+        "event_type",
+        "value_type"
       ],
       "properties": {
         "axis_direction": {
@@ -177,8 +188,37 @@
           ],
           "format": "uint16",
           "minimum": 0.0
+        },
+        "value_type": {
+          "$ref": "#/definitions/ValueType"
         }
       }
+    },
+    "EvdevMappingType": {
+      "description": "How evdev source events should be translated",
+      "oneOf": [
+        {
+          "description": "Source events will be treated as an inclusive match to emit a single inputplumber event. Events emitted immediately upon match.",
+          "type": "string",
+          "enum": [
+            "chord"
+          ]
+        },
+        {
+          "description": "Source events will be treated as an inclusive match to emit a single inputplumber event. Events emitted after button is released.",
+          "type": "string",
+          "enum": [
+            "delayed_chord"
+          ]
+        },
+        {
+          "description": "Multiple source events will emit the same inputplumber event. Useful for mapping axis where different directions are triggered by separate events or multiple events to the same inputplumber event.",
+          "type": "string",
+          "enum": [
+            "multi_source"
+          ]
+        }
+      ]
     },
     "EventCode": {
       "type": "string",
@@ -1104,6 +1144,22 @@
         }
       }
     },
+    "MappingType": {
+      "description": "[MappingType] defines how source events should be translated",
+      "type": "object",
+      "properties": {
+        "evdev": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EvdevMappingType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "MouseCapability": {
       "type": "object",
       "properties": {
@@ -1252,6 +1308,18 @@
           "type": "string"
         }
       }
+    },
+    "ValueType": {
+      "type": "string",
+      "enum": [
+        "button",
+        "trigger",
+        "joystick_x",
+        "joystick_y",
+        "imu_x",
+        "imu_y",
+        "imu_z"
+      ]
     }
   }
 }

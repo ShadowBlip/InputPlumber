@@ -9,9 +9,11 @@ use nix::fcntl::{FcntlArg, OFlag};
 use packed_struct::types::SizedInteger;
 use packed_struct::PrimitiveEnum;
 
+use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::drivers::steam_deck::hid_report::{
     CommandType, PackedHapticReport, PackedRumbleReport, PadSide,
 };
+use crate::input::event::evdev::translator::EventTranslator;
 use crate::{
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
@@ -27,6 +29,7 @@ use crate::{
 pub struct GamepadEventDevice {
     device: Device,
     axes_info: HashMap<AbsoluteAxisCode, AbsInfo>,
+    translator: Option<EventTranslator>,
     ff_effects: HashMap<i16, FFEffect>,
     ff_effects_dualsense: Option<i16>,
     ff_effects_deck: Option<i16>,
@@ -36,7 +39,10 @@ pub struct GamepadEventDevice {
 
 impl GamepadEventDevice {
     /// Create a new [Gamepad] source device from the given udev info
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: Option<CapabilityMapConfigV2>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = device_info.devnode();
         log::debug!("Opening device at: {}", path);
         let mut device = Device::open(path.clone())?;
@@ -56,9 +62,13 @@ impl GamepadEventDevice {
             axes_info.insert(axis, info);
         }
 
+        // Create an event translator if a capability map was given
+        let translator = capability_map.map(|map| EventTranslator::new(&map, axes_info.clone()));
+
         Ok(Self {
             device,
             axes_info,
+            translator,
             ff_effects: HashMap::new(),
             ff_effects_dualsense: None,
             ff_effects_deck: None,
@@ -346,6 +356,13 @@ impl GamepadEventDevice {
 impl SourceInputDevice for GamepadEventDevice {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        let mut native_events = vec![];
+
+        // Poll the translator for any scheduled events
+        if let Some(translator) = self.translator.as_mut() {
+            native_events.extend(translator.poll());
+        }
+
         // Read events from the device
         let events = {
             let result = self.device.fetch_events();
@@ -353,7 +370,7 @@ impl SourceInputDevice for GamepadEventDevice {
                 Ok(events) => events,
                 Err(err) => match err.kind() {
                     // Do nothing if this would block
-                    std::io::ErrorKind::WouldBlock => return Ok(vec![]),
+                    std::io::ErrorKind::WouldBlock => return Ok(native_events),
                     _ => {
                         log::trace!("Failed to fetch events: {:?}", err);
                         let msg = format!("Failed to fetch events: {:?}", err);
@@ -366,11 +383,40 @@ impl SourceInputDevice for GamepadEventDevice {
             events
         };
 
-        // Convert the events into native events
-        let native_events = events
+        // Convert the events into native events if no translator exists
+        if self.translator.is_none() {
+            let translated_events: Vec<NativeEvent> = events
+                .into_iter()
+                .filter_map(|e| self.translate(e))
+                .collect();
+            native_events.extend(translated_events);
+            return Ok(native_events);
+        }
+
+        // Create a list of events that the translator can't translate
+        let mut untranslated_events = vec![];
+
+        // Convert the events into native events with the translator
+        {
+            let Some(translator) = self.translator.as_mut() else {
+                return Ok(native_events);
+            };
+
+            for event in events {
+                if translator.has_translation(&event) {
+                    native_events.extend(translator.translate(&event));
+                } else {
+                    untranslated_events.push(event);
+                }
+            }
+        }
+
+        // Translate any untranslated events using the legacy method
+        let translated_events: Vec<NativeEvent> = untranslated_events
             .into_iter()
             .filter_map(|e| self.translate(e))
             .collect();
+        native_events.extend(translated_events);
 
         Ok(native_events)
     }

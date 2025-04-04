@@ -17,8 +17,7 @@ use zbus::zvariant::ObjectPath;
 use zbus::Connection;
 
 use crate::bluetooth::device1::Device1Proxy;
-use crate::config::capability_map::CapabilityMapConfig;
-use crate::config::path::get_capability_maps_paths;
+use crate::config::capability_map::load_capability_mappings;
 use crate::config::path::get_devices_paths;
 use crate::config::path::get_multidir_sorted_files;
 use crate::config::CompositeDeviceConfig;
@@ -539,7 +538,7 @@ impl Manager {
         // Lookup the capability map associated with this config if it exists
         let capability_map = if let Some(map_id) = config.capability_map_id.clone() {
             log::debug!("Found capability mapping in config: {}", map_id);
-            let capability_map = self.load_capability_mappings().await;
+            let capability_map = load_capability_mappings();
             capability_map.get(&map_id).cloned()
         } else {
             None
@@ -1700,34 +1699,6 @@ impl Manager {
         }
 
         Ok(())
-    }
-
-    /// Loads all capability mappings in all default locations and returns a hashmap
-    /// of the CapabilityMap ID and the [CapabilityMap].
-    pub async fn load_capability_mappings(&self) -> HashMap<String, CapabilityMapConfig> {
-        let mut mappings = HashMap::new();
-        let paths = get_capability_maps_paths();
-        let files = get_multidir_sorted_files(paths.as_slice(), |entry| {
-            entry.path().extension().unwrap() == "yaml"
-        });
-
-        // Look at each file in the directory and try to load them
-        for file in files {
-            // Try to load the capability map
-            log::trace!("Found file: {}", file.display());
-            let mapping = CapabilityMapConfig::from_yaml_file(file.display().to_string());
-            if mapping.is_err() {
-                log::warn!(
-                    "Failed to parse capability mapping: {}",
-                    mapping.unwrap_err()
-                );
-                continue;
-            }
-            let map = mapping.unwrap();
-            mappings.insert(map.id(), map);
-        }
-
-        mappings
     }
 
     /// Looks in all default locations for [CompositeDeviceConfig] definitions and

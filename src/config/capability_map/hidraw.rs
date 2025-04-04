@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// A [HidrawConfig] defines how to decode a particular event in an HID input
 /// report.
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct HidrawConfig {
     pub report_id: u32,
