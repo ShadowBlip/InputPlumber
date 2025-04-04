@@ -1,3 +1,4 @@
+pub mod blocked;
 pub mod dualsense;
 pub mod fts3528;
 pub mod horipad_steam;
@@ -14,6 +15,7 @@ pub mod xpad_uhid;
 
 use std::{error::Error, time::Duration};
 
+use blocked::BlockedHidrawDevice;
 use horipad_steam::HoripadSteam;
 use msi_claw::MsiClaw;
 use rog_ally::RogAlly;
@@ -36,6 +38,7 @@ use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 /// List of available drivers
 enum DriverType {
     Unknown,
+    Blocked,
     DualSense,
     Fts3528Touchscreen,
     HoripadSteam,
@@ -54,6 +57,7 @@ enum DriverType {
 /// [HidRawDevice] represents an input device using the hidraw subsystem.
 #[derive(Debug)]
 pub enum HidRawDevice {
+    Blocked(SourceDriver<BlockedHidrawDevice>),
     DualSense(SourceDriver<DualSenseController>),
     Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
     HoripadSteam(SourceDriver<HoripadSteam>),
@@ -72,6 +76,7 @@ pub enum HidRawDevice {
 impl SourceDeviceCompatible for HidRawDevice {
     fn get_device_ref(&self) -> &UdevDevice {
         match self {
+            HidRawDevice::Blocked(source_driver) => source_driver.info_ref(),
             HidRawDevice::DualSense(source_driver) => source_driver.info_ref(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.info_ref(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.info_ref(),
@@ -90,6 +95,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_id(&self) -> String {
         match self {
+            HidRawDevice::Blocked(source_driver) => source_driver.get_id(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_id(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_id(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.get_id(),
@@ -108,6 +114,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn client(&self) -> super::client::SourceDeviceClient {
         match self {
+            HidRawDevice::Blocked(source_driver) => source_driver.client(),
             HidRawDevice::DualSense(source_driver) => source_driver.client(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.client(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.client(),
@@ -126,6 +133,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
+            HidRawDevice::Blocked(source_driver) => source_driver.run().await,
             HidRawDevice::DualSense(source_driver) => source_driver.run().await,
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.run().await,
             HidRawDevice::HoripadSteam(source_driver) => source_driver.run().await,
@@ -146,6 +154,7 @@ impl SourceDeviceCompatible for HidRawDevice {
         &self,
     ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
         match self {
+            HidRawDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.get_capabilities(),
@@ -164,6 +173,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_device_path(&self) -> String {
         match self {
+            HidRawDevice::Blocked(source_driver) => source_driver.get_device_path(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_device_path(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.get_device_path(),
@@ -190,10 +200,26 @@ impl HidRawDevice {
         composite_device: CompositeDeviceClient,
         conf: Option<config::SourceDevice>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver_type = HidRawDevice::get_driver_type(&device_info);
+        let is_blocked = conf.as_ref().and_then(|c| c.blocked).unwrap_or(false);
+        let driver_type = HidRawDevice::get_driver_type(&device_info, is_blocked);
 
         match driver_type {
             DriverType::Unknown => Err("No driver for hidraw interface found".into()),
+            DriverType::Blocked => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(200),
+                    buffer_size: 4096,
+                };
+                let device = BlockedHidrawDevice::new(device_info.clone())?;
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
+                Ok(Self::Blocked(source_device))
+            }
             DriverType::DualSense => {
                 let options = SourceDriverOptions {
                     poll_rate: Duration::from_millis(1),
@@ -293,8 +319,11 @@ impl HidRawDevice {
     }
 
     /// Return the driver type for the given vendor and product
-    fn get_driver_type(device: &UdevDevice) -> DriverType {
+    fn get_driver_type(device: &UdevDevice, is_blocked: bool) -> DriverType {
         log::debug!("Finding driver for interface: {:?}", device);
+        if is_blocked {
+            return DriverType::Blocked;
+        }
         let vid = device.id_vendor();
         let pid = device.id_product();
 
