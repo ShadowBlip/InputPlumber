@@ -33,6 +33,36 @@
     }
   },
   "definitions": {
+    "AccelerometerCapability": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "axis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deadzone": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "AxisCapability": {
       "type": "object",
       "required": [
@@ -1046,6 +1076,16 @@
     "GamepadCapability": {
       "type": "object",
       "properties": {
+        "accelerometer": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AccelerometerCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "axis": {
           "anyOf": [
             {
