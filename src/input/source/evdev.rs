@@ -10,7 +10,12 @@ use keyboard::KeyboardEventDevice;
 use touchscreen::TouchscreenEventDevice;
 
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
+    config::{
+        self,
+        capability_map::{load_capability_mappings, CapabilityMapConfig},
+    },
+    constants::BUS_SOURCES_PREFIX,
+    input::composite_device::client::CompositeDeviceClient,
     udev::device::UdevDevice,
 };
 
@@ -102,6 +107,16 @@ impl EventDevice {
         let is_blocked = conf.as_ref().and_then(|c| c.blocked).unwrap_or(false);
         let driver_type = EventDevice::get_driver_type(&device_info, is_blocked);
 
+        // Check to see if a capability map was set for this device
+        let mut capability_map = None;
+        let capability_map_id = conf.clone().and_then(|device| device.capability_map_id);
+        if let Some(capability_map_id) = capability_map_id {
+            let mapping_configs = load_capability_mappings();
+            if let Some(CapabilityMapConfig::V2(config)) = mapping_configs.get(&capability_map_id) {
+                capability_map = Some(config.clone());
+            }
+        }
+
         match driver_type {
             DriverType::Blocked => {
                 let options = SourceDriverOptions {
@@ -119,7 +134,7 @@ impl EventDevice {
                 Ok(Self::Blocked(source_device))
             }
             DriverType::Gamepad => {
-                let device = GamepadEventDevice::new(device_info.clone())?;
+                let device = GamepadEventDevice::new(device_info.clone(), capability_map)?;
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Gamepad(source_device))
             }
@@ -128,12 +143,13 @@ impl EventDevice {
                     .as_ref()
                     .and_then(|c| c.config.clone())
                     .and_then(|c| c.touchscreen);
-                let device = TouchscreenEventDevice::new(device_info.clone(), touch_config)?;
+                let device =
+                    TouchscreenEventDevice::new(device_info.clone(), touch_config, capability_map)?;
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Touchscreen(source_device))
             }
             DriverType::Keyboard => {
-                let device = KeyboardEventDevice::new(device_info.clone(), &conf)?;
+                let device = KeyboardEventDevice::new(device_info.clone(), &conf, capability_map)?;
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Keyboard(source_device))
             }

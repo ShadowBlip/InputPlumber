@@ -2,19 +2,32 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// An [EvdevConfig] defines a matching evdev input event
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct EvdevConfig {
     pub event_type: EventType,
     pub event_code: EventCode,
     pub event_value: Option<u16>,
+    pub value_type: ValueType,
     pub axis_direction: Option<AxisDirection>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ValueType {
+    Button,
+    Trigger,
+    JoystickX,
+    JoystickY,
+    ImuX,
+    ImuY,
+    ImuZ,
 }
 
 /// The AxisDirection can be used to map one half of an axis to a particular
 /// capability. For example, you can map the negative values of `ABS_Y` to the
 /// `DPadDown` capability and the positive values of `ABS_Y` to `DPadUp`.
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AxisDirection {
     None,
@@ -22,7 +35,7 @@ pub enum AxisDirection {
     Negative,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq, Copy)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum EventType {
     /// A bookkeeping event. Usually not important to applications.
@@ -60,7 +73,13 @@ pub enum EventType {
     Uinput = 0x0101,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema)]
+impl EventType {
+    pub fn as_u16(&self) -> u16 {
+        *self as u16
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum EventCode {
     SynReport,
@@ -789,7 +808,7 @@ pub enum EventCode {
 }
 
 impl EventCode {
-    pub fn as_u32(&self) -> u32 {
+    pub fn as_u16(&self) -> u16 {
         match self {
             EventCode::SynReport => 0,
             EventCode::SynConfig => 1,

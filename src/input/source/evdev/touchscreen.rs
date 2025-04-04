@@ -8,8 +8,10 @@ use evdev::{
 };
 use nix::fcntl::{FcntlArg, OFlag};
 
+use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::config::TouchscreenConfig;
 use crate::input::capability::Touch;
+use crate::input::event::evdev::translator::EventTranslator;
 use crate::input::event::value::InputValue;
 use crate::{
     input::{
@@ -99,6 +101,7 @@ impl TouchState {
 /// https://www.kernel.org/doc/Documentation/input/multi-touch-protocol.txt
 pub struct TouchscreenEventDevice {
     device: Device,
+    translator: Option<EventTranslator>,
     orientation: Orientation,
     axes_info: HashMap<AbsoluteAxisCode, AbsInfo>,
     touch_state: [TouchState; 10], // NOTE: Max of 10 touch inputs
@@ -111,6 +114,7 @@ impl TouchscreenEventDevice {
     pub fn new(
         device_info: UdevDevice,
         config: Option<TouchscreenConfig>,
+        capability_map: Option<CapabilityMapConfigV2>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = device_info.devnode();
         log::debug!("Opening device at: {}", path);
@@ -177,9 +181,13 @@ impl TouchscreenEventDevice {
             };
         log::debug!("Configured touchscreen orientation: {orientation:?}");
 
+        // Create an event translator if a capability map was given
+        let translator = capability_map.map(|map| EventTranslator::new(&map, axes_info.clone()));
+
         Ok(Self {
             device,
             orientation,
+            translator,
             axes_info,
             touch_state: Default::default(),
             dirty_states: HashSet::with_capacity(10),
@@ -297,6 +305,13 @@ impl TouchscreenEventDevice {
 impl SourceInputDevice for TouchscreenEventDevice {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        let mut native_events = vec![];
+
+        // Poll the translator for any scheduled events
+        if let Some(translator) = self.translator.as_mut() {
+            native_events.extend(translator.poll());
+        }
+
         // Read events from the device
         let events = {
             let result = self.device.fetch_events();
@@ -304,7 +319,7 @@ impl SourceInputDevice for TouchscreenEventDevice {
                 Ok(events) => events,
                 Err(err) => match err.kind() {
                     // Do nothing if this would block
-                    std::io::ErrorKind::WouldBlock => return Ok(vec![]),
+                    std::io::ErrorKind::WouldBlock => return Ok(native_events),
                     _ => {
                         log::trace!("Failed to fetch events: {:?}", err);
                         let msg = format!("Failed to fetch events: {:?}", err);
@@ -317,13 +332,44 @@ impl SourceInputDevice for TouchscreenEventDevice {
             events
         };
 
+        // Convert the events into native events if no translator exists
+        if self.translator.is_none() {
+            let translated_events: Vec<NativeEvent> = events
+                .into_iter()
+                .map(|e| self.translate(e))
+                .filter(|events| !events.is_empty())
+                .flatten()
+                .collect();
+            native_events.extend(translated_events);
+            return Ok(native_events);
+        }
+
+        // Create a list of events that the translator can't translate
+        let mut untranslated_events = vec![];
+
+        // Convert the events into native events with the translator
+        {
+            let Some(translator) = self.translator.as_mut() else {
+                return Ok(native_events);
+            };
+
+            for event in events {
+                if translator.has_translation(&event) {
+                    native_events.extend(translator.translate(&event));
+                } else {
+                    untranslated_events.push(event);
+                }
+            }
+        }
+
         // Convert the events into native events
-        let native_events = events
+        let translated_events: Vec<NativeEvent> = untranslated_events
             .into_iter()
             .map(|e| self.translate(e))
             .filter(|events| !events.is_empty())
             .flatten()
             .collect();
+        native_events.extend(translated_events);
 
         Ok(native_events)
     }
