@@ -328,13 +328,13 @@ impl HidRawDevice {
             DriverType::Vader4Pro => {
                 let device = Vader4Pro::new(device_info.clone())?;
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(1), buffer_size: 2048,
+                    poll_rate: Duration::from_millis(2), buffer_size: 2048,
                 };
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::Vader4Pro(source_device))
             }
         }
-    }
+    }s
 
     /// Return the driver type for the given vendor and product
     fn get_driver_type(device: &UdevDevice, is_blocked: bool) -> DriverType {
