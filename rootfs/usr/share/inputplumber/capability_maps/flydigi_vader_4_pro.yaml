@@ -20,7 +20,7 @@ mapping:
       touchpad:
         name: LeftPad
         touch:
-          button: Touch
+          button: Press
         motion:
           region: top-left
           speed_pps: 800
@@ -32,7 +32,7 @@ mapping:
       touchpad:
         name: RightPad
         touch:
-          button: Touch
+          button: Press
         motion:
           region: top-left
           speed_pps: 800
