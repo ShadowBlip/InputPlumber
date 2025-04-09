@@ -334,7 +334,7 @@ impl HidRawDevice {
                 Ok(Self::Vader4Pro(source_device))
             }
         }
-    }s
+    }
 
     /// Return the driver type for the given vendor and product
     fn get_driver_type(device: &UdevDevice, is_blocked: bool) -> DriverType {
