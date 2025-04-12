@@ -52,30 +52,27 @@ struct DPadState {
 
 pub struct Driver {
     /// Path to the HIDRAW device
-    path: CString,
+    device: HidDevice,
     /// State for the device
     state: Option<PackedInputDataReport>,
     /// Last DPad state
     dpad: DPadState,
-    api: HidApi,
 }
 
 impl Driver {
     pub fn new(udevice: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let path = udevice.devnode();
-        let cs_path = CString::new(path.clone())?;
+        let hidrawpath = udevice.devnode();
+        let cs_path = CString::new(hidrawpath.clone())?;
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&cs_path)?;
-        //let _ = device.set_blocking_mode(false);
 
         let info = device.get_device_info()?;
         if info.vendor_id() != VID || info.product_id() != PID {
-            return Err(format!("Device '{path}' is not a Flydigi Vader 4 Pro").into());
+            return Err(format!("Device '{hidrawpath}' is not a Flydigi Vader 4 Pro").into());
         }
 
         Ok(Self {
-            path: cs_path,
-            api: api,
+            device: device,
             state: None,
             dpad: Default::default(),
         })
@@ -84,14 +81,11 @@ impl Driver {
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; PACKET_SIZE];
-        let device = self.api.open_path(&self.path)?;
-        //let _ = device.set_blocking_mode(false);
-
-        let bytes_read = device.read(&mut buf[..])?;
-        if bytes_read != PACKET_SIZE {
+        let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
+        if  bytes_read != PACKET_SIZE {
             log::warn!("Got unhandled packet size {bytes_read}, someone should look into that...");
             return Ok(vec![]);
-        }
+        } 
         let input_report = PackedInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
