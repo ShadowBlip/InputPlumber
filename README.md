@@ -39,10 +39,11 @@ make build
 sudo make install
 ```
 
-If you are using ArchLinux, you can install InputPlumber from the AUR:
+If you are using ArchLinux or any of its derivaties,
+you can install InputPlumber from the official repositories:
 
 ```bash
-yay -S inputplumber-bin
+sudo pacman -S inputplumber
 ```
 
 Then start the service with:
