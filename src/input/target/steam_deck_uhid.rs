@@ -293,6 +293,7 @@ impl SteamDeckUhidDevice {
                         }
                     }
                 }
+                Gamepad::Dial(_) => (),
             },
             Capability::Mouse(_) => (),
             Capability::Keyboard(_) => (),

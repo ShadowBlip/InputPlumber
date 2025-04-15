@@ -22,8 +22,8 @@ use crate::{
     },
     input::{
         capability::{
-            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard, Touch,
-            Touchpad,
+            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadDial, GamepadTrigger, Keyboard,
+            Touch, Touchpad,
         },
         composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue},
@@ -519,6 +519,22 @@ impl From<NativeEvent> for StateUpdate {
 
                     Self { capability, value }
                 }
+                Gamepad::Dial(_) => {
+                    let value = match event.get_value() {
+                        InputValue::Bool(n) => BoolUpdate { value: n },
+                        InputValue::Float(n) => BoolUpdate {
+                            value: n == -1.0 || n == 1.0,
+                        },
+                        _ => {
+                            // Cannot convert other values
+                            return Self::default();
+                        }
+                    };
+
+                    let value = ValueUpdate::Bool(value);
+
+                    Self { capability, value }
+                }
             },
             Capability::Mouse(_) => Self::default(),
             Capability::Keyboard(_) => {
@@ -762,6 +778,10 @@ impl From<Capability> for InputCapability {
                 },
                 Gamepad::Accelerometer => Self::GamepadAccelerometerCenter,
                 Gamepad::Gyro => Self::GamepadGyroCenter,
+                Gamepad::Dial(dial) => match dial {
+                    GamepadDial::LeftStickDial => Self::GamepadDialLeft,
+                    GamepadDial::RightStickDial => Self::GamepadDialRight,
+                },
             },
             Capability::Mouse(_) => Self::default(),
             Capability::Keyboard(key) => match key {
@@ -966,6 +986,7 @@ impl From<Capability> for InputCapabilityInfo {
                 Gamepad::Trigger(_) => Self::new(capability, ValueType::UInt8),
                 Gamepad::Accelerometer => Self::new(capability, ValueType::Int16Vector3),
                 Gamepad::Gyro => Self::new(capability, ValueType::Int16Vector3),
+                Gamepad::Dial(_) => Self::new(capability, ValueType::Bool),
             },
             Capability::Mouse(_) => Self::default(),
             Capability::Keyboard(_) => Self::new(capability, ValueType::Bool),
