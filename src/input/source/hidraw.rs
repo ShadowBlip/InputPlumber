@@ -13,6 +13,7 @@ pub mod opineo;
 pub mod rog_ally;
 pub mod steam_deck;
 pub mod xpad_uhid;
+pub mod zotac_zone;
 
 use std::{error::Error, time::Duration};
 
@@ -22,6 +23,7 @@ use horipad_steam::HoripadSteam;
 use msi_claw::MsiClaw;
 use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
+use zotac_zone::ZotacZone;
 
 use crate::{
     config, constants::BUS_SOURCES_PREFIX, drivers,
@@ -55,6 +57,7 @@ enum DriverType {
     SteamDeck,
     XpadUhid,
     Vader4Pro,
+    ZotacZone,
 }
 
 /// [HidRawDevice] represents an input device using the hidraw subsystem.
@@ -75,6 +78,7 @@ pub enum HidRawDevice {
     SteamDeck(SourceDriver<DeckController>),
     XpadUhid(SourceDriver<XpadUhid>),
     Vader4Pro(SourceDriver<Vader4Pro>),
+    ZotacZone(SourceDriver<ZotacZone>),
 }
 
 impl SourceDeviceCompatible for HidRawDevice {
@@ -95,6 +99,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::SteamDeck(source_driver) => source_driver.info_ref(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.info_ref(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.info_ref(),
+            HidRawDevice::ZotacZone(source_driver) => source_driver.info_ref(),
         }
     }
 
@@ -115,6 +120,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_id(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_id(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_id(),
+            HidRawDevice::ZotacZone(source_driver) => source_driver.get_id(),
         }
     }
 
@@ -135,6 +141,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::SteamDeck(source_driver) => source_driver.client(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.client(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.client(),
+            HidRawDevice::ZotacZone(source_driver) => source_driver.client(),
         }
     }
 
@@ -155,6 +162,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::SteamDeck(source_driver) => source_driver.run().await,
             HidRawDevice::XpadUhid(source_driver) => source_driver.run().await,
             HidRawDevice::Vader4Pro(source_driver) => source_driver.run().await,
+            HidRawDevice::ZotacZone(source_driver) => source_driver.run().await,
         }
     }
 
@@ -177,6 +185,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::ZotacZone(source_driver) => source_driver.get_capabilities(),
         }
     }
 
@@ -197,6 +206,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_device_path(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::ZotacZone(source_driver) => source_driver.get_device_path(),
         }
     }
 }
@@ -340,6 +350,21 @@ impl HidRawDevice {
                 );
                 Ok(Self::Vader4Pro(source_device))
             }
+            DriverType::ZotacZone => {
+                let device = ZotacZone::new(device_info.clone())?;
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(1),
+                    buffer_size: 1024,
+                };
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
+                Ok(Self::ZotacZone(source_device))
+            }
         }
     }
 
@@ -449,6 +474,14 @@ impl HidRawDevice {
         {
             log::info!("Detected Flydigi Vader 4 Pro");
             return DriverType::Vader4Pro;
+        }
+
+        // Zotac Zone
+        if vid == drivers::zotac_zone::driver::VID
+            && drivers::zotac_zone::driver::PIDS.contains(&pid)
+        {
+            log::info!("Detected ZOTAC Zone");
+            return DriverType::ZotacZone;
         }
 
         // Unknown
