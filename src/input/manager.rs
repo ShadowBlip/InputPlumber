@@ -110,9 +110,6 @@ pub enum ManagerCommand {
     SystemWake {
         sender: mpsc::Sender<()>,
     },
-    GetGamepadOrder {
-        sender: mpsc::Sender<Vec<String>>,
-    },
     SetGamepadOrder {
         dbus_paths: Vec<String>,
     },
@@ -375,11 +372,15 @@ impl Manager {
                         continue;
                     }
 
-                    self.target_gamepad_order = self
+                    let new_order = self
                         .target_gamepad_order
                         .drain(..)
                         .filter(|paf| paf.as_str() != device_path.as_str())
                         .collect();
+
+                    // Update gamepad order in dbus interface
+                    self.update_and_emit_gamepad_order(new_order);
+
                     log::info!("Gamepad order: {:?}", self.target_gamepad_order);
                 }
                 ManagerCommand::DeviceAdded { device } => {
@@ -502,13 +503,6 @@ impl Manager {
 
                         log::info!("Finished preparing for system resume");
                     });
-                }
-                ManagerCommand::GetGamepadOrder { sender } => {
-                    log::debug!("Request for gamepad order");
-                    let order = self.target_gamepad_order.clone();
-                    if let Err(e) = sender.send(order).await {
-                        log::error!("Failed to send gamepad order: {e:?}");
-                    }
                 }
                 ManagerCommand::SetGamepadOrder { dbus_paths } => {
                     self.set_gamepad_order(dbus_paths).await;
@@ -635,43 +629,60 @@ impl Manager {
         target_path: &str,
         composite_path: &str,
     ) -> Result<(), ManagerError> {
+        // Check to see if the target device is a gamepad
+        let is_gamepad = {
+            let Some(target) = self.target_devices.get(target_path) else {
+                let err =
+                    ManagerError::AttachTargetDeviceFailed("Failed to find target device".into());
+                return Err(err);
+            };
+
+            // Check the target device type
+            let target_type = match target.get_type().await {
+                Ok(kind) => kind,
+                Err(e) => {
+                    let err = ManagerError::AttachTargetDeviceFailed(format!(
+                        "Failed to get target device type: {e:?}"
+                    ));
+                    return Err(err);
+                }
+            };
+            let Some(target_type) = TargetDeviceTypeId::try_from(target_type.as_str()).ok() else {
+                let err = ManagerError::AttachTargetDeviceFailed(
+                    "Target device returned an invalid device type!".into(),
+                );
+                return Err(err);
+            };
+
+            target_type.is_gamepad()
+        };
+
+        // If the target device is a gamepad, maintain the order in which it
+        // was connected.
+        if is_gamepad
+            && !self
+                .target_gamepad_order
+                .contains(&composite_path.to_owned())
+        {
+            let mut new_order = self.target_gamepad_order.clone();
+            new_order.push(composite_path.to_string());
+
+            // Update gamepad order in dbus interface
+            self.update_and_emit_gamepad_order(new_order);
+
+            log::info!("Gamepad order: {:?}", self.target_gamepad_order);
+        }
+
         let Some(target) = self.target_devices.get(target_path) else {
             let err = ManagerError::AttachTargetDeviceFailed("Failed to find target device".into());
             return Err(err);
         };
+
         let Some(device) = self.composite_devices.get(composite_path) else {
             let err =
                 ManagerError::AttachTargetDeviceFailed("Failed to find composite device".into());
             return Err(err);
         };
-
-        // Check the target device type
-        let target_type = match target.get_type().await {
-            Ok(kind) => kind,
-            Err(e) => {
-                let err = ManagerError::AttachTargetDeviceFailed(format!(
-                    "Failed to get target device type: {e:?}"
-                ));
-                return Err(err);
-            }
-        };
-        let Some(target_type) = TargetDeviceTypeId::try_from(target_type.as_str()).ok() else {
-            let err = ManagerError::AttachTargetDeviceFailed(
-                "Target device returned an invalid device type!".into(),
-            );
-            return Err(err);
-        };
-
-        // If the target device is a gamepad, maintain the order in which it
-        // was connected.
-        if target_type.is_gamepad()
-            && !self
-                .target_gamepad_order
-                .contains(&composite_path.to_owned())
-        {
-            self.target_gamepad_order.push(composite_path.to_string());
-            log::info!("Gamepad order: {:?}", self.target_gamepad_order);
-        }
 
         // Send the attach command to the composite device
         let mut targets = HashMap::new();
@@ -896,11 +907,15 @@ impl Manager {
         }
 
         // Remove the device from gamepad order
-        self.target_gamepad_order = self
+        let new_order = self
             .target_gamepad_order
             .drain(..)
             .filter(|paf| paf.as_str() != path.as_str())
             .collect();
+
+        // Update gamepad order in dbus interface
+        self.update_and_emit_gamepad_order(new_order);
+
         log::info!("Gamepad order: {:?}", self.target_gamepad_order);
 
         // Remove the composite device from our list
@@ -955,7 +970,7 @@ impl Manager {
                 if self
                     .composite_device_sources
                     .get(composite_device)
-                    .map_or(false, |sources| (sources.len() as i32) >= max_sources)
+                    .is_some_and(|sources| (sources.len() as i32) >= max_sources)
                 {
                     log::trace!(
                         "{composite_device:?} maximum source devices reached: {max_sources}. Skipping."
@@ -983,7 +998,7 @@ impl Manager {
                         continue;
                     }
 
-                    if source_device.ignore.map_or(false, |ignored| ignored) {
+                    if source_device.ignore.is_some_and(|ignored| ignored) {
                         log::debug!(
                             "Ignoring device {:?}, not adding to composite device: {composite_device}",
                             source_device
@@ -1764,13 +1779,27 @@ impl Manager {
         Ok(())
     }
 
+    /// Update the gamepad order and emit dbus signal about order change
+    fn update_and_emit_gamepad_order(&mut self, order: Vec<String>) {
+        // Set the new order
+        self.target_gamepad_order = order.clone();
+
+        // Update the gamepad order on the dbus interface
+        let conn = self.dbus.clone();
+        tokio::task::spawn(async move {
+            if let Err(e) = ManagerInterface::update_target_gamepad_order(&conn, order).await {
+                log::warn!("Failed to emit gamepad order changed signal: {e}");
+            }
+        });
+    }
+
     /// Set the player order of the given composite device paths. Each device
     /// will be suspended and resumed in player order.
     async fn set_gamepad_order(&mut self, order: Vec<String>) {
         log::info!("Setting player order to: {order:?}");
 
         // Ensure the given paths are valid composite device paths
-        self.target_gamepad_order = order
+        let new_order = order
             .into_iter()
             .filter(|path| {
                 let is_valid = self.composite_devices.contains_key(path);
@@ -1780,6 +1809,9 @@ impl Manager {
                 is_valid
             })
             .collect();
+
+        // Update gamepad order in dbus interface
+        self.update_and_emit_gamepad_order(new_order);
 
         let manager_tx = self.tx.clone();
         tokio::task::spawn(async move {
