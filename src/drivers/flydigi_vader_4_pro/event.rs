@@ -2,7 +2,7 @@
 #[derive(Clone, Debug)]
 pub enum Event {
     Button(ButtonEvent),
-//    Inertia(InertialEvent),
+    //    Inertia(InertialEvent),
     Joystick(JoystickEvent),
     Trigger(TriggerEvent),
 }

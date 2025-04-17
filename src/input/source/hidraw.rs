@@ -1,5 +1,6 @@
 pub mod blocked;
 pub mod dualsense;
+pub mod flydigi_vader_4_pro;
 pub mod fts3528;
 pub mod horipad_steam;
 pub mod lego_dinput_combined;
@@ -12,16 +13,15 @@ pub mod opineo;
 pub mod rog_ally;
 pub mod steam_deck;
 pub mod xpad_uhid;
-pub mod flydigi_vader_4_pro;
 
 use std::{error::Error, time::Duration};
 
 use blocked::BlockedHidrawDevice;
+use flydigi_vader_4_pro::Vader4Pro;
 use horipad_steam::HoripadSteam;
 use msi_claw::MsiClaw;
 use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
-use flydigi_vader_4_pro::Vader4Pro;
 
 use crate::{
     config, constants::BUS_SOURCES_PREFIX, drivers,
@@ -450,8 +450,6 @@ impl HidRawDevice {
             log::info!("Detected Flydigi Vader 4 Pro");
             return DriverType::Vader4Pro;
         }
-
-
 
         // Unknown
         log::warn!("No driver for hidraw interface found. VID: {vid}, PID: {pid}");

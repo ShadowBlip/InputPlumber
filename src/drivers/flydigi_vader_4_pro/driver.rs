@@ -2,7 +2,6 @@ use std::{error::Error, ffi::CString};
 
 /* use std::{error::Error, ffi::CString, time::SystemTime, time::UNIX_EPOCH}; // adding timestamp logging. delete after. */
 
-
 use hidapi::{HidApi, HidDevice};
 use packed_struct::{types::SizedInteger, PackedStruct};
 
@@ -10,8 +9,7 @@ use crate::{drivers::flydigi_vader_4_pro::hid_report::Direction, udev::device::U
 
 use super::{
     event::{
-        BinaryInput, ButtonEvent, Event, JoystickEvent,
-        JoystickInput, TriggerEvent, TriggerInput,
+        BinaryInput, ButtonEvent, Event, JoystickEvent, JoystickInput, TriggerEvent, TriggerInput,
     },
     hid_report::PackedInputDataReport,
 };
@@ -29,7 +27,6 @@ pub const REPORT_ID: u8 = 0x04;
 
 // Input report size
 const PACKET_SIZE: usize = 31;
-
 
 // HID buffer read timeout
 const HID_TIMEOUT: i32 = 10;
@@ -82,10 +79,10 @@ impl Driver {
         // Read data from the device into a buffer
         let mut buf = [0; PACKET_SIZE];
         let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
-        if  bytes_read != PACKET_SIZE {
+        if bytes_read != PACKET_SIZE {
             log::warn!("Got unhandled packet size {bytes_read}, someone should look into that...");
             return Ok(vec![]);
-        } 
+        }
         let input_report = PackedInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
@@ -225,8 +222,7 @@ impl Driver {
             })));
         }
 
-
-         if state.dpad != old_state.dpad {
+        if state.dpad != old_state.dpad {
             let up = [Direction::Up, Direction::UpRight, Direction::UpLeft].contains(&state.dpad);
             let down =
                 [Direction::Down, Direction::DownRight, Direction::DownLeft].contains(&state.dpad);
@@ -263,7 +259,7 @@ impl Driver {
             }
 
             self.dpad = dpad_state;
-        } 
+        }
 
         // Axis events
         if state.joystick_l_x != old_state.joystick_l_x
@@ -294,19 +290,19 @@ impl Driver {
             })));
         }
 
- //       // Accelerometer events
- //       events.push(Event::Inertia(InertialEvent::Accelerometer(
- //           InertialInput {
- //               x: -state.accel_x.to_primitive(),
- //               y: state.accel_y.to_primitive(),
- //               z: -state.accel_z.to_primitive(),
- //           },
- //       )));
- //       events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
- //           x: -state.gyro_x.to_primitive(),
- //           y: state.gyro_y.to_primitive(),
- //           z: -state.gyro_z.to_primitive(),
- //       })));
+        //       // Accelerometer events
+        //       events.push(Event::Inertia(InertialEvent::Accelerometer(
+        //           InertialInput {
+        //               x: -state.accel_x.to_primitive(),
+        //               y: state.accel_y.to_primitive(),
+        //               z: -state.accel_z.to_primitive(),
+        //           },
+        //       )));
+        //       events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
+        //           x: -state.gyro_x.to_primitive(),
+        //           y: state.gyro_y.to_primitive(),
+        //           z: -state.gyro_z.to_primitive(),
+        //       })));
 
         //log::trace!("Got events: {events:?}");
         events

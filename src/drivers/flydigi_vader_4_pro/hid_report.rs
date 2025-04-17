@@ -16,7 +16,6 @@ pub enum Direction {
     None = 0,
 }
 
-
 impl Direction {
     pub fn as_bitflag(&self) -> u8 {
         match *self {
@@ -178,7 +177,6 @@ pub struct PackedInputDataReport {
     #[packed_field(bytes = "0", endian = "lsb")]
     pub report_id: u8, // report always 04
 
-
     // byte 7
     #[packed_field(bits = "58")]
     pub l5: bool,
@@ -210,7 +208,6 @@ pub struct PackedInputDataReport {
     pub view: bool,
     #[packed_field(bits = "72")]
     pub y: bool,
-
 
     // byte 10
     #[packed_field(bits = "87")]
@@ -261,7 +258,7 @@ impl Default for PackedInputDataReport {
             quick: false,
             b: false,
             a: false,
-            dpad: Direction::None, 
+            dpad: Direction::None,
             menu: false,
             view: false,
             rtdigital: false,
@@ -280,15 +277,15 @@ impl Default for PackedInputDataReport {
             steam: false,
             rt_analog: 0,
             lt_analog: 0,
-//            tick: Integer::from_primitive(0),
-//            gyro_z: Integer::from_primitive(0),
-//            gyro_y: Integer::from_primitive(0),
-//            gyro_x: Integer::from_primitive(0),
-//            accel_z: Integer::from_primitive(0),
-//            accel_y: Integer::from_primitive(0),
-//            accel_x: Integer::from_primitive(0),
-//            charging: false,
-//            charge_percent: Integer::from_primitive(0),
+            //            tick: Integer::from_primitive(0),
+            //            gyro_z: Integer::from_primitive(0),
+            //            gyro_y: Integer::from_primitive(0),
+            //            gyro_x: Integer::from_primitive(0),
+            //            accel_z: Integer::from_primitive(0),
+            //            accel_y: Integer::from_primitive(0),
+            //            accel_x: Integer::from_primitive(0),
+            //            charging: false,
+            //            charge_percent: Integer::from_primitive(0),
         }
     }
 }

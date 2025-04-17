@@ -37,7 +37,7 @@ impl SourceInputDevice for Vader4Pro {
             Err(err) => {
                 log::error!("Got error polling!: {err:?}");
                 return Err(err.into());
-            },
+            }
         };
         let native_events = translate_events(events);
         Ok(native_events)
@@ -253,7 +253,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 normalize_trigger_value(trigg),
             ),
         },
-/*         event::Event::Inertia(accel_event) => match accel_event {
+        /*         event::Event::Inertia(accel_event) => match accel_event {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Accelerometer),
                 InputValue::Vector3 {
