@@ -1,9 +1,7 @@
 use std::{error::Error, ffi::CString};
 
-/* use std::{error::Error, ffi::CString, time::SystemTime, time::UNIX_EPOCH}; // adding timestamp logging. delete after. */
-
-use hidapi::{HidApi, HidDevice};
-use packed_struct::{types::SizedInteger, PackedStruct};
+use hidapi::HidDevice;
+use packed_struct::PackedStruct;
 
 use crate::{drivers::flydigi_vader_4_pro::hid_report::Direction, udev::device::UdevDevice};
 
@@ -14,14 +12,6 @@ use super::{
     hid_report::PackedInputDataReport,
 };
 
-/* use super::{
-    event::{
-        BinaryInput, ButtonEvent, Event, InertialEvent, InertialInput, JoystickEvent,
-        JoystickInput, TriggerEvent, TriggerInput,
-    },
-    hid_report::PackedInputDataReport,
-};
- */
 // Report ID
 pub const REPORT_ID: u8 = 0x04;
 
@@ -69,7 +59,7 @@ impl Driver {
         }
 
         Ok(Self {
-            device: device,
+            device,
             state: None,
             dpad: Default::default(),
         })

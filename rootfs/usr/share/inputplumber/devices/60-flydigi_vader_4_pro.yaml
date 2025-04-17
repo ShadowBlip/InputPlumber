@@ -40,17 +40,6 @@ source_devices:
           value: "2412"
       sys_name: "event*"
       subsystem: input
-  - group: gamepad
-    unique: false
-    blocked: true
-    udev:
-      attributes:
-        - name: idVendor
-          value: "04b4"
-        - name: idProduct
-          value: "2412"
-      sys_name: "event*"
-      subsystem: usb
 
 # The target input device(s) to emulate by default
 target_devices:

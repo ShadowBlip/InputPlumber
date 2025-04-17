@@ -1,4 +1,4 @@
-pub const REPORT_DESCRIPTOR: [u8; 125] = [
+pub const _REPORT_DESCRIPTOR: [u8; 125] = [
     0x05, 0x01, // Usage Page (Generic Desktop)        0
     0x09, 0x05, // Usage (Game Pad)                    2
     0xa1, 0x01, // Collection (Application)            4

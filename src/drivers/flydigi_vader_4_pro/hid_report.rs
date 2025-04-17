@@ -16,47 +16,6 @@ pub enum Direction {
     None = 0,
 }
 
-impl Direction {
-    pub fn as_bitflag(&self) -> u8 {
-        match *self {
-            Self::Up => 0b00000001,
-            Self::UpRight => 0b00000011,
-            Self::Right => 0b00000010,
-            Self::DownRight => 0b00000110,
-            Self::Down => 0b00000100,
-            Self::DownLeft => 0b00001100,
-            Self::Left => 0b00001000,
-            Self::UpLeft => 0b00001001,
-            Self::None => 0b00000000,
-        }
-    }
-
-    pub fn from_bitflag(bits: u8) -> Self {
-        match bits {
-            0b00000001 => Self::Up,
-            0b00000011 => Self::UpRight,
-            0b00000010 => Self::Right,
-            0b00000110 => Self::DownRight,
-            0b00000100 => Self::Down,
-            0b00001100 => Self::DownLeft,
-            0b00001000 => Self::Left,
-            0b00001001 => Self::UpLeft,
-            0b00000000 => Self::None,
-            _ => Self::None,
-        }
-    }
-
-    pub fn change(&self, direction: Direction, pressed: bool) -> Direction {
-        let old_direction = self.as_bitflag();
-        let new_direction = if pressed {
-            old_direction | direction.as_bitflag()
-        } else {
-            old_direction ^ direction.as_bitflag()
-        };
-        Direction::from_bitflag(new_direction)
-    }
-}
-
 /* No Input
 # ReportID: 4 / 0xffa00003:   -2 ,  102 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,   -1 ,   -1 ,    0 ,    1 ,  127 ,    0 ,  127 ,    0 ,  127 ,  127 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 E: 000656.420862 32 04 fe 66 00 00 00 00 00 00 00 00 00 00 ff ff 00 01 7f 00 7f 00 7f 7f 00 00 00 00 00 00 00 00 00
