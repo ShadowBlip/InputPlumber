@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use zbus::fdo;
+use zbus::{fdo, Connection};
 use zbus_macros::interface;
 
 use crate::{
     config::CompositeDeviceConfig,
+    constants::BUS_PREFIX,
     input::{manager::ManagerCommand, target::TargetDeviceTypeId},
 };
 
@@ -14,11 +15,15 @@ use crate::{
 /// [Manager] is listening on.
 pub struct ManagerInterface {
     tx: mpsc::Sender<ManagerCommand>,
+    gamepad_order: Vec<String>,
 }
 
 impl ManagerInterface {
     pub fn new(tx: mpsc::Sender<ManagerCommand>) -> ManagerInterface {
-        ManagerInterface { tx }
+        ManagerInterface {
+            tx,
+            gamepad_order: Default::default(),
+        }
     }
 }
 
@@ -38,32 +43,21 @@ impl ManagerInterface {
 
     #[zbus(property)]
     async fn gamepad_order(&self) -> fdo::Result<Vec<String>> {
-        let (sender, mut receiver) = mpsc::channel(1);
-        self.tx
-            .send_timeout(
-                ManagerCommand::GetGamepadOrder { sender },
-                Duration::from_millis(500),
-            )
-            .await
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-
-        // Read the response from the manager
-        let Some(response) = receiver.recv().await else {
-            return Err(fdo::Error::Failed("No response from manager".to_string()));
-        };
-
-        Ok(response)
+        Ok(self.gamepad_order.clone())
     }
 
     #[zbus(property)]
-    async fn set_gamepad_order(&self, order: Vec<String>) -> zbus::Result<()> {
+    async fn set_gamepad_order(&mut self, order: Vec<String>) -> fdo::Result<()> {
         self.tx
             .send_timeout(
-                ManagerCommand::SetGamepadOrder { dbus_paths: order },
+                ManagerCommand::SetGamepadOrder {
+                    dbus_paths: order.clone(),
+                },
                 Duration::from_millis(500),
             )
             .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        self.gamepad_order = order;
 
         Ok(())
     }
@@ -233,6 +227,25 @@ impl ManagerInterface {
         if receiver.recv().await.is_none() {
             return Err(fdo::Error::Failed("No response from manager".to_string()));
         }
+
+        Ok(())
+    }
+}
+
+impl ManagerInterface {
+    /// Update the target gamepad order property and emit property changed signal
+    pub async fn update_target_gamepad_order(
+        conn: &Connection,
+        order: Vec<String>,
+    ) -> Result<(), zbus::Error> {
+        let path = format!("{BUS_PREFIX}/Manager");
+        let iface_ref = conn.object_server().interface::<_, Self>(path).await?;
+
+        let mut iface = iface_ref.get_mut().await;
+        iface.gamepad_order = order;
+        iface
+            .gamepad_order_changed(iface_ref.signal_emitter())
+            .await?;
 
         Ok(())
     }
