@@ -1,4 +1,5 @@
 pub mod dualsense;
+pub mod flydigi_vader_4_pro;
 pub mod fts3528;
 pub mod horipad_steam;
 pub mod iio_imu;

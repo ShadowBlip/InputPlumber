@@ -1,5 +1,6 @@
 pub mod blocked;
 pub mod dualsense;
+pub mod flydigi_vader_4_pro;
 pub mod fts3528;
 pub mod horipad_steam;
 pub mod lego_dinput_combined;
@@ -16,6 +17,7 @@ pub mod xpad_uhid;
 use std::{error::Error, time::Duration};
 
 use blocked::BlockedHidrawDevice;
+use flydigi_vader_4_pro::Vader4Pro;
 use horipad_steam::HoripadSteam;
 use msi_claw::MsiClaw;
 use rog_ally::RogAlly;
@@ -52,6 +54,7 @@ enum DriverType {
     RogAlly,
     SteamDeck,
     XpadUhid,
+    Vader4Pro,
 }
 
 /// [HidRawDevice] represents an input device using the hidraw subsystem.
@@ -71,6 +74,7 @@ pub enum HidRawDevice {
     RogAlly(SourceDriver<RogAlly>),
     SteamDeck(SourceDriver<DeckController>),
     XpadUhid(SourceDriver<XpadUhid>),
+    Vader4Pro(SourceDriver<Vader4Pro>),
 }
 
 impl SourceDeviceCompatible for HidRawDevice {
@@ -90,6 +94,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.info_ref(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.info_ref(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.info_ref(),
+            HidRawDevice::Vader4Pro(source_driver) => source_driver.info_ref(),
         }
     }
 
@@ -109,6 +114,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.get_id(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_id(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_id(),
+            HidRawDevice::Vader4Pro(source_driver) => source_driver.get_id(),
         }
     }
 
@@ -128,6 +134,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.client(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.client(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.client(),
+            HidRawDevice::Vader4Pro(source_driver) => source_driver.client(),
         }
     }
 
@@ -147,6 +154,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.run().await,
             HidRawDevice::SteamDeck(source_driver) => source_driver.run().await,
             HidRawDevice::XpadUhid(source_driver) => source_driver.run().await,
+            HidRawDevice::Vader4Pro(source_driver) => source_driver.run().await,
         }
     }
 
@@ -168,6 +176,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::Vader4Pro(source_driver) => source_driver.get_capabilities(),
         }
     }
 
@@ -187,6 +196,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.get_device_path(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_device_path(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::Vader4Pro(source_driver) => source_driver.get_device_path(),
         }
     }
 }
@@ -315,6 +325,21 @@ impl HidRawDevice {
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::HoripadSteam(source_device))
             }
+            DriverType::Vader4Pro => {
+                let device = Vader4Pro::new(device_info.clone())?;
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(1),
+                    buffer_size: 1024,
+                };
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
+                Ok(Self::Vader4Pro(source_device))
+            }
         }
     }
 
@@ -416,6 +441,14 @@ impl HidRawDevice {
         {
             log::info!("Detected Horipad Steam Controller");
             return DriverType::HoripadSteam;
+        }
+
+        // Flydigi Vader 4 Pro
+        if vid == drivers::flydigi_vader_4_pro::driver::VID
+            && pid == drivers::flydigi_vader_4_pro::driver::PID
+        {
+            log::info!("Detected Flydigi Vader 4 Pro");
+            return DriverType::Vader4Pro;
         }
 
         // Unknown

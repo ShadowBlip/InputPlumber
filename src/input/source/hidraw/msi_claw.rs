@@ -37,4 +37,3 @@ impl SourceInputDevice for MsiClaw {
 }
 
 impl SourceOutputDevice for MsiClaw {}
-
