@@ -46,3 +46,38 @@ mapping:
     target_events:
       - gamepad:
           button: Screenshot
+  - name: Left Dial Counter-clockwise
+    source_event:
+      gamepad:
+        dial:
+          name: LeftStick
+          direction: counter-clockwise
+    target_events:
+      - mouse:
+          button: "WheelLeft"
+  - name: Left Dial Clockwise
+    source_event:
+      gamepad:
+        dial:
+          name: LeftStick
+          direction: clockwise
+    target_events:
+      - mouse:
+          button: "WheelRight"
+  - name: Right Dial Counter-clockwise
+    source_event:
+      gamepad:
+        dial:
+          name: RightStick
+          direction: counter-clockwise
+    target_events:
+      - mouse:
+          button: "WheelUp"
+  - name: Right Dial Clockwise
+    source_event:
+      dial:
+          name: RightStick
+          direction: clockwise
+    target_events:
+      - mouse:
+          button: "WheelDown"

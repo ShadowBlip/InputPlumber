@@ -139,6 +139,17 @@ impl From<CapabilityConfig> for Capability {
 
                 return Capability::Gamepad(Gamepad::Accelerometer);
             }
+
+            // Dials/wheels
+            if let Some(dial_config) = gamepad.dial.as_ref() {
+                let dial = GamepadDial::from_str(&dial_config.name);
+                if dial.is_err() {
+                    log::error!("Invalid or unimplemented dial: {}", dial_config.name);
+                    return Capability::NotImplemented;
+                }
+                let dial = dial.unwrap();
+                return Capability::Gamepad(Gamepad::Dial(dial));
+            }
         }
 
         // Keyboard
@@ -251,6 +262,8 @@ pub enum Gamepad {
     /// Gyro events measure the angular velocity of a device measured
     /// with (x, y, z) values normalized to degrees per second.
     Gyro,
+    /// Dials and wheels
+    Dial(GamepadDial),
 }
 
 impl fmt::Display for Gamepad {
@@ -261,6 +274,7 @@ impl fmt::Display for Gamepad {
             Gamepad::Trigger(_) => write!(f, "Trigger"),
             Gamepad::Accelerometer => write!(f, "Accelerometer"),
             Gamepad::Gyro => write!(f, "Gyro"),
+            Gamepad::Dial(_) => write!(f, "Dial"),
         }
     }
 }
@@ -284,6 +298,9 @@ impl FromStr for Gamepad {
             )?)),
             "Accelerometer" => Ok(Gamepad::Accelerometer),
             "Gyro" => Ok(Gamepad::Gyro),
+            "Dial" => Ok(Gamepad::Dial(GamepadDial::from_str(
+                parts.join(":").as_str(),
+            )?)),
             _ => Err(()),
         }
     }
@@ -604,6 +621,33 @@ impl FromStr for GamepadTrigger {
             "RightTrigger" => Ok(GamepadTrigger::RightTrigger),
             "RightTouchpadForce" => Ok(GamepadTrigger::RightTouchpadForce),
             "RightStickForce" => Ok(GamepadTrigger::RightStickForce),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum GamepadDial {
+    LeftStickDial,
+    RightStickDial,
+}
+
+impl fmt::Display for GamepadDial {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GamepadDial::LeftStickDial => write!(f, "LeftStickDial"),
+            GamepadDial::RightStickDial => write!(f, "RightStickDial"),
+        }
+    }
+}
+
+impl FromStr for GamepadDial {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "LeftStickDial" => Ok(GamepadDial::LeftStickDial),
+            "RightStickDial" => Ok(GamepadDial::RightStickDial),
             _ => Err(()),
         }
     }

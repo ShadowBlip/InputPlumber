@@ -573,6 +573,7 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
             },
             Gamepad::Axis(_) => Some(EventType::ABSOLUTE),
             Gamepad::Trigger(_) => Some(EventType::ABSOLUTE),
+            Gamepad::Dial(_) => Some(EventType::ABSOLUTE),
             Gamepad::Accelerometer => None,
             Gamepad::Gyro => None,
         },
@@ -678,6 +679,14 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
             },
             Gamepad::Accelerometer => vec![],
             Gamepad::Gyro => vec![],
+            Gamepad::Dial(dial) => match dial {
+                crate::input::capability::GamepadDial::LeftStickDial => {
+                    vec![RelativeAxisCode::REL_HWHEEL.0]
+                }
+                crate::input::capability::GamepadDial::RightStickDial => {
+                    vec![RelativeAxisCode::REL_WHEEL.0]
+                }
+            },
         },
         Capability::Mouse(mouse) => match mouse {
             Mouse::Motion => vec![RelativeAxisCode::REL_X.0, RelativeAxisCode::REL_Y.0],

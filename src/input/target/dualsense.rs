@@ -560,6 +560,7 @@ impl DualSenseDevice {
                         }
                     }
                 }
+                Gamepad::Dial(_) => (),
             },
             Capability::Touchpad(touch) => {
                 match touch {

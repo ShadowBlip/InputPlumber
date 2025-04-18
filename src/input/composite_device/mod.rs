@@ -928,7 +928,8 @@ impl CompositeDevice {
                     Gamepad::Axis(_)
                     | Gamepad::Trigger(_)
                     | Gamepad::Accelerometer
-                    | Gamepad::Gyro => {}
+                    | Gamepad::Gyro
+                    | Gamepad::Dial(_) => {}
                 },
                 Capability::Mouse(ref t) => match t {
                     Mouse::Motion => {}
