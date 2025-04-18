@@ -41,18 +41,6 @@ source_devices:
       product_id: "1590"
       handler: event*
     capability_map_id: zone1
-  - group: mouse
-    evdev:
-      name: ZOTAC Gaming Zone Mouse
-      vendor_id: "1ee9"
-      product_id: "1590"
-      handler: event*
-  - group: mouse
-    evdev:
-      name: ZOTAC Gaming Zone Dials
-      vendor_id: "1ee9"
-      product_id: "1590"
-      handler: event*
   - group: imu
     iio:
       name: i2c-BMI0160:00
@@ -68,5 +56,4 @@ options:
 # The target input device(s) to emulate by default
 target_devices:
   - xbox-elite
-  - mouse
   - keyboard
