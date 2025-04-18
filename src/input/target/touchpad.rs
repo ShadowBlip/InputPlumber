@@ -1,4 +1,4 @@
-use std::{error::Error, os::fd::AsRawFd};
+use std::{error::Error, os::fd::AsRawFd, time::Instant};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
@@ -34,13 +34,15 @@ impl Default for TouchpadConfig {
             vendor_id: 0x0000,
             product_id: 0xffff,
             version: 0x001,
-            // TODO:
-            // Motion in the Y axis is slow if height and width are the same. I suspect the
-            // physical device motion is being scaled to the display aspect ratio and not
-            // accounting for it  here double scales it. Defaulting to 1080p (most common)
-            // for now until we can grab the screen dimentions.
-            width: 1080,
-            height: 1920,
+            // NOTE: The width and height of the touchpad are important to how the
+            // touchpad will behave. The width/height ratio of the touchpad MUST
+            // match the ABS resolution ratio. I.e. if the touchpad is a square
+            // with a (width, height) of (1024, 1024), then the ABS resolution
+            // should use the same ratio like (32, 32). If the touchpad is a rectangle
+            // with a size of (2048, 1024), then the resolution for the ABS axes
+            // must use the same 2:1 ratio like (64, 32).
+            width: 1024,
+            height: 1024,
         }
     }
 }
@@ -62,7 +64,7 @@ pub struct TouchpadDevice {
     device: VirtualDevice,
     is_touching: bool,
     should_set_timestamp: bool,
-    timestamp: i32,
+    timestamp: Instant,
     tracking_id_next: u16,
     touch_state: [TouchEvent; 10],
 }
@@ -81,7 +83,7 @@ impl TouchpadDevice {
             device,
             is_touching: false,
             should_set_timestamp: true,
-            timestamp: 0,
+            timestamp: Instant::now(),
             tracking_id_next: 0,
             touch_state: [TouchEvent::default(); 10],
         })
@@ -98,8 +100,8 @@ impl TouchpadDevice {
         keys.insert(KeyCode::BTN_TOOL_DOUBLETAP);
 
         // Setup ABS inputs
-        let pad_width_setup = AbsInfo::new(0, 0, config.width as i32, 0, 0, 3);
-        let pad_height_setup = AbsInfo::new(0, 0, config.height as i32, 0, 0, 9);
+        let pad_width_setup = AbsInfo::new(0, 0, config.width as i32, 0, 0, 36);
+        let pad_height_setup = AbsInfo::new(0, 0, config.height as i32, 0, 0, 36);
         let abs_x = UinputAbsSetup::new(AbsoluteAxisCode::ABS_X, pad_width_setup);
         let abs_y = UinputAbsSetup::new(AbsoluteAxisCode::ABS_Y, pad_height_setup);
         let abs_mt_pos_x =
@@ -107,7 +109,7 @@ impl TouchpadDevice {
         let abs_mt_pos_y =
             UinputAbsSetup::new(AbsoluteAxisCode::ABS_MT_POSITION_Y, pad_height_setup);
 
-        let pad_tool_setup = AbsInfo::new(0, 0, 2, 0, 0, 9);
+        let pad_tool_setup = AbsInfo::new(0, 0, 2, 0, 0, 0);
         let abs_mt_tool_type =
             UinputAbsSetup::new(AbsoluteAxisCode::ABS_MT_TOOL_TYPE, pad_tool_setup);
 
@@ -248,6 +250,11 @@ impl TouchpadDevice {
                     let touch_event =
                         InputEvent::new(EventType::KEY.0, KeyCode::BTN_TOOL_FINGER.0, 1);
                     events.push(touch_event);
+
+                    // Reset the timestamp if the state is going from "not touching" -> "touching"
+                    if !self.is_touching {
+                        self.timestamp = Instant::now();
+                    }
                     self.is_touching = true;
                 }
                 let tracking_id = self.tracking_id_next;
@@ -324,10 +331,9 @@ impl TouchpadDevice {
         }
 
         // Update and handle timestamps
-        let value = self.timestamp;
+        let value = self.timestamp.elapsed().as_micros() as i32;
         let event = InputEvent::new(EventType::MISC.0, MiscCode::MSC_TIMESTAMP.0, value);
         events.push(event);
-        self.timestamp = self.timestamp.wrapping_add(6500);
         self.should_set_timestamp = false;
 
         events
@@ -372,20 +378,18 @@ impl TargetOutputDevice for TouchpadDevice {
         // Send timestamp events whenever a touch is active
         let touching = self.is_touching;
         let set_timestamp = self.should_set_timestamp;
-        if touching {
-            // By default, always send a timestamp event, unless one
-            // was sent with touch events.
-            if set_timestamp {
-                let value = self.timestamp;
-                let event = InputEvent::new(EventType::MISC.0, MiscCode::MSC_TIMESTAMP.0, value);
-                self.device.emit(&[event])?;
-                self.timestamp = self.timestamp.wrapping_add(10000);
-            } else {
-                self.should_set_timestamp = true;
-            }
+        if !touching {
+            return Ok(vec![]);
+        }
+
+        // By default, always send a timestamp event, unless one
+        // was sent with touch events.
+        if set_timestamp {
+            let value = self.timestamp.elapsed().as_micros() as i32;
+            let event = InputEvent::new(EventType::MISC.0, MiscCode::MSC_TIMESTAMP.0, value);
+            self.device.emit(&[event])?;
         } else {
-            // Reset the timestamp to zero when no touches are active
-            self.timestamp = 0;
+            self.should_set_timestamp = true;
         }
 
         Ok(vec![])
