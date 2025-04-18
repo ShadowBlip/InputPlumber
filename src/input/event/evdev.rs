@@ -3,10 +3,11 @@ pub mod translator;
 use std::collections::HashMap;
 
 use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, RelativeAxisCode};
+use tabled::derive::display::debug;
 
 use crate::input::capability::{
-    Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard, Mouse, MouseButton,
-    Touch, TouchButton, Touchpad,
+    Capability, Gamepad, GamepadAxis, GamepadButton, GamepadDial, GamepadTrigger, Keyboard, Mouse,
+    MouseButton, Touch, TouchButton, Touchpad,
 };
 
 use super::{native::NativeEvent, value::InputValue};
@@ -465,7 +466,6 @@ impl EvdevEvent {
             EventType::RELATIVE => match RelativeAxisCode(code) {
                 RelativeAxisCode::REL_X => Capability::Mouse(Mouse::Motion),
                 RelativeAxisCode::REL_Y => Capability::Mouse(Mouse::Motion),
-                RelativeAxisCode::REL_WHEEL => Capability::NotImplemented,
                 _ => Capability::NotImplemented,
             },
             EventType::MISC => Capability::NotImplemented,
@@ -573,7 +573,7 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
             },
             Gamepad::Axis(_) => Some(EventType::ABSOLUTE),
             Gamepad::Trigger(_) => Some(EventType::ABSOLUTE),
-            Gamepad::Dial(_) => Some(EventType::ABSOLUTE),
+            Gamepad::Dial(_) => Some(EventType::RELATIVE),
             Gamepad::Accelerometer => None,
             Gamepad::Gyro => None,
         },
@@ -680,16 +680,17 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
             Gamepad::Accelerometer => vec![],
             Gamepad::Gyro => vec![],
             Gamepad::Dial(dial) => match dial {
-                crate::input::capability::GamepadDial::LeftStickDial => {
+                GamepadDial::LeftStickDial => {
                     vec![RelativeAxisCode::REL_HWHEEL.0]
                 }
-                crate::input::capability::GamepadDial::RightStickDial => {
+                GamepadDial::RightStickDial => {
                     vec![RelativeAxisCode::REL_WHEEL.0]
                 }
             },
         },
         Capability::Mouse(mouse) => match mouse {
             Mouse::Motion => vec![RelativeAxisCode::REL_X.0, RelativeAxisCode::REL_Y.0],
+
             Mouse::Button(button) => match button {
                 MouseButton::Left => vec![KeyCode::BTN_LEFT.0],
                 MouseButton::Right => vec![KeyCode::BTN_RIGHT.0],

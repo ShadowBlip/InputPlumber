@@ -925,11 +925,11 @@ impl CompositeDevice {
                             continue;
                         }
                     }
+                    Gamepad::Dial(dial) => {}
                     Gamepad::Axis(_)
                     | Gamepad::Trigger(_)
                     | Gamepad::Accelerometer
-                    | Gamepad::Gyro
-                    | Gamepad::Dial(_) => {}
+                    | Gamepad::Gyro => {}
                 },
                 Capability::Mouse(ref t) => match t {
                     Mouse::Motion => {}
