@@ -694,7 +694,7 @@ impl TargetDevice {
             "touchpad" => {
                 let device = TouchpadDevice::new()?;
                 let options = TargetDriverOptions {
-                    poll_rate: Duration::from_micros(13605),
+                    poll_rate: Duration::from_millis(3),
                     buffer_size: 2048,
                 };
                 let driver = TargetDriver::new_with_options(id, device, dbus, options);
