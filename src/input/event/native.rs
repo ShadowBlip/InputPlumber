@@ -77,6 +77,7 @@ impl NativeEvent {
     }
 
     pub fn from_evdev_raw(event: EvdevEvent, hat_state: Option<i32>) -> NativeEvent {
+        dbg!(&event);
         // If this is a Dpad input, figure out with button this event is for
         let capability = if let Some(old_state) = hat_state {
             let axis = AbsoluteAxisCode(event.as_input_event().code());

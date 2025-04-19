@@ -16,33 +16,69 @@ name: Default
 
 # Profile mappings
 mapping:
-  - name: LeftTop
-    source_event:
-      gamepad:
-        button: LeftTop
-    target_events:
-      - gamepad:
-          button: LeftPaddle1
-  - name: RightTop
-    source_event:
-      gamepad:
-        button: RightTop
-    target_events:
-      - gamepad:
-          button: RightPaddle1
-  - name: Keyboard
-    source_event:
-      gamepad:
-        button: Keyboard
-    target_events:
-      - gamepad:
-          button: Guide
-      - gamepad:
-          button: North
-  - name: QuickAccess2
-    source_event:
-      gamepad:
-        button: QuickAccess2
-    target_events:
-      - gamepad:
-          button: Screenshot
+    - name: LeftTop
+      source_event:
+          gamepad:
+              button: LeftTop
+      target_events:
+          - gamepad:
+                button: LeftPaddle1
+    - name: RightTop
+      source_event:
+          gamepad:
+              button: RightTop
+      target_events:
+          - gamepad:
+                button: RightPaddle1
+    - name: Keyboard
+      source_event:
+          gamepad:
+              button: Keyboard
+      target_events:
+          - gamepad:
+                button: Guide
+          - gamepad:
+                button: North
+    - name: QuickAccess2
+      source_event:
+          gamepad:
+              button: QuickAccess2
+      target_events:
+          - gamepad:
+                button: Screenshot
+    - name: Left Dial Counter-clockwise
+      source_event:
+          gamepad:
+              dial:
+                  name: LeftStickDial
+                  direction: counter-clockwise
+      target_events:
+          - mouse:
+                button: "WheelLeft"
+    - name: Left Dial Clockwise
+      source_event:
+          gamepad:
+              dial:
+                  name: LeftStickDial
+                  direction: clockwise
+      target_events:
+          - mouse:
+                button: "WheelRight"
+    - name: Right Dial Counter-clockwise
+      source_event:
+          gamepad:
+              dial:
+                  name: RightStickDial
+                  direction: counter-clockwise
+      target_events:
+          - mouse:
+                button: "WheelUp"
+    - name: Right Dial Clockwise
+      source_event:
+          gamepad:
+              dial:
+                  name: RightStickDial
+                  direction: clockwise
+      target_events:
+          - mouse:
+                button: "WheelDown"

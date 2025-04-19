@@ -275,6 +275,7 @@ impl CompositeDeviceInterface {
                     Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{}", trigger),
                     Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
                     Gamepad::Gyro => "Gamepad:Gyro".to_string(),
+                    Gamepad::Dial(dial) => format!("Gamepad:Dial:{dial}"),
                 },
                 Capability::Mouse(mouse) => match mouse {
                     Mouse::Motion => "Mouse:Motion".to_string(),
@@ -307,6 +308,7 @@ impl CompositeDeviceInterface {
                     Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{}", trigger),
                     Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
                     Gamepad::Gyro => "Gamepad:Gyro".to_string(),
+                    Gamepad::Dial(dial) => format!("Gamepad:Dial:{dial}"),
                 },
                 Capability::Mouse(mouse) => match mouse {
                     Mouse::Motion => "Mouse:Motion".to_string(),

@@ -236,6 +236,7 @@ impl HoripadSteamDevice {
                         }
                     }
                 }
+                Gamepad::Dial(_) => (),
             },
             Capability::DBus(_) => (),
             Capability::Mouse(_) => (),

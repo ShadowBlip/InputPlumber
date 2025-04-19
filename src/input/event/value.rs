@@ -1,3 +1,5 @@
+use tabled::derive::display::debug;
+
 use crate::{
     config::capability_map::CapabilityConfig,
     input::capability::{Capability, Gamepad, Mouse, Touch, Touchpad},
@@ -130,6 +132,7 @@ impl InputValue {
                                 Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                                 // Gamepad Button -> Gyro
                                 Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                                Gamepad::Dial(_) => Ok(self.clone()),
                             },
                             // Gamepad Button -> Mouse
                             Capability::Mouse(mouse) => match mouse {
@@ -178,6 +181,7 @@ impl InputValue {
                                 Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                                 // Axis -> Gyro
                                 Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                                Gamepad::Dial(_) => Err(TranslationError::NotImplemented),
                             },
                             // Axis -> Mouse
                             Capability::Mouse(mouse) => match mouse {
@@ -223,6 +227,7 @@ impl InputValue {
                             Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                             // Trigger -> Gyro
                             Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                            Gamepad::Dial(_) => self.translate_trigger_to_button(source_config),
                         },
                         // Trigger -> Mouse
                         Capability::Mouse(mouse) => match mouse {
@@ -246,6 +251,52 @@ impl InputValue {
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                     // Gyro -> ...
                     Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                    Gamepad::Dial(_) => match target_cap {
+                        // Gamepad Button -> None
+                        Capability::None => Ok(InputValue::None),
+                        // Gamepad Button -> NotImplemented
+                        Capability::NotImplemented => Ok(InputValue::None),
+                        // Gamepad Button -> Sync
+                        Capability::Sync => Ok(InputValue::Bool(false)),
+                        // Gamepad Button -> DBus
+                        Capability::DBus(_) => Ok(self.clone()),
+                        // Gamepad Button -> Gamepad
+                        Capability::Gamepad(gamepad) => match gamepad {
+                            // Gamepad Button -> Gamepad Button
+                            Gamepad::Button(_) => self.translate_dial_to_button(source_config),
+                            // Gamepad Button -> Axis
+                            Gamepad::Axis(_) => Err(TranslationError::NotImplemented),
+                            // Gamepad Button -> Trigger
+                            Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
+                            // Gamepad Button -> Accelerometer
+                            Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
+                            // Gamepad Button -> Gyro
+                            Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                            Gamepad::Dial(_) => Ok(self.clone()),
+                        },
+                        // Gamepad Button -> Mouse
+                        Capability::Mouse(mouse) => match mouse {
+                            // Gamepad Button -> Mouse Motion
+                            Mouse::Motion => Err(TranslationError::NotImplemented),
+                            // Gamepad Button -> Mouse Button
+                            Mouse::Button(_) => self.translate_dial_to_button(source_config),
+                        },
+                        // Gamepad Button -> Keyboard
+                        Capability::Keyboard(_) => self.translate_dial_to_button(source_config),
+                        // Gamepad Button -> Touchpad
+                        Capability::Touchpad(touch) => match touch {
+                            Touchpad::LeftPad(_) => Err(TranslationError::NotImplemented),
+                            Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
+                            Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
+                        },
+                        // Gamepad Button -> Touchscreen
+                        Capability::Touchscreen(touch) => match touch {
+                            // Gamepad Button -> Touchscreen Motion
+                            Touch::Motion => Err(TranslationError::NotImplemented),
+                            // Gamepad Button -> Touchscreen Button
+                            Touch::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                    },
                 }
             }
 
@@ -269,6 +320,7 @@ impl InputValue {
                     Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                     Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                    Gamepad::Dial(_) => Ok(self.clone()),
                 },
                 // Keyboard Key -> Mouse
                 Capability::Mouse(mouse) => match mouse {
@@ -937,5 +989,46 @@ impl InputValue {
                 "Invalid or unsupported direction".into(),
             )),
         }
+    }
+
+    fn translate_dial_to_button(
+        &self,
+        source_config: &CapabilityConfig,
+    ) -> Result<InputValue, TranslationError> {
+        let Some(gamepad_config) = source_config.gamepad.as_ref() else {
+            return Err(TranslationError::InvalidSourceConfig(
+                "No gamepad config to translate dial to button".to_string(),
+            ));
+        };
+        if let Some(dial) = gamepad_config.dial.as_ref() {
+            if let Some(direction) = dial.direction.as_ref() {
+                let (x, _) = match self {
+                    InputValue::Vector2 { x, y } => (*x, *y),
+                    _ => (None, None),
+                };
+                return match direction.as_str() {
+                    "clockwise" => {
+                        if let Some(x) = x {
+                            Ok(InputValue::Bool(x > 0.0))
+                        } else {
+                            Ok(InputValue::Bool(false))
+                        }
+                    }
+                    "counter-clockwise" => {
+                        if let Some(x) = x {
+                            Ok(InputValue::Bool(x < 0.0))
+                        } else {
+                            Ok(InputValue::Bool(false))
+                        }
+                    }
+                    _ => Err(TranslationError::InvalidSourceConfig(
+                        "Incomplete dial config".to_string(),
+                    )),
+                };
+            }
+        }
+        Err(TranslationError::InvalidSourceConfig(
+            "No gamepad config to translate button to dial".to_string(),
+        ))
     }
 }

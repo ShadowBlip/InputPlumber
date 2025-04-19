@@ -925,6 +925,7 @@ impl CompositeDevice {
                             continue;
                         }
                     }
+                    Gamepad::Dial(dial) => {}
                     Gamepad::Axis(_)
                     | Gamepad::Trigger(_)
                     | Gamepad::Accelerometer

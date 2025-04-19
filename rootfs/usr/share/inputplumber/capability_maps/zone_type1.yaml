@@ -1,0 +1,92 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: Zotac Zone Type 1
+
+# Unique identifier of the capability mapping
+id: zone1
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+    - name: ZOTAC (shortpress)
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: KEY_F16
+                value_type: button
+      target_event:
+          gamepad:
+              button: Guide
+    - name: MORE
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: KEY_F17
+                value_type: button
+      target_event:
+          gamepad:
+              button: QuickAccess
+    - name: HOME (shortpress)
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: KEY_F18
+                value_type: button
+      target_event:
+          gamepad:
+              button: QuickAccess2
+    - name: HOME (longpress)
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: KEY_F19
+                value_type: button
+      target_event:
+          gamepad:
+              button: Keyboard
+    - name: Left Paddle
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: KEY_HOME
+                value_type: button
+      target_event:
+          gamepad:
+              button: LeftPaddle1
+    - name: Right Paddle
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: KEY_END
+                value_type: button
+      target_event:
+          gamepad:
+              button: RightPaddle1
+    - name: Left Dial
+      source_events:
+          - evdev:
+                event_type: REL
+                event_code: REL_HWHEEL
+                value_type: joystick_x
+      target_event:
+          gamepad:
+              dial:
+                  name: LeftStickDial
+    - name: Right Dial
+      source_events:
+          - evdev:
+                event_code: REL_WHEEL
+                event_type: REL
+                value_type: joystick_x
+      target_event:
+          gamepad:
+              dial:
+                  name: RightStickDial
+
+# List of events to filter from the source devices
+filtered_events: []
