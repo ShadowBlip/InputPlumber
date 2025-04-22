@@ -46,6 +46,21 @@ source_devices:
       vendor_id: 0b05
       product_id: 1abe
       handler: event*
+  # New driver group name from `asus_ally_hid`
+  - group: mouse
+    evdev:
+      name: ROG Ally Mouse
+      vendor_id: 0b05
+      product_id: 1abe
+      handler: event*
+  # New driver group name from `asus_ally_hid`
+  - group: keyboard
+    unique: false
+    evdev:
+      name: ROG Ally Keyboard
+      vendor_id: 0b05
+      product_id: 1abe
+      handler: event*
   - group: imu
     iio:
       name: bmi323-imu
