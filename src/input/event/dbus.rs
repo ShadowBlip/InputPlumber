@@ -249,6 +249,8 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Keyboard::KeyMinus => vec![Action::None],
             Keyboard::KeyEqual => vec![Action::None],
             Keyboard::KeyBackspace => vec![Action::Back],
+            Keyboard::KeyBrightnessDown => vec![Action::None],
+            Keyboard::KeyBrightnessUp => vec![Action::None],
             Keyboard::KeyTab => vec![Action::None],
             Keyboard::KeyQ => vec![Action::None],
             Keyboard::KeyW => vec![Action::None],

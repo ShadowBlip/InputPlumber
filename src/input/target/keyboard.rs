@@ -195,6 +195,8 @@ impl KeyboardDevice {
         keys.insert(KeyCode::KEY_SCROLLDOWN);
         keys.insert(KeyCode::KEY_KPLEFTPAREN);
         keys.insert(KeyCode::KEY_KPRIGHTPAREN);
+        keys.insert(KeyCode::KEY_BRIGHTNESSDOWN);
+        keys.insert(KeyCode::KEY_BRIGHTNESSUP);
         keys.insert(KeyCode::KEY_F13);
         keys.insert(KeyCode::KEY_F14);
         keys.insert(KeyCode::KEY_F15);
@@ -270,6 +272,8 @@ impl TargetInputDevice for KeyboardDevice {
             Capability::Keyboard(Keyboard::KeyMinus),
             Capability::Keyboard(Keyboard::KeyEqual),
             Capability::Keyboard(Keyboard::KeyBackspace),
+            Capability::Keyboard(Keyboard::KeyBrightnessDown),
+            Capability::Keyboard(Keyboard::KeyBrightnessUp),
             Capability::Keyboard(Keyboard::KeyTab),
             Capability::Keyboard(Keyboard::KeyQ),
             Capability::Keyboard(Keyboard::KeyW),

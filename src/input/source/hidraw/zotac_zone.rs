@@ -10,14 +10,13 @@ use crate::{
     udev::device::UdevDevice,
 };
 
-/// XpadUhid source device implementation
+/// ZotacZone source device implementation
 pub struct ZotacZone {
     _driver: Driver,
 }
 
 impl ZotacZone {
-    /// Create a new source device with the given udev
-    /// device information
+    /// Create a new source device with the given udev device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info)?;
         Ok(Self { _driver: driver })
@@ -29,6 +28,7 @@ impl Debug for ZotacZone {
         f.debug_struct("ZotacZone").finish()
     }
 }
+
 impl SourceInputDevice for ZotacZone {
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         Ok(vec![])

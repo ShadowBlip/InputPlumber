@@ -6,6 +6,7 @@ use crate::udev::device::{AttributeGetter, AttributeSetter, UdevDevice};
 
 // Hardware ID's
 const ZONE_PID: u16 = 0x1590;
+const ZONE_CFG_IF_NUM: i32 = 3;
 pub const PIDS: [u16; 1] = [ZONE_PID];
 pub const VID: u16 = 0x1ee9;
 pub const VID_ALT: u16 = 0x1e19;
@@ -31,20 +32,14 @@ impl Driver {
         let Some(driver) = parent.driver() else {
             return Err("Failed to identify device driver".into());
         };
-        // Apply settings for the controller
+        // Apply settings for the controller. Do error and crash IP as the
+        // device is still usable.
         let drv_name = driver.to_str().unwrap();
         if drv_name == "zotac_zone_hid" || drv_name == "hid_zotac_zone" {
-            let if_num = device.get_attribute_from_tree("bInterfaceNumber");
-            if if_num.parse().unwrap_or(-1) == 3 {
-                if set_attribute(&mut device, "qam_mode", "0").is_ok() {
-                    log::debug!("Setting qam mode on interface {if_num}.");
-                }
-                if set_attribute(&mut device, "btn_m2/remap/keyboard", "home").is_ok() {
-                    log::debug!("Setting btn_m2/remap/keyboard on interface {if_num} to 'home'.");
-                }
-                if set_attribute(&mut device, "btn_m1/remap/keyboard", "end").is_ok() {
-                    log::debug!("Setting btn_m1/remap/keyboard on interface {if_num} to 'end'.");
-                }
+            if device.interface_number() == ZONE_CFG_IF_NUM {
+                set_attribute(&mut device, "qam_mode", "0");
+                set_attribute(&mut device, "btn_m2/remap/keyboard", "home");
+                set_attribute(&mut device, "btn_m1/remap/keyboard", "end");
             }
         } else {
             return Err("Device is not using the zotac_zone driver.".into());
@@ -54,17 +49,10 @@ impl Driver {
     }
 }
 
-fn set_attribute(
-    device: &mut Device,
-    attribute: &str,
-    value: &str,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let result = device.set_attribute_on_tree(attribute, value);
-    match result {
-        Ok(r) => {
-            log::debug!("set {attribute} to {value}");
-            Ok(r)
-        }
-        Err(e) => Err(format!("Could not set {attribute} to {value}: {e:?}").into()),
+#[inline(always)]
+fn set_attribute(device: &mut Device, attribute: &str, value: &str) {
+    match device.set_attribute_on_tree(attribute, value) {
+        Ok(_) => log::debug!("set {attribute} to {value}"),
+        Err(e) => log::error!("Could not set {attribute} to {value}: {e:?}"),
     }
 }

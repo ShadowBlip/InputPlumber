@@ -133,6 +133,8 @@
             "KeyGrave",
             "KeyLeftShift",
             "KeyBackslash",
+            "KeyBrightnessDown",
+            "KeyBrightnessUp",
             "KeyZ",
             "KeyX",
             "KeyC",

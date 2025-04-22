@@ -24,6 +24,10 @@ pub enum Capability {
 }
 
 impl Capability {
+    /// Helper function to determine if an event mapping output requires emulating
+    /// a momentary press. This is required in such cases as relative->button
+    /// mappings of similar. In the case of the Zotac Zone dials for example these
+    /// emit only a `1` or a `-1` as do other devices like mouse wheels.
     pub fn is_momentary_translation(&self, target: &Capability) -> bool {
         if let Capability::Gamepad(Gamepad::Dial(_)) = self {
             matches!(
@@ -688,6 +692,8 @@ pub enum Keyboard {
     KeyBack,
     KeyBackslash,
     KeyBackspace,
+    KeyBrightnessDown,
+    KeyBrightnessUp,
     KeyC,
     KeyCalc,
     KeyCapslock,
@@ -855,6 +861,8 @@ impl fmt::Display for Keyboard {
             Keyboard::KeyBack => write!(f, "KeyBack"),
             Keyboard::KeyBackslash => write!(f, "KeyBackslash"),
             Keyboard::KeyBackspace => write!(f, "KeyBackspace"),
+            Keyboard::KeyBrightnessDown => write!(f, "KeyBrightnessDown"),
+            Keyboard::KeyBrightnessUp => write!(f, "KeyBrightnessUp"),
             Keyboard::KeyC => write!(f, "KeyC"),
             Keyboard::KeyCalc => write!(f, "KeyCalc"),
             Keyboard::KeyCapslock => write!(f, "KeyCapslock"),
@@ -1026,6 +1034,8 @@ impl FromStr for Keyboard {
             "KeyBack" => Ok(Keyboard::KeyBack),
             "KeyBackslash" => Ok(Keyboard::KeyBackslash),
             "KeyBackspace" => Ok(Keyboard::KeyBackspace),
+            "KeyBrightnessDown" => Ok(Keyboard::KeyBrightnessDown),
+            "KeyBrightnessUp" => Ok(Keyboard::KeyBrightnessUp),
             "KeyC" => Ok(Keyboard::KeyC),
             "KeyCalc" => Ok(Keyboard::KeyCalc),
             "KeyCapslock" => Ok(Keyboard::KeyCapslock),

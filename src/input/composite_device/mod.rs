@@ -1497,6 +1497,8 @@ impl CompositeDevice {
                         continue;
                     }
 
+                    // Some event mappings like relative->button will see only a `1` or `-1` event,
+                    // so these require emulating a momentary button press.
                     if source_cap.is_momentary_translation(&target_cap) {
                         let event = NativeEvent::new_translated(
                             source_cap.clone(),

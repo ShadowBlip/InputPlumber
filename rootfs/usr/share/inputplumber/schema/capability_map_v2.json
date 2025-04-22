@@ -1,1262 +1,1385 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "CapabilityMapConfigV2",
-    "description": "[CapabilityMapConfigV2] are used to fix or define the real capabilities of an input device.",
-    "type": "object",
-    "required": ["id", "kind", "mapping", "name", "version"],
-    "properties": {
-        "id": {
-            "type": "string"
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CapabilityMapConfigV2",
+  "description": "[CapabilityMapConfigV2] are used to fix or define the real capabilities of an input device.",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "mapping",
+    "name",
+    "version"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "mapping": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/CapabilityMapping"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    }
+  },
+  "definitions": {
+    "AccelerometerCapability": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "axis": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        "kind": {
-            "type": "string"
+        "deadzone": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         },
-        "mapping": {
-            "type": "array",
-            "items": {
-                "$ref": "#/definitions/CapabilityMapping"
-            }
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "name": {
-            "type": "string"
-        },
-        "version": {
-            "type": "integer",
-            "format": "uint32",
-            "minimum": 0.0
+          "type": "string"
         }
+      }
     },
-    "definitions": {
-        "AccelerometerCapability": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-                "axis": {
-                    "type": ["string", "null"]
-                },
-                "deadzone": {
-                    "type": ["number", "null"],
-                    "format": "double"
-                },
-                "direction": {
-                    "type": ["string", "null"]
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
+    "AxisCapability": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "deadzone": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         },
-        "AxisCapability": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-                "deadzone": {
-                    "type": ["number", "null"],
-                    "format": "double"
-                },
-                "direction": {
-                    "type": ["string", "null"]
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        "AxisDirection": {
-            "description": "The AxisDirection can be used to map one half of an axis to a particular capability. For example, you can map the negative values of `ABS_Y` to the `DPadDown` capability and the positive values of `ABS_Y` to `DPadUp`.",
-            "type": "string",
-            "enum": ["none", "positive", "negative"]
-        },
-        "CapabilityConfig": {
-            "type": "object",
-            "properties": {
-                "dbus": {
-                    "type": ["string", "null"]
-                },
-                "gamepad": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/GamepadCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "keyboard": {
-                    "type": ["string", "null"]
-                },
-                "mouse": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/MouseCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "touchpad": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/TouchpadCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "touchscreen": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/TouchCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                }
-            }
-        },
-        "CapabilityMapping": {
-            "description": "A [CapabilityMapping] defines how to map source input to an inputplumber capability.",
-            "type": "object",
-            "required": ["name", "source_events", "target_event"],
-            "properties": {
-                "mapping_type": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/MappingType"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "name": {
-                    "type": "string"
-                },
-                "source_events": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/SourceMapping"
-                    }
-                },
-                "target_event": {
-                    "$ref": "#/definitions/CapabilityConfig"
-                }
-            }
-        },
-        "DialCapability": {
-            "description": "The Dial direction can be used to map clockwise or counter-clockwise turns.",
-            "type": "object",
-            "required": ["name", "direction"],
-            "properties": {
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "EvdevConfig": {
-            "description": "An [EvdevConfig] defines a matching evdev input event",
-            "type": "object",
-            "required": ["event_code", "event_type", "value_type"],
-            "properties": {
-                "axis_direction": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/AxisDirection"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "event_code": {
-                    "$ref": "#/definitions/EventCode"
-                },
-                "event_type": {
-                    "$ref": "#/definitions/EventType"
-                },
-                "event_value": {
-                    "type": ["integer", "null"],
-                    "format": "uint16",
-                    "minimum": 0.0
-                },
-                "value_type": {
-                    "$ref": "#/definitions/ValueType"
-                }
-            }
-        },
-        "EvdevMappingType": {
-            "description": "How evdev source events should be translated",
-            "oneOf": [
-                {
-                    "description": "Source events will be treated as an inclusive match to emit a single inputplumber event. Events emitted immediately upon match.",
-                    "type": "string",
-                    "enum": ["chord"]
-                },
-                {
-                    "description": "Source events will be treated as an inclusive match to emit a single inputplumber event. Events emitted after button is released.",
-                    "type": "string",
-                    "enum": ["delayed_chord"]
-                },
-                {
-                    "description": "Multiple source events will emit the same inputplumber event. Useful for mapping axis where different directions are triggered by separate events or multiple events to the same inputplumber event.",
-                    "type": "string",
-                    "enum": ["multi_source"]
-                }
-            ]
-        },
-        "EventCode": {
-            "type": "string",
-            "enum": [
-                "SYN_REPORT",
-                "SYN_CONFIG",
-                "SYN_MT_REPORT",
-                "SYN_DROPPED",
-                "KEY_RESERVED",
-                "KEY_ESC",
-                "KEY1",
-                "KEY2",
-                "KEY3",
-                "KEY4",
-                "KEY5",
-                "KEY6",
-                "KEY7",
-                "KEY8",
-                "KEY9",
-                "KEY0",
-                "KEY_MINUS",
-                "KEY_EQUAL",
-                "KEY_BACKSPACE",
-                "KEY_TAB",
-                "KEY_Q",
-                "KEY_W",
-                "KEY_E",
-                "KEY_R",
-                "KEY_T",
-                "KEY_Y",
-                "KEY_U",
-                "KEY_I",
-                "KEY_O",
-                "KEY_P",
-                "KEY_LEFTBRACE",
-                "KEY_RIGHTBRACE",
-                "KEY_ENTER",
-                "KEY_LEFTCTRL",
-                "KEY_A",
-                "KEY_S",
-                "KEY_D",
-                "KEY_F",
-                "KEY_G",
-                "KEY_H",
-                "KEY_J",
-                "KEY_K",
-                "KEY_L",
-                "KEY_SEMICOLON",
-                "KEY_APOSTROPHE",
-                "KEY_GRAVE",
-                "KEY_LEFTSHIFT",
-                "KEY_BACKSLASH",
-                "KEY_Z",
-                "KEY_X",
-                "KEY_C",
-                "KEY_V",
-                "KEY_B",
-                "KEY_N",
-                "KEY_M",
-                "KEY_COMMA",
-                "KEY_DOT",
-                "KEY_SLASH",
-                "KEY_RIGHTSHIFT",
-                "KEY_KPASTERISK",
-                "KEY_LEFTALT",
-                "KEY_SPACE",
-                "KEY_CAPSLOCK",
-                "KEY_F1",
-                "KEY_F2",
-                "KEY_F3",
-                "KEY_F4",
-                "KEY_F5",
-                "KEY_F6",
-                "KEY_F7",
-                "KEY_F8",
-                "KEY_F9",
-                "KEY_F10",
-                "KEY_NUMLOCK",
-                "KEY_SCROLLLOCK",
-                "KEY_KP7",
-                "KEY_KP8",
-                "KEY_KP9",
-                "KEY_KPMINUS",
-                "KEY_KP4",
-                "KEY_KP5",
-                "KEY_KP6",
-                "KEY_KPPLUS",
-                "KEY_KP1",
-                "KEY_KP2",
-                "KEY_KP3",
-                "KEY_KP0",
-                "KEY_KPDOT",
-                "KEY_ZENKAKUHANKAKU",
-                "KEY102ND",
-                "KEY_F11",
-                "KEY_F12",
-                "KEY_RO",
-                "KEY_KATAKANA",
-                "KEY_HIRAGANA",
-                "KEY_HENKAN",
-                "KEY_KATAKANAHIRAGANA",
-                "KEY_MUHENKAN",
-                "KEY_KPJPCOMMA",
-                "KEY_KPENTER",
-                "KEY_RIGHTCTRL",
-                "KEY_KPSLASH",
-                "KEY_SYSRQ",
-                "KEY_RIGHTALT",
-                "KEY_LINEFEED",
-                "KEY_HOME",
-                "KEY_UP",
-                "KEY_PAGEUP",
-                "KEY_LEFT",
-                "KEY_RIGHT",
-                "KEY_END",
-                "KEY_DOWN",
-                "KEY_PAGEDOWN",
-                "KEY_INSERT",
-                "KEY_DELETE",
-                "KEY_MACRO",
-                "KEY_MUTE",
-                "KEY_VOLUMEDOWN",
-                "KEY_VOLUMEUP",
-                "KEY_POWER",
-                "KEY_KPEQUAL",
-                "KEY_KPPLUSMINUS",
-                "KEY_PAUSE",
-                "KEY_SCALE",
-                "KEY_KPCOMMA",
-                "KEY_HANGEUL",
-                "KEY_HANJA",
-                "KEY_YEN",
-                "KEY_LEFTMETA",
-                "KEY_RIGHTMETA",
-                "KEY_COMPOSE",
-                "KEY_STOP",
-                "KEY_AGAIN",
-                "KEY_PROPS",
-                "KEY_UNDO",
-                "KEY_FRONT",
-                "KEY_COPY",
-                "KEY_OPEN",
-                "KEY_PASTE",
-                "KEY_FIND",
-                "KEY_CUT",
-                "KEY_HELP",
-                "KEY_MENU",
-                "KEY_CALC",
-                "KEY_SETUP",
-                "KEY_SLEEP",
-                "KEY_WAKEUP",
-                "KEY_FILE",
-                "KEY_SENDFILE",
-                "KEY_DELETEFILE",
-                "KEY_XFER",
-                "KEY_PROG1",
-                "KEY_PROG2",
-                "KEY_WWW",
-                "KEY_MSDOS",
-                "KEY_SCREENLOCK",
-                "KEY_ROTATE_DISPLAY",
-                "KEY_CYCLEWINDOWS",
-                "KEY_MAIL",
-                "KEY_BOOKMARKS",
-                "KEY_COMPUTER",
-                "KEY_BACK",
-                "KEY_FORWARD",
-                "KEY_CLOSECD",
-                "KEY_EJECTCD",
-                "KEY_EJECTCLOSECD",
-                "KEY_NEXTSONG",
-                "KEY_PLAYPAUSE",
-                "KEY_PREVIOUSSONG",
-                "KEY_STOPCD",
-                "KEY_RECORD",
-                "KEY_REWIND",
-                "KEY_PHONE",
-                "KEY_ISO",
-                "KEY_CONFIG",
-                "KEY_HOMEPAGE",
-                "KEY_REFRESH",
-                "KEY_EXIT",
-                "KEY_MOVE",
-                "KEY_EDIT",
-                "KEY_SCROLLUP",
-                "KEY_SCROLLDOWN",
-                "KEY_KPLEFTPAREN",
-                "KEY_KPRIGHTPAREN",
-                "KEY_NEW",
-                "KEY_REDO",
-                "KEY_F13",
-                "KEY_F14",
-                "KEY_F15",
-                "KEY_F16",
-                "KEY_F17",
-                "KEY_F18",
-                "KEY_F19",
-                "KEY_F20",
-                "KEY_F21",
-                "KEY_F22",
-                "KEY_F23",
-                "KEY_F24",
-                "KEY_PLAYCD",
-                "KEY_PAUSECD",
-                "KEY_PROG3",
-                "KEY_PROG4",
-                "KEY_ALL_APPLICATIONS",
-                "KEY_SUSPEND",
-                "KEY_CLOSE",
-                "KEY_PLAY",
-                "KEY_FASTFORWARD",
-                "KEY_BASSBOOST",
-                "KEY_PRINT",
-                "KEY_HP",
-                "KEY_CAMERA",
-                "KEY_SOUND",
-                "KEY_QUESTION",
-                "KEY_EMAIL",
-                "KEY_CHAT",
-                "KEY_SEARCH",
-                "KEY_CONNECT",
-                "KEY_FINANCE",
-                "KEY_SPORT",
-                "KEY_SHOP",
-                "KEY_ALTERASE",
-                "KEY_CANCEL",
-                "KEY_BRIGHTNESSDOWN",
-                "KEY_BRIGHTNESSUP",
-                "KEY_MEDIA",
-                "KEY_SWITCHVIDEOMODE",
-                "KEY_KBDILLUMTOGGLE",
-                "KEY_KBDILLUMDOWN",
-                "KEY_KBDILLUMUP",
-                "KEY_SEND",
-                "KEY_REPLY",
-                "KEY_FORWARDMAIL",
-                "KEY_SAVE",
-                "KEY_DOCUMENTS",
-                "KEY_BATTERY",
-                "KEY_BLUETOOTH",
-                "KEY_WLAN",
-                "KEY_UWB",
-                "KEY_UNKNOWN",
-                "KEY_VIDEO_NEXT",
-                "KEY_VIDEO_PREV",
-                "KEY_BRIGHTNESS_CYCLE",
-                "KEY_BRIGHTNESS_AUTO",
-                "KEY_DISPLAY_OFF",
-                "KEY_WWAN",
-                "KEY_RFKILL",
-                "KEY_MICMUTE",
-                "BTN_MISC",
-                "BTN0",
-                "BTN1",
-                "BTN2",
-                "BTN3",
-                "BTN4",
-                "BTN5",
-                "BTN6",
-                "BTN7",
-                "BTN8",
-                "BTN9",
-                "BTN_MOUSE",
-                "BTN_LEFT",
-                "BTN_RIGHT",
-                "BTN_MIDDLE",
-                "BTN_SIDE",
-                "BTN_EXTRA",
-                "BTN_FORWARD",
-                "BTN_BACK",
-                "BTN_TASK",
-                "BTN_JOYSTICK",
-                "BTN_TRIGGER",
-                "BTN_THUMB",
-                "BTN_THUMB2",
-                "BTN_TOP",
-                "BTN_TOP2",
-                "BTN_PINKIE",
-                "BTN_BASE",
-                "BTN_BASE2",
-                "BTN_BASE3",
-                "BTN_BASE4",
-                "BTN_BASE5",
-                "BTN_BASE6",
-                "BTN_DEAD",
-                "BTN_GAMEPAD",
-                "BTN_SOUTH",
-                "BTN_EAST",
-                "BTN_C",
-                "BTN_NORTH",
-                "BTN_WEST",
-                "BTN_Z",
-                "BTN_TL",
-                "BTN_TR",
-                "BTN_TL2",
-                "BTN_TR2",
-                "BTN_SELECT",
-                "BTN_START",
-                "BTN_MODE",
-                "BTN_THUMBL",
-                "BTN_THUMBR",
-                "BTN_DIGI",
-                "BTN_TOOL_PEN",
-                "BTN_TOOL_RUBBER",
-                "BTN_TOOL_BRUSH",
-                "BTN_TOOL_PENCIL",
-                "BTN_TOOL_AIRBRUSH",
-                "BTN_TOOL_FINGER",
-                "BTN_TOOL_MOUSE",
-                "BTN_TOOL_LENS",
-                "BTN_TOOL_QUINTTAP",
-                "BTN_STYLUS3",
-                "BTN_TOUCH",
-                "BTN_STYLUS",
-                "BTN_STYLUS2",
-                "BTN_TOOL_DOUBLETAP",
-                "BTN_TOOL_TRIPLETAP",
-                "BTN_TOOL_QUADTAP",
-                "BTN_WHEEL",
-                "BTN_GEAR_DOWN",
-                "BTN_GEAR_UP",
-                "KEY_OK",
-                "KEY_SELECT",
-                "KEY_GOTO",
-                "KEY_CLEAR",
-                "KEY_POWER2",
-                "KEY_OPTION",
-                "KEY_INFO",
-                "KEY_TIME",
-                "KEY_VENDOR",
-                "KEY_ARCHIVE",
-                "KEY_PROGRAM",
-                "KEY_CHANNEL",
-                "KEY_FAVORITES",
-                "KEY_EPG",
-                "KEY_PVR",
-                "KEY_MHP",
-                "KEY_LANGUAGE",
-                "KEY_TITLE",
-                "KEY_SUBTITLE",
-                "KEY_ANGLE",
-                "KEY_FULL_SCREEN",
-                "KEY_MODE",
-                "KEY_KEYBOARD",
-                "KEY_ASPECT_RATIO",
-                "KEY_PC",
-                "KEY_TV",
-                "KEY_TV2",
-                "KEY_VCR",
-                "KEY_VCR2",
-                "KEY_SAT",
-                "KEY_SAT2",
-                "KEY_CD",
-                "KEY_TAPE",
-                "KEY_RADIO",
-                "KEY_TUNER",
-                "KEY_PLAYER",
-                "KEY_TEXT",
-                "KEY_DVD",
-                "KEY_AUX",
-                "KEY_MP3",
-                "KEY_AUDIO",
-                "KEY_VIDEO",
-                "KEY_DIRECTORY",
-                "KEY_LIST",
-                "KEY_MEMO",
-                "KEY_CALENDAR",
-                "KEY_RED",
-                "KEY_GREEN",
-                "KEY_YELLOW",
-                "KEY_BLUE",
-                "KEY_CHANNELUP",
-                "KEY_CHANNELDOWN",
-                "KEY_FIRST",
-                "KEY_LAST",
-                "KEY_AB",
-                "KEY_NEXT",
-                "KEY_RESTART",
-                "KEY_SLOW",
-                "KEY_SHUFFLE",
-                "KEY_BREAK",
-                "KEY_PREVIOUS",
-                "KEY_DIGITS",
-                "KEY_TEEN",
-                "KEY_TWEN",
-                "KEY_VIDEOPHONE",
-                "KEY_GAMES",
-                "KEY_ZOOMIN",
-                "KEY_ZOOMOUT",
-                "KEY_ZOOMRESET",
-                "KEY_WORDPROCESSOR",
-                "KEY_EDITOR",
-                "KEY_SPREADSHEET",
-                "KEY_GRAPHICSEDITOR",
-                "KEY_PRESENTATION",
-                "KEY_DATABASE",
-                "KEY_NEWS",
-                "KEY_VOICEMAIL",
-                "KEY_ADDRESSBOOK",
-                "KEY_MESSENGER",
-                "KEY_DISPLAYTOGGLE",
-                "KEY_SPELLCHECK",
-                "KEY_LOGOFF",
-                "KEY_DOLLAR",
-                "KEY_EURO",
-                "KEY_FRAMEBACK",
-                "KEY_FRAMEFORWARD",
-                "KEY_CONTEXT_MENU",
-                "KEY_MEDIA_REPEAT",
-                "KEY10CHANNELSUP",
-                "KEY10CHANNELSDOWN",
-                "KEY_IMAGES",
-                "KEY_NOTIFICATION_CENTER",
-                "KEY_PICKUP_PHONE",
-                "KEY_HANGUP_PHONE",
-                "KEY_LINK_PHONE",
-                "KEY_DEL_EOL",
-                "KEY_DEL_EOS",
-                "KEY_INS_LINE",
-                "KEY_DEL_LINE",
-                "KEY_FN",
-                "KEY_FN_ESC",
-                "KEY_FN_F1",
-                "KEY_FN_F2",
-                "KEY_FN_F3",
-                "KEY_FN_F4",
-                "KEY_FN_F5",
-                "KEY_FN_F6",
-                "KEY_FN_F7",
-                "KEY_FN_F8",
-                "KEY_FN_F9",
-                "KEY_FN_F10",
-                "KEY_FN_F11",
-                "KEY_FN_F12",
-                "KEY_FN1",
-                "KEY_FN2",
-                "KEY_FN_D",
-                "KEY_FN_E",
-                "KEY_FN_F",
-                "KEY_FN_S",
-                "KEY_FN_B",
-                "KEY_FN_RIGHT_SHIFT",
-                "KEY_BRL_DOT1",
-                "KEY_BRL_DOT2",
-                "KEY_BRL_DOT3",
-                "KEY_BRL_DOT4",
-                "KEY_BRL_DOT5",
-                "KEY_BRL_DOT6",
-                "KEY_BRL_DOT7",
-                "KEY_BRL_DOT8",
-                "KEY_BRL_DOT9",
-                "KEY_BRL_DOT10",
-                "KEY_NUMERIC0",
-                "KEY_NUMERIC1",
-                "KEY_NUMERIC2",
-                "KEY_NUMERIC3",
-                "KEY_NUMERIC4",
-                "KEY_NUMERIC5",
-                "KEY_NUMERIC6",
-                "KEY_NUMERIC7",
-                "KEY_NUMERIC8",
-                "KEY_NUMERIC9",
-                "KEY_NUMERIC_STAR",
-                "KEY_NUMERIC_POUND",
-                "KEY_NUMERIC_A",
-                "KEY_NUMERIC_B",
-                "KEY_NUMERIC_C",
-                "KEY_NUMERIC_D",
-                "KEY_CAMERA_FOCUS",
-                "KEY_WPS_BUTTON",
-                "KEY_TOUCHPAD_TOGGLE",
-                "KEY_TOUCHPAD_ON",
-                "KEY_TOUCHPAD_OFF",
-                "KEY_CAMERA_ZOOMIN",
-                "KEY_CAMERA_ZOOMOUT",
-                "KEY_CAMERA_UP",
-                "KEY_CAMERA_DOWN",
-                "KEY_CAMERA_LEFT",
-                "KEY_CAMERA_RIGHT",
-                "KEY_ATTENDANT_ON",
-                "KEY_ATTENDANT_OFF",
-                "KEY_ATTENDANT_TOGGLE",
-                "KEY_LIGHTS_TOGGLE",
-                "BTN_DPAD_UP",
-                "BTN_DPAD_DOWN",
-                "BTN_DPAD_LEFT",
-                "BTN_DPAD_RIGHT",
-                "KEY_ALS_TOGGLE",
-                "KEY_ROTATE_LOCK_TOGGLE",
-                "KEY_REFRESH_RATE_TOGGLE",
-                "KEY_BUTTONCONFIG",
-                "KEY_TASKMANAGER",
-                "KEY_JOURNAL",
-                "KEY_CONTROLPANEL",
-                "KEY_APPSELECT",
-                "KEY_SCREENSAVER",
-                "KEY_VOICECOMMAND",
-                "KEY_ASSISTANT",
-                "KEY_KBD_LAYOUT_NEXT",
-                "KEY_EMOJI_PICKER",
-                "KEY_DICTATE",
-                "KEY_CAMERA_ACCESS_ENABLE",
-                "KEY_CAMERA_ACCESS_DISABLE",
-                "KEY_CAMERA_ACCESS_TOGGLE",
-                "KEY_ACCESSIBILITY",
-                "KEY_DO_NOT_DISTURB",
-                "KEY_BRIGHTNESS_MIN",
-                "KEY_BRIGHTNESS_MAX",
-                "KEY_KBDINPUTASSIST_PREV",
-                "KEY_KBDINPUTASSIST_NEXT",
-                "KEY_KBDINPUTASSIST_PREVGROUP",
-                "KEY_KBDINPUTASSIST_NEXTGROUP",
-                "KEY_KBDINPUTASSIST_ACCEPT",
-                "KEY_KBDINPUTASSIST_CANCEL",
-                "KEY_RIGHT_UP",
-                "KEY_RIGHT_DOWN",
-                "KEY_LEFT_UP",
-                "KEY_LEFT_DOWN",
-                "KEY_ROOT_MENU",
-                "KEY_MEDIA_TOP_MENU",
-                "KEY_NUMERIC11",
-                "KEY_NUMERIC12",
-                "KEY_AUDIO_DESC",
-                "KEY3D_MODE",
-                "KEY_NEXT_FAVORITE",
-                "KEY_STOP_RECORD",
-                "KEY_PAUSE_RECORD",
-                "KEY_VOD",
-                "KEY_UNMUTE",
-                "KEY_FASTREVERSE",
-                "KEY_SLOWREVERSE",
-                "KEY_DATA",
-                "KEY_ONSCREEN_KEYBOARD",
-                "KEY_PRIVACY_SCREEN_TOGGLE",
-                "KEY_SELECTIVE_SCREENSHOT",
-                "KEY_NEXT_ELEMENT",
-                "KEY_PREVIOUS_ELEMENT",
-                "KEY_AUTOPILOT_ENGAGE_TOGGLE",
-                "KEY_MARK_WAYPOINT",
-                "KEY_SOS",
-                "KEY_NAV_CHART",
-                "KEY_FISHING_CHART",
-                "KEY_SINGLE_RANGE_RADAR",
-                "KEY_DUAL_RANGE_RADAR",
-                "KEY_RADAR_OVERLAY",
-                "KEY_TRADITIONAL_SONAR",
-                "KEY_CLEARVU_SONAR",
-                "KEY_SIDEVU_SONAR",
-                "KEY_NAV_INFO",
-                "KEY_BRIGHTNESS_MENU",
-                "KEY_MACRO1",
-                "KEY_MACRO2",
-                "KEY_MACRO3",
-                "KEY_MACRO4",
-                "KEY_MACRO5",
-                "KEY_MACRO6",
-                "KEY_MACRO7",
-                "KEY_MACRO8",
-                "KEY_MACRO9",
-                "KEY_MACRO10",
-                "KEY_MACRO11",
-                "KEY_MACRO12",
-                "KEY_MACRO13",
-                "KEY_MACRO14",
-                "KEY_MACRO15",
-                "KEY_MACRO16",
-                "KEY_MACRO17",
-                "KEY_MACRO18",
-                "KEY_MACRO19",
-                "KEY_MACRO20",
-                "KEY_MACRO21",
-                "KEY_MACRO22",
-                "KEY_MACRO23",
-                "KEY_MACRO24",
-                "KEY_MACRO25",
-                "KEY_MACRO26",
-                "KEY_MACRO27",
-                "KEY_MACRO28",
-                "KEY_MACRO29",
-                "KEY_MACRO30",
-                "KEY_MACRO_RECORD_START",
-                "KEY_MACRO_RECORD_STOP",
-                "KEY_MACRO_PRESET_CYCLE",
-                "KEY_MACRO_PRESET1",
-                "KEY_MACRO_PRESET2",
-                "KEY_MACRO_PRESET3",
-                "KEY_KBD_LCD_MENU1",
-                "KEY_KBD_LCD_MENU2",
-                "KEY_KBD_LCD_MENU3",
-                "KEY_KBD_LCD_MENU4",
-                "KEY_KBD_LCD_MENU5",
-                "BTN_TRIGGER_HAPPY",
-                "BTN_TRIGGER_HAPPY1",
-                "BTN_TRIGGER_HAPPY2",
-                "BTN_TRIGGER_HAPPY3",
-                "BTN_TRIGGER_HAPPY4",
-                "BTN_TRIGGER_HAPPY5",
-                "BTN_TRIGGER_HAPPY6",
-                "BTN_TRIGGER_HAPPY7",
-                "BTN_TRIGGER_HAPPY8",
-                "BTN_TRIGGER_HAPPY9",
-                "BTN_TRIGGER_HAPPY10",
-                "BTN_TRIGGER_HAPPY11",
-                "BTN_TRIGGER_HAPPY12",
-                "BTN_TRIGGER_HAPPY13",
-                "BTN_TRIGGER_HAPPY14",
-                "BTN_TRIGGER_HAPPY15",
-                "BTN_TRIGGER_HAPPY16",
-                "BTN_TRIGGER_HAPPY17",
-                "BTN_TRIGGER_HAPPY18",
-                "BTN_TRIGGER_HAPPY19",
-                "BTN_TRIGGER_HAPPY20",
-                "BTN_TRIGGER_HAPPY21",
-                "BTN_TRIGGER_HAPPY22",
-                "BTN_TRIGGER_HAPPY23",
-                "BTN_TRIGGER_HAPPY24",
-                "BTN_TRIGGER_HAPPY25",
-                "BTN_TRIGGER_HAPPY26",
-                "BTN_TRIGGER_HAPPY27",
-                "BTN_TRIGGER_HAPPY28",
-                "BTN_TRIGGER_HAPPY29",
-                "BTN_TRIGGER_HAPPY30",
-                "BTN_TRIGGER_HAPPY31",
-                "BTN_TRIGGER_HAPPY32",
-                "BTN_TRIGGER_HAPPY33",
-                "BTN_TRIGGER_HAPPY34",
-                "BTN_TRIGGER_HAPPY35",
-                "BTN_TRIGGER_HAPPY36",
-                "BTN_TRIGGER_HAPPY37",
-                "BTN_TRIGGER_HAPPY38",
-                "BTN_TRIGGER_HAPPY39",
-                "BTN_TRIGGER_HAPPY40",
-                "REL_X",
-                "REL_Y",
-                "REL_Z",
-                "REL_RX",
-                "REL_RY",
-                "REL_RZ",
-                "REL_HWHEEL",
-                "REL_DIAL",
-                "REL_WHEEL",
-                "REL_MISC",
-                "REL_RESERVED",
-                "REL_WHEEL_HI_RES",
-                "REL_HWHEEL_HI_RES",
-                "ABS_X",
-                "ABS_Y",
-                "ABS_Z",
-                "ABS_RX",
-                "ABS_RY",
-                "ABS_RZ",
-                "ABS_THROTTLE",
-                "ABS_RUDDER",
-                "ABS_WHEEL",
-                "ABS_GAS",
-                "ABS_BRAKE",
-                "ABS_HAT0X",
-                "ABS_HAT0Y",
-                "ABS_HAT1X",
-                "ABS_HAT1Y",
-                "ABS_HAT2X",
-                "ABS_HAT2Y",
-                "ABS_HAT3X",
-                "ABS_HAT3Y",
-                "ABS_PRESSURE",
-                "ABS_DISTANCE",
-                "ABS_TILT_X",
-                "ABS_TILT_Y",
-                "ABS_TOOL_WIDTH",
-                "ABS_VOLUME",
-                "ABS_PROFILE",
-                "ABS_MISC",
-                "ABS_RESERVED",
-                "ABS_MT_SLOT",
-                "ABS_MT_TOUCH_MAJOR",
-                "ABS_MT_TOUCH_MINOR",
-                "ABS_MT_WIDTH_MAJOR",
-                "ABS_MT_WIDTH_MINOR",
-                "ABS_MT_ORIENTATION",
-                "ABS_MT_POSITION_X",
-                "ABS_MT_POSITION_Y",
-                "ABS_MT_TOOL_TYPE",
-                "ABS_MT_BLOB_ID",
-                "ABS_MT_TRACKING_ID",
-                "ABS_MT_PRESSURE",
-                "ABS_MT_DISTANCE",
-                "ABS_MT_TOOL_X",
-                "ABS_MT_TOOL_Y",
-                "SW_LID",
-                "SW_TABLET_MODE",
-                "SW_HEADPHONE_INSERT",
-                "SW_RFKILL_ALL",
-                "SW_MICROPHONE_INSERT",
-                "SW_DOCK",
-                "SW_LINEOUT_INSERT",
-                "SW_JACK_PHYSICAL_INSERT",
-                "SW_VIDEOOUT_INSERT",
-                "SW_CAMERA_LENS_COVER",
-                "SW_KEYPAD_SLIDE",
-                "SW_FRONT_PROXIMITY",
-                "SW_ROTATE_LOCK",
-                "SW_LINEIN_INSERT",
-                "SW_MUTE_DEVICE",
-                "SW_PEN_INSERTED",
-                "SW_MACHINE_COVER",
-                "MSC_SERIAL",
-                "MSC_PULSELED",
-                "MSC_GESTURE",
-                "MSC_RAW",
-                "MSC_SCAN",
-                "MSC_TIMESTAMP",
-                "LED_NUML",
-                "LED_CAPSL",
-                "LED_SCROLLL",
-                "LED_COMPOSE",
-                "LED_KANA",
-                "LED_SLEEP",
-                "LED_SUSPEND",
-                "LED_MUTE",
-                "LED_MISC",
-                "LED_MAIL",
-                "LED_CHARGING",
-                "REP_DELAY",
-                "REP_PERIOD",
-                "SND_CLICK",
-                "SND_BELL",
-                "SND_TONE"
-            ]
-        },
-        "EventType": {
-            "oneOf": [
-                {
-                    "description": "A bookkeeping event. Usually not important to applications.",
-                    "type": "string",
-                    "enum": ["SYNC"]
-                },
-                {
-                    "description": "A key changed state. A key, or button, is usually a momentary switch (in the circuit sense). It has two states: down, or up. There are events for when keys are pressed (become down) and released (become up). There are also \"key repeats\", where multiple events are sent while a key is down.",
-                    "type": "string",
-                    "enum": ["KEY"]
-                },
-                {
-                    "description": "Movement on a relative axis. There is no absolute coordinate frame, just the fact that there was a change of a certain amount of units. Used for things like mouse movement or scroll wheels.",
-                    "type": "string",
-                    "enum": ["REL"]
-                },
-                {
-                    "description": "Movement on an absolute axis. Used for things such as touch events and joysticks.",
-                    "type": "string",
-                    "enum": ["ABS"]
-                },
-                {
-                    "description": "Miscellaneous events that don't fall into other categories. For example, Key presses may send `MSC_SCAN` events before each KEY event",
-                    "type": "string",
-                    "enum": ["MSC"]
-                },
-                {
-                    "description": "Change in a switch value. Switches are boolean conditions and usually correspond to a toggle switch of some kind in hardware.",
-                    "type": "string",
-                    "enum": ["SW"]
-                },
-                {
-                    "description": "An LED was toggled.",
-                    "type": "string",
-                    "enum": ["LED"]
-                },
-                {
-                    "description": "A sound was made.",
-                    "type": "string",
-                    "enum": ["SND"]
-                },
-                {
-                    "description": "Metadata about key repeat configuration.",
-                    "type": "string",
-                    "enum": ["REP"]
-                },
-                {
-                    "description": "Sent to the device with a previusly obtained effect id as a code in order to toggle the effect.",
-                    "type": "string",
-                    "enum": ["FF"]
-                },
-                {
-                    "description": "Used to trigger power events such as suspend or power off.",
-                    "type": "string",
-                    "enum": ["PWR"]
-                },
-                {
-                    "description": "A force feedback effect's state changed.",
-                    "type": "string",
-                    "enum": ["FF_STATUS"]
-                },
-                {
-                    "description": "An event originating from uinput.",
-                    "type": "string",
-                    "enum": ["UINPUT"]
-                }
-            ]
-        },
-        "GamepadCapability": {
-            "type": "object",
-            "properties": {
-                "accelerometer": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/AccelerometerCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "axis": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/AxisCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "button": {
-                    "type": ["string", "null"]
-                },
-                "gyro": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/GyroCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "trigger": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/TriggerCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "dial": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/DialCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                }
-            }
-        },
-        "GyroCapability": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-                "axis": {
-                    "type": ["string", "null"]
-                },
-                "deadzone": {
-                    "type": ["number", "null"],
-                    "format": "double"
-                },
-                "direction": {
-                    "type": ["string", "null"]
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "HidrawConfig": {
-            "description": "A [HidrawConfig] defines how to decode a particular event in an HID input report.",
-            "type": "object",
-            "required": ["bit_offset", "byte_start", "input_type", "report_id"],
-            "properties": {
-                "bit_offset": {
-                    "type": "integer",
-                    "format": "uint8",
-                    "minimum": 0.0
-                },
-                "byte_start": {
-                    "type": "integer",
-                    "format": "uint64",
-                    "minimum": 0.0
-                },
-                "input_type": {
-                    "type": "string"
-                },
-                "report_id": {
-                    "type": "integer",
-                    "format": "uint32",
-                    "minimum": 0.0
-                }
-            }
-        },
-        "MappingType": {
-            "description": "[MappingType] defines how source events should be translated",
-            "type": "object",
-            "properties": {
-                "evdev": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/EvdevMappingType"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                }
-            }
-        },
-        "MouseCapability": {
-            "type": "object",
-            "properties": {
-                "button": {
-                    "type": ["string", "null"]
-                },
-                "motion": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/MouseMotionCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                }
-            }
-        },
-        "MouseMotionCapability": {
-            "type": "object",
-            "properties": {
-                "direction": {
-                    "type": ["string", "null"]
-                },
-                "speed_pps": {
-                    "type": ["integer", "null"],
-                    "format": "uint64",
-                    "minimum": 0.0
-                }
-            }
-        },
-        "SourceMapping": {
-            "description": "A [SourceMapping] defines input events to be mapped",
-            "type": "object",
-            "properties": {
-                "capability": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/CapabilityConfig"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "evdev": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/EvdevConfig"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                },
-                "hidraw": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/HidrawConfig"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                }
-            }
-        },
-        "TouchCapability": {
-            "type": "object",
-            "properties": {
-                "button": {
-                    "type": ["string", "null"]
-                },
-                "motion": {
-                    "anyOf": [
-                        {
-                            "$ref": "#/definitions/TouchMotionCapability"
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ]
-                }
-            }
-        },
-        "TouchMotionCapability": {
-            "type": "object",
-            "properties": {
-                "region": {
-                    "type": ["string", "null"]
-                },
-                "speed_pps": {
-                    "type": ["integer", "null"],
-                    "format": "uint64",
-                    "minimum": 0.0
-                }
-            }
-        },
-        "TouchpadCapability": {
-            "type": "object",
-            "required": ["name", "touch"],
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "touch": {
-                    "$ref": "#/definitions/TouchCapability"
-                }
-            }
-        },
-        "TriggerCapability": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-                "deadzone": {
-                    "type": ["number", "null"],
-                    "format": "double"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "ValueType": {
-            "type": "string",
-            "enum": [
-                "button",
-                "trigger",
-                "joystick_x",
-                "joystick_y",
-                "imu_x",
-                "imu_y",
-                "imu_z"
-            ]
+        "name": {
+          "type": "string"
         }
+      }
+    },
+    "AxisDirection": {
+      "description": "The AxisDirection can be used to map one half of an axis to a particular capability. For example, you can map the negative values of `ABS_Y` to the `DPadDown` capability and the positive values of `ABS_Y` to `DPadUp`.",
+      "type": "string",
+      "enum": [
+        "none",
+        "positive",
+        "negative"
+      ]
+    },
+    "CapabilityConfig": {
+      "type": "object",
+      "properties": {
+        "dbus": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gamepad": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GamepadCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keyboard": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mouse": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MouseCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "touchpad": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TouchpadCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "touchscreen": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TouchCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "CapabilityMapping": {
+      "description": "A [CapabilityMapping] defines how to map source input to an inputplumber capability.",
+      "type": "object",
+      "required": [
+        "name",
+        "source_events",
+        "target_event"
+      ],
+      "properties": {
+        "mapping_type": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MappingType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "source_events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceMapping"
+          }
+        },
+        "target_event": {
+          "$ref": "#/definitions/CapabilityConfig"
+        }
+      }
+    },
+    "DialCapability": {
+      "description": "The Dial direction can be used to map clockwise or counter-clockwise turns.",
+      "type": "object",
+      "required": ["name", "direction"],
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "EvdevConfig": {
+      "description": "An [EvdevConfig] defines a matching evdev input event",
+      "type": "object",
+      "required": [
+        "event_code",
+        "event_type",
+        "value_type"
+      ],
+      "properties": {
+        "axis_direction": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AxisDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_code": {
+          "$ref": "#/definitions/EventCode"
+        },
+        "event_type": {
+          "$ref": "#/definitions/EventType"
+        },
+        "event_value": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "value_type": {
+          "$ref": "#/definitions/ValueType"
+        }
+      }
+    },
+    "EvdevMappingType": {
+      "description": "How evdev source events should be translated",
+      "oneOf": [
+        {
+          "description": "Source events will be treated as an inclusive match to emit a single inputplumber event. Events emitted immediately upon match.",
+          "type": "string",
+          "enum": [
+            "chord"
+          ]
+        },
+        {
+          "description": "Source events will be treated as an inclusive match to emit a single inputplumber event. Events emitted after button is released.",
+          "type": "string",
+          "enum": [
+            "delayed_chord"
+          ]
+        },
+        {
+          "description": "Multiple source events will emit the same inputplumber event. Useful for mapping axis where different directions are triggered by separate events or multiple events to the same inputplumber event.",
+          "type": "string",
+          "enum": [
+            "multi_source"
+          ]
+        }
+      ]
+    },
+    "EventCode": {
+      "type": "string",
+      "enum": [
+        "SYN_REPORT",
+        "SYN_CONFIG",
+        "SYN_MT_REPORT",
+        "SYN_DROPPED",
+        "KEY_RESERVED",
+        "KEY_ESC",
+        "KEY1",
+        "KEY2",
+        "KEY3",
+        "KEY4",
+        "KEY5",
+        "KEY6",
+        "KEY7",
+        "KEY8",
+        "KEY9",
+        "KEY0",
+        "KEY_MINUS",
+        "KEY_EQUAL",
+        "KEY_BACKSPACE",
+        "KEY_TAB",
+        "KEY_Q",
+        "KEY_W",
+        "KEY_E",
+        "KEY_R",
+        "KEY_T",
+        "KEY_Y",
+        "KEY_U",
+        "KEY_I",
+        "KEY_O",
+        "KEY_P",
+        "KEY_LEFTBRACE",
+        "KEY_RIGHTBRACE",
+        "KEY_ENTER",
+        "KEY_LEFTCTRL",
+        "KEY_A",
+        "KEY_S",
+        "KEY_D",
+        "KEY_F",
+        "KEY_G",
+        "KEY_H",
+        "KEY_J",
+        "KEY_K",
+        "KEY_L",
+        "KEY_SEMICOLON",
+        "KEY_APOSTROPHE",
+        "KEY_GRAVE",
+        "KEY_LEFTSHIFT",
+        "KEY_BACKSLASH",
+        "KEY_Z",
+        "KEY_X",
+        "KEY_C",
+        "KEY_V",
+        "KEY_B",
+        "KEY_N",
+        "KEY_M",
+        "KEY_COMMA",
+        "KEY_DOT",
+        "KEY_SLASH",
+        "KEY_RIGHTSHIFT",
+        "KEY_KPASTERISK",
+        "KEY_LEFTALT",
+        "KEY_SPACE",
+        "KEY_CAPSLOCK",
+        "KEY_F1",
+        "KEY_F2",
+        "KEY_F3",
+        "KEY_F4",
+        "KEY_F5",
+        "KEY_F6",
+        "KEY_F7",
+        "KEY_F8",
+        "KEY_F9",
+        "KEY_F10",
+        "KEY_NUMLOCK",
+        "KEY_SCROLLLOCK",
+        "KEY_KP7",
+        "KEY_KP8",
+        "KEY_KP9",
+        "KEY_KPMINUS",
+        "KEY_KP4",
+        "KEY_KP5",
+        "KEY_KP6",
+        "KEY_KPPLUS",
+        "KEY_KP1",
+        "KEY_KP2",
+        "KEY_KP3",
+        "KEY_KP0",
+        "KEY_KPDOT",
+        "KEY_ZENKAKUHANKAKU",
+        "KEY102ND",
+        "KEY_F11",
+        "KEY_F12",
+        "KEY_RO",
+        "KEY_KATAKANA",
+        "KEY_HIRAGANA",
+        "KEY_HENKAN",
+        "KEY_KATAKANAHIRAGANA",
+        "KEY_MUHENKAN",
+        "KEY_KPJPCOMMA",
+        "KEY_KPENTER",
+        "KEY_RIGHTCTRL",
+        "KEY_KPSLASH",
+        "KEY_SYSRQ",
+        "KEY_RIGHTALT",
+        "KEY_LINEFEED",
+        "KEY_HOME",
+        "KEY_UP",
+        "KEY_PAGEUP",
+        "KEY_LEFT",
+        "KEY_RIGHT",
+        "KEY_END",
+        "KEY_DOWN",
+        "KEY_PAGEDOWN",
+        "KEY_INSERT",
+        "KEY_DELETE",
+        "KEY_MACRO",
+        "KEY_MUTE",
+        "KEY_VOLUMEDOWN",
+        "KEY_VOLUMEUP",
+        "KEY_POWER",
+        "KEY_KPEQUAL",
+        "KEY_KPPLUSMINUS",
+        "KEY_PAUSE",
+        "KEY_SCALE",
+        "KEY_KPCOMMA",
+        "KEY_HANGEUL",
+        "KEY_HANJA",
+        "KEY_YEN",
+        "KEY_LEFTMETA",
+        "KEY_RIGHTMETA",
+        "KEY_COMPOSE",
+        "KEY_STOP",
+        "KEY_AGAIN",
+        "KEY_PROPS",
+        "KEY_UNDO",
+        "KEY_FRONT",
+        "KEY_COPY",
+        "KEY_OPEN",
+        "KEY_PASTE",
+        "KEY_FIND",
+        "KEY_CUT",
+        "KEY_HELP",
+        "KEY_MENU",
+        "KEY_CALC",
+        "KEY_SETUP",
+        "KEY_SLEEP",
+        "KEY_WAKEUP",
+        "KEY_FILE",
+        "KEY_SENDFILE",
+        "KEY_DELETEFILE",
+        "KEY_XFER",
+        "KEY_PROG1",
+        "KEY_PROG2",
+        "KEY_WWW",
+        "KEY_MSDOS",
+        "KEY_SCREENLOCK",
+        "KEY_ROTATE_DISPLAY",
+        "KEY_CYCLEWINDOWS",
+        "KEY_MAIL",
+        "KEY_BOOKMARKS",
+        "KEY_COMPUTER",
+        "KEY_BACK",
+        "KEY_FORWARD",
+        "KEY_CLOSECD",
+        "KEY_EJECTCD",
+        "KEY_EJECTCLOSECD",
+        "KEY_NEXTSONG",
+        "KEY_PLAYPAUSE",
+        "KEY_PREVIOUSSONG",
+        "KEY_STOPCD",
+        "KEY_RECORD",
+        "KEY_REWIND",
+        "KEY_PHONE",
+        "KEY_ISO",
+        "KEY_CONFIG",
+        "KEY_HOMEPAGE",
+        "KEY_REFRESH",
+        "KEY_EXIT",
+        "KEY_MOVE",
+        "KEY_EDIT",
+        "KEY_SCROLLUP",
+        "KEY_SCROLLDOWN",
+        "KEY_KPLEFTPAREN",
+        "KEY_KPRIGHTPAREN",
+        "KEY_NEW",
+        "KEY_REDO",
+        "KEY_F13",
+        "KEY_F14",
+        "KEY_F15",
+        "KEY_F16",
+        "KEY_F17",
+        "KEY_F18",
+        "KEY_F19",
+        "KEY_F20",
+        "KEY_F21",
+        "KEY_F22",
+        "KEY_F23",
+        "KEY_F24",
+        "KEY_PLAYCD",
+        "KEY_PAUSECD",
+        "KEY_PROG3",
+        "KEY_PROG4",
+        "KEY_ALL_APPLICATIONS",
+        "KEY_SUSPEND",
+        "KEY_CLOSE",
+        "KEY_PLAY",
+        "KEY_FASTFORWARD",
+        "KEY_BASSBOOST",
+        "KEY_PRINT",
+        "KEY_HP",
+        "KEY_CAMERA",
+        "KEY_SOUND",
+        "KEY_QUESTION",
+        "KEY_EMAIL",
+        "KEY_CHAT",
+        "KEY_SEARCH",
+        "KEY_CONNECT",
+        "KEY_FINANCE",
+        "KEY_SPORT",
+        "KEY_SHOP",
+        "KEY_ALTERASE",
+        "KEY_CANCEL",
+        "KEY_BRIGHTNESSDOWN",
+        "KEY_BRIGHTNESSUP",
+        "KEY_MEDIA",
+        "KEY_SWITCHVIDEOMODE",
+        "KEY_KBDILLUMTOGGLE",
+        "KEY_KBDILLUMDOWN",
+        "KEY_KBDILLUMUP",
+        "KEY_SEND",
+        "KEY_REPLY",
+        "KEY_FORWARDMAIL",
+        "KEY_SAVE",
+        "KEY_DOCUMENTS",
+        "KEY_BATTERY",
+        "KEY_BLUETOOTH",
+        "KEY_WLAN",
+        "KEY_UWB",
+        "KEY_UNKNOWN",
+        "KEY_VIDEO_NEXT",
+        "KEY_VIDEO_PREV",
+        "KEY_BRIGHTNESS_CYCLE",
+        "KEY_BRIGHTNESS_AUTO",
+        "KEY_DISPLAY_OFF",
+        "KEY_WWAN",
+        "KEY_RFKILL",
+        "KEY_MICMUTE",
+        "BTN_MISC",
+        "BTN0",
+        "BTN1",
+        "BTN2",
+        "BTN3",
+        "BTN4",
+        "BTN5",
+        "BTN6",
+        "BTN7",
+        "BTN8",
+        "BTN9",
+        "BTN_MOUSE",
+        "BTN_LEFT",
+        "BTN_RIGHT",
+        "BTN_MIDDLE",
+        "BTN_SIDE",
+        "BTN_EXTRA",
+        "BTN_FORWARD",
+        "BTN_BACK",
+        "BTN_TASK",
+        "BTN_JOYSTICK",
+        "BTN_TRIGGER",
+        "BTN_THUMB",
+        "BTN_THUMB2",
+        "BTN_TOP",
+        "BTN_TOP2",
+        "BTN_PINKIE",
+        "BTN_BASE",
+        "BTN_BASE2",
+        "BTN_BASE3",
+        "BTN_BASE4",
+        "BTN_BASE5",
+        "BTN_BASE6",
+        "BTN_DEAD",
+        "BTN_GAMEPAD",
+        "BTN_SOUTH",
+        "BTN_EAST",
+        "BTN_C",
+        "BTN_NORTH",
+        "BTN_WEST",
+        "BTN_Z",
+        "BTN_TL",
+        "BTN_TR",
+        "BTN_TL2",
+        "BTN_TR2",
+        "BTN_SELECT",
+        "BTN_START",
+        "BTN_MODE",
+        "BTN_THUMBL",
+        "BTN_THUMBR",
+        "BTN_DIGI",
+        "BTN_TOOL_PEN",
+        "BTN_TOOL_RUBBER",
+        "BTN_TOOL_BRUSH",
+        "BTN_TOOL_PENCIL",
+        "BTN_TOOL_AIRBRUSH",
+        "BTN_TOOL_FINGER",
+        "BTN_TOOL_MOUSE",
+        "BTN_TOOL_LENS",
+        "BTN_TOOL_QUINTTAP",
+        "BTN_STYLUS3",
+        "BTN_TOUCH",
+        "BTN_STYLUS",
+        "BTN_STYLUS2",
+        "BTN_TOOL_DOUBLETAP",
+        "BTN_TOOL_TRIPLETAP",
+        "BTN_TOOL_QUADTAP",
+        "BTN_WHEEL",
+        "BTN_GEAR_DOWN",
+        "BTN_GEAR_UP",
+        "KEY_OK",
+        "KEY_SELECT",
+        "KEY_GOTO",
+        "KEY_CLEAR",
+        "KEY_POWER2",
+        "KEY_OPTION",
+        "KEY_INFO",
+        "KEY_TIME",
+        "KEY_VENDOR",
+        "KEY_ARCHIVE",
+        "KEY_PROGRAM",
+        "KEY_CHANNEL",
+        "KEY_FAVORITES",
+        "KEY_EPG",
+        "KEY_PVR",
+        "KEY_MHP",
+        "KEY_LANGUAGE",
+        "KEY_TITLE",
+        "KEY_SUBTITLE",
+        "KEY_ANGLE",
+        "KEY_FULL_SCREEN",
+        "KEY_MODE",
+        "KEY_KEYBOARD",
+        "KEY_ASPECT_RATIO",
+        "KEY_PC",
+        "KEY_TV",
+        "KEY_TV2",
+        "KEY_VCR",
+        "KEY_VCR2",
+        "KEY_SAT",
+        "KEY_SAT2",
+        "KEY_CD",
+        "KEY_TAPE",
+        "KEY_RADIO",
+        "KEY_TUNER",
+        "KEY_PLAYER",
+        "KEY_TEXT",
+        "KEY_DVD",
+        "KEY_AUX",
+        "KEY_MP3",
+        "KEY_AUDIO",
+        "KEY_VIDEO",
+        "KEY_DIRECTORY",
+        "KEY_LIST",
+        "KEY_MEMO",
+        "KEY_CALENDAR",
+        "KEY_RED",
+        "KEY_GREEN",
+        "KEY_YELLOW",
+        "KEY_BLUE",
+        "KEY_CHANNELUP",
+        "KEY_CHANNELDOWN",
+        "KEY_FIRST",
+        "KEY_LAST",
+        "KEY_AB",
+        "KEY_NEXT",
+        "KEY_RESTART",
+        "KEY_SLOW",
+        "KEY_SHUFFLE",
+        "KEY_BREAK",
+        "KEY_PREVIOUS",
+        "KEY_DIGITS",
+        "KEY_TEEN",
+        "KEY_TWEN",
+        "KEY_VIDEOPHONE",
+        "KEY_GAMES",
+        "KEY_ZOOMIN",
+        "KEY_ZOOMOUT",
+        "KEY_ZOOMRESET",
+        "KEY_WORDPROCESSOR",
+        "KEY_EDITOR",
+        "KEY_SPREADSHEET",
+        "KEY_GRAPHICSEDITOR",
+        "KEY_PRESENTATION",
+        "KEY_DATABASE",
+        "KEY_NEWS",
+        "KEY_VOICEMAIL",
+        "KEY_ADDRESSBOOK",
+        "KEY_MESSENGER",
+        "KEY_DISPLAYTOGGLE",
+        "KEY_SPELLCHECK",
+        "KEY_LOGOFF",
+        "KEY_DOLLAR",
+        "KEY_EURO",
+        "KEY_FRAMEBACK",
+        "KEY_FRAMEFORWARD",
+        "KEY_CONTEXT_MENU",
+        "KEY_MEDIA_REPEAT",
+        "KEY10CHANNELSUP",
+        "KEY10CHANNELSDOWN",
+        "KEY_IMAGES",
+        "KEY_NOTIFICATION_CENTER",
+        "KEY_PICKUP_PHONE",
+        "KEY_HANGUP_PHONE",
+        "KEY_LINK_PHONE",
+        "KEY_DEL_EOL",
+        "KEY_DEL_EOS",
+        "KEY_INS_LINE",
+        "KEY_DEL_LINE",
+        "KEY_FN",
+        "KEY_FN_ESC",
+        "KEY_FN_F1",
+        "KEY_FN_F2",
+        "KEY_FN_F3",
+        "KEY_FN_F4",
+        "KEY_FN_F5",
+        "KEY_FN_F6",
+        "KEY_FN_F7",
+        "KEY_FN_F8",
+        "KEY_FN_F9",
+        "KEY_FN_F10",
+        "KEY_FN_F11",
+        "KEY_FN_F12",
+        "KEY_FN1",
+        "KEY_FN2",
+        "KEY_FN_D",
+        "KEY_FN_E",
+        "KEY_FN_F",
+        "KEY_FN_S",
+        "KEY_FN_B",
+        "KEY_FN_RIGHT_SHIFT",
+        "KEY_BRL_DOT1",
+        "KEY_BRL_DOT2",
+        "KEY_BRL_DOT3",
+        "KEY_BRL_DOT4",
+        "KEY_BRL_DOT5",
+        "KEY_BRL_DOT6",
+        "KEY_BRL_DOT7",
+        "KEY_BRL_DOT8",
+        "KEY_BRL_DOT9",
+        "KEY_BRL_DOT10",
+        "KEY_NUMERIC0",
+        "KEY_NUMERIC1",
+        "KEY_NUMERIC2",
+        "KEY_NUMERIC3",
+        "KEY_NUMERIC4",
+        "KEY_NUMERIC5",
+        "KEY_NUMERIC6",
+        "KEY_NUMERIC7",
+        "KEY_NUMERIC8",
+        "KEY_NUMERIC9",
+        "KEY_NUMERIC_STAR",
+        "KEY_NUMERIC_POUND",
+        "KEY_NUMERIC_A",
+        "KEY_NUMERIC_B",
+        "KEY_NUMERIC_C",
+        "KEY_NUMERIC_D",
+        "KEY_CAMERA_FOCUS",
+        "KEY_WPS_BUTTON",
+        "KEY_TOUCHPAD_TOGGLE",
+        "KEY_TOUCHPAD_ON",
+        "KEY_TOUCHPAD_OFF",
+        "KEY_CAMERA_ZOOMIN",
+        "KEY_CAMERA_ZOOMOUT",
+        "KEY_CAMERA_UP",
+        "KEY_CAMERA_DOWN",
+        "KEY_CAMERA_LEFT",
+        "KEY_CAMERA_RIGHT",
+        "KEY_ATTENDANT_ON",
+        "KEY_ATTENDANT_OFF",
+        "KEY_ATTENDANT_TOGGLE",
+        "KEY_LIGHTS_TOGGLE",
+        "BTN_DPAD_UP",
+        "BTN_DPAD_DOWN",
+        "BTN_DPAD_LEFT",
+        "BTN_DPAD_RIGHT",
+        "KEY_ALS_TOGGLE",
+        "KEY_ROTATE_LOCK_TOGGLE",
+        "KEY_REFRESH_RATE_TOGGLE",
+        "KEY_BUTTONCONFIG",
+        "KEY_TASKMANAGER",
+        "KEY_JOURNAL",
+        "KEY_CONTROLPANEL",
+        "KEY_APPSELECT",
+        "KEY_SCREENSAVER",
+        "KEY_VOICECOMMAND",
+        "KEY_ASSISTANT",
+        "KEY_KBD_LAYOUT_NEXT",
+        "KEY_EMOJI_PICKER",
+        "KEY_DICTATE",
+        "KEY_CAMERA_ACCESS_ENABLE",
+        "KEY_CAMERA_ACCESS_DISABLE",
+        "KEY_CAMERA_ACCESS_TOGGLE",
+        "KEY_ACCESSIBILITY",
+        "KEY_DO_NOT_DISTURB",
+        "KEY_BRIGHTNESS_MIN",
+        "KEY_BRIGHTNESS_MAX",
+        "KEY_KBDINPUTASSIST_PREV",
+        "KEY_KBDINPUTASSIST_NEXT",
+        "KEY_KBDINPUTASSIST_PREVGROUP",
+        "KEY_KBDINPUTASSIST_NEXTGROUP",
+        "KEY_KBDINPUTASSIST_ACCEPT",
+        "KEY_KBDINPUTASSIST_CANCEL",
+        "KEY_RIGHT_UP",
+        "KEY_RIGHT_DOWN",
+        "KEY_LEFT_UP",
+        "KEY_LEFT_DOWN",
+        "KEY_ROOT_MENU",
+        "KEY_MEDIA_TOP_MENU",
+        "KEY_NUMERIC11",
+        "KEY_NUMERIC12",
+        "KEY_AUDIO_DESC",
+        "KEY3D_MODE",
+        "KEY_NEXT_FAVORITE",
+        "KEY_STOP_RECORD",
+        "KEY_PAUSE_RECORD",
+        "KEY_VOD",
+        "KEY_UNMUTE",
+        "KEY_FASTREVERSE",
+        "KEY_SLOWREVERSE",
+        "KEY_DATA",
+        "KEY_ONSCREEN_KEYBOARD",
+        "KEY_PRIVACY_SCREEN_TOGGLE",
+        "KEY_SELECTIVE_SCREENSHOT",
+        "KEY_NEXT_ELEMENT",
+        "KEY_PREVIOUS_ELEMENT",
+        "KEY_AUTOPILOT_ENGAGE_TOGGLE",
+        "KEY_MARK_WAYPOINT",
+        "KEY_SOS",
+        "KEY_NAV_CHART",
+        "KEY_FISHING_CHART",
+        "KEY_SINGLE_RANGE_RADAR",
+        "KEY_DUAL_RANGE_RADAR",
+        "KEY_RADAR_OVERLAY",
+        "KEY_TRADITIONAL_SONAR",
+        "KEY_CLEARVU_SONAR",
+        "KEY_SIDEVU_SONAR",
+        "KEY_NAV_INFO",
+        "KEY_BRIGHTNESS_MENU",
+        "KEY_MACRO1",
+        "KEY_MACRO2",
+        "KEY_MACRO3",
+        "KEY_MACRO4",
+        "KEY_MACRO5",
+        "KEY_MACRO6",
+        "KEY_MACRO7",
+        "KEY_MACRO8",
+        "KEY_MACRO9",
+        "KEY_MACRO10",
+        "KEY_MACRO11",
+        "KEY_MACRO12",
+        "KEY_MACRO13",
+        "KEY_MACRO14",
+        "KEY_MACRO15",
+        "KEY_MACRO16",
+        "KEY_MACRO17",
+        "KEY_MACRO18",
+        "KEY_MACRO19",
+        "KEY_MACRO20",
+        "KEY_MACRO21",
+        "KEY_MACRO22",
+        "KEY_MACRO23",
+        "KEY_MACRO24",
+        "KEY_MACRO25",
+        "KEY_MACRO26",
+        "KEY_MACRO27",
+        "KEY_MACRO28",
+        "KEY_MACRO29",
+        "KEY_MACRO30",
+        "KEY_MACRO_RECORD_START",
+        "KEY_MACRO_RECORD_STOP",
+        "KEY_MACRO_PRESET_CYCLE",
+        "KEY_MACRO_PRESET1",
+        "KEY_MACRO_PRESET2",
+        "KEY_MACRO_PRESET3",
+        "KEY_KBD_LCD_MENU1",
+        "KEY_KBD_LCD_MENU2",
+        "KEY_KBD_LCD_MENU3",
+        "KEY_KBD_LCD_MENU4",
+        "KEY_KBD_LCD_MENU5",
+        "BTN_TRIGGER_HAPPY",
+        "BTN_TRIGGER_HAPPY1",
+        "BTN_TRIGGER_HAPPY2",
+        "BTN_TRIGGER_HAPPY3",
+        "BTN_TRIGGER_HAPPY4",
+        "BTN_TRIGGER_HAPPY5",
+        "BTN_TRIGGER_HAPPY6",
+        "BTN_TRIGGER_HAPPY7",
+        "BTN_TRIGGER_HAPPY8",
+        "BTN_TRIGGER_HAPPY9",
+        "BTN_TRIGGER_HAPPY10",
+        "BTN_TRIGGER_HAPPY11",
+        "BTN_TRIGGER_HAPPY12",
+        "BTN_TRIGGER_HAPPY13",
+        "BTN_TRIGGER_HAPPY14",
+        "BTN_TRIGGER_HAPPY15",
+        "BTN_TRIGGER_HAPPY16",
+        "BTN_TRIGGER_HAPPY17",
+        "BTN_TRIGGER_HAPPY18",
+        "BTN_TRIGGER_HAPPY19",
+        "BTN_TRIGGER_HAPPY20",
+        "BTN_TRIGGER_HAPPY21",
+        "BTN_TRIGGER_HAPPY22",
+        "BTN_TRIGGER_HAPPY23",
+        "BTN_TRIGGER_HAPPY24",
+        "BTN_TRIGGER_HAPPY25",
+        "BTN_TRIGGER_HAPPY26",
+        "BTN_TRIGGER_HAPPY27",
+        "BTN_TRIGGER_HAPPY28",
+        "BTN_TRIGGER_HAPPY29",
+        "BTN_TRIGGER_HAPPY30",
+        "BTN_TRIGGER_HAPPY31",
+        "BTN_TRIGGER_HAPPY32",
+        "BTN_TRIGGER_HAPPY33",
+        "BTN_TRIGGER_HAPPY34",
+        "BTN_TRIGGER_HAPPY35",
+        "BTN_TRIGGER_HAPPY36",
+        "BTN_TRIGGER_HAPPY37",
+        "BTN_TRIGGER_HAPPY38",
+        "BTN_TRIGGER_HAPPY39",
+        "BTN_TRIGGER_HAPPY40",
+        "REL_X",
+        "REL_Y",
+        "REL_Z",
+        "REL_RX",
+        "REL_RY",
+        "REL_RZ",
+        "REL_HWHEEL",
+        "REL_DIAL",
+        "REL_WHEEL",
+        "REL_MISC",
+        "REL_RESERVED",
+        "REL_WHEEL_HI_RES",
+        "REL_HWHEEL_HI_RES",
+        "ABS_X",
+        "ABS_Y",
+        "ABS_Z",
+        "ABS_RX",
+        "ABS_RY",
+        "ABS_RZ",
+        "ABS_THROTTLE",
+        "ABS_RUDDER",
+        "ABS_WHEEL",
+        "ABS_GAS",
+        "ABS_BRAKE",
+        "ABS_HAT0X",
+        "ABS_HAT0Y",
+        "ABS_HAT1X",
+        "ABS_HAT1Y",
+        "ABS_HAT2X",
+        "ABS_HAT2Y",
+        "ABS_HAT3X",
+        "ABS_HAT3Y",
+        "ABS_PRESSURE",
+        "ABS_DISTANCE",
+        "ABS_TILT_X",
+        "ABS_TILT_Y",
+        "ABS_TOOL_WIDTH",
+        "ABS_VOLUME",
+        "ABS_PROFILE",
+        "ABS_MISC",
+        "ABS_RESERVED",
+        "ABS_MT_SLOT",
+        "ABS_MT_TOUCH_MAJOR",
+        "ABS_MT_TOUCH_MINOR",
+        "ABS_MT_WIDTH_MAJOR",
+        "ABS_MT_WIDTH_MINOR",
+        "ABS_MT_ORIENTATION",
+        "ABS_MT_POSITION_X",
+        "ABS_MT_POSITION_Y",
+        "ABS_MT_TOOL_TYPE",
+        "ABS_MT_BLOB_ID",
+        "ABS_MT_TRACKING_ID",
+        "ABS_MT_PRESSURE",
+        "ABS_MT_DISTANCE",
+        "ABS_MT_TOOL_X",
+        "ABS_MT_TOOL_Y",
+        "SW_LID",
+        "SW_TABLET_MODE",
+        "SW_HEADPHONE_INSERT",
+        "SW_RFKILL_ALL",
+        "SW_MICROPHONE_INSERT",
+        "SW_DOCK",
+        "SW_LINEOUT_INSERT",
+        "SW_JACK_PHYSICAL_INSERT",
+        "SW_VIDEOOUT_INSERT",
+        "SW_CAMERA_LENS_COVER",
+        "SW_KEYPAD_SLIDE",
+        "SW_FRONT_PROXIMITY",
+        "SW_ROTATE_LOCK",
+        "SW_LINEIN_INSERT",
+        "SW_MUTE_DEVICE",
+        "SW_PEN_INSERTED",
+        "SW_MACHINE_COVER",
+        "MSC_SERIAL",
+        "MSC_PULSELED",
+        "MSC_GESTURE",
+        "MSC_RAW",
+        "MSC_SCAN",
+        "MSC_TIMESTAMP",
+        "LED_NUML",
+        "LED_CAPSL",
+        "LED_SCROLLL",
+        "LED_COMPOSE",
+        "LED_KANA",
+        "LED_SLEEP",
+        "LED_SUSPEND",
+        "LED_MUTE",
+        "LED_MISC",
+        "LED_MAIL",
+        "LED_CHARGING",
+        "REP_DELAY",
+        "REP_PERIOD",
+        "SND_CLICK",
+        "SND_BELL",
+        "SND_TONE"
+      ]
+    },
+    "EventType": {
+      "oneOf": [
+        {
+          "description": "A bookkeeping event. Usually not important to applications.",
+          "type": "string",
+          "enum": [
+            "SYNC"
+          ]
+        },
+        {
+          "description": "A key changed state. A key, or button, is usually a momentary switch (in the circuit sense). It has two states: down, or up. There are events for when keys are pressed (become down) and released (become up). There are also \"key repeats\", where multiple events are sent while a key is down.",
+          "type": "string",
+          "enum": [
+            "KEY"
+          ]
+        },
+        {
+          "description": "Movement on a relative axis. There is no absolute coordinate frame, just the fact that there was a change of a certain amount of units. Used for things like mouse movement or scroll wheels.",
+          "type": "string",
+          "enum": [
+            "REL"
+          ]
+        },
+        {
+          "description": "Movement on an absolute axis. Used for things such as touch events and joysticks.",
+          "type": "string",
+          "enum": [
+            "ABS"
+          ]
+        },
+        {
+          "description": "Miscellaneous events that don't fall into other categories. For example, Key presses may send `MSC_SCAN` events before each KEY event",
+          "type": "string",
+          "enum": [
+            "MSC"
+          ]
+        },
+        {
+          "description": "Change in a switch value. Switches are boolean conditions and usually correspond to a toggle switch of some kind in hardware.",
+          "type": "string",
+          "enum": [
+            "SW"
+          ]
+        },
+        {
+          "description": "An LED was toggled.",
+          "type": "string",
+          "enum": [
+            "LED"
+          ]
+        },
+        {
+          "description": "A sound was made.",
+          "type": "string",
+          "enum": [
+            "SND"
+          ]
+        },
+        {
+          "description": "Metadata about key repeat configuration.",
+          "type": "string",
+          "enum": [
+            "REP"
+          ]
+        },
+        {
+          "description": "Sent to the device with a previusly obtained effect id as a code in order to toggle the effect.",
+          "type": "string",
+          "enum": [
+            "FF"
+          ]
+        },
+        {
+          "description": "Used to trigger power events such as suspend or power off.",
+          "type": "string",
+          "enum": [
+            "PWR"
+          ]
+        },
+        {
+          "description": "A force feedback effect's state changed.",
+          "type": "string",
+          "enum": [
+            "FF_STATUS"
+          ]
+        },
+        {
+          "description": "An event originating from uinput.",
+          "type": "string",
+          "enum": [
+            "UINPUT"
+          ]
+        }
+      ]
+    },
+    "GamepadCapability": {
+      "type": "object",
+      "properties": {
+        "accelerometer": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AccelerometerCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "axis": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AxisCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "button": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gyro": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GyroCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TriggerCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dial": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DialCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "GyroCapability": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "axis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deadzone": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "HidrawConfig": {
+      "description": "A [HidrawConfig] defines how to decode a particular event in an HID input report.",
+      "type": "object",
+      "required": [
+        "bit_offset",
+        "byte_start",
+        "input_type",
+        "report_id"
+      ],
+      "properties": {
+        "bit_offset": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "byte_start": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "input_type": {
+          "type": "string"
+        },
+        "report_id": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "MappingType": {
+      "description": "[MappingType] defines how source events should be translated",
+      "type": "object",
+      "properties": {
+        "evdev": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EvdevMappingType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MouseCapability": {
+      "type": "object",
+      "properties": {
+        "button": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "motion": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MouseMotionCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MouseMotionCapability": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speed_pps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "SourceMapping": {
+      "description": "A [SourceMapping] defines input events to be mapped",
+      "type": "object",
+      "properties": {
+        "capability": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CapabilityConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evdev": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EvdevConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hidraw": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HidrawConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TouchCapability": {
+      "type": "object",
+      "properties": {
+        "button": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "motion": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TouchMotionCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TouchMotionCapability": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speed_pps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "TouchpadCapability": {
+      "type": "object",
+      "required": [
+        "name",
+        "touch"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "touch": {
+          "$ref": "#/definitions/TouchCapability"
+        }
+      }
+    },
+    "TriggerCapability": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "deadzone": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "ValueType": {
+      "type": "string",
+      "enum": [
+        "button",
+        "trigger",
+        "joystick_x",
+        "joystick_y",
+        "imu_x",
+        "imu_y",
+        "imu_z"
+      ]
     }
+  }
 }

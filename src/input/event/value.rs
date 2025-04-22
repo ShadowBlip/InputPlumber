@@ -251,49 +251,32 @@ impl InputValue {
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                     // Gyro -> ...
                     Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                    // Dial mapping to -> ..
                     Gamepad::Dial(_) => match target_cap {
-                        // Gamepad Button -> None
                         Capability::None => Ok(InputValue::None),
-                        // Gamepad Button -> NotImplemented
                         Capability::NotImplemented => Ok(InputValue::None),
-                        // Gamepad Button -> Sync
                         Capability::Sync => Ok(InputValue::Bool(false)),
-                        // Gamepad Button -> DBus
                         Capability::DBus(_) => Ok(self.clone()),
-                        // Gamepad Button -> Gamepad
                         Capability::Gamepad(gamepad) => match gamepad {
-                            // Gamepad Button -> Gamepad Button
                             Gamepad::Button(_) => self.translate_dial_to_button(source_config),
-                            // Gamepad Button -> Axis
                             Gamepad::Axis(_) => Err(TranslationError::NotImplemented),
-                            // Gamepad Button -> Trigger
                             Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
-                            // Gamepad Button -> Accelerometer
                             Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
-                            // Gamepad Button -> Gyro
                             Gamepad::Gyro => Err(TranslationError::NotImplemented),
                             Gamepad::Dial(_) => Ok(self.clone()),
                         },
-                        // Gamepad Button -> Mouse
                         Capability::Mouse(mouse) => match mouse {
-                            // Gamepad Button -> Mouse Motion
                             Mouse::Motion => Err(TranslationError::NotImplemented),
-                            // Gamepad Button -> Mouse Button
                             Mouse::Button(_) => self.translate_dial_to_button(source_config),
                         },
-                        // Gamepad Button -> Keyboard
                         Capability::Keyboard(_) => self.translate_dial_to_button(source_config),
-                        // Gamepad Button -> Touchpad
                         Capability::Touchpad(touch) => match touch {
                             Touchpad::LeftPad(_) => Err(TranslationError::NotImplemented),
                             Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
                             Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
                         },
-                        // Gamepad Button -> Touchscreen
                         Capability::Touchscreen(touch) => match touch {
-                            // Gamepad Button -> Touchscreen Motion
                             Touch::Motion => Err(TranslationError::NotImplemented),
-                            // Gamepad Button -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
                     },

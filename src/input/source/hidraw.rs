@@ -383,7 +383,7 @@ impl HidRawDevice {
             DriverType::ZotacZone => {
                 let device = ZotacZone::new(device_info.clone())?;
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(1),
+                    poll_rate: Duration::from_millis(300),
                     buffer_size: 1024,
                 };
                 let source_device = SourceDriver::new_with_options(
