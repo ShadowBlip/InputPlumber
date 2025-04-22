@@ -27,9 +27,21 @@ mapping:
     target_event:
       gamepad:
         button: Keyboard
+  - name: Control Center (Long)
+    source_events:
+      - keyboard: KeyF20
+    target_event:
+      gamepad:
+        button: Keyboard
   - name: Armory Crate (Short)
     source_events:
       - keyboard: KeyProg1
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: Armory Crate (Short)
+    source_events:
+      - keyboard: KeyF19
     target_event:
       gamepad:
         button: QuickAccess
