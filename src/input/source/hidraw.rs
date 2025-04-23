@@ -27,8 +27,8 @@ use legos_touchpad::LegionSTouchpadController;
 use msi_claw::MsiClaw;
 use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
-use zotac_zone::ZotacZone;
 use zbus::Connection;
+use zotac_zone::ZotacZone;
 
 use crate::{
     config, constants::BUS_SOURCES_PREFIX, drivers,

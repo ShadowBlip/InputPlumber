@@ -9,6 +9,7 @@ use zbus_macros::interface;
 
 use crate::{
     config::DeviceProfile,
+    constants::BUS_SOURCES_PREFIX,
     input::{
         capability::{Capability, Gamepad, Mouse},
         composite_device::{client::CompositeDeviceClient, InterceptMode},
@@ -321,6 +322,26 @@ impl CompositeDeviceInterface {
         }
 
         Ok(capability_strings)
+    }
+
+    /// Source devices that this [CompositeDevice] is managing
+    #[zbus(property)]
+    async fn source_devices(&self) -> fdo::Result<Vec<String>> {
+        let paths = self
+            .composite_device
+            .get_source_device_paths()
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let paths = paths
+            .into_iter()
+            .filter_map(|p| {
+                let last = p.split("/").last()?;
+                let name = last.replace(':', "_");
+                Some(format!("{BUS_SOURCES_PREFIX}/{name}"))
+            })
+            .collect();
+
+        Ok(paths)
     }
 
     /// List of source devices that this composite device is processing inputs for
