@@ -39,7 +39,7 @@ make build
 sudo make install
 ```
 
-If you are using ArchLinux or any of its derivaties,
+If you are using Arch Linux or any of its derivatives,
 you can install InputPlumber from the official repositories:
 
 ```bash
