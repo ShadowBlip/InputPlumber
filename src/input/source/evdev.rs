@@ -8,6 +8,7 @@ use std::{collections::HashMap, error::Error, time::Duration};
 use evdev::{Device, EventType};
 use keyboard::KeyboardEventDevice;
 use touchscreen::TouchscreenEventDevice;
+use zbus::Connection;
 
 use crate::{
     config::{
@@ -94,6 +95,15 @@ impl SourceDeviceCompatible for EventDevice {
             EventDevice::Gamepad(source_driver) => source_driver.get_device_path(),
             EventDevice::Touchscreen(source_driver) => source_driver.get_device_path(),
             EventDevice::Keyboard(source_driver) => source_driver.get_device_path(),
+        }
+    }
+
+    fn listen_on_dbus(&self, conn: Connection) {
+        match self {
+            EventDevice::Blocked(source_driver) => source_driver.listen_on_dbus(conn),
+            EventDevice::Gamepad(source_driver) => source_driver.listen_on_dbus(conn),
+            EventDevice::Touchscreen(source_driver) => source_driver.listen_on_dbus(conn),
+            EventDevice::Keyboard(source_driver) => source_driver.listen_on_dbus(conn),
         }
     }
 }

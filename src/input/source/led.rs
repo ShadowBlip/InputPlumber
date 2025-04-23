@@ -54,6 +54,12 @@ impl SourceDeviceCompatible for LedDevice {
             LedDevice::MultiColorChassis(source_driver) => source_driver.get_device_path(),
         }
     }
+
+    fn listen_on_dbus(&self, conn: zbus::Connection) {
+        match self {
+            LedDevice::MultiColorChassis(source_driver) => source_driver.listen_on_dbus(conn),
+        }
+    }
 }
 
 impl LedDevice {

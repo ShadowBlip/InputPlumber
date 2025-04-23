@@ -661,6 +661,9 @@ impl CompositeDevice {
                 SourceIioImuInterface::listen_on_dbus(self.conn.clone(), device.clone()).await?;
             }
 
+            // Add any other source device DBus interfaces
+            source_device.listen_on_dbus(self.conn.clone());
+
             self.source_device_tasks.spawn(async move {
                 if let Err(e) = source_device.run().await {
                     log::error!("Failed running device: {:?}", e);

@@ -2,6 +2,7 @@ use crate::{
     config::LedFixedColor,
     input::{
         capability::Capability,
+        output_capability::{OutputCapability, LED},
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -132,10 +133,18 @@ impl SourceOutputDevice for MultiColorChassis {
                 }
                 self.write_color(report.led_red, report.led_green, report.led_blue)?;
             }
+            OutputEvent::LedColor { r, g, b } => {
+                self.write_color(r, g, b)?;
+            }
             _ => {
                 return Ok(());
             }
         }
         Ok(())
+    }
+
+    /// Returns the output capabilities of the device
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![OutputCapability::LED(LED::Color)])
     }
 }

@@ -28,6 +28,7 @@ use msi_claw::MsiClaw;
 use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
 use zotac_zone::ZotacZone;
+use zbus::Connection;
 
 use crate::{
     config, constants::BUS_SOURCES_PREFIX, drivers,
@@ -227,6 +228,29 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_device_path(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_device_path(),
             HidRawDevice::ZotacZone(source_driver) => source_driver.get_device_path(),
+        }
+    }
+
+    fn listen_on_dbus(&self, conn: Connection) {
+        match self {
+            HidRawDevice::Blocked(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::DualSense(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::HoripadSteam(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::LegionGoDCombined(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::LegionGoFPS(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::LegionGoSImu(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::LegionGoSXInput(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::LegionGoXInput(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::OrangePiNeo(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::MsiClaw(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::RogAlly(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::SteamDeck(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::XpadUhid(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::Vader4Pro(source_driver) => source_driver.listen_on_dbus(conn),
+            HidRawDevice::ZotacZone(source_driver) => source_driver.listen_on_dbus(conn),
         }
     }
 }

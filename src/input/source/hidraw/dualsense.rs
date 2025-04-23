@@ -6,6 +6,7 @@ use packed_struct::types::SizedInteger;
 
 use crate::drivers::dualsense::driver::{DS5_EDGE_PID, DS5_PID, DS5_VID};
 use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
+use crate::input::output_capability::{OutputCapability, LED};
 use crate::{
     drivers::dualsense::{self, driver::Driver},
     input::{
@@ -175,6 +176,10 @@ impl SourceOutputDevice for DualSenseController {
                 }
                 Ok(())
             }
+            OutputEvent::LedColor { r, g, b } => {
+                self.driver.set_led_color(r, g, b)?;
+                Ok(())
+            }
         }
     }
 
@@ -203,6 +208,14 @@ impl SourceOutputDevice for DualSenseController {
         log::debug!("Erasing FF effect data");
         self.ff_evdev_effects.remove(&effect_id);
         Ok(())
+    }
+
+    /// Returns the output capabilities of the device
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![
+            OutputCapability::ForceFeedback,
+            OutputCapability::LED(LED::Color),
+        ])
     }
 }
 

@@ -231,6 +231,7 @@ impl SourceOutputDevice for DeckController {
                 let report = packed_rumble_report.pack().map_err(|e| e.to_string())?;
                 self.driver.write(&report)?;
             }
+            OutputEvent::LedColor { r: _, g: _, b: _ } => (),
         }
 
         Ok(())

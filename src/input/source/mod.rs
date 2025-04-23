@@ -11,8 +11,11 @@ use ::evdev::FFEffectData;
 use led::LedDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
+use zbus::Connection;
 
-use crate::{config, udev::device::UdevDevice};
+use crate::{
+    config, dbus::interface::source::output::SourceOutputLedInterface, udev::device::UdevDevice,
+};
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,
@@ -23,6 +26,7 @@ use super::{
     capability::Capability,
     composite_device::client::CompositeDeviceClient,
     event::{native::NativeEvent, Event},
+    output_capability::{OutputCapability, LED},
     output_event::OutputEvent,
 };
 
@@ -151,6 +155,11 @@ pub trait SourceOutputDevice {
     /// Stop the source device.
     fn stop(&mut self) -> Result<(), OutputError> {
         Ok(())
+    }
+
+    /// Returns the possible output events this device is capable of emitting
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![])
     }
 }
 
@@ -441,6 +450,44 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
             }
         }
     }
+
+    // Start any DBus interfaces the device may implement based on
+    // its capabilities.
+    fn listen_on_dbus(&self, conn: Connection) {
+        let device_id = self.get_id();
+        log::debug!(
+            "Checking `{device_id}` to see if any additional dbus interfaces need to start"
+        );
+
+        // Get the output capabilities of the device to determine if any additional
+        // dbus interfaces should be started for this device.
+        let capabilities = {
+            let implementation = self.implementation.lock().unwrap();
+            implementation.get_output_capabilities().unwrap_or_default()
+        };
+        log::debug!("Device `{device_id}` has output capabilities: {capabilities:?}");
+
+        // Start the appropriate dbus interface depending on the output capabilities
+        for capability in capabilities {
+            log::debug!("Checking output capability for `{device_id}`: {capability:?}");
+            // Start a dbus interface for LED control if the device supports it.
+            if capability == OutputCapability::LED(LED::Color) {
+                log::debug!(
+                    "Device `{device_id}` supports LED color. Starting LED control interface."
+                );
+                let result = SourceOutputLedInterface::listen_on_dbus(
+                    conn.clone(),
+                    device_id.as_str(),
+                    self.tx.clone(),
+                );
+                if let Err(e) = result {
+                    log::debug!("Failed to start interface for {device_id}: {e}");
+                }
+            }
+
+            // TODO: add rumble interface to send force feedback events over dbus
+        }
+    }
 }
 
 pub(crate) trait SourceDeviceCompatible {
@@ -461,6 +508,9 @@ pub(crate) trait SourceDeviceCompatible {
 
     /// Returns the full path to the device handler (e.g. /dev/input/event3, /dev/hidraw0)
     fn get_device_path(&self) -> String;
+
+    /// Starts additional dbus interface for the given source device
+    fn listen_on_dbus(&self, conn: Connection);
 }
 
 /// A [SourceDevice] is any physical input device that emits input events
@@ -530,6 +580,15 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_device_path(),
             SourceDevice::Iio(device) => device.get_device_path(),
             SourceDevice::Led(device) => device.get_device_path(),
+        }
+    }
+
+    pub fn listen_on_dbus(&self, conn: Connection) {
+        match self {
+            SourceDevice::Event(device) => device.listen_on_dbus(conn),
+            SourceDevice::HidRaw(device) => device.listen_on_dbus(conn),
+            SourceDevice::Iio(device) => device.listen_on_dbus(conn),
+            SourceDevice::Led(device) => device.listen_on_dbus(conn),
         }
     }
 }

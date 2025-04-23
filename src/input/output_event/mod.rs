@@ -7,7 +7,7 @@ use crate::drivers::{
     steam_deck::hid_report::{PackedHapticReport, PackedRumbleReport, PadSide},
 };
 
-use super::output_capability::{Haptic, OutputCapability};
+use super::output_capability::{Haptic, OutputCapability, LED};
 
 /// Output events are events that flow from target devices back to source devices
 #[derive(Debug, Clone)]
@@ -17,6 +17,7 @@ pub enum OutputEvent {
     DualSense(SetStatePackedOutputData),
     SteamDeckHaptics(PackedHapticReport),
     SteamDeckRumble(PackedRumbleReport),
+    LedColor { r: u8, g: u8, b: u8 },
 }
 
 impl OutputEvent {
@@ -71,6 +72,7 @@ impl OutputEvent {
                 }
             }
             OutputEvent::SteamDeckRumble(_) => vec![OutputCapability::ForceFeedback],
+            OutputEvent::LedColor { r: _, g: _, b: _ } => vec![OutputCapability::LED(LED::Color)],
         }
     }
 }

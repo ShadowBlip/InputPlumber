@@ -6,6 +6,7 @@ pub mod bmi_imu_new;
 use std::error::Error;
 
 use glob_match::glob_match;
+use zbus::Connection;
 
 use crate::{
     config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
@@ -72,6 +73,13 @@ impl SourceDeviceCompatible for IioDevice {
         match self {
             IioDevice::BmiImu(source_driver) => source_driver.get_device_path(),
             IioDevice::AccelGryo3D(source_driver) => source_driver.get_device_path(),
+        }
+    }
+
+    fn listen_on_dbus(&self, conn: Connection) {
+        match self {
+            IioDevice::BmiImu(source_driver) => source_driver.listen_on_dbus(conn),
+            IioDevice::AccelGryo3D(source_driver) => source_driver.listen_on_dbus(conn),
         }
     }
 }

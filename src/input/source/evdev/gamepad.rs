@@ -545,6 +545,7 @@ impl SourceOutputDevice for GamepadEventDevice {
                 }
                 Ok(())
             }
+            OutputEvent::LedColor { r: _, g: _, b: _ } => Ok(()),
         }
     }
 
