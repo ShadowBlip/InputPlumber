@@ -1,5 +1,6 @@
 pub mod client;
 pub mod command;
+pub mod targets;
 
 use std::{
     borrow::Borrow,
@@ -11,6 +12,7 @@ use std::{
 };
 
 use evdev::InputEvent;
+use targets::CompositeDeviceTargets;
 use tokio::{
     sync::mpsc,
     task::{JoinHandle, JoinSet},
@@ -73,8 +75,6 @@ pub enum InterceptMode {
 pub struct CompositeDevice {
     /// Connection to DBus
     conn: Connection,
-    /// Transmit channel to communicate with the input manager
-    manager: mpsc::Sender<ManagerCommand>,
     /// Configuration for the CompositeDevice
     config: CompositeDeviceConfig,
     /// Name of the [CompositeDeviceConfig] loaded for the device
@@ -129,24 +129,8 @@ pub struct CompositeDevice {
     source_device_tasks: JoinSet<()>,
     /// Unique identifiers for running source devices. E.g. ["evdev://event0"]
     source_devices_used: Vec<String>,
-    /// Map of DBus paths to their respective transmitter channel.
-    /// E.g. {"/org/shadowblip/InputPlumber/devices/target/gamepad0": <Sender>}
-    target_devices: HashMap<String, TargetDeviceClient>,
-    /// Map of device capabilities to a list of target devices that implements
-    /// that capability. This list contains the DBus path for the target device
-    /// so its transmitter channel can be looked up in `target_devices`.
-    /// E.g. {Capability::Keyboard: ["/org/shadowblip/InputPlumber/devices/target/keyboard0"]}
-    target_devices_by_capability: HashMap<Capability, HashSet<String>>,
-    /// List of target devices waiting to be attached to this composite device.
-    /// This is used to block/requeue multiple calls to set_target_devices().
-    /// E.g. ["/org/shadowblip/InputPlumber/devices/target/gamepad0"]
-    target_devices_queued: HashSet<String>,
-    /// List of active target device types (e.g. "deck", "ds5", "xb360") that
-    /// were active before system suspend.
-    target_devices_suspended: Vec<String>,
-    /// Map of DBusDevice DBus paths to their respective transmitter channel.
-    /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
-    target_dbus_devices: HashMap<String, TargetDeviceClient>,
+    /// State of target devices attached to the composite device
+    targets: CompositeDeviceTargets,
     /// Set of available Force Feedback effect IDs that are not in use
     /// TODO: Just use the keys from ff_effect_id_source_map to determine next id
     ff_effect_ids: BTreeSet<i16>,
@@ -184,8 +168,7 @@ impl CompositeDevice {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         let name = config.name.clone();
         let mut device = Self {
-            conn,
-            manager,
+            conn: conn.clone(),
             config,
             name,
             capabilities: HashSet::new(),
@@ -197,9 +180,9 @@ impl CompositeDevice {
             translatable_active_inputs: Vec::new(),
             translated_recent_events: HashSet::new(),
             emitted_mappings: HashSet::new(),
-            dbus_path,
+            dbus_path: dbus_path.clone(),
             intercept_mode: InterceptMode::None,
-            tx,
+            tx: tx.clone(),
             rx,
             source_devices: HashMap::new(),
             source_devices_discovered: Vec::new(),
@@ -208,11 +191,7 @@ impl CompositeDevice {
             source_device_paths: Vec::new(),
             source_device_tasks: JoinSet::new(),
             source_devices_used: Vec::new(),
-            target_devices: HashMap::new(),
-            target_devices_by_capability: HashMap::new(),
-            target_devices_queued: HashSet::new(),
-            target_devices_suspended: Vec::new(),
-            target_dbus_devices: HashMap::new(),
+            targets: CompositeDeviceTargets::new(conn, dbus_path, tx.into(), manager),
             ff_effect_ids: (0..64).collect(),
             ff_effect_id_source_map: HashMap::new(),
             intercept_activation_caps: vec![Capability::Gamepad(Gamepad::Button(
@@ -344,7 +323,7 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::GetTargetCapabilities(sender) => {
-                        let target_caps = match self.get_target_capabilities().await {
+                        let target_caps = match self.targets.get_capabilities().await {
                             Ok(caps) => caps,
                             Err(e) => {
                                 log::error!("Failed to get target capabilities: {e:?}");
@@ -372,13 +351,13 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::GetTargetDevicePaths(sender) => {
-                        let paths = self.target_devices.keys().cloned().collect();
+                        let paths = self.targets.get_device_paths();
                         if let Err(e) = sender.send(paths).await {
                             log::error!("Failed to send target device paths: {:?}", e);
                         }
                     }
                     CompositeCommand::GetDBusDevicePaths(sender) => {
-                        let paths = self.target_dbus_devices.keys().cloned().collect();
+                        let paths = self.targets.get_dbus_device_paths();
                         if let Err(e) = sender.send(paths).await {
                             log::error!("Failed to send dbus device paths: {:?}", e);
                         }
@@ -402,12 +381,12 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::SetTargetDevices(target_types) => {
-                        if let Err(e) = self.set_target_devices(target_types).await {
-                            log::error!("Failed to set target devices: {e:?}");
+                        if let Err(e) = self.targets.set_devices(target_types).await {
+                            log::error!("Failed to set target devices: {e}");
                         }
                     }
                     CompositeCommand::AttachTargetDevices(targets) => {
-                        if let Err(e) = self.attach_target_devices(targets).await {
+                        if let Err(e) = self.targets.attach_devices(targets).await {
                             log::error!("Failed to attach target devices: {e:?}");
                         }
                     }
@@ -484,7 +463,7 @@ impl CompositeDevice {
                         log::debug!(
                             "Updating target capabilities for '{dbus_path}': {capabilities:?}"
                         );
-                        self.update_target_capabilities(dbus_path, capabilities);
+                        self.targets.update_capabilities(dbus_path, capabilities);
                     }
                     CompositeCommand::WriteEvent(event) => {
                         if let Err(e) = self.write_event(event).await {
@@ -518,20 +497,20 @@ impl CompositeDevice {
                     }
                     CompositeCommand::Suspend(sender) => {
                         log::info!("Preparing for system suspend for: {dbus_path}");
-                        self.handle_suspend().await;
+                        self.targets.handle_suspend().await;
                         if let Err(e) = sender.send(()).await {
                             log::error!("Failed to send suspend response: {e:?}");
                         }
                     }
                     CompositeCommand::Resume(sender) => {
                         log::info!("Preparing for system resume for: {dbus_path}");
-                        self.handle_resume().await;
+                        self.targets.handle_resume().await;
                         if let Err(e) = sender.send(()).await {
                             log::error!("Failed to send resume response: {e:?}");
                         }
                     }
                     CompositeCommand::IsSuspended(sender) => {
-                        let is_suspended = !self.target_devices_suspended.is_empty();
+                        let is_suspended = self.targets.get_suspended_devices().is_empty();
                         log::debug!("Checking if device is suspended: {is_suspended}");
                         if let Err(e) = sender.send(is_suspended).await {
                             log::error!("Failed to send suspended response: {e:?}");
@@ -545,12 +524,7 @@ impl CompositeDevice {
             if devices_removed && self.source_devices_used.is_empty() {
                 if persist {
                     log::debug!("No source devices remain, but CompositeDevice {dbus_path} has persist enabled. Clearing target devices states.");
-                    for (path, target) in &self.target_devices {
-                        log::debug!("Clearing target device: {path}");
-                        if let Err(e) = target.clear_state().await {
-                            log::error!("Failed to clear target device state {path}: {e:?}");
-                        }
-                    }
+                    self.targets.clear_state().await;
                 } else {
                     log::debug!("No source devices remain. Stopping CompositeDevice {dbus_path}");
                     break 'main;
@@ -561,18 +535,7 @@ impl CompositeDevice {
 
         // Stop all target devices
         log::debug!("Stopping target devices");
-        for (path, target) in &self.target_devices {
-            log::debug!("Stopping target device: {path}");
-            if let Err(e) = target.stop().await {
-                log::error!("Failed to stop target device {path}: {e:?}");
-            }
-        }
-        for (path, target) in &self.target_dbus_devices {
-            log::debug!("Stopping target dbus device: {path}");
-            if let Err(e) = target.stop().await {
-                log::error!("Failed to stop dbus device {path}: {e:?}");
-            }
-        }
+        self.targets.stop().await;
 
         // Unhide all source devices
         for source_path in self.source_device_paths.clone() {
@@ -618,7 +581,7 @@ impl CompositeDevice {
 
     /// Sets the DBus target devices on the [CompositeDevice].
     pub fn set_dbus_devices(&mut self, devices: HashMap<String, TargetDeviceClient>) {
-        self.target_dbus_devices = devices;
+        self.targets.set_dbus_devices(devices);
     }
 
     /// Return a list of source device paths (e.g. /dev/hidraw0, /dev/input/event0)
@@ -989,6 +952,7 @@ impl CompositeDevice {
         log::debug!("No other buttons are pressed and this is not the first in the list. Do not hold input.");
         false
     }
+
     // Filter out input-cancelling events that do not come from same
     // capability as the initiator
     fn filter_event(&mut self, event: NativeEvent) -> Option<NativeEvent> {
@@ -1032,21 +996,15 @@ impl CompositeDevice {
 
         // If this event implements the DBus capability, send the event to DBus devices
         if matches!(cap, Capability::DBus(_)) {
-            log::trace!("Emit dbus event: {:?}", event);
-            #[allow(clippy::for_kv_map)]
-            for (_, target) in &self.target_dbus_devices {
-                target.write_event(event.clone()).await?;
-            }
+            self.targets.write_dbus_event(event).await;
             return Ok(());
         }
 
         // If the device is in intercept mode, only send events to DBus
         // target devices.
         if self.intercept_mode == InterceptMode::Always {
-            log::trace!("Emit intercepted event: {:?}", event);
-            for target in self.target_dbus_devices.values() {
-                target.write_event(event.clone()).await?;
-            }
+            log::trace!("Intercepted event: {event:?}");
+            self.targets.write_dbus_event(event).await;
             return Ok(());
         }
 
@@ -1055,33 +1013,14 @@ impl CompositeDevice {
         if self.intercept_mode == InterceptMode::GamepadOnly
             && matches!(cap, Capability::Gamepad(_))
         {
-            log::trace!("Emit intercepted event: {:?}", event);
-            for target in self.target_dbus_devices.values() {
-                target.write_event(event.clone()).await?;
-            }
+            log::trace!("Intercepted gamepad event: {event:?}");
+            self.targets.write_dbus_event(event).await;
             return Ok(());
         }
 
-        // Find all target devices capable of handling this event
-        let Some(target_paths) = self.target_devices_by_capability.get(&cap) else {
-            log::trace!("No target devices capable of handling this event: {cap}");
-            return Ok(());
-        };
-        let target_devices: Vec<(&str, &TargetDeviceClient)> = target_paths
-            .iter()
-            .filter_map(|path| {
-                let device = self.target_devices.get(path);
-                device.map(|client| (path.as_str(), client))
-            })
-            .collect();
+        // Write the event to all target devices capable of handling the event
+        self.targets.write_event(event).await;
 
-        // Only write the event to devices that are capabile of handling it
-        log::trace!("Emit passed event: {:?}", event);
-        for (name, target) in target_devices {
-            if let Err(e) = target.write_event(event.clone()).await {
-                log::error!("Failed to write event to: {name}: {e:?}");
-            }
-        }
         Ok(())
     }
 
@@ -1195,19 +1134,11 @@ impl CompositeDevice {
 
         // If intercept mode is being turned on, clear the state from
         // any target devices to prevent further input events.
-        for (path, device) in self.target_devices.iter() {
-            // If intercept is set to only intercept gamepad input, only target
-            // gamepad devices need to have their state cleared.
-            if mode == InterceptMode::GamepadOnly && !path.contains("gamepad") {
-                log::debug!("Intercept mode is set to GamepadOnly, skipping clearing state on target device {path}");
-                continue;
-            }
-
-            log::debug!("Clearing state on device: {path}");
-            if let Err(e) = device.clear_state().await {
-                log::error!("Failed to clear state on target device {path}: {e:?}");
-            }
+        if mode == InterceptMode::GamepadOnly {
+            self.targets.clear_gamepad_state().await;
+            return;
         }
+        self.targets.clear_state().await;
     }
 
     /// Translates the given event into a different event based on the given
@@ -1734,15 +1665,7 @@ impl CompositeDevice {
         }
 
         // Clear the state from all target devices
-        let target_devices = self.target_devices.clone();
-        tokio::task::spawn(async move {
-            for (path, device) in target_devices.iter() {
-                log::debug!("Clearing state on device: {path}");
-                if let Err(e) = device.clear_state().await {
-                    log::error!("Failed to clear state on target device {path}: {e:?}");
-                }
-            }
-        });
+        self.targets.schedule_clear_state();
 
         log::debug!("Successfully loaded device profile: {}", profile.name);
         Ok(())
@@ -1941,287 +1864,6 @@ impl CompositeDevice {
         Ok(false)
     }
 
-    /// Set the given target devices on the composite device. This will create
-    /// new target devices, attach them to this device, and stop/remove any
-    /// existing devices.
-    async fn set_target_devices(
-        &mut self,
-        device_types: Vec<String>,
-    ) -> Result<(), Box<dyn Error>> {
-        log::info!("Setting target devices: {:?}", device_types);
-        // Check to see if there are target device attachments pending. If so,
-        // requeue this set_target_devices request.
-        if !self.target_devices_queued.is_empty() {
-            log::debug!(
-                "Target devices already waiting for attachment. Re-queueing set target devices."
-            );
-            let tx = self.tx.clone();
-            tokio::task::spawn(async move {
-                if let Err(e) = tx
-                    .send(CompositeCommand::SetTargetDevices(device_types))
-                    .await
-                {
-                    log::error!("Error sending composite device command! {e:?}");
-                }
-            });
-            return Ok(());
-        }
-
-        // Identify which target devices are new
-        let mut device_types_to_start: Vec<String> = vec![];
-        for kind in device_types.iter() {
-            if self.target_kind_running(kind).await? {
-                log::debug!("Target device {kind} already running, nothing to do.");
-                continue;
-            }
-
-            device_types_to_start.push(kind.clone());
-        }
-
-        // Identify the targets that need to close
-        let mut targets_to_stop: HashMap<String, TargetDeviceClient> = HashMap::new();
-        for (path, target) in self.target_devices.clone().into_iter() {
-            let target_type = match target.get_type().await {
-                Ok(value) => value,
-                Err(e) => {
-                    return Err(format!("Failed to request target type: {e:?}").into());
-                }
-            };
-            if !device_types.contains(&target_type) {
-                log::debug!("Target device {path} not in new devices list. Adding to stop list.");
-                targets_to_stop.insert(path, target);
-            }
-        }
-
-        // Stop all old target devices that aren't going to persist
-        for (path, target) in targets_to_stop.clone().into_iter() {
-            log::debug!("Stopping old target device: {path}");
-            self.target_devices.remove(&path);
-            for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
-                target_devices.remove(&path);
-            }
-            if let Err(e) = target.stop().await {
-                log::error!("Failed to stop old target device: {e:?}");
-            }
-        }
-
-        let composite_path = self.dbus_path.clone();
-
-        // Create new target devices using the input manager
-        for kind in device_types_to_start {
-            // Ask the input manager to create a target device
-            log::debug!("Requesting to create device: {kind}");
-            let (sender, mut receiver) = mpsc::channel(1);
-            self.manager
-                .send(ManagerCommand::CreateTargetDevice { kind, sender })
-                .await?;
-            let Some(response) = receiver.recv().await else {
-                log::warn!("Channel closed waiting for response from input manager");
-                continue;
-            };
-            let target_path = match response {
-                Ok(path) => path,
-                Err(e) => {
-                    let err = format!("Failed to create target: {e:?}");
-                    log::error!("{err}");
-                    continue;
-                }
-            };
-
-            // Ask the input manager to attach the target device to this composite
-            // device. Note that this *must* be run in an async task to prevent
-            // deadlocking.
-            log::debug!("Requesting to attach target device {target_path} to {composite_path}");
-            let manager = self.manager.clone();
-            let target_path_clone = target_path.clone();
-            let composite_path_clone = composite_path.clone();
-            tokio::task::spawn(async move {
-                let (sender, mut receiver) = mpsc::channel(1);
-                let result = manager
-                    .send(ManagerCommand::AttachTargetDevice {
-                        target_path: target_path_clone,
-                        composite_path: composite_path_clone,
-                        sender,
-                    })
-                    .await;
-                if let Err(e) = result {
-                    log::warn!(
-                        "Failed to send attach request to input manager: {}",
-                        e.to_string()
-                    );
-                    return;
-                }
-                let Some(response) = receiver.recv().await else {
-                    log::warn!("Channel closed waiting for response from input manager");
-                    return;
-                };
-                if let Err(e) = response {
-                    log::error!("Failed to attach target device: {e:?}");
-                }
-            });
-
-            // Enqueue the target device to wait for the attachment message from
-            // the input manager to prevent multiple calls to set_target_devices()
-            // from mangling attachment.
-            self.target_devices_queued.insert(target_path);
-        }
-
-        // Signal change in target devices to DBus
-        // TODO: Check this
-        //self.signal_targets_changed().await;
-
-        Ok(())
-    }
-
-    // Deterimines if a given target device kind is already running
-    async fn target_kind_running(&self, kind: &str) -> Result<bool, Box<dyn Error>> {
-        // TODO: Save this on the DS5 target device so we can properly look it up.
-        let kind = match kind {
-            "ds5" => "ds5_edge",
-            _ => kind,
-        };
-        for target in self.target_devices.values() {
-            let target_type = match target.get_type().await {
-                Ok(value) => value,
-                Err(e) => {
-                    return Err(format!("Failed to request target type: {e:?}").into());
-                }
-            };
-            if kind == target_type {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-
-    // Get the capabilities of all target devices
-    async fn get_target_capabilities(&self) -> Result<HashSet<Capability>, Box<dyn Error>> {
-        let mut target_caps = HashSet::new();
-        for target in self.target_devices.values() {
-            let caps = match target.get_capabilities().await {
-                Ok(caps) => caps,
-                Err(e) => {
-                    return Err(format!("Failed to get target capabilities: {e:?}").into());
-                }
-            };
-            for cap in caps {
-                target_caps.insert(cap);
-            }
-        }
-        for target in self.target_dbus_devices.values() {
-            let caps = match target.get_capabilities().await {
-                Ok(caps) => caps,
-                Err(e) => {
-                    return Err(format!("Failed to get target capabilities: {e:?}").into());
-                }
-            };
-            for cap in caps {
-                target_caps.insert(cap);
-            }
-        }
-
-        Ok(target_caps)
-    }
-
-    /// Update the target capabilities of the given target device
-    fn update_target_capabilities(&mut self, dbus_path: String, capabilities: HashSet<Capability>) {
-        // Track the target device by capabilities it has
-        for cap in capabilities.into_iter() {
-            self.target_devices_by_capability
-                .entry(cap)
-                .and_modify(|devices| {
-                    devices.insert(dbus_path.clone());
-                })
-                .or_insert_with(|| {
-                    let mut devices = HashSet::new();
-                    devices.insert(dbus_path.clone());
-                    devices
-                });
-        }
-    }
-
-    /// Attach the given target devices to the composite device
-    async fn attach_target_devices(
-        &mut self,
-        targets: HashMap<String, TargetDeviceClient>,
-    ) -> Result<(), Box<dyn Error>> {
-        let dbus_path = self.dbus_path.clone();
-
-        // Keep track of all target devices
-        for (path, target) in targets.into_iter() {
-            // Query the target device for its capabilities
-            let caps = match target.get_capabilities().await {
-                Ok(caps) => caps,
-                Err(e) => {
-                    return Err(format!("Failed to get target capabilities: {e:?}").into());
-                }
-            };
-
-            log::debug!("Attaching target device: {path}");
-            if let Err(e) = target.set_composite_device(self.client()).await {
-                return Err(
-                    format!("Failed to set composite device for target device: {:?}", e).into(),
-                );
-            }
-            log::debug!("Attached device {path} to {dbus_path}");
-
-            // Track the target device by capabilities it has
-            for cap in caps {
-                self.target_devices_by_capability
-                    .entry(cap)
-                    .and_modify(|devices| {
-                        devices.insert(path.clone());
-                    })
-                    .or_insert_with(|| {
-                        let mut devices = HashSet::new();
-                        devices.insert(path.clone());
-                        devices
-                    });
-            }
-
-            // Add the target device
-            self.target_devices_queued.remove(&path);
-            self.target_devices.insert(path.clone(), target);
-        }
-
-        // TODO: check this
-        //self.signal_targets_changed().await;
-
-        Ok(())
-    }
-
-    /// Emit a DBus signal when target devices change
-    async fn signal_targets_changed(&self) {
-        let dbus_path = self.dbus_path.clone();
-        let conn = self.conn.clone();
-
-        tokio::task::spawn(async move {
-            // Get the object instance at the given path so we can send DBus signal
-            // updates
-            let iface_ref = match conn
-                .object_server()
-                .interface::<_, CompositeDeviceInterface>(dbus_path.clone())
-                .await
-            {
-                Ok(iface) => iface,
-                Err(e) => {
-                    log::error!(
-                        "Failed to get DBus interface for composite device to signal: {e:?}"
-                    );
-                    return;
-                }
-            };
-            // Emit the target devices changed signal
-            let iface = iface_ref.get().await;
-            if let Err(e) = iface
-                .target_devices_changed(iface_ref.signal_emitter())
-                .await
-            {
-                log::error!("Failed to send target devices changed signal: {e:?}");
-            }
-        });
-    }
-
     /// Emit a DBus signal when source devices change
     async fn signal_sources_changed(&self) {
         let dbus_path = self.dbus_path.clone();
@@ -2253,60 +1895,5 @@ impl CompositeDevice {
                 log::error!("Failed to send source devices changed signal: {e:?}");
             }
         });
-    }
-
-    /// Called when notified by the input manager that system suspend is about
-    /// to happen.
-    async fn handle_suspend(&mut self) {
-        // Clear the list of suspended target devices
-        self.target_devices_suspended.clear();
-
-        // Record what target devices are currently used so they can be restored
-        // when the system is resumed.
-        for (path, target) in self.target_devices.clone().into_iter() {
-            let target_type = match target.get_type().await {
-                Ok(kind) => kind,
-                Err(err) => {
-                    log::error!("Failed to get target device type: {err:?}");
-                    continue;
-                }
-            };
-
-            self.target_devices_suspended.push(target_type);
-            self.target_devices.remove(&path);
-            for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
-                target_devices.remove(&path);
-            }
-            if let Err(e) = target.stop().await {
-                log::error!("Failed to stop old target device: {e:?}");
-            }
-
-            // Wait a few beats to ensure that the target device is really gone
-            tokio::time::sleep(Duration::from_millis(200)).await;
-        }
-        log::info!(
-            "Target devices before suspend: {:?}",
-            self.target_devices_suspended
-        );
-    }
-
-    /// Called when notified by the input manager that system resume is about
-    /// to happen.
-    async fn handle_resume(&mut self) {
-        log::info!(
-            "Restoring target devices: {:?}",
-            self.target_devices_suspended
-        );
-
-        // Set the target devices back to the ones used before suspend
-        if let Err(err) = self
-            .set_target_devices(self.target_devices_suspended.clone())
-            .await
-        {
-            log::error!("Failed to set restore target devices: {err:?}");
-        }
-
-        // Clear the list of suspended target devices
-        self.target_devices_suspended.clear();
     }
 }
