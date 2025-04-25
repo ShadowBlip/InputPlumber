@@ -133,6 +133,8 @@
             "KeyGrave",
             "KeyLeftShift",
             "KeyBackslash",
+            "KeyBrightnessDown",
+            "KeyBrightnessUp",
             "KeyZ",
             "KeyX",
             "KeyC",
@@ -421,6 +423,9 @@
         "trigger": {
           "$ref": "#/definitions/TriggerEvent"
         },
+        "dial": {
+          "$ref": "#/definitions/DialEvent"
+        },
         "button": {
           "type": "string",
           "enum": [
@@ -562,6 +567,32 @@
           "type": "number",
           "default": 0.3,
           "description": "Optional deadzone from 0.0 - 1.0. When this deadzone threshold is crossed, this input is considered 'pressed'."
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "DialEvent": {
+      "title": "DialEvent",
+      "type": "object",
+      "description": "Dial or Wheel events such as LeftStick, RightStick, etc.",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "LeftStick",
+            "RightStick"
+          ]
+        },
+        "direction": {
+          "type": "string",
+          "description": "Optional direction of the axis. Used when converting axis events into button events.",
+          "enum": [
+            "clockwise",
+            "counter-clockwise"
+          ]
         }
       },
       "required": [

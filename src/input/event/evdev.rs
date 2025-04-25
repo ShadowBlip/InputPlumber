@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, RelativeAxisCode};
 
 use crate::input::capability::{
-    Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard, Mouse, MouseButton,
-    Touch, TouchButton, Touchpad,
+    Capability, Gamepad, GamepadAxis, GamepadButton, GamepadDial, GamepadTrigger, Keyboard, Mouse,
+    MouseButton, Touch, TouchButton, Touchpad,
 };
 
 use super::{native::NativeEvent, value::InputValue};
@@ -210,8 +210,8 @@ impl EvdevEvent {
                 KeyCode::KEY_BATTERY => Capability::NotImplemented,
                 KeyCode::KEY_BLUETOOTH => Capability::NotImplemented,
                 KeyCode::KEY_BOOKMARKS => Capability::NotImplemented,
-                KeyCode::KEY_BRIGHTNESSDOWN => Capability::NotImplemented,
-                KeyCode::KEY_BRIGHTNESSUP => Capability::NotImplemented,
+                KeyCode::KEY_BRIGHTNESSDOWN => Capability::Keyboard(Keyboard::KeyBrightnessDown),
+                KeyCode::KEY_BRIGHTNESSUP => Capability::Keyboard(Keyboard::KeyBrightnessUp),
                 KeyCode::KEY_BRIGHTNESS_AUTO => Capability::NotImplemented,
                 KeyCode::KEY_BRIGHTNESS_CYCLE => Capability::NotImplemented,
                 KeyCode::KEY_C => Capability::Keyboard(Keyboard::KeyC),
@@ -465,7 +465,6 @@ impl EvdevEvent {
             EventType::RELATIVE => match RelativeAxisCode(code) {
                 RelativeAxisCode::REL_X => Capability::Mouse(Mouse::Motion),
                 RelativeAxisCode::REL_Y => Capability::Mouse(Mouse::Motion),
-                RelativeAxisCode::REL_WHEEL => Capability::NotImplemented,
                 _ => Capability::NotImplemented,
             },
             EventType::MISC => Capability::NotImplemented,
@@ -573,6 +572,7 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
             },
             Gamepad::Axis(_) => Some(EventType::ABSOLUTE),
             Gamepad::Trigger(_) => Some(EventType::ABSOLUTE),
+            Gamepad::Dial(_) => Some(EventType::RELATIVE),
             Gamepad::Accelerometer => None,
             Gamepad::Gyro => None,
         },
@@ -678,9 +678,18 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
             },
             Gamepad::Accelerometer => vec![],
             Gamepad::Gyro => vec![],
+            Gamepad::Dial(dial) => match dial {
+                GamepadDial::LeftStickDial => {
+                    vec![RelativeAxisCode::REL_HWHEEL.0]
+                }
+                GamepadDial::RightStickDial => {
+                    vec![RelativeAxisCode::REL_WHEEL.0]
+                }
+            },
         },
         Capability::Mouse(mouse) => match mouse {
             Mouse::Motion => vec![RelativeAxisCode::REL_X.0, RelativeAxisCode::REL_Y.0],
+
             Mouse::Button(button) => match button {
                 MouseButton::Left => vec![KeyCode::BTN_LEFT.0],
                 MouseButton::Right => vec![KeyCode::BTN_RIGHT.0],
@@ -712,6 +721,8 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
             Keyboard::KeyBack => vec![KeyCode::KEY_BACK.0],
             Keyboard::KeyBackslash => vec![KeyCode::KEY_BACKSLASH.0],
             Keyboard::KeyBackspace => vec![KeyCode::KEY_BACKSPACE.0],
+            Keyboard::KeyBrightnessDown => vec![KeyCode::KEY_BRIGHTNESSDOWN.0],
+            Keyboard::KeyBrightnessUp => vec![KeyCode::KEY_BRIGHTNESSUP.0],
             Keyboard::KeyC => vec![KeyCode::KEY_C.0],
             Keyboard::KeyCalc => vec![KeyCode::KEY_CALC.0],
             Keyboard::KeyCapslock => vec![KeyCode::KEY_CAPSLOCK.0],

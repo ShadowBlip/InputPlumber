@@ -46,3 +46,35 @@ mapping:
     target_events:
       - gamepad:
           button: Screenshot
+  - name: Left Dial Counter-clockwise
+    source_event:
+      gamepad:
+        dial:
+          name: LeftStickDial
+          direction: counter-clockwise
+    target_events:
+      - keyboard: KeyVolumeDown
+  - name: Left Dial Clockwise
+    source_event:
+      gamepad:
+        dial:
+          name: LeftStickDial
+          direction: clockwise
+    target_events:
+      - keyboard: KeyVolumeUp
+  - name: Right Dial Counter-clockwise
+    source_event:
+      gamepad:
+        dial:
+          name: RightStickDial
+          direction: counter-clockwise
+    target_events:
+      - keyboard: KeyBrightnessDown
+  - name: Right Dial Clockwise
+    source_event:
+      gamepad:
+        dial:
+          name: RightStickDial
+          direction: clockwise
+    target_events:
+      - keyboard: KeyBrightnessUp

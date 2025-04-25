@@ -218,6 +218,7 @@ pub struct GamepadCapability {
     pub trigger: Option<TriggerCapability>,
     pub gyro: Option<GyroCapability>,
     pub accelerometer: Option<AccelerometerCapability>,
+    pub dial: Option<DialCapability>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
@@ -251,6 +252,13 @@ pub struct AccelerometerCapability {
     pub direction: Option<String>,
     pub deadzone: Option<f64>,
     pub axis: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct DialCapability {
+    pub name: String,
+    pub direction: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]

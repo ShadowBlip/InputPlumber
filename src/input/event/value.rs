@@ -1,3 +1,5 @@
+use tabled::derive::display::debug;
+
 use crate::{
     config::capability_map::CapabilityConfig,
     input::capability::{Capability, Gamepad, Mouse, Touch, Touchpad},
@@ -130,6 +132,7 @@ impl InputValue {
                                 Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                                 // Gamepad Button -> Gyro
                                 Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                                Gamepad::Dial(_) => Ok(self.clone()),
                             },
                             // Gamepad Button -> Mouse
                             Capability::Mouse(mouse) => match mouse {
@@ -178,6 +181,7 @@ impl InputValue {
                                 Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                                 // Axis -> Gyro
                                 Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                                Gamepad::Dial(_) => Err(TranslationError::NotImplemented),
                             },
                             // Axis -> Mouse
                             Capability::Mouse(mouse) => match mouse {
@@ -223,6 +227,7 @@ impl InputValue {
                             Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                             // Trigger -> Gyro
                             Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                            Gamepad::Dial(_) => self.translate_trigger_to_button(source_config),
                         },
                         // Trigger -> Mouse
                         Capability::Mouse(mouse) => match mouse {
@@ -246,6 +251,35 @@ impl InputValue {
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                     // Gyro -> ...
                     Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                    // Dial mapping to -> ..
+                    Gamepad::Dial(_) => match target_cap {
+                        Capability::None => Ok(InputValue::None),
+                        Capability::NotImplemented => Ok(InputValue::None),
+                        Capability::Sync => Ok(InputValue::Bool(false)),
+                        Capability::DBus(_) => Ok(self.clone()),
+                        Capability::Gamepad(gamepad) => match gamepad {
+                            Gamepad::Button(_) => self.translate_dial_to_button(source_config),
+                            Gamepad::Axis(_) => Err(TranslationError::NotImplemented),
+                            Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
+                            Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
+                            Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                            Gamepad::Dial(_) => Ok(self.clone()),
+                        },
+                        Capability::Mouse(mouse) => match mouse {
+                            Mouse::Motion => Err(TranslationError::NotImplemented),
+                            Mouse::Button(_) => self.translate_dial_to_button(source_config),
+                        },
+                        Capability::Keyboard(_) => self.translate_dial_to_button(source_config),
+                        Capability::Touchpad(touch) => match touch {
+                            Touchpad::LeftPad(_) => Err(TranslationError::NotImplemented),
+                            Touchpad::RightPad(_) => Err(TranslationError::NotImplemented),
+                            Touchpad::CenterPad(_) => Err(TranslationError::NotImplemented),
+                        },
+                        Capability::Touchscreen(touch) => match touch {
+                            Touch::Motion => Err(TranslationError::NotImplemented),
+                            Touch::Button(_) => Err(TranslationError::NotImplemented),
+                        },
+                    },
                 }
             }
 
@@ -269,6 +303,7 @@ impl InputValue {
                     Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
                     Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                    Gamepad::Dial(_) => Ok(self.clone()),
                 },
                 // Keyboard Key -> Mouse
                 Capability::Mouse(mouse) => match mouse {
@@ -935,6 +970,43 @@ impl InputValue {
             }),
             _ => Err(TranslationError::InvalidTargetConfig(
                 "Invalid or unsupported direction".into(),
+            )),
+        }
+    }
+
+    fn translate_dial_to_button(
+        &self,
+        source_config: &CapabilityConfig,
+    ) -> Result<InputValue, TranslationError> {
+        let gamepad = source_config.gamepad.as_ref().ok_or_else(|| {
+            TranslationError::InvalidSourceConfig(
+                "No gamepad config to translate dial to button".to_string(),
+            )
+        })?;
+
+        let dial = gamepad.dial.as_ref().ok_or_else(|| {
+            TranslationError::InvalidSourceConfig(
+                "No gamepad config to translate button to dial".to_string(),
+            )
+        })?;
+
+        let direction = dial.direction.as_ref().ok_or_else(|| {
+            TranslationError::InvalidSourceConfig("Incomplete dial config".to_string())
+        })?;
+
+        // Extract x value from Vector2 if present, otherwise return None
+        let x_value = match self {
+            InputValue::Vector2 { x: Some(x), y: _ } => *x,
+            _ => return Ok(InputValue::None),
+        };
+
+        // Check direction and value to determine button state
+        match direction.as_str() {
+            "clockwise" if x_value > 0.0 => Ok(InputValue::Bool(true)),
+            "counter-clockwise" if x_value < 0.0 => Ok(InputValue::Bool(true)),
+            "clockwise" | "counter-clockwise" => Ok(InputValue::None),
+            _ => Err(TranslationError::InvalidSourceConfig(
+                "Incomplete dial config".to_string(),
             )),
         }
     }

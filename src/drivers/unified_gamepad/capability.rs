@@ -686,6 +686,11 @@ pub enum InputCapability {
     /// Right analog stick force sensor, Steam Deck right stick force
     GamepadTriggerRightStickForce = 0x505,
 
+    /// Left dial/wheel, Zotac Zone left dial
+    GamepadDialLeft = 0x550,
+    /// Right dial/wheel, Zotac Zone right dial
+    GamepadDialRight = 0x551,
+
     /// Center or main gyro sensor
     GamepadGyroCenter = 0x600,
     /// Left side gamepad gyro

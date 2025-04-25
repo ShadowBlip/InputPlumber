@@ -186,6 +186,16 @@
         }
       }
     },
+    "DialCapability": {
+      "description": "The Dial direction can be used to map clockwise or counter-clockwise turns.",
+      "type": "object",
+      "required": ["name", "direction"],
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "EvdevConfig": {
       "description": "An [EvdevConfig] defines a matching evdev input event",
       "type": "object",
@@ -1116,6 +1126,16 @@
           "anyOf": [
             {
               "$ref": "#/definitions/TriggerCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dial": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DialCapability"
             },
             {
               "type": "null"

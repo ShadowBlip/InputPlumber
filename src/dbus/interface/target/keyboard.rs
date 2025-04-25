@@ -199,6 +199,8 @@ fn capability_from_key_string(key: &str) -> Capability {
         "KEY_SCROLLDOWN" => Capability::Keyboard(Keyboard::KeyScrollDown),
         "KEY_KPLEFTPAREN" => Capability::Keyboard(Keyboard::KeyKpLeftParen),
         "KEY_KPRIGHTPAREN" => Capability::Keyboard(Keyboard::KeyKpRightParen),
+        "KEY_BRIGHTNESSDOWN" => Capability::Keyboard(Keyboard::KeyBrightnessDown),
+        "KEY_BRIGHTNESSUP" => Capability::Keyboard(Keyboard::KeyBrightnessUp),
         "KEY_F13" => Capability::Keyboard(Keyboard::KeyF13),
         "KEY_F14" => Capability::Keyboard(Keyboard::KeyF14),
         "KEY_F15" => Capability::Keyboard(Keyboard::KeyF15),

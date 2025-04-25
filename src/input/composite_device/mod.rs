@@ -925,6 +925,7 @@ impl CompositeDevice {
                             continue;
                         }
                     }
+                    Gamepad::Dial(_) => {}
                     Gamepad::Axis(_)
                     | Gamepad::Trigger(_)
                     | Gamepad::Accelerometer
@@ -1493,6 +1494,24 @@ impl CompositeDevice {
                         }
                     };
                     if matches!(value, InputValue::None) {
+                        continue;
+                    }
+
+                    // Some event mappings like relative->button will see only a `1` or `-1` event,
+                    // so these require emulating a momentary button press.
+                    if source_cap.is_momentary_translation(&target_cap) {
+                        let event = NativeEvent::new_translated(
+                            source_cap.clone(),
+                            target_cap.clone(),
+                            InputValue::Bool(true),
+                        );
+                        events.push(event);
+                        let event = NativeEvent::new_translated(
+                            source_cap.clone(),
+                            target_cap,
+                            InputValue::Bool(false),
+                        );
+                        events.push(event);
                         continue;
                     }
 

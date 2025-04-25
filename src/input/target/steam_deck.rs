@@ -709,6 +709,7 @@ impl SteamDeckDevice {
                         }
                     }
                 }
+                Gamepad::Dial(_) => (),
             },
             Capability::Mouse(_) => (),
             Capability::Keyboard(_) => (),

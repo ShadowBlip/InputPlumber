@@ -23,6 +23,25 @@ pub enum Capability {
     Touchscreen(Touch),
 }
 
+impl Capability {
+    /// Helper function to determine if an event mapping output requires emulating
+    /// a momentary press. This is required in such cases as relative->button
+    /// mappings of similar. In the case of the Zotac Zone dials for example these
+    /// emit only a `1` or a `-1` as do other devices like mouse wheels.
+    pub fn is_momentary_translation(&self, target: &Capability) -> bool {
+        if let Capability::Gamepad(Gamepad::Dial(_)) = self {
+            matches!(
+                target,
+                Capability::Gamepad(Gamepad::Button(_))
+                    | Capability::Mouse(Mouse::Button(_))
+                    | Capability::Keyboard(_)
+            )
+        } else {
+            false
+        }
+    }
+}
+
 impl fmt::Display for Capability {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -139,6 +158,17 @@ impl From<CapabilityConfig> for Capability {
 
                 return Capability::Gamepad(Gamepad::Accelerometer);
             }
+
+            // Dials/wheels
+            if let Some(dial_config) = gamepad.dial.as_ref() {
+                let dial = GamepadDial::from_str(&dial_config.name);
+                if dial.is_err() {
+                    log::error!("Invalid or unimplemented dial: {}", dial_config.name);
+                    return Capability::NotImplemented;
+                }
+                let dial = dial.unwrap();
+                return Capability::Gamepad(Gamepad::Dial(dial));
+            }
         }
 
         // Keyboard
@@ -251,6 +281,8 @@ pub enum Gamepad {
     /// Gyro events measure the angular velocity of a device measured
     /// with (x, y, z) values normalized to degrees per second.
     Gyro,
+    /// Dials and wheels
+    Dial(GamepadDial),
 }
 
 impl fmt::Display for Gamepad {
@@ -261,6 +293,7 @@ impl fmt::Display for Gamepad {
             Gamepad::Trigger(_) => write!(f, "Trigger"),
             Gamepad::Accelerometer => write!(f, "Accelerometer"),
             Gamepad::Gyro => write!(f, "Gyro"),
+            Gamepad::Dial(_) => write!(f, "Dial"),
         }
     }
 }
@@ -284,6 +317,9 @@ impl FromStr for Gamepad {
             )?)),
             "Accelerometer" => Ok(Gamepad::Accelerometer),
             "Gyro" => Ok(Gamepad::Gyro),
+            "Dial" => Ok(Gamepad::Dial(GamepadDial::from_str(
+                parts.join(":").as_str(),
+            )?)),
             _ => Err(()),
         }
     }
@@ -610,6 +646,33 @@ impl FromStr for GamepadTrigger {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum GamepadDial {
+    LeftStickDial,
+    RightStickDial,
+}
+
+impl fmt::Display for GamepadDial {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GamepadDial::LeftStickDial => write!(f, "LeftStickDial"),
+            GamepadDial::RightStickDial => write!(f, "RightStickDial"),
+        }
+    }
+}
+
+impl FromStr for GamepadDial {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "LeftStickDial" => Ok(GamepadDial::LeftStickDial),
+            "RightStickDial" => Ok(GamepadDial::RightStickDial),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Keyboard {
     Key0,
     Key1,
@@ -629,6 +692,8 @@ pub enum Keyboard {
     KeyBack,
     KeyBackslash,
     KeyBackspace,
+    KeyBrightnessDown,
+    KeyBrightnessUp,
     KeyC,
     KeyCalc,
     KeyCapslock,
@@ -796,6 +861,8 @@ impl fmt::Display for Keyboard {
             Keyboard::KeyBack => write!(f, "KeyBack"),
             Keyboard::KeyBackslash => write!(f, "KeyBackslash"),
             Keyboard::KeyBackspace => write!(f, "KeyBackspace"),
+            Keyboard::KeyBrightnessDown => write!(f, "KeyBrightnessDown"),
+            Keyboard::KeyBrightnessUp => write!(f, "KeyBrightnessUp"),
             Keyboard::KeyC => write!(f, "KeyC"),
             Keyboard::KeyCalc => write!(f, "KeyCalc"),
             Keyboard::KeyCapslock => write!(f, "KeyCapslock"),
@@ -967,6 +1034,8 @@ impl FromStr for Keyboard {
             "KeyBack" => Ok(Keyboard::KeyBack),
             "KeyBackslash" => Ok(Keyboard::KeyBackslash),
             "KeyBackspace" => Ok(Keyboard::KeyBackspace),
+            "KeyBrightnessDown" => Ok(Keyboard::KeyBrightnessDown),
+            "KeyBrightnessUp" => Ok(Keyboard::KeyBrightnessUp),
             "KeyC" => Ok(Keyboard::KeyC),
             "KeyCalc" => Ok(Keyboard::KeyCalc),
             "KeyCapslock" => Ok(Keyboard::KeyCapslock),
