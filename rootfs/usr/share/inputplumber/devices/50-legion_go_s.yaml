@@ -23,6 +23,39 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  # Config, used for setting attributes on load
+  - group: gamepad
+    udev:
+      attributes:
+        - name: bInterfaceNumber
+          value: "03"
+        - name: idVendor
+          value: "1a86"
+        - name: idProduct
+          value: "e310"
+      driver: lenovo-legos-hid
+      subsystem: hidraw
+  - group: gamepad
+    udev:
+      attributes:
+        - name: bInterfaceNumber
+          value: "03"
+        - name: idVendor
+          value: "1a86"
+        - name: idProduct
+          value: "e311"
+      driver: lenovo-legos-hid
+      subsystem: hidraw
+  #- group: gamepad
+  #  hidraw:
+  #    vendor_id: 0x1a86
+  #    product_id: 0xe310
+  #    interface_num: 3
+  #- group: gamepad
+  #  hidraw:
+  #    vendor_id: 0x1a86
+  #    product_id: 0xe311
+  #    interface_num: 3
   # Mouse
   - group: mouse
     blocked: true
