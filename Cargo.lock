@@ -989,6 +989,7 @@ dependencies = [
  "tokio",
  "udev",
  "uhid-virt",
+ "version-compare",
  "virtual-usb",
  "xdg",
  "zbus",
@@ -2127,6 +2128,12 @@ checksum = "81dfa00651efa65069b0b6b651f4aaa31ba9e3c3ce0137aaad053604ee7e0314"
 dependencies = [
  "getrandom 0.2.15",
 ]
+
+[[package]]
+name = "version-compare"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "852e951cb7832cb45cb1169900d19760cfa39b82bc0ea9c0e5a14ae88411c98b"
 
 [[package]]
 name = "virtual-usb"

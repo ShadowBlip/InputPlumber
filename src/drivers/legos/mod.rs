@@ -2,6 +2,7 @@ use std::time::Duration;
 
 pub mod event;
 pub mod hid_report;
+pub mod config_driver;
 pub mod imu_driver;
 pub mod touchpad_driver;
 pub mod xinput_driver;
@@ -12,8 +13,9 @@ pub const XINPUT_PID: u16 = 0xe310;
 pub const DINPUT_PID: u16 = 0xe311;
 pub const PIDS: [u16; 2] = [XINPUT_PID, DINPUT_PID];
 
-pub const IMU_IID: i32 = 0x5;
+pub const CFG_IID: i32 = 0x3;
 pub const TP_IID: i32 = 0x2;
+pub const IMU_IID: i32 = 0x5;
 pub const GP_IID: i32 = 0x6;
 
 // Input report sizes

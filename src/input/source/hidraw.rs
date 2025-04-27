@@ -7,6 +7,7 @@ pub mod lego_dinput_combined;
 pub mod lego_dinput_split;
 pub mod lego_fps_mode;
 pub mod lego_xinput;
+pub mod legos_config;
 pub mod legos_imu;
 pub mod legos_touchpad;
 pub mod legos_xinput;
@@ -22,6 +23,7 @@ use std::{error::Error, time::Duration};
 use blocked::BlockedHidrawDevice;
 use flydigi_vader_4_pro::Vader4Pro;
 use horipad_steam::HoripadSteam;
+use legos_config::LegionSConfigController;
 use legos_imu::LegionSImuController;
 use legos_touchpad::LegionSTouchpadController;
 use msi_claw::MsiClaw;
@@ -52,6 +54,7 @@ enum DriverType {
     LegionGoDCombined,
     LegionGoDSplit,
     LegionGoFPS,
+    LegionGoSConfig,
     LegionGoSImu,
     LegionGoSTouchpad,
     LegionGoSXInput,
@@ -76,6 +79,7 @@ pub enum HidRawDevice {
     LegionGoDCombined(SourceDriver<LegionControllerDCombined>),
     LegionGoDSplit(SourceDriver<LegionControllerDSplit>),
     LegionGoFPS(SourceDriver<LegionControllerFPS>),
+    LegionGoSConfig(SourceDriver<LegionSConfigController>),
     LegionGoSImu(SourceDriver<LegionSImuController>),
     LegionGoSTouchpad(SourceDriver<LegionSTouchpadController>),
     LegionGoSXInput(SourceDriver<LegionSXInputController>),
@@ -99,6 +103,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoDCombined(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoDSplit(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoFPS(source_driver) => source_driver.info_ref(),
+            HidRawDevice::LegionGoSConfig(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.info_ref(),
@@ -122,6 +127,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoDCombined(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoDSplit(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoFPS(source_driver) => source_driver.get_id(),
+            HidRawDevice::LegionGoSConfig(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_id(),
@@ -145,6 +151,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoDCombined(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoDSplit(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoFPS(source_driver) => source_driver.client(),
+            HidRawDevice::LegionGoSConfig(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.client(),
@@ -168,6 +175,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoDCombined(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoDSplit(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoFPS(source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoSConfig(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.run().await,
@@ -193,6 +201,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoDCombined(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoDSplit(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoFPS(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::LegionGoSConfig(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_capabilities(),
@@ -216,6 +225,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoDCombined(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoDSplit(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoFPS(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::LegionGoSConfig(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_device_path(),
@@ -309,6 +319,11 @@ impl HidRawDevice {
                 let device = LegionControllerX::new(device_info.clone())?;
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
                 Ok(Self::LegionGoXInput(source_device))
+            }
+            DriverType::LegionGoSConfig => {
+                let device = LegionSConfigController::new(device_info.clone())?;
+                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                Ok(Self::LegionGoSConfig(source_device))
             }
             DriverType::LegionGoSImu => {
                 let device = LegionSImuController::new(device_info.clone())?;
@@ -447,6 +462,15 @@ impl HidRawDevice {
         if vid == drivers::lego::driver_xinput::VID && pid == drivers::lego::driver_xinput::PID {
             log::info!("Detected Legion Go XInput Mode");
             return DriverType::LegionGoXInput;
+        }
+
+        // Legion Go S Config
+        if vid == drivers::legos::VID
+            && drivers::legos::PIDS.contains(&pid)
+            && iid == drivers::legos::CFG_IID
+        {
+            log::info!("Detected Legion Go S Config");
+            return DriverType::LegionGoSConfig;
         }
 
         // Legion Go S IMU
