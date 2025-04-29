@@ -2,6 +2,8 @@
 Description=InputPlumber Service
 
 [Service]
+Type=dbus
+BusName=org.shadowblip.InputPlumber
 Environment=LOG_LEVEL=info
 ExecStart=/usr/bin/inputplumber
 
