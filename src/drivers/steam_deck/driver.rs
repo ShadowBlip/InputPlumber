@@ -98,14 +98,14 @@ impl Driver {
         if enabled {
             // Enable keyboard emulation
             let report = PackedMappingsReport {
-                report_id: ReportType::DefaultMappings as u8,
+                report_id: ReportType::SetDefaultDigitalMappings as u8,
             };
             let buf = report.pack()?;
             let _bytes_written = self.device.write(&buf)?;
 
             // Enable mouse emulation on the right pad
             let report = PackedMappingsReport {
-                report_id: ReportType::DefaultMouse as u8,
+                report_id: ReportType::LoadDefaultSettings as u8,
             };
             let buf = report.pack()?;
             let _bytes_written = self.device.write(&buf)?;
@@ -117,7 +117,7 @@ impl Driver {
         else {
             // Disable keyboard emulation (for a few seconds)
             let report = PackedMappingsReport {
-                report_id: ReportType::ClearMappings as u8,
+                report_id: ReportType::ClearDigitalMappings as u8,
             };
             let buf = report.pack()?;
             let _bytes_written = self.device.write(&buf)?;
@@ -140,7 +140,7 @@ impl Driver {
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Create a buffer for the report
         let mut buf = [0; 64];
-        buf[0] = ReportType::WriteRegister as u8;
+        buf[0] = ReportType::SetSettingsValues as u8;
         // Only allow writing one register at a time (size: 3 bytes)
         buf[1] = 3;
         // Register is 8 bits

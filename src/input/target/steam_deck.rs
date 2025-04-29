@@ -2,6 +2,7 @@ use packed_struct::{
     types::{Integer, SizedInteger},
     PackedStruct,
 };
+use rand::Rng;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -104,6 +105,7 @@ impl Default for SteamDeckConfig {
 const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
 
 pub struct SteamDeckDevice {
+    chip_id: [u8; 15],
     config: SteamDeckConfig,
     config_rx: Option<Receiver<SteamDeckConfig>>,
     /// Steam will send 'SetReport' commands with a report type, so it can fetch
@@ -132,6 +134,7 @@ impl SteamDeckDevice {
         }
 
         Ok(Self {
+            chip_id: Default::default(),
             config,
             config_rx: None,
             current_report: ReportType::InputData,
@@ -288,12 +291,12 @@ impl SteamDeckDevice {
                     HidReportType::Feature => {
                         // Reply based on the currently set report
                         match self.current_report {
-                            ReportType::GetAttrib => {
+                            ReportType::GetAttributesValues => {
                                 log::debug!("Sending attribute data");
                                 // No idea what these bytes mean, but this is
                                 // what is sent from the real device.
                                 let data = [
-                                    ReportType::GetAttrib as u8,
+                                    ReportType::GetAttributesValues as u8,
                                     0x2d,
                                     0x01,
                                     0x05,
@@ -360,18 +363,33 @@ impl SteamDeckDevice {
                                 ];
                                 Reply::from_xfer(xfer, &data)
                             }
-                            ReportType::GetSerial => {
+                            ReportType::GetStringAttribute => {
                                 // Reply with the serial number
                                 // [ReportType::GetSerial, 0x14, 0x01, ..serial?]?
                                 log::debug!("Sending serial number: {}", self.serial_number);
-                                let mut data = vec![ReportType::GetSerial as u8, 0x14, 0x01];
+                                let mut data =
+                                    vec![ReportType::GetStringAttribute as u8, 0x14, 0x01];
                                 let mut serial_data = self.serial_number.as_bytes().to_vec();
                                 data.append(&mut serial_data);
                                 data.resize(64, 0);
                                 Reply::from_xfer(xfer, data.as_slice())
                             }
+                            ReportType::GetChipId => {
+                                log::debug!("Sending Chip ID: {:?}", self.chip_id);
+                                let mut data = vec![ReportType::GetChipId as u8, 0x11, 0x00];
+                                let mut chip_id = self.chip_id.to_vec();
+                                data.append(&mut chip_id);
+                                data.resize(64, 0);
+                                Reply::from_xfer(xfer, data.as_slice())
+                            }
                             // Don't care about other types
-                            _ => Reply::from_xfer(xfer, &[]),
+                            _ => {
+                                log::trace!(
+                                    "Got GetReport for ReportType we aren't handling: {:?}",
+                                    self.current_report
+                                );
+                                Reply::from_xfer(xfer, &[])
+                            }
                         }
                     }
                 }
@@ -444,44 +462,33 @@ impl SteamDeckDevice {
 
                 // https://github.com/libsdl-org/SDL/blob/f0363a0466f72655a1081fb96a90e1b9602ee571/src/joystick/hidapi/SDL_hidapi_steamdeck.c
                 match report_type {
-                    ReportType::InputData => (),
-                    ReportType::SetMappings => (),
-                    // ClearMappings gets called to take the controller out of lizard
+                    // ClearDigitalMappings gets called to take the controller out of lizard
                     // mode so that Steam can control it directly.
-                    ReportType::ClearMappings => {
-                        //log::trace!("Disabling lizard mode");
+                    ReportType::ClearDigitalMappings => {
+                        log::debug!("Disabling lizard mode");
                         self.lizard_mode_enabled = false;
                     }
-                    ReportType::GetMappings => (),
-                    ReportType::GetAttrib => {
+                    ReportType::GetAttributesValues => {
                         log::debug!("Attribute requested");
-                        self.current_report = ReportType::GetAttrib;
+                        self.current_report = ReportType::GetAttributesValues;
                     }
-                    ReportType::GetAttribLabel => (),
-                    // DefaultMappings sets the device in lizard mode, so it can run
+                    // SetDefaultDigitalMappings sets the device in lizard mode, so it can run
                     // without Steam.
-                    ReportType::DefaultMappings => {
+                    ReportType::SetDefaultDigitalMappings => {
                         log::debug!("Setting lizard mode enabled");
                         self.lizard_mode_enabled = true;
                     }
-                    ReportType::FactoryReset => (),
-                    // When Steam boots up, it writes to a register with this data:
-                    // Got SetReport data: [135, 3, 8, 7, 0, 0, 0, ...]
-                    ReportType::WriteRegister => (),
-                    ReportType::ClearRegister => (),
-                    ReportType::ReadRegister => (),
-                    ReportType::GetRegisterLabel => (),
-                    ReportType::GetRegisterMax => (),
-                    ReportType::GetRegisterDefault => (),
-                    ReportType::SetMode => (),
-                    ReportType::DefaultMouse => (),
-                    ReportType::TriggerHapticPulse => (),
-                    ReportType::RequestCommStatus => (),
                     // Configure the next GET_REPORT call to return the serial
                     // number.
-                    ReportType::GetSerial => {
+                    ReportType::GetStringAttribute => {
                         log::debug!("Serial number requested");
-                        self.current_report = ReportType::GetSerial;
+                        self.current_report = ReportType::GetStringAttribute;
+                    }
+                    // Configure the next GET_REPORT call to return the serial
+                    // number.
+                    ReportType::GetChipId => {
+                        log::debug!("Chip ID requested");
+                        self.current_report = ReportType::GetChipId;
                     }
                     ReportType::TriggerHapticCommand => {
                         self.current_report = ReportType::TriggerHapticCommand;
@@ -527,9 +534,12 @@ impl SteamDeckDevice {
                         let event = OutputEvent::SteamDeckRumble(packed_rumble_report);
                         self.output_event = Some(event);
                     }
-                    ReportType::UnknownC1 => (),
-                    ReportType::UnknownDc => (),
-                    ReportType::UnknownE2 => (),
+                    _ => {
+                        log::trace!(
+                            "Got SetReport for ReportType we aren't handling: {:?}",
+                            report_type
+                        );
+                    }
                 }
             }
             // Ignore other types of requests
@@ -996,6 +1006,30 @@ impl TargetOutputDevice for SteamDeckDevice {
             self.device = Some(device);
             self.config = config;
             self.config_rx = None;
+            self.serial_number = format!(
+                "{:04x?}-{:04x?}-1ae1c0b",
+                VID,
+                self.config.product_id.to_u32()
+            );
+            let mut rng = rand::rng();
+            let chip_id: [u8; 15] = [
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+            ];
+            self.chip_id = chip_id;
         }
 
         // Increment the frame
