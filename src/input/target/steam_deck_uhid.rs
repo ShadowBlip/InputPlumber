@@ -11,6 +11,7 @@ use packed_struct::{
     types::{Integer, SizedInteger},
     PackedStruct,
 };
+use rand::Rng;
 use tokio::sync::mpsc::{channel, Receiver};
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
@@ -54,6 +55,7 @@ use super::{
 const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
 
 pub struct SteamDeckUhidDevice {
+    chip_id: [u8; 15],
     config: SteamDeckConfig,
     config_rx: Option<Receiver<SteamDeckConfig>>,
     /// Steam will send 'SetReport' commands with a report type, so it can fetch
@@ -75,6 +77,7 @@ impl SteamDeckUhidDevice {
     /// Create a new emulated Steam Deck device with the given configuration.
     pub fn new_with_config(config: SteamDeckConfig) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
+            chip_id: Default::default(),
             config,
             config_rx: None,
             current_report: ReportType::InputData,
@@ -385,13 +388,13 @@ impl SteamDeckUhidDevice {
         };
 
         let data = match self.current_report {
-            ReportType::GetAttrib => {
+            ReportType::GetAttributesValues => {
                 log::debug!("Sending attribute data");
                 // No idea what these bytes mean, but this is
                 // what is sent from the real device.
                 let data = [
                     0x00,
-                    ReportType::GetAttrib as u8,
+                    ReportType::GetAttributesValues as u8,
                     0x2d,
                     0x01,
                     0x05,
@@ -457,18 +460,32 @@ impl SteamDeckUhidDevice {
                 ];
                 data.to_vec()
             }
-            ReportType::GetSerial => {
+            ReportType::GetStringAttribute => {
                 // Reply with the serial number
                 // [ReportType::GetSerial, 0x14, 0x01, ..serial?]?
                 log::debug!("Sending serial number: {}", self.serial_number);
-                let mut data = vec![0x0, ReportType::GetSerial as u8, 0x14, 0x01];
+                let mut data = vec![0x0, ReportType::GetStringAttribute as u8, 0x14, 0x01];
                 let mut serial_data = self.serial_number.as_bytes().to_vec();
                 data.append(&mut serial_data);
                 data.resize(64, 0);
                 data
             }
+            ReportType::GetChipId => {
+                log::debug!("Sending Chip ID: {:?}", self.chip_id);
+                let mut data = vec![0x00, ReportType::GetChipId as u8, 0x11, 0x00];
+                let mut chip_id = self.chip_id.to_vec();
+                data.append(&mut chip_id);
+                data.resize(64, 0);
+                data
+            }
             // Don't care about other types
-            _ => vec![],
+            _ => {
+                log::trace!(
+                    "Got GetReport for ReportType we aren't handling: {:?}",
+                    self.current_report
+                );
+                vec![]
+            }
         };
 
         // Write the report reply to the HIDRAW device
@@ -497,8 +514,6 @@ impl SteamDeckUhidDevice {
                 return Ok(vec![]);
             }
         };
-        log::trace!("True Report ID: {:#04x}", (*report_id));
-        log::trace!("Raw data {}: {:?}", data.len(), data);
         // uhid has an extra byte prepended, remove it.
         data.remove(0);
         let output_events = match self.current_report {
@@ -528,8 +543,14 @@ impl SteamDeckUhidDevice {
                 let event = OutputEvent::SteamDeckRumble(packed_rumble_report);
                 vec![event]
             }
-
-            _ => vec![],
+            // Don't care about other types
+            _ => {
+                log::trace!(
+                    "Got SetReport for ReportType we aren't handling: {:?}",
+                    self.current_report
+                );
+                vec![]
+            }
         };
 
         let Some(device) = self.device.as_mut() else {
@@ -748,6 +769,30 @@ impl TargetOutputDevice for SteamDeckUhidDevice {
             self.device = Some(device);
             self.config = config;
             self.config_rx = None;
+            self.serial_number = format!(
+                "{:04x?}-{:04x?}-1ae1c0b",
+                VID,
+                self.config.product_id.to_u32()
+            );
+            let mut rng = rand::rng();
+            let chip_id: [u8; 15] = [
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+                rng.random(),
+            ];
+            self.chip_id = chip_id;
         }
 
         let Some(device) = self.device.as_mut() else {
