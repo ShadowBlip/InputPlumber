@@ -1,6 +1,7 @@
 NAME := $(shell grep 'name =' Cargo.toml | head -n 1 | cut -d'"' -f2)
 VERSION := $(shell grep '^version =' Cargo.toml | cut -d'"' -f2)
-ARCH := $(shell uname -m)
+ARCH ?= $(shell uname -m)
+TARGET_ARCH ?= $(ARCH)-unknown-linux-gnu
 DBUS_NAME := org.shadowblip.InputPlumber
 ALL_RS := $(shell find src -name '*.rs')
 ALL_ROOTFS := $(shell find rootfs -type f)
@@ -41,7 +42,7 @@ help: ## Display this help.
 
 .PHONY: install
 install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr)
-	install -D -m 755 target/$(BUILD_TYPE)/$(NAME) \
+	install -D -m 755 target/$(TARGET_ARCH)/$(BUILD_TYPE)/$(NAME) \
 		$(PREFIX)/bin/$(NAME)
 	install -D -m 644 rootfs/usr/share/dbus-1/system.d/$(DBUS_NAME).conf \
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
@@ -77,24 +78,24 @@ uninstall: ## Uninstall inputplumber
 ##@ Development
 
 .PHONY: build ## Build (Default: BUILD_TYPE=release)
-build: target/$(BUILD_TYPE)/$(NAME)
+build: target/$(TARGET_ARCH)/$(BUILD_TYPE)/$(NAME)
 
 .PHONY: debug
-debug: target/debug/$(NAME)  ## Build debug build
-target/debug/$(NAME): $(ALL_RS) Cargo.lock
-	cargo build
+debug: target/$(TARGET_ARCH)/debug/$(NAME)  ## Build debug build
+target/$(TARGET_ARCH)/debug/$(NAME): $(ALL_RS) Cargo.lock
+	cargo build --target $(TARGET_ARCH)
 
 .PHONY: release
-release: target/release/$(NAME) ## Build release build
-target/release/$(NAME): $(ALL_RS) Cargo.lock
-	cargo build --release
+release: target/$(TARGET_ARCH)/release/$(NAME) ## Build release build
+target/$(TARGET_ARCH)/release/$(NAME): $(ALL_RS) Cargo.lock
+	cargo build --release --target $(TARGET_ARCH)
 
 .PHONY: all
 all: build debug ## Build release and debug builds
 
 .PHONY: run
 run: debug ## Build and run
-	sudo LOG_LEVEL=$(LOG_LEVEL) ./target/debug/$(NAME)
+	sudo LOG_LEVEL=$(LOG_LEVEL) ./target/$(TARGET_ARCH)/debug/$(NAME)
 
 .PHONY: clean
 clean: ## Remove build artifacts
@@ -126,35 +127,35 @@ example:
 ##@ Distribution
 
 .PHONY: dist
-dist: dist/$(NAME).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist/$(NAME).raw ## Create all redistributable versions of the project
+dist: dist/$(NAME)-$(ARCH).tar.gz dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist/$(NAME)-$(ARCH).raw ## Create all redistributable versions of the project
 
 .PHONY: dist-archive
-dist-archive: dist/$(NAME).tar.gz ## Build a redistributable archive of the project
-dist/$(NAME).tar.gz: build $(ALL_ROOTFS)
+dist-archive: dist/$(NAME)-$(ARCH).tar.gz ## Build a redistributable archive of the project
+dist/$(NAME)-$(ARCH).tar.gz: build $(ALL_ROOTFS)
 	rm -rf $(CACHE_DIR)/$(NAME)
 	mkdir -p $(CACHE_DIR)/$(NAME)
 	$(MAKE) install PREFIX=$(CACHE_DIR)/$(NAME)/usr NO_RELOAD=true
 	mkdir -p dist
 	tar cvfz $@ -C $(CACHE_DIR) $(NAME)
-	cd dist && sha256sum $(NAME).tar.gz > $(NAME).tar.gz.sha256.txt
+	cd dist && sha256sum $(NAME)-$(ARCH).tar.gz > $(NAME)-$(ARCH).tar.gz.sha256.txt
 
 .PHONY: dist-rpm
 dist-rpm: dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Build a redistributable RPM package
-dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/release/$(NAME)
+dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/$(TARGET_ARCH)/release/$(NAME)
 	mkdir -p dist
 	cargo install --version 0.14.1 cargo-generate-rpm
-	cargo generate-rpm
-	cp ./target/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
+	cargo generate-rpm --target $(TARGET_ARCH)
+	cp ./target/$(TARGET_ARCH)/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
 	cd dist && sha256sum $(NAME)-$(VERSION)-1.$(ARCH).rpm > $(NAME)-$(VERSION)-1.$(ARCH).rpm.sha256.txt
 
 .PHONY: dist-ext
-dist-ext: dist/$(NAME).raw ## Create a systemd-sysext extension archive
-dist/$(NAME).raw: dist/$(NAME).tar.gz $(CACHE_DIR)/libiio $(CACHE_DIR)/libserialport
+dist-ext: dist/$(NAME)-$(ARCH).raw ## Create a systemd-sysext extension archive
+dist/$(NAME)-$(ARCH).raw: dist/$(NAME)-$(ARCH).tar.gz $(CACHE_DIR)/libiio $(CACHE_DIR)/libserialport
 	@echo "Building redistributable systemd extension"
 	mkdir -p dist
-	rm -rf dist/$(NAME).raw $(CACHE_DIR)/$(NAME).raw
-	cp dist/$(NAME).tar.gz $(CACHE_DIR)
-	cd $(CACHE_DIR) && tar xvfz $(NAME).tar.gz $(NAME)/usr
+	rm -rf dist/$(NAME)-$(ARCH).raw $(CACHE_DIR)/$(NAME)-$(ARCH).raw
+	cp dist/$(NAME)-$(ARCH).tar.gz $(CACHE_DIR)
+	cd $(CACHE_DIR) && tar xvfz $(NAME)-$(ARCH).tar.gz $(NAME)/usr
 	mkdir -p $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d
 	echo ID=$(SYSEXT_ID) > $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
 	echo EXTENSION_RELOAD_MANAGER=1 >> $(CACHE_DIR)/$(NAME)/usr/lib/extension-release.d/extension-release.$(NAME)
@@ -167,30 +168,46 @@ dist/$(NAME).raw: dist/$(NAME).tar.gz $(CACHE_DIR)/libiio $(CACHE_DIR)/libserial
 	cp -r $(CACHE_DIR)/libiio/usr/lib/libiio* $(CACHE_DIR)/$(NAME)/usr/lib
 
 	@# Build the extension archive
-	cd $(CACHE_DIR) && mksquashfs $(NAME) $(NAME).raw
+	cd $(CACHE_DIR) && mksquashfs $(NAME) $(NAME)-$(ARCH).raw
 	rm -rf $(CACHE_DIR)/$(NAME)
-	mv $(CACHE_DIR)/$(NAME).raw $@
-	cd dist && sha256sum $(NAME).raw > $(NAME).raw.sha256.txt
+	mv $(CACHE_DIR)/$(NAME)-$(ARCH).raw $@
+	cd dist && sha256sum $(NAME)-$(ARCH).raw > $(NAME)-$(ARCH).raw.sha256.txt
 
+.PHONY: $(CACHE_DIR)/libiio
 $(CACHE_DIR)/libiio:
 	rm -rf $(CACHE_DIR)/libiio*
+	mkdir -p $(CACHE_DIR)/libiio
+ifeq ($(ARCH),x86_64)
 	wget https://archlinux.org/packages/extra/x86_64/libiio/download/ \
 		-O $(CACHE_DIR)/libiio.tar.zst
 	zstd -d $(CACHE_DIR)/libiio.tar.zst
-	mkdir -p $(CACHE_DIR)/libiio
 	tar xvf $(CACHE_DIR)/libiio.tar -C $(CACHE_DIR)/libiio
+endif
+ifeq ($(ARCH),aarch64)
+	wget http://mirror.archlinuxarm.org/aarch64/extra/libiio-0.26-2-aarch64.pkg.tar.xz \
+		-O $(CACHE_DIR)/libiio.tar.xz
+	tar xvf $(CACHE_DIR)/libiio.tar.xz -C $(CACHE_DIR)/libiio
+endif
 
+.PHONY: $(CACHE_DIR)/libserialport
 $(CACHE_DIR)/libserialport:
 	rm -rf $(CACHE_DIR)/libserialport*
+	mkdir -p $(CACHE_DIR)/libserialport
+ifeq ($(ARCH),x86_64)
 	wget https://archlinux.org/packages/extra/x86_64/libserialport/download/ \
 	  -O $(CACHE_DIR)/libserialport.tar.zst
 	zstd -d $(CACHE_DIR)/libserialport.tar.zst
-	mkdir -p $(CACHE_DIR)/libserialport
 	tar xvf $(CACHE_DIR)/libserialport.tar -C $(CACHE_DIR)/libserialport
+endif
+ifeq ($(ARCH),aarch64)
+	wget http://mirror.archlinuxarm.org/aarch64/extra/libserialport-0.1.2-1-aarch64.pkg.tar.xz \
+		-O $(CACHE_DIR)/libserialport.tar.xz
+	tar xvf $(CACHE_DIR)/libserialport.tar.xz -C $(CACHE_DIR)/libserialport
+endif
 
 .PHONY: update-pkgbuild-hash
-update-pkgbuild-hash: dist/$(NAME).tar.gz ## Update the PKGBUILD hash
-	sed -i "s#^sha256sums=.*#sha256sums=('$$(cat dist/$(NAME).tar.gz.sha256.txt | cut -d' ' -f1)')#g" \
+update-pkgbuild-hash: dist/$(NAME)-$(ARCH).tar.gz ## Update the PKGBUILD hash
+	sed -i "s#^sha256sums=.*#sha256sums=('$$(cat dist/$(NAME)-$(ARCH).tar.gz.sha256.txt | cut -d' ' -f1)')#g" \
 		pkg/archlinux/PKGBUILD
 
 .PHONY: dbus-xml
@@ -247,6 +264,10 @@ in-docker:
 		-v $(PWD):/src \
 		--workdir /src \
 		-e HOME=/home/build \
+		-e ARCH=$(ARCH) \
+		-e TARGET_ARCH=$(TARGET_ARCH) \
+		-e BUILD_TYPE=$(BUILD_TYPE) \
+		-e PKG_CONFIG_SYSROOT_DIR="/usr/$(ARCH)-linux-gnu" \
 		--user $(shell id -u):$(shell id -g) \
 		$(IMAGE_NAME):$(IMAGE_TAG) \
 		make $(TARGET)
@@ -259,7 +280,7 @@ deploy: deploy-ext ## Build and deploy to a remote device
 .PHONY: deploy-ext
 deploy-ext: dist-ext ## Build and deploy systemd extension to a remote device
 	ssh $(SSH_USER)@$(SSH_HOST) mkdir -p .var/lib/extensions
-	scp dist/$(NAME).raw $(SSH_USER)@$(SSH_HOST):~/.var/lib/extensions
+	scp dist/$(NAME)-$(ARCH).raw $(SSH_USER)@$(SSH_HOST):~/.var/lib/extensions
 	ssh -t $(SSH_USER)@$(SSH_HOST) sudo systemd-sysext refresh
 	ssh $(SSH_USER)@$(SSH_HOST) systemd-sysext status
 
