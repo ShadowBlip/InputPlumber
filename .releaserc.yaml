@@ -37,7 +37,7 @@ plugins:
     - shell: true
       prepareCmd: |
         make in-docker TARGET='dist update-pkgbuild-hash'
-        make in-docker TARGET='dist' ARCH=aarch64"
+        make in-docker TARGET='dist' ARCH="aarch64"
       publishCmd: "echo '${nextRelease.version}' > .version.txt"
 
   # Commit the following changes to git after other plugins have run
