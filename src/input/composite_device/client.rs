@@ -439,4 +439,15 @@ impl CompositeDeviceClient {
         }
         Err(ClientError::ChannelClosed)
     }
+
+    /// Notify the composite device that the given source device has stopped
+    pub async fn notify_source_device_stopped(
+        &self,
+        device: UdevDevice,
+    ) -> Result<(), ClientError> {
+        self.tx
+            .send(CompositeCommand::SourceDeviceStopped(device))
+            .await?;
+        Ok(())
+    }
 }
