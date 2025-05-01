@@ -1,7 +1,10 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::msi_claw::{driver::Driver, hid_report::GamepadMode},
+    drivers::msi_claw::{
+        driver::Driver,
+        hid_report::{GamepadMode, MkeysFunction},
+    },
     input::{
         capability::Capability,
         event::native::NativeEvent,
@@ -10,14 +13,21 @@ use crate::{
     udev::device::UdevDevice,
 };
 
-pub struct MsiClaw {}
+pub struct MsiClaw {
+    driver: Driver,
+}
 
 impl MsiClaw {
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info)?;
         log::debug!("Setting gamepad to XInput mode");
-        driver.set_mode(GamepadMode::XInput)?;
-        Ok(Self {})
+        driver.set_mode(GamepadMode::XInput, MkeysFunction::Macro)?;
+        driver.set_mode(GamepadMode::XInput, MkeysFunction::Combination)?;
+        driver.set_mode(GamepadMode::XInput, MkeysFunction::Macro)?;
+        if let Err(e) = driver.get_mode() {
+            log::error!("Failed to send get gamepad mode request: {e}");
+        }
+        Ok(Self { driver })
     }
 }
 
@@ -28,6 +38,9 @@ impl Debug for MsiClaw {
 }
 impl SourceInputDevice for MsiClaw {
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        if let Err(e) = self.driver.poll() {
+            log::error!("Error polling: {e}");
+        }
         Ok(vec![])
     }
 
