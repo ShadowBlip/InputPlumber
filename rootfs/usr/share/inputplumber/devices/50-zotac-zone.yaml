@@ -16,7 +16,7 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      board_name: G0A1W
+      board_name: "{G0A1W,G1A1W}"
       sys_vendor: ZOTAC
 
 # One or more source devices to combine into a single virtual device. The events
