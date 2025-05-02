@@ -41,6 +41,16 @@ source_devices:
     iio:
       name: i2c-BMI0160:00
 
+  #RGB
+  - group: led
+    udev: # Legacy
+      sys_name: multicolor:chassis
+      subsystem: leds
+  - group: led
+    udev: # Updated
+      sys_name: ayaneo:rgb:joystick_rings
+      subsystem: leds
+
 # Optional configuration for the composite device
 options:
   # If true, InputPlumber will automatically try to manage the input device. If

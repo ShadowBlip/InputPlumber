@@ -259,7 +259,7 @@ pub struct ImuConfig {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct LedConfig {
-    pub fixed_color: Option<LedFixedColor>,
+    pub fixed_color: Option<FixedRgbColor>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -325,8 +325,7 @@ pub struct Led {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
-#[allow(clippy::upper_case_acronyms)]
-pub struct LedFixedColor {
+pub struct FixedRgbColor {
     pub r: u8,
     pub g: u8,
     pub b: u8,

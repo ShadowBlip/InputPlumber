@@ -1,5 +1,5 @@
-pub mod multicolor_chassis;
-use self::multicolor_chassis::MultiColorChassis;
+pub mod multicolor;
+use self::multicolor::LedMultiColor;
 use super::{SourceDeviceCompatible, SourceDriver};
 use crate::{
     config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
@@ -8,36 +8,36 @@ use crate::{
 use std::error::Error;
 /// List of available drivers
 enum DriverType {
-    MultiColorChassis,
+    LedMultiColor,
 }
 /// [LedDevice] represents an input device using the leds subsystem.
 #[derive(Debug)]
 pub enum LedDevice {
-    MultiColorChassis(SourceDriver<MultiColorChassis>),
+    MultiColor(SourceDriver<LedMultiColor>),
 }
 
 impl SourceDeviceCompatible for LedDevice {
     fn get_device_ref(&self) -> &UdevDevice {
         match self {
-            LedDevice::MultiColorChassis(source_driver) => source_driver.info_ref(),
+            LedDevice::MultiColor(source_driver) => source_driver.info_ref(),
         }
     }
 
     fn get_id(&self) -> String {
         match self {
-            LedDevice::MultiColorChassis(source_driver) => source_driver.get_id(),
+            LedDevice::MultiColor(source_driver) => source_driver.get_id(),
         }
     }
 
     fn client(&self) -> super::client::SourceDeviceClient {
         match self {
-            LedDevice::MultiColorChassis(source_driver) => source_driver.client(),
+            LedDevice::MultiColor(source_driver) => source_driver.client(),
         }
     }
 
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
-            LedDevice::MultiColorChassis(source_driver) => source_driver.run().await,
+            LedDevice::MultiColor(source_driver) => source_driver.run().await,
         }
     }
 
@@ -45,13 +45,13 @@ impl SourceDeviceCompatible for LedDevice {
         &self,
     ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
         match self {
-            LedDevice::MultiColorChassis(source_driver) => source_driver.get_capabilities(),
+            LedDevice::MultiColor(source_driver) => source_driver.get_capabilities(),
         }
     }
 
     fn get_device_path(&self) -> String {
         match self {
-            LedDevice::MultiColorChassis(source_driver) => source_driver.get_device_path(),
+            LedDevice::MultiColor(source_driver) => source_driver.get_device_path(),
         }
     }
 }
@@ -67,34 +67,23 @@ impl LedDevice {
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver_type = LedDevice::get_driver_type(&device_info);
         match driver_type {
-            DriverType::MultiColorChassis => {
-                let device = MultiColorChassis::new(
-                    device_info.clone(),
-                    match conf
-                        .as_ref()
-                        .and_then(|c| c.config.clone())
-                        .and_then(|c| c.led)
-                    {
-                        Some(cfg) => cfg.fixed_color,
-                        None => None,
-                    },
-                )?;
+            DriverType::LedMultiColor => {
+                let device = LedMultiColor::new(device_info.clone())?;
                 let source_device = SourceDriver::new(composite_device, device, device_info, conf);
-                Ok(Self::MultiColorChassis(source_device))
+                Ok(Self::MultiColor(source_device))
             }
         }
     }
     /// Return the driver type for the given device info
     fn get_driver_type(device: &UdevDevice) -> DriverType {
-        let device_name = device.name();
+        let device_name = device.sysname();
         let name = device_name.as_str();
         log::debug!("Finding driver for LED interface: {name}");
 
-        // TODO: for now everthing is a MultiColorChassis
-        DriverType::MultiColorChassis
+        DriverType::LedMultiColor
     }
 }
-/// Returns the DBus path for an [LedDevice] from a device id (E.g. iio:device0)
+/// Returns the DBus path for an [LedDevice] from a device id (E.g. leds://input7__numlock)
 pub fn get_dbus_path(id: String) -> String {
     let name = id.replace(':', "_");
     format!("{}/{}", BUS_SOURCES_PREFIX, name)
