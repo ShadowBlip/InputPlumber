@@ -134,6 +134,12 @@ source_devices:
       product_id: 0xe311
       interface_num: 5
 
+  #RGB
+  - group: led
+    udev:
+      sys_name: go_s:rgb:joystick_rings
+      subsystem: leds
+
 # Optional configuration for the composite device
 options:
   # If true, InputPlumber will automatically try to manage the input device. If

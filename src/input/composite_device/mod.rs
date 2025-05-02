@@ -1533,7 +1533,7 @@ impl CompositeDevice {
 
         let source_device = match subsystem.as_str() {
             "input" => {
-                log::debug!("Adding source device: {:?}", device.name());
+                log::debug!("Adding EVDEV source device: {:?}", device.name());
                 if is_blocked {
                     is_blocked_evdev = true;
                 }
@@ -1541,17 +1541,17 @@ impl CompositeDevice {
                 SourceDevice::Event(device)
             }
             "hidraw" => {
-                log::debug!("Adding source device: {:?}", device.name());
+                log::debug!("Adding HIDRAW source device: {:?}", device.name());
                 let device = HidRawDevice::new(device, self.client(), source_config.clone())?;
                 SourceDevice::HidRaw(device)
             }
             "iio" => {
-                log::debug!("Adding source device: {:?}", device.name());
+                log::debug!("Adding IIO source device: {:?}", device.name());
                 let device = IioDevice::new(device, self.client(), source_config.clone())?;
                 SourceDevice::Iio(device)
             }
             "leds" => {
-                log::debug!("Adding source device: {:?}", device.name());
+                log::debug!("Adding LED source device: {:?}", device.sysname());
                 let device = LedDevice::new(device, self.client(), source_config.clone())?;
                 SourceDevice::Led(device)
             }

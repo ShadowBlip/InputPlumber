@@ -1007,7 +1007,7 @@ impl Manager {
                     }
 
                     // Check if the composite device has to be unique (default to being unique)
-                    if source_device.unique.map_or(true, |unique| unique) {
+                    if source_device.unique.map_or_else(|| true, |unique| unique) {
                         log::trace!(
                             "Found unique device {:?}, not adding to composite device {composite_device}",
                             source_device
@@ -1414,16 +1414,11 @@ impl Manager {
                     }
                     log::debug!("Finished adding source device on dbus");
                 });
+
                 // Add the device as a source device
                 let path = led::get_dbus_path(sys_name.clone());
                 self.source_device_dbus_paths.insert(id.clone(), path);
-                // Check to see if the device is virtual
-                if device.is_virtual() {
-                    log::debug!("{} is virtual, skipping consideration.", dev_path);
-                    return Ok(());
-                } else {
-                    log::trace!("Real device: {}", dev_path);
-                }
+
                 // Signal that a source device was added
                 log::debug!("Spawing task to add source device: {id}");
                 self.on_source_device_added(id.clone(), device).await?;

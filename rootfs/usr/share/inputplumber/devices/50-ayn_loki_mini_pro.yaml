@@ -41,6 +41,16 @@ source_devices:
         y: [0, 1, 0]
         z: [0, 0, -1]
 
+  #RGB
+  - group: led
+    udev: # Legacy
+      sys_name: multicolor:chassis
+      subsystem: leds
+  - group: led
+    udev: # Updated
+      sys_name: ayn:rgb:joystick_rings
+      subsystem: leds
+
 # Optional configuration for the composite device
 options:
   # If true, InputPlumber will automatically try to manage the input device. If

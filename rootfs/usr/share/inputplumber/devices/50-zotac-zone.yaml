@@ -58,6 +58,16 @@ source_devices:
     iio:
       name: i2c-BMI0160:00
 
+  #RGB
+  - group: led
+    udev:
+      sys_name: zotac:rgb:spectra_zone_0
+      subsystem: leds
+  - group: led
+    udev:
+      sys_name: zotac:rgb:spectra_zone_1
+      subsystem: leds
+
 # Optional configuration for the composite device
 options:
   # If true, InputPlumber will automatically try to manage the input device. If
