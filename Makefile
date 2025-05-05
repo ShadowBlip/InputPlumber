@@ -184,7 +184,8 @@ ifeq ($(ARCH),x86_64)
 	tar xvf $(CACHE_DIR)/libiio.tar -C $(CACHE_DIR)/libiio
 endif
 ifeq ($(ARCH),aarch64)
-	wget http://mirror.archlinuxarm.org/aarch64/extra/libiio-0.26-2-aarch64.pkg.tar.xz \
+	VERSION=$$(curl -s https://archlinuxarm.org/packages/aarch64/libiio | grep '<h1>libiio ' | cut -d'>' -f2 | cut -d'<' -f1 | cut -d' ' -f2) && \
+	wget http://mirror.archlinuxarm.org/aarch64/extra/libiio-$${VERSION}-aarch64.pkg.tar.xz \
 		-O $(CACHE_DIR)/libiio.tar.xz
 	tar xvf $(CACHE_DIR)/libiio.tar.xz -C $(CACHE_DIR)/libiio
 endif
