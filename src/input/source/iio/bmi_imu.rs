@@ -1,59 +1,29 @@
-use std::{error::Error, f64::consts::PI, thread};
-
-use tokio::sync::mpsc::{self, error::TryRecvError};
+use std::{error::Error, f64::consts::PI, fmt::Debug};
 
 use crate::{
     config,
     drivers::iio_imu::{self, driver::Driver, info::MountMatrix},
     input::{
         capability::{Capability, Gamepad},
-        composite_device::client::CompositeDeviceClient,
-        event::{native::NativeEvent, value::InputValue, Event},
-        source::SourceCommand,
+        event::{native::NativeEvent, value::InputValue},
+        source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
 
-/// IIO IMU implementation of IIO interface
-#[derive(Debug)]
-#[allow(clippy::upper_case_acronyms)]
-pub struct IMU {
-    device: UdevDevice,
-    config: Option<config::IIO>,
-    composite_device: CompositeDeviceClient,
-    rx: Option<mpsc::Receiver<SourceCommand>>,
-    device_id: String,
+pub struct BmiImu {
+    driver: Driver,
 }
 
-impl IMU {
+impl BmiImu {
+    /// Create a new BMI IMU source device with the given udev
+    /// device information
     pub fn new(
-        device: UdevDevice,
+        device_info: UdevDevice,
         config: Option<config::IIO>,
-        composite_device: CompositeDeviceClient,
-        rx: mpsc::Receiver<SourceCommand>,
-        device_id: String,
-    ) -> Self {
-        Self {
-            device,
-            config,
-            composite_device,
-            rx: Some(rx),
-            device_id,
-        }
-    }
-
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting BMI IMU driver");
-
-        // Get the device id and name for the driver
-        let id = self.device.sysname();
-        let name = self.device.name();
-        let device_id = self.device_id.clone();
-        let composite_device = self.composite_device.clone();
-        let mut rx = self.rx.take().unwrap();
-
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         // Override the mount matrix if one is defined in the config
-        let mount_matrix = if let Some(config) = self.config.as_ref() {
+        let mount_matrix = if let Some(config) = config.as_ref() {
             if let Some(matrix_config) = config.mount_matrix.as_ref() {
                 let matrix = MountMatrix {
                     x: (matrix_config.x[0], matrix_config.x[1], matrix_config.x[2]),
@@ -68,43 +38,39 @@ impl IMU {
             None
         };
 
-        // Spawn a blocking task with the given poll rate to poll the IMU for
-        // data.
-        let task =
-            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let driver = Driver::new(id, name, mount_matrix)?;
-                loop {
-                    receive_commands(&mut rx)?;
-                    let events = driver.poll()?;
-                    let native_events = translate_events(events);
-                    for event in native_events {
-                        log::trace!("Sending IMU event to CompositeDevice: {:?}", event);
-                        // Don't send un-implemented events
-                        if matches!(event.as_capability(), Capability::NotImplemented) {
-                            continue;
-                        }
-                        let res = composite_device
-                            .blocking_process_event(device_id.clone(), Event::Native(event));
-                        if let Err(e) = res {
-                            return Err(e.to_string().into());
-                        }
-                    }
-                    // Sleep between each poll iteration
-                    thread::sleep(driver.sample_delay);
-                }
-            });
+        let id = device_info.sysname();
+        let name = device_info.name();
+        let driver = Driver::new(id, name, mount_matrix)?;
 
-        // Wait for the task to finish
-        if let Err(e) = task.await? {
-            log::error!("Error running BMI IMU Driver: {:?}", e);
-            return Err(e.to_string().into());
-        }
-
-        log::debug!("BMI IMU driver stopped");
-
-        Ok(())
+        Ok(Self { driver })
     }
 }
+
+impl SourceInputDevice for BmiImu {
+    /// Poll the given input device for input events
+    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        let events = self.driver.poll()?;
+        let native_events = translate_events(events);
+        Ok(native_events)
+    }
+
+    /// Returns the possible input events this device is capable of emitting
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
+        Ok(CAPABILITIES.into())
+    }
+}
+
+impl SourceOutputDevice for BmiImu {}
+
+impl Debug for BmiImu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BmiImu").finish()
+    }
+}
+
+// NOTE: Mark this struct as thread-safe as it will only ever be called from
+// a single thread.
+unsafe impl Send for BmiImu {}
 
 /// Translate the given driver events into native events
 fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {
@@ -140,34 +106,8 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
     }
 }
 
-/// Read commands sent to this device from the channel until it is
-/// empty.
-fn receive_commands(
-    rx: &mut mpsc::Receiver<SourceCommand>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    const MAX_COMMANDS: u8 = 64;
-    let mut commands_processed = 0;
-    loop {
-        match rx.try_recv() {
-            Ok(cmd) => match cmd {
-                SourceCommand::WriteEvent(_) => (),
-                SourceCommand::UploadEffect(_, _) => (),
-                SourceCommand::UpdateEffect(_, _) => (),
-                SourceCommand::EraseEffect(_, _) => (),
-                SourceCommand::Stop => return Err("Device stopped".into()),
-            },
-            Err(e) => match e {
-                TryRecvError::Empty => return Ok(()),
-                TryRecvError::Disconnected => {
-                    log::debug!("Receive channel disconnected");
-                    return Err("Receive channel disconnected".into());
-                }
-            },
-        };
-
-        commands_processed += 1;
-        if commands_processed >= MAX_COMMANDS {
-            return Ok(());
-        }
-    }
-}
+/// List of all capabilities that the driver implements
+pub const CAPABILITIES: &[Capability] = &[
+    Capability::Gamepad(Gamepad::Accelerometer),
+    Capability::Gamepad(Gamepad::Gyro),
+];
