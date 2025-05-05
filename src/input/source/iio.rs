@@ -1,7 +1,5 @@
 pub mod accel_gyro_3d;
-pub mod accel_gyro_3d_new;
 pub mod bmi_imu;
-pub mod bmi_imu_new;
 
 use std::error::Error;
 
@@ -12,7 +10,7 @@ use crate::{
     udev::device::UdevDevice,
 };
 
-use self::{accel_gyro_3d_new::AccelGyro3dImu, bmi_imu_new::BmiImu};
+use self::{accel_gyro_3d::AccelGyro3dImu, bmi_imu::BmiImu};
 
 use super::{SourceDeviceCompatible, SourceDriver};
 
