@@ -54,6 +54,7 @@ use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 #[derive(Debug, Clone)]
 pub enum ProductId {
     SteamDeck = 0x1205,
+    Generic = 0x12f0,
     ZotacZone = 0x12fc,
     AsusRogAlly,
     LenovoLegionGo,
@@ -64,6 +65,7 @@ impl ProductId {
     pub fn to_u16(&self) -> u16 {
         match self {
             ProductId::SteamDeck => ProductId::SteamDeck as u16,
+            ProductId::Generic => ProductId::Generic as u16,
             ProductId::ZotacZone => ProductId::ZotacZone as u16,
             ProductId::AsusRogAlly => ProductId::AsusRogAlly as u16,
             ProductId::LenovoLegionGo => ProductId::LenovoLegionGo as u16,
@@ -74,6 +76,7 @@ impl ProductId {
     pub fn to_u32(&self) -> u32 {
         match self {
             ProductId::SteamDeck => ProductId::SteamDeck as u32,
+            ProductId::Generic => ProductId::Generic as u32,
             ProductId::ZotacZone => ProductId::ZotacZone as u32,
             ProductId::AsusRogAlly => ProductId::AsusRogAlly as u32,
             ProductId::LenovoLegionGo => ProductId::LenovoLegionGo as u32,
@@ -93,9 +96,9 @@ pub struct SteamDeckConfig {
 impl Default for SteamDeckConfig {
     fn default() -> Self {
         Self {
-            vendor: "Valve Corporation".to_string(),
-            name: "Steam Controller".to_string(),
-            product_id: ProductId::SteamDeck,
+            vendor: "InputPlumber".to_string(),
+            name: "Generic Steam Controller".to_string(),
+            product_id: ProductId::Generic,
         }
     }
 }
@@ -835,6 +838,11 @@ impl TargetInputDevice for SteamDeckDevice {
                     device_config.vendor = "Zotac".to_string();
                     device_config.name = "Zone Controller".to_string();
                     device_config.product_id = ProductId::ZotacZone;
+                }
+                "Steam Deck" => {
+                    device_config.vendor = "Valve Corporation".to_string();
+                    device_config.name = "Steam Controller".to_string();
+                    device_config.product_id = ProductId::SteamDeck;
                 }
                 _ => {}
             };
