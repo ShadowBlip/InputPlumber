@@ -615,6 +615,13 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                     device_config.name = "Zone Controller".to_string();
                     device_config.product_id = ProductId::ZotacZone;
                 }
+                "Steam Deck" => {
+                    device_config.vendor = "Valve Corporation".to_string();
+                    device_config.name = "Steam Controller".to_string();
+                    // True PID will only work with the VCHI target as Steam looks for a
+                    // specific bInterfaceNumber when that PID is detected.
+                    device_config.product_id = ProductId::Generic;
+                }
                 _ => {}
             };
 
