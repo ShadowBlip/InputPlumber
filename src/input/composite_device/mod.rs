@@ -1479,6 +1479,28 @@ impl CompositeDevice {
         let path = device.devnode();
         let id = device.get_id();
 
+        // Remove any ffb effects this device registered
+        let mut freed_effect_ids = Vec::new();
+
+        // Loop through all registered effects and remove this device as a source
+        for (effect_id, source_map) in self.ff_effect_id_source_map.iter_mut() {
+            if source_map.remove(&id).is_some() {
+                log::debug!("Removed source {id} from effect {effect_id}");
+            }
+
+            // If this was the last user of the effect, stage the effect for removal
+            if source_map.is_empty() {
+                freed_effect_ids.push(*effect_id);
+            }
+        }
+
+        // Remove all previously staged effects
+        for effect_id in freed_effect_ids {
+            log::debug!("Freeing effect {effect_id} because last source was removed");
+            self.ff_effect_id_source_map.remove(&effect_id);
+            self.ff_effect_ids.insert(effect_id);
+        }
+
         if let Some(idx) = self.source_device_paths.iter().position(|str| str == &path) {
             self.source_device_paths.remove(idx);
         };
