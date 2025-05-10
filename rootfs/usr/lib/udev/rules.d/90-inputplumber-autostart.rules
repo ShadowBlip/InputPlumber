@@ -1,0 +1,1 @@
+ENV{USE_INPUTPLUMBER}=="1", TAG+="uaccess", TAG+="systemd", ENV{SYSTEMD_WANTS}+="inputplumber.service"

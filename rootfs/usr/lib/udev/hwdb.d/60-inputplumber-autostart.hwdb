@@ -1,0 +1,85 @@
+# AOKZOE A1
+dmi:*svnAOKZOE:pnAOKZOEA1AR07:*
+dmi:*svnAOKZOE:pnAOKZOEA1Pro:*
+# ASUS Rog Ally/X
+dmi:*svnASUSTeKCOMPUTERINC.:*rnRC71L:*
+dmi:*svnASUSTeKCOMPUTERINC.:*rnRC72LA:*
+# AYANEO 2
+dmi:*svnAYANEO:pnAYANEO2:*
+dmi:*svnAYANEO:pnAYANEO2S:*
+dmi:*svnAYANEO:pnAYANEOGEEK:*
+dmi:*svnAYANEO:pnAYANEOGEEK1S:*
+# AYANEO 2021
+dmi:*svnAYANEO:pnAYANEO2021:*
+dmi:*svnAYANEO:pnAYANEO2021Pro:*
+dmi:*svnAYANEO:pnAYANEO2021ProRetroPower:*
+dmi:*svnAYANEO:pnAYANEOFOUNDER:*
+# AYANEO Air
+dmi:*svnAYANEO:pnAIR1S:*
+dmi:*svnAYANEO:pnAIR1SLimited:*
+dmi:*svnAYANEO:pnAIR:*
+dmi:*svnAYANEO:pnAIRPlus:*
+dmi:*svnAYANEO:pnAIRPro:*
+# AYANEO Flip
+dmi:*svnAYANEO:pnFLIPDS:*
+dmi:*svnAYANEO:pnFLIPKB:*
+# AYANEO Kun
+dmi:*svnAYANEO:pnAYANEOKUN:*
+# AYANEO Next
+dmi:*svnAYANEO:pnAYANEONEXT:*
+dmi:*svnAYANEO:pnAYANEONEXTAdvance:*
+dmi:*svnAYANEO:pnAYANEONEXTPro:*
+dmi:*svnAYANEO:pnNEXT:*
+dmi:*svnAYANEO:pnNEXTAdvance:*
+dmi:*svnAYANEO:pnNEXTLite:*
+dmi:*svnAYANEO:pnNEXTPro:*
+# AYANEO Slide
+dmi:*svnAYANEO:pnSLIDE:*
+# AYN Loki
+dmi:*svnayn:pnLokiMax:*
+dmi:*svnayn:pnLokiMiniPro:*
+dmi:*svnayn:pnLokiZero:*
+# GPD Win 3
+dmi:*svnGPD:pnG1618-03:*
+# GPD Win 4
+dmi:*svnGPD:pnG1618-04:*
+# GPD Win Max 2
+dmi:*svnGPD:pnG1619-04:*
+# GPD Win Mini
+dmi:*svnGPD:pnG1617-01:*
+# Lenovo Legion Go
+dmi:*svnLENOVO:pn83E1:*
+# Lenovo Legion Go S
+dmi:*svnLENOVO:pn83L3:*
+dmi:*svnLENOVO:pn83N6:*
+dmi:*svnLENOVO:pn83Q2:*
+dmi:*svnLENOVO:pn83Q3:*
+# MSI Claw
+dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClaw7AI+A2VM:*
+dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClaw8AI+A2VM:*
+dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClawA1M:*
+# OneXPlayer Old models
+dmi:*svnONE-NETBOOK:pnONEXPLAYER:*
+dmi:*svnONE-NETBOOKTECHNOLOGYCO.,LTD.:pnONEXPLAYER:*
+# OneXPlayer 2
+dmi:*svnONE-NETBOOK:pnONEXPLAYER2ARP23:*
+dmi:*svnONE-NETBOOK:pnONEXPLAYER2PROARP23:*
+dmi:*svnONE-NETBOOK:pnONEXPLAYER2PROARP23EVA-01:*
+# OneXPlayer Mini A07
+dmi:*svnONE-NETBOOK:pnONEXPLAYERminiA07:*
+# OneXPlayer Mini Pro
+dmi:*svnONE-NETBOOK:pnONEXPLAYERMiniPro:*
+# OneXPlayer OneXFly
+dmi:*svnONE-NETBOOK:pnONEXPLAYERF1:*
+dmi:*svnONE-NETBOOK:pnONEXPLAYERF1Pro:*
+# OneXPlayer X1
+dmi:*svnONE-NETBOOK:pnONEXPLAYERX1A:*
+dmi:*svnONE-NETBOOK:pnONEXPLAYERX1i:*
+dmi:*svnONE-NETBOOK:pnONEXPLAYERX1mini:*
+# OrangePi Neo
+dmi:*svnOrangePi:pnNEO-01:*
+# Zotac Zone
+dmi:*svnZOTAC:*rnG0A1W:*
+dmi:*svnZOTAC:*rnG1A1W:*
+  USE_INPUTPLUMBER=1
+

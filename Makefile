@@ -48,8 +48,10 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	install -D -m 644 -t $(PREFIX)/lib/systemd/system/ \
 		rootfs/usr/lib/systemd/system/*
-	install -D -m 644 rootfs/usr/lib/udev/hwdb.d/59-inputplumber.hwdb \
-		$(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb
+	install -D -m 644 -t $(PREFIX)/lib/udev/hwdb.d/ \
+		rootfs/usr/lib/udev/hwdb.d/*
+	install -D -m 644 -t $(PREFIX)/lib/udev/rules.d/ \
+		rootfs/usr/lib/udev/rules.d/*
 	install -D -m 644 -t $(PREFIX)/share/$(NAME)/devices/ \
 		rootfs/usr/share/$(NAME)/devices/*
 	install -D -m 644 -t $(PREFIX)/share/$(NAME)/schema/ \
@@ -70,6 +72,8 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
 	rm $(PREFIX)/lib/systemd/system/$(NAME)-suspend.service
 	rm $(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb
+	rm $(PREFIX)/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb
+	rm $(PREFIX)/lib/udev/rules.d/90-inputplumber-autostart.rules
 	rm -rf $(PREFIX)/share/$(NAME)/devices/
 	rm -rf $(PREFIX)/share/$(NAME)/schema/
 	rm -rf $(PREFIX)/share/$(NAME)/capability_maps/
