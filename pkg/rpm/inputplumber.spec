@@ -31,6 +31,7 @@ mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/share/dbus-1/system.d
 mkdir -p %{buildroot}/usr/lib/systemd/system
 mkdir -p %{buildroot}/usr/lib/udev/hwdb.d
+mkdir -p %{buildroot}/usr/lib/udev/rules.d
 mkdir -p %{buildroot}/usr/share/inputplumber/capability_maps
 mkdir -p %{buildroot}/usr/share/inputplumber/devices
 mkdir -p %{buildroot}/usr/share/inputplumber/profiles
@@ -40,6 +41,8 @@ install -D -m 755 %{_builddir}/InputPlumber/target/%{_arch}-unknown-linux-gnu/re
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf %{buildroot}/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/lib/systemd/system/* %{buildroot}/usr/lib/systemd/system/
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/lib/udev/hwdb.d/59-inputplumber.hwdb %{buildroot}/usr/lib/udev/hwdb.d/59-inputplumber.hwdb
+install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb %{buildroot}/usr/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb
+install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/lib/udev/rules.d/90-inputplumber-autostart.rules %{buildroot}/usr/lib/udev/rules.d/90-inputplumber-autostart.rules
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/capability_maps/* %{buildroot}/usr/share/inputplumber/capability_maps/
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/devices/* %{buildroot}/usr/share/inputplumber/devices/
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/profiles/* %{buildroot}/usr/share/inputplumber/profiles/
