@@ -28,4 +28,4 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: |
-          make in-docker TARGET='dist' BUILD_TYPE='debug' ARCH='aarch64'
+          make in-docker TARGET='dist' BUILD_TYPE='debug' TARGET_ARCH='aarch64-unknown-linux-gnu'
