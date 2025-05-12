@@ -1,7 +1,7 @@
 NAME := $(shell grep 'name =' Cargo.toml | head -n 1 | cut -d'"' -f2)
 VERSION := $(shell grep '^version =' Cargo.toml | cut -d'"' -f2)
-ARCH ?= $(shell uname -m)
-TARGET_ARCH ?= $(ARCH)-unknown-linux-gnu
+TARGET_ARCH ?= $(shell rustc -vV | sed -n 's/host: //p')
+ARCH := $(shell echo "$(TARGET_ARCH)" | cut -d'-' -f1)
 DBUS_NAME := org.shadowblip.InputPlumber
 ALL_RS := $(shell find src -name '*.rs')
 ALL_ROOTFS := $(shell find rootfs -type f)
