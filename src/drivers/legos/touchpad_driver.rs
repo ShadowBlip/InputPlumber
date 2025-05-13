@@ -1,4 +1,4 @@
-use std::{error::Error, ffi::CString, time::Instant};
+use std::{error::Error, ffi::CString};
 
 use hidapi::HidDevice;
 use packed_struct::PackedStruct;
@@ -8,8 +8,7 @@ use super::{
         AxisEvent, BinaryInput, ButtonEvent, Event, TouchAxisInput, TriggerEvent, TriggerInput,
     },
     hid_report::TouchpadDataReport,
-    HID_TIMEOUT, PAD_FORCE_NORMAL, PAD_RELEASE_DELAY, PIDS, TOUCH_PACKET_SIZE, TOUCH_REPORT_ID,
-    TP_IID, VID,
+    HID_TIMEOUT, PAD_FORCE_NORMAL, PIDS, TOUCH_PACKET_SIZE, TOUCH_REPORT_ID, TP_IID, VID,
 };
 
 pub struct TouchpadDriver {
@@ -17,10 +16,6 @@ pub struct TouchpadDriver {
     device: HidDevice,
     /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport>,
-    /// Timestamp of the last touch event.
-    last_touch: Instant,
-    /// Whether or not we are detecting a touch event currently.
-    is_touching: bool,
 }
 
 impl TouchpadDriver {
@@ -39,8 +34,6 @@ impl TouchpadDriver {
         }
         Ok(Self {
             device,
-            is_touching: false,
-            last_touch: Instant::now(),
             touchpad_state: None,
         })
     }
@@ -62,17 +55,6 @@ impl TouchpadDriver {
                 }
             };
         }
-
-        // There is no release event, so check to see if we are still touching.
-        if self.is_touching && (self.last_touch.elapsed() > PAD_RELEASE_DELAY) {
-            self.is_touching = false;
-            events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
-                index: 0,
-                is_touching: false,
-                x: 0,
-                y: 0,
-            })));
-        };
 
         Ok(events)
     }
@@ -128,7 +110,7 @@ impl TouchpadDriver {
                 pressed: state.pressed,
             })));
             // The touchpad doesn't have a force sensor. TouchAxisInputhe deck target wont produce a "click"
-            // event in desktop or lizard mode without a force value. Simulate a 1/4 press t owork
+            // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
             // around this.
             events.push(Event::Trigger(TriggerEvent::RpadForce(TriggerInput {
                 value: PAD_FORCE_NORMAL * state.pressed as u8,
@@ -136,15 +118,13 @@ impl TouchpadDriver {
         }
 
         // Axis events
-        if state.touch_x != old_state.touch_x || state.touch_y != old_state.touch_y {
-            if !self.is_touching {
-                self.is_touching = true;
-            }
-
-            self.last_touch = Instant::now();
+        if state.touch_x != old_state.touch_x
+            || state.touch_y != old_state.touch_y
+            || state.tip_switch != old_state.tip_switch
+        {
             events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
                 index: 0,
-                is_touching: true,
+                is_touching: state.tip_switch,
                 x: state.touch_x,
                 y: state.touch_y,
             })));
