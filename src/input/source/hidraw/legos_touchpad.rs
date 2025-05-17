@@ -1,7 +1,9 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::legos::{event, touchpad_driver::TouchpadDriver, PAD_FORCE_MAX, PAD_MOTION_MAX},
+    drivers::legos::{
+        event, touchpad_driver::TouchpadDriver, PAD_FORCE_MAX, PAD_MOTION_MAX, PAD_MOTION_MIN,
+    },
     input::{
         capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
         event::{native::NativeEvent, value::InputValue},
@@ -54,6 +56,19 @@ impl Debug for LegionSTouchpadController {
     }
 }
 
+// Returns a value between 0.0 and 1.0 based on the given value, scaled by a
+// minimum and maximum.
+fn normalize_unsigned_value_range(mut raw_value: f64, min: f64, max: f64) -> f64 {
+    if raw_value < min {
+        log::trace!("Got raw value {raw_value} less than minimum {min}");
+        raw_value = min
+    } else if raw_value > max {
+        log::trace!("Got raw value {raw_value} greater than maximum {max}");
+        raw_value = max
+    }
+    (raw_value - min) / (max - min)
+}
+
 // Returns a value between 0.0 and 1.0 based on the given value with its
 // maximum.
 fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
@@ -65,10 +80,10 @@ fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
 fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
     match event {
         event::AxisEvent::Touchpad(value) => {
-            let x = normalize_unsigned_value(value.x as f64, PAD_MOTION_MAX);
+            let x = normalize_unsigned_value_range(value.x as f64, PAD_MOTION_MIN, PAD_MOTION_MAX);
             let x = Some(x);
 
-            let y = normalize_unsigned_value(value.y as f64, PAD_MOTION_MAX);
+            let y = normalize_unsigned_value_range(value.y as f64, PAD_MOTION_MIN, PAD_MOTION_MAX);
             let y = Some(y);
 
             InputValue::Touch {
