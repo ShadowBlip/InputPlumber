@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 pub mod config_driver;
 pub mod event;
 pub mod hid_report;
@@ -27,7 +25,8 @@ const XINPUT_PACKET_SIZE: usize = 32;
 pub const GYRO_SCALE: i16 = 2;
 pub const PAD_FORCE_MAX: f64 = 127.0;
 pub const PAD_FORCE_NORMAL: u8 = 32; /* Simulated average pressure */
-pub const PAD_MOTION_MAX: f64 = 400.0;
+pub const PAD_MOTION_MAX: f64 = 350.0;
+pub const PAD_MOTION_MIN: f64 = 75.0;
 pub const STICK_X_MAX: f64 = 127.0;
 pub const STICK_X_MIN: f64 = -127.0;
 pub const STICK_Y_MAX: f64 = 127.0;
