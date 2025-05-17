@@ -321,23 +321,63 @@ impl HidRawDevice {
                 Ok(Self::LegionGoXInput(source_device))
             }
             DriverType::LegionGoSConfig => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_secs(1),
+                    buffer_size: 2048,
+                };
                 let device = LegionSConfigController::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
                 Ok(Self::LegionGoSConfig(source_device))
             }
             DriverType::LegionGoSImu => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(4),
+                    buffer_size: 2048,
+                };
                 let device = LegionSImuController::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
                 Ok(Self::LegionGoSImu(source_device))
             }
             DriverType::LegionGoSTouchpad => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(8),
+                    buffer_size: 2048,
+                };
                 let device = LegionSTouchpadController::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
                 Ok(Self::LegionGoSTouchpad(source_device))
             }
             DriverType::LegionGoSXInput => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(4),
+                    buffer_size: 2048,
+                };
                 let device = LegionSXInputController::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info,
+                    options,
+                    conf,
+                );
                 Ok(Self::LegionGoSXInput(source_device))
             }
             DriverType::OrangePiNeo => {
