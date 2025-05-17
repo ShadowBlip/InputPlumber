@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 pub mod config_driver;
 pub mod event;
 pub mod hid_report;
