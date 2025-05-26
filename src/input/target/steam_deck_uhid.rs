@@ -644,10 +644,6 @@ impl TargetInputDevice for SteamDeckUhidDevice {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
 
-        // Increment the frame
-        let frame = self.state.frame.to_primitive();
-        self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
-
         // Check to see if this is a button event
         // In some cases, a button down and button up event can happen within
         // the same "frame", which would result in no net state change. This
@@ -805,6 +801,10 @@ impl TargetOutputDevice for SteamDeckUhidDevice {
         let Some(device) = self.device.as_mut() else {
             return Ok(vec![]);
         };
+
+        // Increment the frame
+        let frame = self.state.frame.to_primitive();
+        self.state.frame = Integer::from_primitive(frame.wrapping_add(1));
 
         let event = match device.read() {
             Ok(event) => event,
