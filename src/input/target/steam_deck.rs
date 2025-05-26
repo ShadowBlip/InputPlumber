@@ -2,7 +2,6 @@ use packed_struct::{
     types::{Integer, SizedInteger},
     PackedStruct,
 };
-use rand::Rng;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -137,7 +136,7 @@ impl SteamDeckDevice {
         }
 
         Ok(Self {
-            chip_id: Default::default(),
+            chip_id: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4],
             config,
             config_rx: None,
             current_report: ReportType::InputData,
@@ -1019,25 +1018,6 @@ impl TargetOutputDevice for SteamDeckDevice {
                 VID,
                 self.config.product_id.to_u32()
             );
-            let mut rng = rand::rng();
-            let chip_id: [u8; 15] = [
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-                rng.random(),
-            ];
-            self.chip_id = chip_id;
         }
 
         // Increment the frame
