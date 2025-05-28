@@ -551,7 +551,8 @@ impl Manager {
             device,
             self.next_composite_dbus_path()?,
             capability_map,
-        )?;
+        )
+        .await?;
 
         // Check to see if there's already a CompositeDevice for
         // these source devices.
@@ -809,7 +810,7 @@ impl Manager {
         let composite_path = String::from(device.dbus_path());
         let composite_path_clone = composite_path.clone();
         let tx = self.tx.clone();
-        let task = tokio::spawn(async move {
+        let task = tokio::task::spawn(async move {
             if let Err(e) = device.run().await {
                 log::error!("Error running {composite_path}: {}", e.to_string());
             }
