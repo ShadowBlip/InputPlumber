@@ -1,4 +1,11 @@
-use std::{error::Error, fmt::Debug};
+use std::{
+    error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::msi_claw::{
@@ -6,7 +13,6 @@ use crate::{
         hid_report::{GamepadMode, MkeysFunction},
     },
     input::{
-        capability::Capability,
         event::native::NativeEvent,
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -14,7 +20,8 @@ use crate::{
 };
 
 pub struct MsiClaw {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
+    interval: Interval,
 }
 
 impl MsiClaw {
@@ -27,7 +34,11 @@ impl MsiClaw {
         if let Err(e) = driver.get_mode() {
             log::error!("Failed to send get gamepad mode request: {e}");
         }
-        Ok(Self { driver })
+        let interval = interval(Duration::from_millis(40));
+        Ok(Self {
+            driver: Arc::new(Mutex::new(driver)),
+            interval,
+        })
     }
 }
 
@@ -36,15 +47,13 @@ impl Debug for MsiClaw {
         f.debug_struct("MsiClaw").finish()
     }
 }
+
 impl SourceInputDevice for MsiClaw {
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        if let Err(e) = self.driver.poll() {
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        if let Err(e) = self.driver.lock().unwrap().poll() {
             log::error!("Error polling: {e}");
         }
-        Ok(vec![])
-    }
-
-    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(vec![])
     }
 }

@@ -18,7 +18,7 @@ pub mod steam_deck;
 pub mod xpad_uhid;
 pub mod zotac_zone;
 
-use std::{error::Error, time::Duration};
+use std::error::Error;
 
 use blocked::BlockedHidrawDevice;
 use flydigi_vader_4_pro::Vader4Pro;
@@ -32,8 +32,11 @@ use xpad_uhid::XpadUhid;
 use zotac_zone::ZotacZone;
 
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, drivers,
-    input::composite_device::client::CompositeDeviceClient, udev::device::UdevDevice,
+    config,
+    constants::BUS_SOURCES_PREFIX,
+    drivers,
+    input::{capability::Capability, composite_device::client::CompositeDeviceClient},
+    udev::device::UdevDevice,
 };
 
 use self::{
@@ -43,7 +46,7 @@ use self::{
     legos_xinput::LegionSXInputController, opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
 };
 
-use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
+use super::{InputError, SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 
 /// List of available drivers
 enum DriverType {
@@ -168,31 +171,29 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
-            HidRawDevice::Blocked(source_driver) => source_driver.run().await,
-            HidRawDevice::DualSense(source_driver) => source_driver.run().await,
-            HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.run().await,
-            HidRawDevice::HoripadSteam(source_driver) => source_driver.run().await,
-            HidRawDevice::LegionGoDCombined(source_driver) => source_driver.run().await,
-            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.run().await,
-            HidRawDevice::LegionGoFPS(source_driver) => source_driver.run().await,
-            HidRawDevice::LegionGoSConfig(source_driver) => source_driver.run().await,
-            HidRawDevice::LegionGoSImu(source_driver) => source_driver.run().await,
-            HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.run().await,
-            HidRawDevice::LegionGoSXInput(source_driver) => source_driver.run().await,
-            HidRawDevice::LegionGoXInput(source_driver) => source_driver.run().await,
-            HidRawDevice::MsiClaw(source_driver) => source_driver.run().await,
-            HidRawDevice::OrangePiNeo(source_driver) => source_driver.run().await,
-            HidRawDevice::RogAlly(source_driver) => source_driver.run().await,
-            HidRawDevice::SteamDeck(source_driver) => source_driver.run().await,
-            HidRawDevice::Vader4Pro(source_driver) => source_driver.run().await,
-            HidRawDevice::XpadUhid(source_driver) => source_driver.run().await,
-            HidRawDevice::ZotacZone(source_driver) => source_driver.run().await,
+            HidRawDevice::Blocked(mut source_driver) => source_driver.run().await,
+            HidRawDevice::DualSense(mut source_driver) => source_driver.run().await,
+            HidRawDevice::Fts3528Touchscreen(mut source_driver) => source_driver.run().await,
+            HidRawDevice::HoripadSteam(mut source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoDCombined(mut source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoDSplit(mut source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoFPS(mut source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoSConfig(mut source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoSImu(mut source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoSTouchpad(mut source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoSXInput(mut source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoXInput(mut source_driver) => source_driver.run().await,
+            HidRawDevice::MsiClaw(mut source_driver) => source_driver.run().await,
+            HidRawDevice::OrangePiNeo(mut source_driver) => source_driver.run().await,
+            HidRawDevice::RogAlly(mut source_driver) => source_driver.run().await,
+            HidRawDevice::SteamDeck(mut source_driver) => source_driver.run().await,
+            HidRawDevice::Vader4Pro(mut source_driver) => source_driver.run().await,
+            HidRawDevice::XpadUhid(mut source_driver) => source_driver.run().await,
+            HidRawDevice::ZotacZone(mut source_driver) => source_driver.run().await,
         }
     }
 
-    fn get_capabilities(
-        &self,
-    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
             HidRawDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_capabilities(),
@@ -256,10 +257,7 @@ impl HidRawDevice {
         match driver_type {
             DriverType::Unknown => Err("No driver for hidraw interface found".into()),
             DriverType::Blocked => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(200),
-                    buffer_size: 4096,
-                };
+                let options = SourceDriverOptions { buffer_size: 4096 };
                 let device = BlockedHidrawDevice::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
@@ -271,10 +269,7 @@ impl HidRawDevice {
                 Ok(Self::Blocked(source_device))
             }
             DriverType::DualSense => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(1),
-                    buffer_size: 2048,
-                };
+                let options = SourceDriverOptions { buffer_size: 2048 };
                 let device = DualSenseController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
@@ -286,10 +281,7 @@ impl HidRawDevice {
                 Ok(Self::DualSense(source_device))
             }
             DriverType::SteamDeck => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(1),
-                    buffer_size: 2048,
-                };
+                let options = SourceDriverOptions { buffer_size: 2048 };
                 let device = DeckController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
@@ -321,10 +313,7 @@ impl HidRawDevice {
                 Ok(Self::LegionGoXInput(source_device))
             }
             DriverType::LegionGoSConfig => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_secs(1),
-                    buffer_size: 2048,
-                };
+                let options = SourceDriverOptions { buffer_size: 2048 };
                 let device = LegionSConfigController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
@@ -336,10 +325,7 @@ impl HidRawDevice {
                 Ok(Self::LegionGoSConfig(source_device))
             }
             DriverType::LegionGoSImu => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(4),
-                    buffer_size: 2048,
-                };
+                let options = SourceDriverOptions { buffer_size: 2048 };
                 let device = LegionSImuController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
@@ -351,10 +337,7 @@ impl HidRawDevice {
                 Ok(Self::LegionGoSImu(source_device))
             }
             DriverType::LegionGoSTouchpad => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(8),
-                    buffer_size: 2048,
-                };
+                let options = SourceDriverOptions { buffer_size: 2048 };
                 let device = LegionSTouchpadController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
@@ -366,10 +349,7 @@ impl HidRawDevice {
                 Ok(Self::LegionGoSTouchpad(source_device))
             }
             DriverType::LegionGoSXInput => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(4),
-                    buffer_size: 2048,
-                };
+                let options = SourceDriverOptions { buffer_size: 2048 };
                 let device = LegionSXInputController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
@@ -402,10 +382,7 @@ impl HidRawDevice {
             }
             DriverType::RogAlly => {
                 let device = RogAlly::new(device_info.clone())?;
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(500),
-                    buffer_size: 1024,
-                };
+                let options = SourceDriverOptions { buffer_size: 1024 };
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -422,10 +399,7 @@ impl HidRawDevice {
             }
             DriverType::Vader4Pro => {
                 let device = Vader4Pro::new(device_info.clone())?;
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(0),
-                    buffer_size: 1024,
-                };
+                let options = SourceDriverOptions { buffer_size: 1024 };
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -437,10 +411,7 @@ impl HidRawDevice {
             }
             DriverType::ZotacZone => {
                 let device = ZotacZone::new(device_info.clone())?;
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(300),
-                    buffer_size: 1024,
-                };
+                let options = SourceDriverOptions { buffer_size: 1024 };
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,

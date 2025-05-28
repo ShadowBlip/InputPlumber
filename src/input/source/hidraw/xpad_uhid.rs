@@ -1,6 +1,13 @@
-use std::{collections::HashMap, error::Error, fmt::Debug};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use evdev::{FFEffectData, FFEffectKind};
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::xpad_uhid::{
@@ -18,18 +25,21 @@ use crate::{
 
 /// XpadUhid source device implementation
 pub struct XpadUhid {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    interval: Interval,
 }
 
 impl XpadUhid {
     /// Create a new source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = Driver::new(device_info)?;
+        let driver = Arc::new(Mutex::new(Driver::new(device_info)?));
+        let interval = interval(Duration::from_micros(2500));
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
+            interval,
         })
     }
 
@@ -69,7 +79,7 @@ impl XpadUhid {
         // The value determines if the effect should be playing or not.
         if value == 0 {
             log::trace!("Stopping rumble");
-            if let Err(e) = self.driver.rumble(0, 0) {
+            if let Err(e) = self.driver.lock().unwrap().rumble(0, 0) {
                 log::debug!("Failed to stop rumble: {:?}", e);
                 return Ok(());
             }
@@ -111,7 +121,7 @@ impl XpadUhid {
                 let right_speed = right_speed.round() as u8;
 
                 // Do rumble
-                if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+                if let Err(e) = self.driver.lock().unwrap().rumble(left_speed, right_speed) {
                     let err = format!("Failed to do rumble: {:?}", e);
                     return Err(err.into());
                 }
@@ -124,8 +134,9 @@ impl XpadUhid {
 
 impl SourceInputDevice for XpadUhid {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = self.driver.poll()?;
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
     }
@@ -140,7 +151,7 @@ impl SourceOutputDevice for XpadUhid {
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
-    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+    async fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
         log::trace!("Received output event: {:?}", event);
         match event {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
@@ -153,7 +164,7 @@ impl SourceOutputDevice for XpadUhid {
 
     /// Upload the given force feedback effect data to the source device. Returns
     /// a device-specific id of the uploaded effect if it is successful.
-    fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
+    async fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
         log::debug!("Uploading FF effect data");
         let id = self.next_ff_effect_id();
         if id == -1 {
@@ -165,14 +176,18 @@ impl SourceOutputDevice for XpadUhid {
     }
 
     /// Update the effect with the given id using the given effect data.
-    fn update_effect(&mut self, effect_id: i16, effect: FFEffectData) -> Result<(), OutputError> {
+    async fn update_effect(
+        &mut self,
+        effect_id: i16,
+        effect: FFEffectData,
+    ) -> Result<(), OutputError> {
         log::debug!("Updating FF effect data with id {effect_id}");
         self.ff_evdev_effects.insert(effect_id, effect);
         Ok(())
     }
 
     /// Erase the effect with the given id from the source device.
-    fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
+    async fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
         log::debug!("Erasing FF effect data");
         self.ff_evdev_effects.remove(&effect_id);
         Ok(())

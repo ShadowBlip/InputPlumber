@@ -1,9 +1,11 @@
 use std::fmt::Debug;
 use std::os::fd::AsRawFd;
+use std::time::Duration;
 use std::{collections::HashMap, error::Error};
 
 use evdev::{Device, EventType, InputEvent};
 use nix::fcntl::{FcntlArg, OFlag};
+use tokio::time::{interval, Interval};
 
 use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::{
@@ -23,6 +25,7 @@ use crate::{
 pub struct KeyboardEventDevice {
     device: Device,
     translator: Option<EventTranslator>,
+    interval: Interval,
 }
 
 impl KeyboardEventDevice {
@@ -51,7 +54,14 @@ impl KeyboardEventDevice {
         // Create an event translator if a capability map was given
         let translator = capability_map.map(|map| EventTranslator::new(&map, HashMap::new()));
 
-        Ok(Self { device, translator })
+        // Set polling interval
+        let interval = interval(Duration::from_millis(10));
+
+        Ok(Self {
+            device,
+            translator,
+            interval,
+        })
     }
 
     /// Translate the given evdev event into a native event
@@ -73,7 +83,8 @@ impl KeyboardEventDevice {
 
 impl SourceInputDevice for KeyboardEventDevice {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
         let mut native_events = vec![];
 
         // Poll the translator for any scheduled events

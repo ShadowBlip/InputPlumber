@@ -1,4 +1,11 @@
-use std::{error::Error, fmt::Debug};
+use std::{
+    error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::opineo::{
@@ -23,8 +30,9 @@ enum TouchpadSide {
 
 /// OrangePi Neo Touchpad source device implementation
 pub struct OrangePiNeoTouchpad {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
     side: TouchpadSide,
+    interval: Interval,
 }
 
 impl OrangePiNeoTouchpad {
@@ -45,19 +53,22 @@ impl OrangePiNeoTouchpad {
                 TouchpadSide::Unknown
             }
         };
-        let driver = Driver::new(device_info)?;
+        let driver = Arc::new(Mutex::new(Driver::new(device_info)?));
+        let interval = interval(Duration::from_micros(2500));
 
         Ok(Self {
             driver,
             side: touchpad_side,
+            interval,
         })
     }
 }
 
 impl SourceInputDevice for OrangePiNeoTouchpad {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = self.driver.poll()?;
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events, self.side);
         Ok(native_events)
     }

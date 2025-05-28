@@ -1,7 +1,14 @@
-use std::{collections::HashMap, error::Error, fmt::Debug};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
 use packed_struct::{types::SizedInteger, PrimitiveEnum};
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::{
@@ -23,18 +30,21 @@ use crate::{
 
 /// Legion Go Controller source device implementation
 pub struct LegionSXInputController {
-    driver: XInputDriver,
+    driver: Arc<Mutex<XInputDriver>>,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    interval: Interval,
 }
 
 impl LegionSXInputController {
     /// Create a new Legion controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = XInputDriver::new(device_info.devnode())?;
+        let driver = Arc::new(Mutex::new(XInputDriver::new(device_info.devnode())?));
+        let interval = interval(Duration::from_micros(2500));
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
+            interval,
         })
     }
 
@@ -58,7 +68,7 @@ impl LegionSXInputController {
 
         // The value determines if the effect should be playing or not.
         if value == 0 {
-            if let Err(e) = self.driver.haptic_rumble(0, 0) {
+            if let Err(e) = self.driver.lock().unwrap().haptic_rumble(0, 0) {
                 log::debug!("Failed to stop haptic rumble: {:?}", e);
                 return Ok(());
             }
@@ -97,7 +107,12 @@ impl LegionSXInputController {
                 let right_speed = (weak_magnitude / 256) as u8;
 
                 // Do rumble
-                if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
+                if let Err(e) = self
+                    .driver
+                    .lock()
+                    .unwrap()
+                    .haptic_rumble(left_speed, right_speed)
+                {
                     let err = format!("Failed to do haptic rumble: {:?}", e);
                     return Err(err.into());
                 }
@@ -116,7 +131,12 @@ impl LegionSXInputController {
         let left_speed = report.rumble_emulation_left;
         let right_speed = report.rumble_emulation_right;
 
-        if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
+        if let Err(e) = self
+            .driver
+            .lock()
+            .unwrap()
+            .haptic_rumble(left_speed, right_speed)
+        {
             let err = format!("Failed to do haptic rumble: {:?}", e);
             return Err(err.into());
         }
@@ -135,9 +155,13 @@ impl LegionSXInputController {
         let new_gain = new_gain as u8;
 
         match report.side {
-            PadSide::Left => self.driver.haptic_rumble(new_gain, 0)?,
-            PadSide::Right => self.driver.haptic_rumble(0, new_gain)?,
-            PadSide::Both => self.driver.haptic_rumble(new_gain, new_gain)?,
+            PadSide::Left => self.driver.lock().unwrap().haptic_rumble(new_gain, 0)?,
+            PadSide::Right => self.driver.lock().unwrap().haptic_rumble(0, new_gain)?,
+            PadSide::Both => self
+                .driver
+                .lock()
+                .unwrap()
+                .haptic_rumble(new_gain, new_gain)?,
         }
 
         Ok(())
@@ -146,8 +170,9 @@ impl LegionSXInputController {
 
 impl SourceInputDevice for LegionSXInputController {
     /// Poll the source device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = self.driver.poll()?;
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
     }
@@ -162,7 +187,7 @@ impl SourceOutputDevice for LegionSXInputController {
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
-    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+    async fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
         log::trace!("Received output event: {:?}", event);
         match event {
             OutputEvent::Evdev(input_event) => {
@@ -179,7 +204,10 @@ impl SourceOutputDevice for LegionSXInputController {
             OutputEvent::SteamDeckRumble(report) => {
                 let l_speed = (report.left_speed.to_primitive() / 256) as u8;
                 let r_speed = (report.right_speed.to_primitive() / 256) as u8;
-                self.driver.haptic_rumble(l_speed, r_speed)?;
+                self.driver
+                    .lock()
+                    .unwrap()
+                    .haptic_rumble(l_speed, r_speed)?;
             }
         }
 

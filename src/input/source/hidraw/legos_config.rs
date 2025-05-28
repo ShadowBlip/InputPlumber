@@ -2,11 +2,7 @@ use std::{error::Error, fmt::Debug};
 
 use crate::{
     drivers::legos::config_driver::ConfigDriver,
-    input::{
-        capability::Capability,
-        event::native::NativeEvent,
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
-    },
+    input::source::{SourceInputDevice, SourceOutputDevice},
     udev::device::UdevDevice,
 };
 
@@ -29,14 +25,7 @@ impl Debug for LegionSConfigController {
         f.debug_struct("LegionSConfig").finish()
     }
 }
-impl SourceInputDevice for LegionSConfigController {
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        Ok(vec![])
-    }
 
-    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(vec![])
-    }
-}
+impl SourceInputDevice for LegionSConfigController {}
 
 impl SourceOutputDevice for LegionSConfigController {}

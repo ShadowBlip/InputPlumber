@@ -1,34 +1,43 @@
-use std::{error::Error, fmt::Debug};
+use std::{
+    error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::legos::{event, imu_driver::IMUDriver},
     input::{
         capability::{Capability, Gamepad},
         event::{native::NativeEvent, value::InputValue},
-        output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
 
 /// Legion Go Controller source device implementation
 pub struct LegionSImuController {
-    driver: IMUDriver,
+    driver: Arc<Mutex<IMUDriver>>,
+    interval: Interval,
 }
 
 impl LegionSImuController {
     /// Create a new Legion controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = IMUDriver::new(device_info.devnode())?;
-        Ok(Self { driver })
+        let driver = Arc::new(Mutex::new(IMUDriver::new(device_info.devnode())?));
+        let interval = interval(Duration::from_micros(2500));
+        Ok(Self { driver, interval })
     }
 }
 
 impl SourceInputDevice for LegionSImuController {
     /// Poll the source device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = self.driver.poll()?;
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
     }
@@ -39,14 +48,7 @@ impl SourceInputDevice for LegionSImuController {
     }
 }
 
-impl SourceOutputDevice for LegionSImuController {
-    /// Write the given output event to the source device. Output events are
-    /// events that flow from an application (like a game) to the physical
-    /// input device, such as force feedback events.
-    fn write_event(&mut self, _event: OutputEvent) -> Result<(), OutputError> {
-        Ok(())
-    }
-}
+impl SourceOutputDevice for LegionSImuController {}
 
 impl Debug for LegionSImuController {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

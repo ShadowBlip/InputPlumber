@@ -6,13 +6,15 @@ use std::error::Error;
 use glob_match::glob_match;
 
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
+    config,
+    constants::BUS_SOURCES_PREFIX,
+    input::{capability::Capability, composite_device::client::CompositeDeviceClient},
     udev::device::UdevDevice,
 };
 
 use self::{accel_gyro_3d::AccelGyro3dImu, bmi_imu::BmiImu};
 
-use super::{SourceDeviceCompatible, SourceDriver};
+use super::{InputError, SourceDeviceCompatible, SourceDriver};
 
 /// List of available drivers
 enum DriverType {
@@ -52,14 +54,12 @@ impl SourceDeviceCompatible for IioDevice {
 
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
-            IioDevice::BmiImu(source_driver) => source_driver.run().await,
-            IioDevice::AccelGryo3D(source_driver) => source_driver.run().await,
+            IioDevice::BmiImu(mut source_driver) => source_driver.run().await,
+            IioDevice::AccelGryo3D(mut source_driver) => source_driver.run().await,
         }
     }
 
-    fn get_capabilities(
-        &self,
-    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
             IioDevice::BmiImu(source_driver) => source_driver.get_capabilities(),
             IioDevice::AccelGryo3D(source_driver) => source_driver.get_capabilities(),

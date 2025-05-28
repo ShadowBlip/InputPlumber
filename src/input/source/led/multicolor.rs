@@ -1,8 +1,7 @@
 use crate::{
     input::{
-        capability::Capability,
         output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -251,18 +250,10 @@ impl Debug for LedMultiColor {
     }
 }
 
-impl SourceInputDevice for LedMultiColor {
-    fn poll(&mut self) -> Result<Vec<crate::input::event::native::NativeEvent>, InputError> {
-        Ok(Vec::new())
-    }
-
-    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(Vec::new())
-    }
-}
+impl SourceInputDevice for LedMultiColor {}
 
 impl SourceOutputDevice for LedMultiColor {
-    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+    async fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
         log::trace!("Received output event: {event:?}");
         match event {
             OutputEvent::DualSense(report) => {

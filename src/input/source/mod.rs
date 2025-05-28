@@ -1,19 +1,14 @@
-use std::{
-    collections::HashSet,
-    env,
-    error::Error,
-    str::FromStr,
-    sync::{Arc, Mutex, MutexGuard},
-    thread,
-    time::Duration,
-};
+use std::{collections::HashSet, env, error::Error, future::Future, str::FromStr, time::Duration};
 
 use ::evdev::FFEffectData;
 use led::LedDevice;
 use thiserror::Error;
-use tokio::sync::mpsc::{self, error::TryRecvError};
+use tokio::sync::mpsc;
 
-use crate::{config, udev::device::UdevDevice};
+use crate::{
+    config,
+    udev::{device::UdevDevice, hide_device, unhide_device},
+};
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,
@@ -36,8 +31,6 @@ pub mod led;
 
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
-/// Default poll rate (2.5ms/400Hz)
-const POLL_RATE: Duration = Duration::from_micros(2500);
 
 /// Possible errors for a source device client
 #[derive(Error, Debug)]
@@ -104,14 +97,35 @@ impl From<Box<dyn Error + Send + Sync>> for OutputError {
     }
 }
 
+/// Options for running a source device
+#[derive(Debug)]
+pub struct SourceDriverOptions {
+    pub buffer_size: usize,
+}
+
+impl Default for SourceDriverOptions {
+    fn default() -> Self {
+        Self {
+            buffer_size: BUFFER_SIZE,
+        }
+    }
+}
+
 /// A [SourceInputDevice] is a device implementation that is capable of emitting
 /// input events.
 pub trait SourceInputDevice {
-    /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError>;
+    /// Poll the source device for input events
+    fn poll(&mut self) -> impl Future<Output = Result<Vec<NativeEvent>, InputError>> + Send {
+        async {
+            tokio::time::sleep(Duration::from_secs(60 * 60)).await;
+            Ok(Vec::new())
+        }
+    }
 
-    /// Returns the possible input events this device is capable of emitting
-    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError>;
+    /// Input capabilities of the source device
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
+        Ok(Vec::new())
+    }
 }
 
 /// A [SourceOutputDevice] is a device implementation that can handle output events
@@ -120,73 +134,66 @@ pub trait SourceOutputDevice {
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
-    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+    fn write_event(&mut self, event: OutputEvent) -> impl Future<Output = Result<(), OutputError>> {
         //log::trace!("Received output event: {event:?}");
         let _ = event;
-        Ok(())
+        async { Ok(()) }
     }
 
     /// Upload the given force feedback effect data to the source device. Returns
     /// a device-specific id of the uploaded effect if it is successful. Return
     /// -1 if this device does not support FF events.
-    fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
+    fn upload_effect(
+        &mut self,
+        effect: FFEffectData,
+    ) -> impl Future<Output = Result<i16, OutputError>> {
         //log::trace!("Received upload effect: {effect:?}");
         let _ = effect;
-        Ok(-1)
+        async { Ok(-1) }
     }
 
     /// Update the effect with the given id using the given effect data.
-    fn update_effect(&mut self, effect_id: i16, effect: FFEffectData) -> Result<(), OutputError> {
+    fn update_effect(
+        &mut self,
+        effect_id: i16,
+        effect: FFEffectData,
+    ) -> impl Future<Output = Result<(), OutputError>> {
         //log::trace!("Received update effect: {effect_id:?} {effect:?}");
         let _ = effect;
         let _ = effect_id;
-        Ok(())
+        async { Ok(()) }
     }
 
     /// Erase the effect with the given id from the source device.
-    fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
+    fn erase_effect(&mut self, effect_id: i16) -> impl Future<Output = Result<(), OutputError>> {
         //log::trace!("Received erase effect: {effect_id:?}");
         let _ = effect_id;
-        Ok(())
+        async { Ok(()) }
     }
 
     /// Stop the source device.
-    fn stop(&mut self) -> Result<(), OutputError> {
-        Ok(())
-    }
-}
-
-/// Options for running a source device
-#[derive(Debug)]
-pub struct SourceDriverOptions {
-    pub poll_rate: Duration,
-    pub buffer_size: usize,
-}
-
-impl Default for SourceDriverOptions {
-    fn default() -> Self {
-        Self {
-            poll_rate: POLL_RATE,
-            buffer_size: BUFFER_SIZE,
-        }
+    fn stop(&mut self) -> impl Future<Output = Result<(), OutputError>> {
+        async { Ok(()) }
     }
 }
 
 /// A [SourceDriver] is any physical input device that emits input events
 #[derive(Debug)]
 pub struct SourceDriver<T: SourceInputDevice + SourceOutputDevice> {
-    options: SourceDriverOptions,
+    config: Option<config::SourceDevice>,
+    is_hidden: bool,
     event_filter_enabled: bool,
     event_include_list: HashSet<Capability>,
     event_exclude_list: HashSet<Capability>,
-    implementation: Arc<Mutex<T>>,
+    implementation: T,
     device_info: UdevDevice,
     composite_device: CompositeDeviceClient,
     tx: mpsc::Sender<SourceCommand>,
     rx: mpsc::Receiver<SourceCommand>,
+    metrics_enabled: bool,
 }
 
-impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T> {
+impl<T: SourceInputDevice + SourceOutputDevice + Send> SourceDriver<T> {
     /// Create a new source device with the given implementation
     pub fn new(
         composite_device: CompositeDeviceClient,
@@ -244,16 +251,23 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
             }
         }
 
+        let metrics_enabled = match env::var("ENABLE_METRICS") {
+            Ok(value) => value.as_str() == "1",
+            Err(_) => false,
+        };
+
         Self {
+            config,
+            is_hidden: false,
             event_filter_enabled,
             event_include_list: events_include,
             event_exclude_list: events_exclude,
-            options,
-            implementation: Arc::new(Mutex::new(device)),
+            implementation: device,
             device_info,
             composite_device,
             tx,
             rx,
+            metrics_enabled,
         }
     }
 
@@ -299,7 +313,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
 
     /// Returns the possible input events this device is capable of emitting
     pub fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        let caps = { self.implementation.lock().unwrap().get_capabilities()? };
+        let caps = self.implementation.get_capabilities()?;
 
         if self.event_filter_enabled {
             return Ok(caps
@@ -328,160 +342,168 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
         &self.device_info
     }
 
-    /// Run the source device, consuming the device.
-    pub async fn run(self) -> Result<(), Box<dyn Error>> {
-        let device_id = self.get_id();
-        let metrics_enabled = match env::var("ENABLE_METRICS") {
-            Ok(value) => value.as_str() == "1",
-            Err(_) => false,
-        };
+    /// Run the source device
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        // Hide the device if specified
+        let should_passthru = self
+            .config
+            .as_ref()
+            .and_then(|c| c.passthrough)
+            .unwrap_or(false);
+        let subsystem = self.device_info.subsystem();
+        let should_hide = !should_passthru && subsystem.as_str() != "iio";
+        if should_hide {
+            let source_path = self.device_info.devnode();
+            if let Err(e) = hide_device(source_path.as_str()).await {
+                log::warn!("Failed to hide device '{source_path}': {e:?}");
+            } else {
+                log::debug!("Finished hiding device: {source_path}");
+                self.is_hidden = true;
+            }
+        }
 
-        // Spawn a blocking task to run the source device.
-        let task =
-            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut rx = self.rx;
-                let mut implementation = self.implementation.lock().unwrap();
-                loop {
-                    // Create a context with performance metrics for each event
-                    let mut context = if metrics_enabled {
-                        Some(EventContext::new())
-                    } else {
-                        None
-                    };
-                    if let Some(ref mut context) = context {
-                        let root_span = context.metrics_mut().create_span("root");
-                        root_span.start();
-                    }
+        // TODO: If the source device is blocked, don't bother polling it.
 
-                    // Poll the implementation for events
-                    if let Some(ref mut context) = context {
-                        let poll_span = context
-                            .metrics_mut()
-                            .create_child_span("root", "source_poll");
-                        poll_span.start();
-                    }
-                    let events = implementation.poll()?;
-                    if let Some(ref mut context) = context {
-                        let poll_span = context.metrics_mut().get_mut("source_poll").unwrap();
-                        poll_span.finish();
-                    }
-
-                    // Process each event
-                    for mut event in events.into_iter() {
-                        if self.event_filter_enabled
-                            && Self::should_filter(
-                                &self.event_exclude_list,
-                                &self.event_include_list,
-                                &event.as_capability(),
-                            )
-                        {
-                            continue;
-                        }
-                        if let Some(ref context) = context {
-                            let mut context = context.clone();
-                            let send_span = context
-                                .metrics_mut()
-                                .create_child_span("root", "source_send");
-                            send_span.start();
-                            event.set_context(context);
-                        }
-                        let event = Event::Native(event);
-                        let result = self
-                            .composite_device
-                            .blocking_process_event(device_id.clone(), event);
-                        if let Err(e) = result {
-                            return Err(e.to_string().into());
-                        }
-                    }
-
-                    // Receive commands/output events
-                    if let Err(e) = SourceDriver::receive_commands(&mut rx, &mut implementation) {
-                        log::debug!("Error receiving commands: {:?}", e);
-                        break;
-                    }
-
-                    // Sleep for the configured duration
-                    thread::sleep(self.options.poll_rate);
+        // Run the main loop
+        loop {
+            // Create a context with performance metrics for each event
+            let mut context = if self.metrics_enabled {
+                let mut context = EventContext::new();
+                {
+                    let root_span = context.metrics_mut().create_span("root");
+                    root_span.start();
                 }
+                let poll_span = context
+                    .metrics_mut()
+                    .create_child_span("root", "source_poll");
+                poll_span.start();
+                Some(context)
+            } else {
+                None
+            };
 
-                Ok(())
+            tokio::select! {
+                // Poll the implementation for events
+                result = self.implementation.poll() => {
+                    let events = result?;
+                    self.process_events(&mut context, events).await?;
+                }
+                // Receive commands/output events
+                result = self.rx.recv() => {
+                    let Some(cmd) = result else {
+                        return Err("Receive channel disconnected".into());
+                    };
+                    self.process_command(cmd).await?;
+                }
+            }
+        }
+    }
+
+    /// Process the given events and write them to the composite device
+    async fn process_events(
+        &self,
+        context: &mut Option<EventContext>,
+        events: Vec<NativeEvent>,
+    ) -> Result<(), Box<dyn Error>> {
+        if let Some(context) = context {
+            let poll_span = context.metrics_mut().get_mut("source_poll").unwrap();
+            poll_span.finish();
+        }
+        let device_id = self.get_id();
+        for mut event in events.into_iter() {
+            if self.event_filter_enabled
+                && Self::should_filter(
+                    &self.event_exclude_list,
+                    &self.event_include_list,
+                    &event.as_capability(),
+                )
+            {
+                continue;
+            }
+            if let Some(context) = context {
+                let mut context = context.clone();
+                let send_span = context
+                    .metrics_mut()
+                    .create_child_span("root", "source_send");
+                send_span.start();
+                event.set_context(context);
+            }
+            let event = Event::Native(event);
+            let composite_device = self.composite_device.clone();
+            let device_id = device_id.clone();
+            // NOTE: Spawning a task to send the event to the composite device
+            // appears to be significantly more performant.
+            // TODO: Don't spawn a task for each event
+            tokio::task::spawn(async move {
+                let _ = composite_device.process_event(device_id, event).await;
             });
-
-        // Wait for the device to finish running.
-        if let Err(e) = task.await? {
-            return Err(e.to_string().into());
         }
 
         Ok(())
     }
 
-    /// Read commands sent to this device from the channel until it is
-    /// empty.
-    fn receive_commands(
-        rx: &mut mpsc::Receiver<SourceCommand>,
-        implementation: &mut MutexGuard<'_, T>,
-    ) -> Result<(), Box<dyn Error>> {
-        const MAX_COMMANDS: u8 = 64;
-        let mut commands_processed = 0;
-        loop {
-            match rx.try_recv() {
-                Ok(cmd) => match cmd {
-                    SourceCommand::UploadEffect(data, composite_dev) => {
-                        let res = match implementation.upload_effect(data) {
-                            Ok(id) => composite_dev.send(Ok(id)),
-                            Err(e) => {
-                                let err = format!("Failed to upload effect: {:?}", e);
-                                composite_dev.send(Err(err.into()))
-                            }
-                        };
-                        if let Err(err) = res {
-                            log::error!("Failed to send upload result: {:?}", err);
-                        }
+    /// Read commands sent to this device from the channel
+    async fn process_command(&mut self, cmd: SourceCommand) -> Result<(), Box<dyn Error>> {
+        match cmd {
+            SourceCommand::UploadEffect(data, composite_dev) => {
+                let res = match self.implementation.upload_effect(data).await {
+                    Ok(id) => composite_dev.send(Ok(id)),
+                    Err(e) => {
+                        let err = format!("Failed to upload effect: {:?}", e);
+                        composite_dev.send(Err(err.into()))
                     }
-                    SourceCommand::UpdateEffect(effect_id, data) => {
-                        implementation.update_effect(effect_id, data)?;
+                };
+                if let Err(err) = res {
+                    log::error!("Failed to send upload result: {:?}", err);
+                }
+            }
+            SourceCommand::UpdateEffect(effect_id, data) => {
+                self.implementation.update_effect(effect_id, data).await?;
+            }
+            SourceCommand::EraseEffect(id, composite_dev) => {
+                let res = match self.implementation.erase_effect(id).await {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        let err = format!("Failed to erase effect: {e:?}");
+                        composite_dev.send(Err(err.into()))
                     }
-                    SourceCommand::EraseEffect(id, composite_dev) => {
-                        let res = match implementation.erase_effect(id) {
-                            Ok(_) => Ok(()),
-                            Err(e) => {
-                                let err = format!("Failed to erase effect: {e:?}");
-                                composite_dev.send(Err(err.into()))
-                            }
-                        };
-                        if let Err(err) = res {
-                            log::error!("Failed to send erase result: {:?}", err);
-                        }
-                    }
-                    SourceCommand::WriteEvent(event) => {
-                        log::trace!("Received output event: {:?}", event);
-                        implementation.write_event(event)?;
-                    }
-                    SourceCommand::Stop => {
-                        implementation.stop()?;
-                        return Err("Device stopped".into());
-                    }
-                },
-                Err(e) => match e {
-                    TryRecvError::Empty => return Ok(()),
-                    TryRecvError::Disconnected => {
-                        log::debug!("Receive channel disconnected");
-                        return Err("Receive channel disconnected".into());
-                    }
-                },
-            };
-
-            // Only process MAX_COMMANDS messages at a time
-            commands_processed += 1;
-            if commands_processed >= MAX_COMMANDS {
-                return Ok(());
+                };
+                if let Err(err) = res {
+                    log::error!("Failed to send erase result: {:?}", err);
+                }
+            }
+            SourceCommand::WriteEvent(event) => {
+                log::trace!("Received output event: {:?}", event);
+                self.implementation.write_event(event).await?;
+            }
+            SourceCommand::Stop => {
+                self.implementation.stop().await?;
+                return Err("Device stopped".into());
             }
         }
+
+        Ok(())
     }
 }
 
-pub(crate) trait SourceDeviceCompatible {
+impl<T: SourceInputDevice + SourceOutputDevice> Drop for SourceDriver<T> {
+    fn drop(&mut self) {
+        // Unhide the device
+        if !self.is_hidden {
+            return;
+        }
+        let source_path = self.device_info.devnode();
+        tokio::task::spawn(async move {
+            if let Err(e) = unhide_device(source_path).await {
+                log::warn!("Unable to unhide device: {e}");
+            }
+        });
+    }
+}
+
+pub trait SourceDeviceCompatible {
     /// Returns a copy of the UdevDevice
+    #[allow(dead_code)]
     fn get_device_ref(&self) -> &UdevDevice;
 
     /// Returns a unique identifier for the source device.
@@ -491,7 +513,7 @@ pub(crate) trait SourceDeviceCompatible {
     fn client(&self) -> SourceDeviceClient;
 
     /// Run the source device
-    async fn run(self) -> Result<(), Box<dyn Error>>;
+    fn run(self) -> impl Future<Output = Result<(), Box<dyn Error>>>;
 
     /// Returns the capabilities that this source device can fulfill.
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError>;
@@ -511,6 +533,7 @@ pub enum SourceDevice {
 
 impl SourceDevice {
     /// Returns a copy of the UdevDevice
+    #[allow(dead_code)]
     pub fn get_device_ref(&self) -> &UdevDevice {
         match self {
             SourceDevice::Event(device) => device.get_device_ref(),
