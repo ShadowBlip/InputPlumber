@@ -1,4 +1,11 @@
-use std::{error::Error, fmt::Debug};
+use std::{
+    error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::horipad_steam::{
@@ -15,15 +22,17 @@ use crate::{
 
 /// HoripadSteam source device implementation
 pub struct HoripadSteam {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
+    interval: Interval,
 }
 
 impl HoripadSteam {
     /// Create a new source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = Driver::new(device_info)?;
-        Ok(Self { driver })
+        let driver = Arc::new(Mutex::new(Driver::new(device_info)?));
+        let interval = interval(Duration::from_micros(2500));
+        Ok(Self { driver, interval })
     }
 }
 
@@ -31,8 +40,9 @@ impl SourceOutputDevice for HoripadSteam {}
 
 impl SourceInputDevice for HoripadSteam {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = self.driver.poll()?;
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
     }
