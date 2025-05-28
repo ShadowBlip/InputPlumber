@@ -9,6 +9,7 @@ use std::{
 
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
 use packed_struct::PackedStruct;
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::{
@@ -37,18 +38,20 @@ pub const VID: u16 = 0x28de;
 pub const PID: u16 = 0x1205;
 
 pub struct DeckController {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
     device_info: UdevDevice,
     lizard_mode_started: bool,
     lizard_mode_running: Arc<Mutex<bool>>,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    interval: Interval,
 }
 
 impl DeckController {
     /// Create a new Deck Controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = Driver::new(device_info.devnode())?;
+        let driver = Arc::new(Mutex::new(Driver::new(device_info.devnode())?));
+        let interval = interval(Duration::from_millis(1));
 
         Ok(Self {
             driver,
@@ -56,6 +59,7 @@ impl DeckController {
             lizard_mode_started: false,
             lizard_mode_running: Arc::new(Mutex::new(false)),
             ff_evdev_effects: HashMap::new(),
+            interval,
         })
     }
 
@@ -120,7 +124,7 @@ impl DeckController {
 
         // The value determines if the effect should be playing or not.
         if value == 0 {
-            if let Err(e) = self.driver.haptic_rumble(0, 0) {
+            if let Err(e) = self.driver.lock().unwrap().haptic_rumble(0, 0) {
                 log::debug!("Failed to stop haptic rumble: {:?}", e);
                 return Ok(());
             }
@@ -159,7 +163,12 @@ impl DeckController {
                 let right_speed = weak_magnitude;
 
                 // Do rumble
-                if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
+                if let Err(e) = self
+                    .driver
+                    .lock()
+                    .unwrap()
+                    .haptic_rumble(left_speed, right_speed)
+                {
                     let err = format!("Failed to do haptic rumble: {:?}", e);
                     return Err(err.into());
                 }
@@ -178,7 +187,12 @@ impl DeckController {
         let left_speed = report.rumble_emulation_left as u16 * 256;
         let right_speed = report.rumble_emulation_right as u16 * 256;
 
-        if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
+        if let Err(e) = self
+            .driver
+            .lock()
+            .unwrap()
+            .haptic_rumble(left_speed, right_speed)
+        {
             let err = format!("Failed to do haptic rumble: {:?}", e);
             return Err(err.into());
         }
@@ -189,13 +203,14 @@ impl DeckController {
 
 impl SourceInputDevice for DeckController {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         // Spawn a blocking task to handle lizard mode
         if !self.lizard_mode_started {
             self.start_lizard_task();
         }
+        self.interval.tick().await;
 
-        let events = self.driver.poll()?;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
     }
@@ -210,7 +225,7 @@ impl SourceOutputDevice for DeckController {
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
-    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+    async fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
         log::trace!("Received output event: {:?}", event);
         match event {
             OutputEvent::Evdev(input_event) => {
@@ -225,11 +240,11 @@ impl SourceOutputDevice for DeckController {
             OutputEvent::Uinput(_) => (),
             OutputEvent::SteamDeckHaptics(packed_haptic_report) => {
                 let report = packed_haptic_report.pack().map_err(|e| e.to_string())?;
-                self.driver.write(&report)?;
+                self.driver.lock().unwrap().write(&report)?;
             }
             OutputEvent::SteamDeckRumble(packed_rumble_report) => {
                 let report = packed_rumble_report.pack().map_err(|e| e.to_string())?;
-                self.driver.write(&report)?;
+                self.driver.lock().unwrap().write(&report)?;
             }
         }
 
@@ -238,7 +253,7 @@ impl SourceOutputDevice for DeckController {
 
     /// Upload the given force feedback effect data to the source device. Returns
     /// a device-specific id of the uploaded effect if it is successful.
-    fn upload_effect(&mut self, effect: evdev::FFEffectData) -> Result<i16, OutputError> {
+    async fn upload_effect(&mut self, effect: evdev::FFEffectData) -> Result<i16, OutputError> {
         log::debug!("Uploading FF effect data");
         let id = self.next_ff_effect_id();
         if id == -1 {
@@ -250,7 +265,7 @@ impl SourceOutputDevice for DeckController {
     }
 
     /// Update the effect with the given id using the given effect data.
-    fn update_effect(
+    async fn update_effect(
         &mut self,
         effect_id: i16,
         effect: evdev::FFEffectData,
@@ -261,14 +276,14 @@ impl SourceOutputDevice for DeckController {
     }
 
     /// Erase the effect with the given id from the source device.
-    fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
+    async fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
         log::debug!("Erasing FF effect data");
         self.ff_evdev_effects.remove(&effect_id);
         Ok(())
     }
 
     /// Stop the source device and terminate the lizard mode task
-    fn stop(&mut self) -> Result<(), OutputError> {
+    async fn stop(&mut self) -> Result<(), OutputError> {
         *self.lizard_mode_running.lock().unwrap() = false;
         Ok(())
     }

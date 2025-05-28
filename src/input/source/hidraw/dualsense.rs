@@ -1,8 +1,11 @@
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use std::{collections::HashMap, error::Error};
 
 use evdev::{FFEffectData, FFEffectKind};
 use packed_struct::types::SizedInteger;
+use tokio::time::{interval, Interval};
 
 use crate::drivers::dualsense::driver::{DS5_EDGE_PID, DS5_PID, DS5_VID};
 use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
@@ -27,18 +30,21 @@ pub const PIDS: [u16; 2] = [DS5_EDGE_PID, DS5_PID];
 
 /// Sony Playstation DualSense Controller source device implementation
 pub struct DualSenseController {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    interval: Interval,
 }
 
 impl DualSenseController {
     /// Create a new DualSense controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = Driver::new(device_info.devnode())?;
+        let driver = Arc::new(Mutex::new(Driver::new(device_info.devnode())?));
+        let interval = interval(Duration::from_millis(1));
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
+            interval,
         })
     }
 
@@ -78,7 +84,7 @@ impl DualSenseController {
         // The value determines if the effect should be playing or not.
         if value == 0 {
             log::trace!("Stopping rumble");
-            if let Err(e) = self.driver.rumble(0, 0) {
+            if let Err(e) = self.driver.lock().unwrap().rumble(0, 0) {
                 log::debug!("Failed to stop rumble: {:?}", e);
                 return Ok(());
             }
@@ -118,7 +124,12 @@ impl DualSenseController {
                 let right_speed = weak_magnitude / u8::MAX as u16 + 1;
 
                 // Do rumble
-                if let Err(e) = self.driver.rumble(left_speed as u8, right_speed as u8) {
+                if let Err(e) = self
+                    .driver
+                    .lock()
+                    .unwrap()
+                    .rumble(left_speed as u8, right_speed as u8)
+                {
                     let err = format!("Failed to do rumble: {:?}", e);
                     return Err(err.into());
                 }
@@ -133,6 +144,8 @@ impl DualSenseController {
         let left_speed = report.left_speed.to_primitive() / u8::MAX as u16 + 1;
         let right_speed = report.right_speed.to_primitive() / u8::MAX as u16 + 1;
         self.driver
+            .lock()
+            .unwrap()
             .rumble(left_speed as u8, right_speed as u8)
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -141,8 +154,9 @@ impl DualSenseController {
 
 impl SourceInputDevice for DualSenseController {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = self.driver.poll()?;
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events);
 
         Ok(native_events)
@@ -158,13 +172,13 @@ impl SourceOutputDevice for DualSenseController {
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
-    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+    async fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
         log::trace!("Received output event: {:?}", event);
         match event {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
             OutputEvent::DualSense(report) => {
                 log::debug!("Received DualSense output report");
-                Ok(self.driver.write(report)?)
+                Ok(self.driver.lock().unwrap().write(report)?)
             }
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::SteamDeckHaptics(_report) => Ok(()),
@@ -180,7 +194,7 @@ impl SourceOutputDevice for DualSenseController {
 
     /// Upload the given force feedback effect data to the source device. Returns
     /// a device-specific id of the uploaded effect if it is successful.
-    fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
+    async fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
         log::debug!("Uploading FF effect data");
         let id = self.next_ff_effect_id();
         if id == -1 {
@@ -192,14 +206,18 @@ impl SourceOutputDevice for DualSenseController {
     }
 
     /// Update the effect with the given id using the given effect data.
-    fn update_effect(&mut self, effect_id: i16, effect: FFEffectData) -> Result<(), OutputError> {
+    async fn update_effect(
+        &mut self,
+        effect_id: i16,
+        effect: FFEffectData,
+    ) -> Result<(), OutputError> {
         log::debug!("Updating FF effect data with id {effect_id}");
         self.ff_evdev_effects.insert(effect_id, effect);
         Ok(())
     }
 
     /// Erase the effect with the given id from the source device.
-    fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
+    async fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
         log::debug!("Erasing FF effect data");
         self.ff_evdev_effects.remove(&effect_id);
         Ok(())

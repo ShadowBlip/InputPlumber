@@ -281,3 +281,6 @@ fn get_channels_with_type(
 
     (channels, channel_info)
 }
+
+// TODO: Use a Mutex for the iio channels
+unsafe impl Send for Driver {}
