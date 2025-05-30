@@ -1,4 +1,11 @@
-use std::{error::Error, fmt::Debug};
+use std::{
+    error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::flydigi_vader_4_pro::{
@@ -15,15 +22,17 @@ use crate::{
 
 /// Vader4Pro source device implementation
 pub struct Vader4Pro {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
+    interval: Interval,
 }
 
 impl Vader4Pro {
     /// Create a new source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = Driver::new(device_info)?;
-        Ok(Self { driver })
+        let driver = Arc::new(Mutex::new(Driver::new(device_info)?));
+        let interval = interval(Duration::from_millis(1));
+        Ok(Self { driver, interval })
     }
 }
 
@@ -31,8 +40,9 @@ impl SourceOutputDevice for Vader4Pro {}
 
 impl SourceInputDevice for Vader4Pro {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = match self.driver.poll() {
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = match self.driver.lock().unwrap().poll() {
             Ok(events) => events,
             Err(err) => {
                 log::error!("Got error polling!: {err:?}");
