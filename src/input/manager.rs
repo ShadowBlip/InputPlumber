@@ -361,7 +361,7 @@ impl Manager {
                     let is_suspended = match device.is_suspended().await {
                         Ok(suspended) => suspended,
                         Err(e) => {
-                            log::error!("Failed to check if device is suspended: {e:?}");
+                            log::debug!("Failed to check if device is suspended: {e:?}");
                             continue;
                         }
                     };
@@ -1797,7 +1797,7 @@ impl Manager {
         log::info!("Setting player order to: {order:?}");
 
         // Ensure the given paths are valid composite device paths
-        let new_order = order
+        let new_order: Vec<String> = order
             .into_iter()
             .filter(|path| {
                 let is_valid = self.composite_devices.contains_key(path);
@@ -1808,43 +1808,30 @@ impl Manager {
             })
             .collect();
 
-        // Update gamepad order in dbus interface
-        self.update_and_emit_gamepad_order(new_order);
+        // Get each device to resume
+        let devices: Vec<CompositeDeviceClient> = new_order
+            .into_iter()
+            .map(|path| self.composite_devices.get(&path).unwrap().clone())
+            .collect();
 
-        let manager_tx = self.tx.clone();
         tokio::task::spawn(async move {
-            // Send suspend command to manager
-            let (tx, mut rx) = mpsc::channel(1);
-            if let Err(e) = manager_tx
-                .send(ManagerCommand::SystemSleep { sender: tx })
-                .await
-            {
-                log::error!("Failed to send system sleep command to manager: {e:?}");
-                return;
-            }
-
-            // Wait for all devices to suspend
-            if rx.recv().await.is_none() {
-                log::error!("Failed to get response from manager for system sleep command");
-                return;
+            // Suspend all composite devices
+            for device in devices.iter() {
+                if let Err(e) = device.suspend().await {
+                    log::warn!("Failed to suspend device: {e}");
+                }
             }
 
             // Sleep a little bit before resuming target devices
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            // Send wake command to manager
-            let (tx, mut rx) = mpsc::channel(1);
-            if let Err(e) = manager_tx
-                .send(ManagerCommand::SystemWake { sender: tx })
-                .await
-            {
-                log::error!("Failed to send system wake command to manager: {e:?}");
-                return;
-            }
-
-            // Wait for all devices to resume
-            if rx.recv().await.is_none() {
-                log::error!("Failed to get response from manager for system wake command");
+            // Resume all composite devices in order
+            for device in devices.iter() {
+                if let Err(e) = device.resume().await {
+                    log::warn!("Failed to resume device: {e}");
+                    continue;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         });
 
