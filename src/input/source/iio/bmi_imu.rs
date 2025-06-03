@@ -1,4 +1,12 @@
-use std::{error::Error, f64::consts::PI, fmt::Debug};
+use std::{
+    error::Error,
+    f64::consts::PI,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{interval, Interval};
 
 use crate::{
     config,
@@ -12,7 +20,8 @@ use crate::{
 };
 
 pub struct BmiImu {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
+    interval: Interval,
 }
 
 impl BmiImu {
@@ -40,16 +49,18 @@ impl BmiImu {
 
         let id = device_info.sysname();
         let name = device_info.name();
-        let driver = Driver::new(id, name, mount_matrix)?;
+        let driver = Arc::new(Mutex::new(Driver::new(id, name, mount_matrix)?));
+        let interval = interval(Duration::from_millis(10));
 
-        Ok(Self { driver })
+        Ok(Self { driver, interval })
     }
 }
 
 impl SourceInputDevice for BmiImu {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = self.driver.poll()?;
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
     }
@@ -67,10 +78,6 @@ impl Debug for BmiImu {
         f.debug_struct("BmiImu").finish()
     }
 }
-
-// NOTE: Mark this struct as thread-safe as it will only ever be called from
-// a single thread.
-unsafe impl Send for BmiImu {}
 
 /// Translate the given driver events into native events
 fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {

@@ -21,7 +21,7 @@ impl SourceIioImuInterface {
     pub async fn listen_on_dbus(
         conn: Connection,
         device: UdevDevice,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let iface = SourceIioImuInterface::new(device);
         let Ok(id) = iface.id() else {
             return Ok(());
