@@ -65,7 +65,8 @@ systemctl disable inputplumber.service
 /usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf
 /usr/lib/systemd/system/inputplumber.service
 /usr/lib/systemd/system/inputplumber-suspend.service
-/usr/lib/udev/hwdb.d/59-inputplumber.hwdb
+/usr/lib/udev/hwdb.d/*.hwdb
+/usr/lib/udev/rules.d/*.rules
 /usr/share/inputplumber/capability_maps/*.yaml
 /usr/share/inputplumber/devices/*.yaml
 /usr/share/inputplumber/profiles/*.yaml
