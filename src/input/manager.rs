@@ -439,7 +439,7 @@ impl Manager {
                     }
                 }
                 ManagerCommand::SystemSleep { sender } => {
-                    log::info!("Preparing for system suspend");
+                    log::info!("Preparing to suspend all target devices");
 
                     // Call the suspend handler on each composite device and wait
                     // for a response.
@@ -457,11 +457,11 @@ impl Manager {
                             log::error!("Failed to send response: {e:?}");
                         }
 
-                        log::info!("Finished preparing for system suspend");
+                        log::info!("Finished preparing suspending all target devices");
                     });
                 }
                 ManagerCommand::SystemWake { sender } => {
-                    log::info!("Preparing for system resume");
+                    log::info!("Preparing to resume all target devices");
 
                     // Call the resume handler on each composite device and wait
                     // for a response.
@@ -473,13 +473,15 @@ impl Manager {
                             let Some(device) = composite_devices.get(&path) else {
                                 continue;
                             };
+                            log::info!("Resuming device: {path}");
                             if let Err(e) = device.resume().await {
                                 log::error!("Failed to call resume handler on device: {e:?}");
                             }
                         }
 
                         // Resume any remaining composite devices
-                        for device in composite_devices.values() {
+                        for (path, device) in composite_devices.iter() {
+                            log::info!("Resuming device: {path}");
                             let is_suspended = match device.is_suspended().await {
                                 Ok(suspended) => suspended,
                                 Err(e) => {
@@ -488,6 +490,7 @@ impl Manager {
                                 }
                             };
                             if !is_suspended {
+                                log::info!("Device `{path}` is not suspended. No need to resume.");
                                 continue;
                             }
                             if let Err(e) = device.resume().await {
@@ -501,7 +504,7 @@ impl Manager {
                             log::error!("Failed to send response: {e:?}");
                         }
 
-                        log::info!("Finished preparing for system resume");
+                        log::info!("Finished preparing resuming all target devices");
                     });
                 }
                 ManagerCommand::SetGamepadOrder { dbus_paths } => {
