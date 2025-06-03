@@ -13,7 +13,10 @@ use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use unified_gamepad::UnifiedGamepadDevice;
 
-use crate::dbus::interface::target::{gamepad::TargetGamepadInterface, TargetInterface};
+use crate::dbus::interface::{
+    performance::PerformanceInterface,
+    target::{gamepad::TargetGamepadInterface, TargetInterface},
+};
 
 use super::{
     capability::Capability,
@@ -284,13 +287,13 @@ pub trait TargetInputDevice {
             let iface = TargetGamepadInterface::new(type_id.name().to_owned());
 
             let object_server = dbus.object_server();
-            let (gen_result, result) = tokio::join!(
+            let results = tokio::join!(
                 object_server.at(path.clone(), generic_interface),
                 object_server.at(path.clone(), iface)
             );
 
-            if gen_result.is_err() || result.is_err() {
-                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
+            if results.0.is_err() || results.1.is_err() {
+                log::debug!("Failed to start dbus interface `{path}`: {results:?}");
             } else {
                 log::debug!("Started dbus interface: {path}");
             }
@@ -459,6 +462,9 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                     self.type_id,
                 );
 
+                // Start the performance metrics DBus interface for the device
+                Self::start_metrics_interface(&self.dbus, dbus_path.as_str());
+
                 log::debug!("Target device running: {dbus_path}");
                 loop {
                     // Find any scheduled events that are ready to be sent
@@ -481,6 +487,8 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
 
                     // Receive commands/input events
                     if let Err(e) = TargetDriver::receive_commands(
+                        &self.dbus,
+                        dbus_path.as_str(),
                         self.type_id.as_str(),
                         &mut composite_device,
                         &mut rx,
@@ -521,6 +529,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
 
                 // Stop the device
                 log::debug!("Target device stopping: {dbus_path}");
+                Self::stop_metrics_interface(&self.dbus, dbus_path.as_str());
                 implementation.stop_dbus_interface(self.dbus, dbus_path.clone());
                 implementation.stop()?;
                 log::debug!("Target device stopped: {dbus_path}");
@@ -536,9 +545,42 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
         Ok(())
     }
 
+    /// Start the performance metrics dbus interface
+    fn start_metrics_interface(dbus: &Connection, dbus_path: &str) {
+        let dbus = dbus.clone();
+        let dbus_path = dbus_path.to_string();
+        tokio::task::spawn(async move {
+            let metrics_interface = PerformanceInterface::new();
+            let object_server = dbus.object_server();
+            let res = object_server
+                .at(dbus_path.as_str(), metrics_interface)
+                .await;
+            if let Err(e) = res {
+                log::error!("Error running metrics interface: {e}");
+            }
+        });
+    }
+
+    /// Stop the performance metrics dbus interface
+    fn stop_metrics_interface(dbus: &Connection, dbus_path: &str) {
+        let dbus = dbus.clone();
+        let dbus_path = dbus_path.to_string();
+        tokio::task::spawn(async move {
+            let object_server = dbus.object_server();
+            let res = object_server
+                .remove::<PerformanceInterface, String>(dbus_path)
+                .await;
+            if let Err(e) = res {
+                log::error!("Error stopping metrics interface: {e}");
+            }
+        });
+    }
+
     /// Read commands sent to this device from the channel until it is
     /// empty.
     fn receive_commands(
+        dbus: &Connection,
+        dbus_path: &str,
         type_id: &str,
         composite_device: &mut Option<CompositeDeviceClient>,
         rx: &mut mpsc::Receiver<TargetCommand>,
@@ -550,7 +592,51 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
             match rx.try_recv() {
                 Ok(cmd) => match cmd {
                     TargetCommand::WriteEvent(event) => {
+                        let cap = event.as_capability();
+                        let mut context = event.get_context().cloned().unwrap();
+                        context
+                            .metrics_mut()
+                            .get_mut("target_send")
+                            .unwrap()
+                            .finish();
+                        let write_span = context
+                            .metrics_mut()
+                            .create_child_span("root", "target_write");
+                        write_span.start();
                         implementation.write_event(event)?;
+                        write_span.finish();
+                        if let Some(root_span) = context.metrics_mut().get_mut("root") {
+                            root_span.finish();
+                        }
+
+                        for span in context.metrics_mut().iter() {
+                            let Some(duration) = span.elapsed() else {
+                                continue;
+                            };
+                            let id = span.id();
+                            if let Some(parent_id) = span.parent_id() {
+                                log::trace!("Capability {cap:?} Span `{parent_id}` -> `{id}` Latency: {duration:?}");
+                            } else {
+                                log::trace!("Capability {cap:?} Span `{id}` Latency: {duration:?}");
+                            }
+                        }
+
+                        if let Some(root_span) = context.metrics_mut().get_mut("root") {
+                            let duration = root_span.elapsed().unwrap();
+                            log::trace!("Capability {cap:?} Total Latency: {duration:?}");
+                        }
+
+                        let dbus = dbus.clone();
+                        let dbus_path = dbus_path.to_string();
+                        tokio::task::spawn(async move {
+                            let _ = PerformanceInterface::emit_metrics(
+                                &dbus,
+                                dbus_path.as_str(),
+                                cap,
+                                &context,
+                            )
+                            .await;
+                        });
                     }
                     TargetCommand::SetCompositeDevice(device) => {
                         *composite_device = Some(device.clone());

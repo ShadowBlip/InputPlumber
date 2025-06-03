@@ -276,7 +276,19 @@ impl CompositeDeviceTargets {
         // Only write the event to devices that are capable of handling it
         log::trace!("[{}] Emit passed event: {event:?}", self.path);
         for (name, target) in target_devices {
-            if let Err(e) = target.write_event(event.clone()).await {
+            let mut event = event.clone();
+            if let Some(context) = event.get_context_mut() {
+                context
+                    .metrics_mut()
+                    .get_mut("composite_device")
+                    .unwrap()
+                    .finish();
+                context
+                    .metrics_mut()
+                    .create_child_span("root", "target_send")
+                    .start();
+            }
+            if let Err(e) = target.write_event(event).await {
                 log::error!("Failed to write event to: {name}: {e:?}");
             }
         }
