@@ -21,6 +21,9 @@ matches:
   - dmi_data:
       product_name: GEEK 1S
       sys_vendor: AYANEO
+  - dmi_data:
+      product_name: AYANEO GEEK 1S
+      sys_vendor: AYANEO
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
