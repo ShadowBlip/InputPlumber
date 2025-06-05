@@ -110,8 +110,12 @@ format: ## Run rustfmt on all source files
 	rustfmt --edition 2021 $(ALL_RS)
 
 .PHONY: test
-test: ## Run all tests
+test: test-autostart-rules ## Run all tests
 	cargo test -- --show-output
+
+.PHONY: test-autostart-rules
+test-autostart-rules: ## Test to ensure autostart rules are up-to-date
+	RUST_BACKTRACE=0 cargo test config::config_test::check_autostart_rules -- --exact --show-output
 
 .PHONY: generate
 generate: ## Generate schema definitions for configs
