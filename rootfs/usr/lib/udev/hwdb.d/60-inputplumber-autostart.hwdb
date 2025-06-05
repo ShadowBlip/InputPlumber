@@ -1,14 +1,19 @@
+# Anbernic
+dmi:*svnAnbernic:pnWin600:*
 # AOKZOE A1
 dmi:*svnAOKZOE:pnAOKZOEA1AR07:*
 dmi:*svnAOKZOE:pnAOKZOEA1Pro:*
+dmi:*svnAOKZOE:pnAOKZOEA1X:*
 # ASUS Rog Ally/X
 dmi:*svnASUSTeKCOMPUTERINC.:*rnRC71L:*
 dmi:*svnASUSTeKCOMPUTERINC.:*rnRC72LA:*
 # AYANEO 2
 dmi:*svnAYANEO:pnAYANEO2:*
 dmi:*svnAYANEO:pnAYANEO2S:*
-dmi:*svnAYANEO:pnAYANEOGEEK:*
 dmi:*svnAYANEO:pnAYANEOGEEK1S:*
+dmi:*svnAYANEO:pnAYANEOGEEK:*
+dmi:*svnAYANEO:pnGEEK1S:*
+dmi:*svnAYANEO:pnGEEK:*
 dmi:*svnMystenLabs,Inc.:pnSuiPlay0X1:*
 # AYANEO 2021
 dmi:*svnAYANEO:pnAYANEO2021:*
@@ -20,6 +25,9 @@ dmi:*svnAYANEO:pnAIR1S:*
 dmi:*svnAYANEO:pnAIR1SLimited:*
 dmi:*svnAYANEO:pnAIR:*
 dmi:*svnAYANEO:pnAIRPlus:*
+dmi:*svnAYANEO:pnAIRPlus:*rnAB05-AMD:*
+dmi:*svnAYANEO:pnAIRPlus:*rnAB05-Intel:*
+dmi:*svnAYANEO:pnAIRPlus:*rnAB05-Mendocino:*
 dmi:*svnAYANEO:pnAIRPro:*
 # AYANEO Flip
 dmi:*svnAYANEO:pnFLIPDS:*
@@ -55,6 +63,9 @@ dmi:*svnLENOVO:pn83L3:*
 dmi:*svnLENOVO:pn83N6:*
 dmi:*svnLENOVO:pn83Q2:*
 dmi:*svnLENOVO:pn83Q3:*
+# Lenovo Legion Go 2
+dmi:*svnLENOVO:pn83N0:*
+dmi:*svnLENOVO:pn83N1:*
 # MSI Claw
 dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClaw7AI+A2VM:*
 dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClaw8AI+A2VM:*
