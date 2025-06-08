@@ -1,7 +1,7 @@
 // References:
 // - https://github.com/zezba9000/MSI-Claw-Gamepad-Mode/blob/main/main.c
 // - https://github.com/NeroReflex/hid-msi-claw-dkms/blob/main/hid-msi-claw.c
-use std::{error::Error, ffi::CString};
+use std::{error::Error, ffi::CString, time::Duration};
 
 use hidapi::HidDevice;
 use packed_struct::PackedStruct;
@@ -31,27 +31,29 @@ impl Driver {
         let path = CString::new(path)?;
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
+        device.set_blocking_mode(false)?;
 
         Ok(Self { device })
     }
 
-    pub fn poll(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn poll(&self) -> Result<Option<PackedCommandReport>, Box<dyn Error + Send + Sync>> {
         let mut buf = [0; 8];
         let bytes_read = self.device.read(&mut buf[..])?;
+        if bytes_read == 0 {
+            return Ok(None);
+        }
         let slice = &buf[..bytes_read];
 
-        if bytes_read > 0 {
-            log::debug!("Got response bytes: {slice:?}");
-            let report = PackedCommandReport::unpack(&buf)?;
-            log::debug!("Response: {report}");
+        log::debug!("Got response bytes: {slice:?}");
+        let report = PackedCommandReport::unpack(&buf)?;
+        log::debug!("Response: {report}");
 
-            if report.command == Command::GamepadModeAck {
-                let mode: GamepadMode = report.arg1.into();
-                log::debug!("Current gamepad mode: {mode:?}");
-            }
+        if report.command == Command::GamepadModeAck {
+            let mode: GamepadMode = report.arg1.into();
+            log::debug!("Current gamepad mode: {mode:?}");
         }
 
-        Ok(())
+        Ok(Some(report))
     }
 
     // Configure the device to be in the given mode
@@ -63,7 +65,26 @@ impl Driver {
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let report = PackedCommandReport::switch_mode(mode, mkeys);
         let data = report.pack()?;
-        self.device.write(&data)?;
+
+        // The Claw appears to use a ring buffer of 64 bytes, so keep writing
+        // the command until the ring buffer is full and an ACK response is
+        // received. Attempts (buffer_size / report_size) number of times (8).
+        for _ in 0..8 {
+            // Write the SetMode command
+            self.device.write(&data)?;
+            std::thread::sleep(Duration::from_millis(50));
+
+            // Poll the device for an acknowlgement response
+            let Some(report) = self.poll()? else {
+                continue;
+            };
+
+            // TODO: Validate that the device switched gamepad modes
+            match report.command {
+                Command::Ack | Command::GamepadModeAck => break,
+                _ => break,
+            }
+        }
 
         Ok(())
     }
