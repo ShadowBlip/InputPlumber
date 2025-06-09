@@ -269,10 +269,13 @@ sem-release: ## Publish a release with semantic release
 in-docker:
 	@# Run the given make target inside Docker
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	mkdir -p $(CACHE_DIR)/home
 	docker run --rm \
 		-v $(PWD):/src \
+		-v $(PWD)/$(CACHE_DIR)/home:/home/build \
 		--workdir /src \
 		-e HOME=/home/build \
+		-e CARGO_HOME=/home/build/.cargo \
 		-e ARCH=$(ARCH) \
 		-e TARGET_ARCH=$(TARGET_ARCH) \
 		-e BUILD_TYPE=$(BUILD_TYPE) \
