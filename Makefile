@@ -7,6 +7,7 @@ ALL_RS := $(shell find src -name '*.rs')
 ALL_ROOTFS := $(shell find rootfs -type f)
 PREFIX ?= /usr
 CACHE_DIR := .cache
+ENABLE_METRICS ?= 1
 
 # Build variables
 BUILD_TYPE ?= release
@@ -99,7 +100,7 @@ all: build debug ## Build release and debug builds
 
 .PHONY: run
 run: debug ## Build and run
-	sudo LOG_LEVEL=$(LOG_LEVEL) ./target/$(TARGET_ARCH)/debug/$(NAME)
+	sudo LOG_LEVEL=$(LOG_LEVEL) ENABLE_METRICS=$(ENABLE_METRICS) ./target/$(TARGET_ARCH)/debug/$(NAME)
 
 .PHONY: clean
 clean: ## Remove build artifacts

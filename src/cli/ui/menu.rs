@@ -1,5 +1,7 @@
+pub mod device_performance_menu;
 pub mod device_test_menu;
 
+use device_performance_menu::DevicePerformanceMenu;
 use device_test_menu::DeviceTestMenu;
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
@@ -26,6 +28,7 @@ pub trait MenuWidget {
 #[derive(Debug)]
 pub enum Menu {
     DeviceTest(DeviceTestMenu),
+    DevicePerformance(DevicePerformanceMenu),
 }
 
 impl Widget for &Menu {
@@ -34,7 +37,8 @@ impl Widget for &Menu {
         Self: Sized,
     {
         match self {
-            Menu::DeviceTest(device_test_menu) => device_test_menu.render(area, buf),
+            Menu::DeviceTest(menu) => menu.render(area, buf),
+            Menu::DevicePerformance(menu) => menu.render(area, buf),
         }
     }
 }
@@ -42,13 +46,15 @@ impl Widget for &Menu {
 impl MenuWidget for Menu {
     fn update(&mut self) -> Vec<InterfaceCommand> {
         match self {
-            Menu::DeviceTest(device_test_menu) => device_test_menu.update(),
+            Menu::DeviceTest(menu) => menu.update(),
+            Menu::DevicePerformance(menu) => menu.update(),
         }
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Vec<InterfaceCommand> {
         match self {
-            Menu::DeviceTest(device_test_menu) => device_test_menu.handle_key_event(key_event),
+            Menu::DeviceTest(menu) => menu.handle_key_event(key_event),
+            Menu::DevicePerformance(menu) => menu.handle_key_event(key_event),
         }
     }
 }
@@ -56,5 +62,11 @@ impl MenuWidget for Menu {
 impl From<DeviceTestMenu> for Menu {
     fn from(value: DeviceTestMenu) -> Self {
         Self::DeviceTest(value)
+    }
+}
+
+impl From<DevicePerformanceMenu> for Menu {
+    fn from(value: DevicePerformanceMenu) -> Self {
+        Self::DevicePerformance(value)
     }
 }

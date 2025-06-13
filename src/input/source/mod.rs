@@ -1,5 +1,6 @@
 use std::{
     collections::HashSet,
+    env,
     error::Error,
     str::FromStr,
     sync::{Arc, Mutex, MutexGuard},
@@ -22,7 +23,7 @@ use self::{
 use super::{
     capability::Capability,
     composite_device::client::CompositeDeviceClient,
-    event::{native::NativeEvent, Event},
+    event::{context::EventContext, native::NativeEvent, Event},
     output_event::OutputEvent,
 };
 
@@ -72,6 +73,7 @@ impl From<Box<dyn Error + Send + Sync>> for InputError {
 /// Possible errors for a source device client
 #[derive(Error, Debug)]
 pub enum OutputError {
+    #[allow(dead_code)]
     #[error("Output behavior is not implemented")]
     NotImplemented,
     #[error("OutputError occurred running source device: {0}")]
@@ -329,6 +331,10 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     /// Run the source device, consuming the device.
     pub async fn run(self) -> Result<(), Box<dyn Error>> {
         let device_id = self.get_id();
+        let metrics_enabled = match env::var("ENABLE_METRICS") {
+            Ok(value) => value.as_str() == "1",
+            Err(_) => false,
+        };
 
         // Spawn a blocking task to run the source device.
         let task =
@@ -336,9 +342,32 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                 let mut rx = self.rx;
                 let mut implementation = self.implementation.lock().unwrap();
                 loop {
+                    // Create a context with performance metrics for each event
+                    let mut context = if metrics_enabled {
+                        Some(EventContext::new())
+                    } else {
+                        None
+                    };
+                    if let Some(ref mut context) = context {
+                        let root_span = context.metrics_mut().create_span("root");
+                        root_span.start();
+                    }
+
                     // Poll the implementation for events
+                    if let Some(ref mut context) = context {
+                        let poll_span = context
+                            .metrics_mut()
+                            .create_child_span("root", "source_poll");
+                        poll_span.start();
+                    }
                     let events = implementation.poll()?;
-                    for event in events.into_iter() {
+                    if let Some(ref mut context) = context {
+                        let poll_span = context.metrics_mut().get_mut("source_poll").unwrap();
+                        poll_span.finish();
+                    }
+
+                    // Process each event
+                    for mut event in events.into_iter() {
                         if self.event_filter_enabled
                             && Self::should_filter(
                                 &self.event_exclude_list,
@@ -347,6 +376,14 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                             )
                         {
                             continue;
+                        }
+                        if let Some(ref context) = context {
+                            let mut context = context.clone();
+                            let send_span = context
+                                .metrics_mut()
+                                .create_child_span("root", "source_send");
+                            send_span.start();
+                            event.set_context(context);
                         }
                         let event = Event::Native(event);
                         let result = self

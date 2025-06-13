@@ -1,4 +1,5 @@
 use std::{
+    env,
     error::Error,
     io,
     sync::{Arc, Mutex, MutexGuard},
@@ -13,12 +14,18 @@ use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 use unified_gamepad::UnifiedGamepadDevice;
 
-use crate::dbus::interface::target::{gamepad::TargetGamepadInterface, TargetInterface};
+use crate::dbus::interface::{
+    performance::PerformanceInterface,
+    target::{gamepad::TargetGamepadInterface, TargetInterface},
+};
 
 use super::{
     capability::Capability,
     composite_device::client::{ClientError, CompositeDeviceClient},
-    event::native::{NativeEvent, ScheduledNativeEvent},
+    event::{
+        context::EventContext,
+        native::{NativeEvent, ScheduledNativeEvent},
+    },
     output_capability::OutputCapability,
     output_event::OutputEvent,
 };
@@ -284,13 +291,13 @@ pub trait TargetInputDevice {
             let iface = TargetGamepadInterface::new(type_id.name().to_owned());
 
             let object_server = dbus.object_server();
-            let (gen_result, result) = tokio::join!(
+            let results = tokio::join!(
                 object_server.at(path.clone(), generic_interface),
                 object_server.at(path.clone(), iface)
             );
 
-            if gen_result.is_err() || result.is_err() {
-                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
+            if results.0.is_err() || results.1.is_err() {
+                log::debug!("Failed to start dbus interface `{path}`: {results:?}");
             } else {
                 log::debug!("Started dbus interface: {path}");
             }
@@ -440,6 +447,10 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
     /// Run the target device, consuming the device.
     pub async fn run(mut self, dbus_path: String) -> Result<(), Box<dyn Error>> {
         log::debug!("Started running target device: {dbus_path}");
+        let metrics_enabled = match env::var("ENABLE_METRICS") {
+            Ok(value) => value.as_str() == "1",
+            Err(_) => false,
+        };
 
         // Spawn a blocking task to run the target device. The '?' operator should
         // be avoided in this task so cleanup tasks can run to remove the DBus
@@ -458,6 +469,17 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                     client,
                     self.type_id,
                 );
+
+                // Start the performance metrics DBus interface for the device
+                // if metrics are enabled.
+                let metrics_tx = if metrics_enabled {
+                    Some(Self::start_metrics_interface(
+                        &self.dbus,
+                        dbus_path.as_str(),
+                    ))
+                } else {
+                    None
+                };
 
                 log::debug!("Target device running: {dbus_path}");
                 loop {
@@ -484,6 +506,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                         &self.type_id,
                         &mut composite_device,
                         &mut rx,
+                        &metrics_tx,
                         &mut implementation,
                     ) {
                         log::debug!("Error receiving commands: {e:?}");
@@ -521,6 +544,9 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
 
                 // Stop the device
                 log::debug!("Target device stopping: {dbus_path}");
+                if metrics_enabled {
+                    Self::stop_metrics_interface(&self.dbus, dbus_path.as_str());
+                }
                 implementation.stop_dbus_interface(self.dbus, dbus_path.clone());
                 implementation.stop()?;
                 log::debug!("Target device stopped: {dbus_path}");
@@ -536,12 +562,67 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
         Ok(())
     }
 
+    /// Start the performance metrics dbus interface
+    fn start_metrics_interface(
+        dbus: &Connection,
+        dbus_path: &str,
+    ) -> mpsc::Sender<(Capability, EventContext)> {
+        // Create a channel to emit event metrics
+        let (tx, mut rx) = mpsc::channel(2048);
+
+        // Spawn a task with the metrics dbus interface
+        let dbus_clone = dbus.clone();
+        let dbus_path_clone = dbus_path.to_string();
+        tokio::task::spawn(async move {
+            let metrics_interface = PerformanceInterface::new();
+            let object_server = dbus_clone.object_server();
+            let res = object_server
+                .at(dbus_path_clone.as_str(), metrics_interface)
+                .await;
+            if let Err(e) = res {
+                log::error!("Error running metrics interface: {e}");
+            }
+        });
+
+        // Spawn a task to read event metrics over the channel and emit them
+        // over dbus.
+        let dbus = dbus.clone();
+        let dbus_path = dbus_path.to_string();
+        tokio::task::spawn(async move {
+            while let Some((cap, ctx)) = rx.recv().await {
+                let result =
+                    PerformanceInterface::emit_metrics(&dbus, dbus_path.as_str(), cap, &ctx).await;
+                if let Err(e) = result {
+                    log::debug!("Error emitting metrics: {e}");
+                }
+            }
+        });
+
+        tx
+    }
+
+    /// Stop the performance metrics dbus interface
+    fn stop_metrics_interface(dbus: &Connection, dbus_path: &str) {
+        let dbus = dbus.clone();
+        let dbus_path = dbus_path.to_string();
+        tokio::task::spawn(async move {
+            let object_server = dbus.object_server();
+            let res = object_server
+                .remove::<PerformanceInterface, String>(dbus_path)
+                .await;
+            if let Err(e) = res {
+                log::error!("Error stopping metrics interface: {e}");
+            }
+        });
+    }
+
     /// Read commands sent to this device from the channel until it is
     /// empty.
     fn receive_commands(
         type_id: &TargetDeviceTypeId,
         composite_device: &mut Option<CompositeDeviceClient>,
         rx: &mut mpsc::Receiver<TargetCommand>,
+        metrics_tx: &Option<mpsc::Sender<(Capability, EventContext)>>,
         implementation: &mut MutexGuard<'_, T>,
     ) -> Result<(), Box<dyn Error>> {
         const MAX_COMMANDS: u8 = 64;
@@ -550,7 +631,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
             match rx.try_recv() {
                 Ok(cmd) => match cmd {
                     TargetCommand::WriteEvent(event) => {
-                        implementation.write_event(event)?;
+                        Self::write_event(metrics_tx, implementation, event)?;
                     }
                     TargetCommand::SetCompositeDevice(device) => {
                         *composite_device = Some(device.clone());
@@ -586,6 +667,53 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                 return Ok(());
             }
         }
+    }
+
+    /// Write the event to the underlying target device implementation
+    fn write_event(
+        metrics_tx: &Option<mpsc::Sender<(Capability, EventContext)>>,
+        implementation: &mut MutexGuard<'_, T>,
+        event: NativeEvent,
+    ) -> Result<(), Box<dyn Error>> {
+        let Some(mut context) = event.get_context().cloned() else {
+            implementation.write_event(event)?;
+            return Ok(());
+        };
+        let Some(metrics_tx) = metrics_tx else {
+            implementation.write_event(event)?;
+            return Ok(());
+        };
+        let cap = event.as_capability();
+
+        // Finish recording time for "target_send"
+        if let Some(target_send_span) = context.metrics_mut().get_mut("target_send") {
+            target_send_span.finish();
+        }
+
+        // Create a span to record how long writing to the target device takes
+        let write_span = context
+            .metrics_mut()
+            .create_child_span("root", "target_write");
+        write_span.start();
+        implementation.write_event(event)?;
+        write_span.finish();
+
+        // Finish recording the root span with the timing for the entire event
+        if let Some(root_span) = context.metrics_mut().get_mut("root") {
+            root_span.finish();
+        }
+
+        // Send the metrics so they can be emitted over dbus
+        if let Err(e) = metrics_tx.try_send((cap, context)) {
+            match e {
+                mpsc::error::TrySendError::Closed(_) => (),
+                _ => {
+                    log::debug!("Failed to send event metrics: {e}");
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
