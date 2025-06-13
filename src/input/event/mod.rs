@@ -1,3 +1,4 @@
+pub mod context;
 pub mod dbus;
 pub mod evdev;
 pub mod native;
