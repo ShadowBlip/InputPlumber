@@ -1,13 +1,14 @@
-use std::{error::Error, ffi::CString};
+use std::{error::Error, f32::consts::PI, ffi::CString};
 
 use hidapi::HidDevice;
-use packed_struct::PackedStruct;
+use packed_struct::{types::SizedInteger, PackedStruct};
 
 use crate::{drivers::flydigi_vader_4_pro::hid_report::Direction, udev::device::UdevDevice};
 
 use super::{
     event::{
-        BinaryInput, ButtonEvent, Event, JoystickEvent, JoystickInput, TriggerEvent, TriggerInput,
+        BinaryInput, ButtonEvent, Event, InertialEvent, InertialInput, JoystickEvent,
+        JoystickInput, TriggerEvent, TriggerInput,
     },
     hid_report::PackedInputDataReport,
 };
@@ -16,7 +17,7 @@ use super::{
 pub const REPORT_ID: u8 = 0x04;
 
 // Input report size
-const PACKET_SIZE: usize = 31;
+const PACKET_SIZE: usize = 32;
 
 // HID buffer read timeout
 const HID_TIMEOUT: i32 = 10;
@@ -280,21 +281,20 @@ impl Driver {
             })));
         }
 
-        //       // Accelerometer events
-        //       events.push(Event::Inertia(InertialEvent::Accelerometer(
-        //           InertialInput {
-        //               x: -state.accel_x.to_primitive(),
-        //               y: state.accel_y.to_primitive(),
-        //               z: -state.accel_z.to_primitive(),
-        //           },
-        //       )));
-        //       events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-        //           x: -state.gyro_x.to_primitive(),
-        //           y: state.gyro_y.to_primitive(),
-        //           z: -state.gyro_z.to_primitive(),
-        //       })));
-
-        //log::trace!("Got events: {events:?}");
+        // Accelerometer events
+        events.push(Event::Inertia(InertialEvent::Accelerometer(
+            InertialInput {
+                x: -state.accel_x.to_primitive(),
+                y: state.accel_y.to_primitive(),
+                z: state.accel_z.to_primitive(),
+            },
+        )));
+        // Gyro events. They need to be rotated in order for them to be read properly
+        events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
+            x: -(state.gyro_x.to_primitive() as i32 * 1143239 / i16::MAX as i32) as i16,
+            y: -(state.get_y() as i32 * 1143239 / i16::MAX as i32) as i16,
+            z: -(state.gyro_z.to_primitive() as i32 * 17873 / i16::MAX as i32) as i16,
+        })));
         events
     }
 }
