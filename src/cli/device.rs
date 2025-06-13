@@ -14,6 +14,7 @@ use crate::dbus::interface::manager::ManagerInterfaceProxy;
 use crate::dbus::interface::target::TargetInterfaceProxy;
 use crate::input::target::TargetDeviceTypeId;
 
+use super::ui::menu::device_performance_menu::DevicePerformanceMenu;
 use super::ui::menu::device_test_menu::DeviceTestMenu;
 use super::ui::TextUserInterface;
 
@@ -34,6 +35,11 @@ pub enum DeviceCommand {
     Intercept {
         #[command(subcommand)]
         cmd: InterceptCommand,
+    },
+    /// Manage a single target device
+    Target {
+        #[command(subcommand)]
+        cmd: TargetCommand,
     },
     /// Manage target devices
     Targets {
@@ -62,6 +68,15 @@ pub enum InterceptCommand {
     Get,
     /// Set the intercept mode of the composite device.
     Set { mode: InterceptMode },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TargetCommand {
+    /// Monitor the input latency of the given target device
+    Monitor {
+        #[arg(value_parser = PossibleValuesParser::new(TargetDeviceTypeId::supported_types().iter().map(|f| f.as_str().to_string()).collect::<Vec<String>>()))]
+        kind: String,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -239,6 +254,43 @@ pub async fn handle_device(
             InterceptCommand::Set { mode } => {
                 device.set_intercept_mode(mode.clone().into()).await?;
                 println!("Set intercept mode to: {mode}");
+            }
+        },
+        DeviceCommand::Target { cmd } => match cmd {
+            TargetCommand::Monitor { kind } => {
+                let target_paths = device.target_devices().await?;
+
+                // Find the correct target device
+                let mut target_path = None;
+                for path in target_paths {
+                    let target = TargetInterfaceProxy::builder(&conn)
+                        .path(path.as_str())?
+                        .build()
+                        .await?;
+                    let device_type = target.device_type().await?;
+                    if device_type == kind {
+                        target_path = Some(path.clone());
+                    }
+                }
+
+                let Some(path) = target_path else {
+                    return Err(format!("No target device {kind} found in device").into());
+                };
+
+                // Run the TUI for the monitoring interface
+                let mut tui = TextUserInterface::new();
+                let menu = DevicePerformanceMenu::new(&conn, path.as_str()).await?;
+                let task = tokio::task::spawn_blocking(
+                    move || -> Result<(), Box<dyn Error + Send + Sync>> {
+                        if let Err(e) = tui.run(menu.into()) {
+                            return Err(e.to_string().into());
+                        }
+                        Ok(())
+                    },
+                );
+                if let Err(e) = task.await? {
+                    return Err(e.to_string().into());
+                }
             }
         },
         DeviceCommand::Targets { cmd } => match cmd {

@@ -4,7 +4,7 @@ use evdev::AbsoluteAxisCode;
 
 use crate::input::capability::{Capability, Gamepad, GamepadButton};
 
-use super::{evdev::EvdevEvent, value::InputValue};
+use super::{context::EventContext, evdev::EvdevEvent, value::InputValue};
 
 /// A native event represents an InputPlumber event
 #[derive(Debug, Clone)]
@@ -19,6 +19,10 @@ pub struct NativeEvent {
     source_capability: Option<Capability>,
     /// The value of the input event.
     value: InputValue,
+    /// The event context contains additional information related to the event, such
+    /// as performance metrics and metadata. `Box<>` is used to allocate the
+    /// context on the heap to reduce the size of [NativeEvent].
+    context: Option<Box<EventContext>>,
 }
 
 impl NativeEvent {
@@ -28,6 +32,7 @@ impl NativeEvent {
             capability,
             value,
             source_capability: None,
+            context: None,
         }
     }
 
@@ -42,6 +47,7 @@ impl NativeEvent {
             capability,
             source_capability: Some(source_capability),
             value,
+            context: None,
         }
     }
 
@@ -59,6 +65,22 @@ impl NativeEvent {
     /// capability defined.
     pub fn is_translated(&self) -> bool {
         self.source_capability.is_some()
+    }
+
+    /// Returns the current context of the event
+    pub fn get_context(&self) -> Option<&EventContext> {
+        self.context.as_deref()
+    }
+
+    /// Returns the current context of the event
+    pub fn get_context_mut(&mut self) -> Option<&mut EventContext> {
+        self.context.as_deref_mut()
+    }
+
+    /// Add the given event context to the event. Calling this method will
+    /// allocate the given [EventContext] on the heap.
+    pub fn set_context(&mut self, context: EventContext) {
+        self.context = Some(Box::new(context));
     }
 
     /// Set the source capability of the event if this is a translated event
@@ -116,6 +138,7 @@ impl NativeEvent {
             capability,
             value,
             source_capability: None,
+            context: None,
         }
     }
 }
@@ -129,6 +152,7 @@ impl From<EvdevEvent> for NativeEvent {
             capability,
             value,
             source_capability: None,
+            context: None,
         }
     }
 }
