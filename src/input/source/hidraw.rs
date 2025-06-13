@@ -423,7 +423,7 @@ impl HidRawDevice {
             DriverType::Vader4Pro => {
                 let device = Vader4Pro::new(device_info.clone())?;
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(1),
+                    poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
                 };
                 let source_device = SourceDriver::new_with_options(

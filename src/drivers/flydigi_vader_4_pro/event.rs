@@ -2,7 +2,7 @@
 #[derive(Clone, Debug)]
 pub enum Event {
     Button(ButtonEvent),
-    //    Inertia(InertialEvent),
+    Inertia(InertialEvent),
     Joystick(JoystickEvent),
     Trigger(TriggerEvent),
 }
@@ -66,9 +66,8 @@ pub enum ButtonEvent {
     DPadLeft(BinaryInput),
 }
 
-/*
 /// [InertialInput] represents the state of the IMU (x, y, z) values
- #[derive(Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct InertialInput {
     pub x: i16,
     pub y: i16,
@@ -81,7 +80,6 @@ pub enum InertialEvent {
     Accelerometer(InertialInput),
     Gyro(InertialInput),
 }
-*/
 
 /// [JoystickInput] is a double  (x, y) axis
 #[derive(Clone, Debug)]
