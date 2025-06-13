@@ -653,9 +653,21 @@ impl CompositeDevice {
         log::trace!("Received event: {:?} from {device_id}", raw_event);
 
         // Convert the event into a NativeEvent
-        let Event::Native(event) = raw_event;
+        let Event::Native(mut event) = raw_event;
         let cap = event.as_capability();
         log::trace!("Event capability: {:?}", cap);
+
+        if let Some(context) = event.get_context_mut() {
+            context
+                .metrics_mut()
+                .get_mut("source_send")
+                .unwrap()
+                .finish();
+            context
+                .metrics_mut()
+                .create_child_span("root", "composite_device")
+                .start();
+        }
 
         // Only send valid events to the target device(s)
         if cap == Capability::NotImplemented {
