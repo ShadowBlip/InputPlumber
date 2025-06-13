@@ -22,7 +22,7 @@ use self::{
 use super::{
     capability::Capability,
     composite_device::client::CompositeDeviceClient,
-    event::{native::NativeEvent, Event},
+    event::{context::EventContext, native::NativeEvent, Event},
     output_event::OutputEvent,
 };
 
@@ -72,6 +72,7 @@ impl From<Box<dyn Error + Send + Sync>> for InputError {
 /// Possible errors for a source device client
 #[derive(Error, Debug)]
 pub enum OutputError {
+    #[allow(dead_code)]
     #[error("Output behavior is not implemented")]
     NotImplemented,
     #[error("OutputError occurred running source device: {0}")]
@@ -336,9 +337,19 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                 let mut rx = self.rx;
                 let mut implementation = self.implementation.lock().unwrap();
                 loop {
+                    // Create a context with performance metrics for each event
+                    let mut context = EventContext::new();
+                    let root_span = context.metrics_mut().create_span("root");
+                    root_span.start();
+
                     // Poll the implementation for events
+                    let poll_span = context
+                        .metrics_mut()
+                        .create_child_span("root", "source_poll");
+                    poll_span.start();
                     let events = implementation.poll()?;
-                    for event in events.into_iter() {
+                    poll_span.finish();
+                    for mut event in events.into_iter() {
                         if self.event_filter_enabled
                             && Self::should_filter(
                                 &self.event_exclude_list,
@@ -348,6 +359,13 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                         {
                             continue;
                         }
+                        let mut context = context.clone();
+                        let send_span = context
+                            .metrics_mut()
+                            .create_child_span("root", "source_send");
+                        send_span.start();
+                        // TODO: Only allocate the event context if setting enabled
+                        event.set_context(context);
                         let event = Event::Native(event);
                         let result = self
                             .composite_device
