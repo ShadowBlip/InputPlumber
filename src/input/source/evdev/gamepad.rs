@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::time::Duration;
 use std::{collections::HashMap, error::Error, os::fd::AsRawFd};
 
 use evdev::{
@@ -8,6 +9,7 @@ use evdev::{
 use nix::fcntl::{FcntlArg, OFlag};
 use packed_struct::types::SizedInteger;
 use packed_struct::PrimitiveEnum;
+use tokio::time::{interval, Interval};
 
 use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::drivers::steam_deck::hid_report::{
@@ -34,6 +36,7 @@ pub struct GamepadEventDevice {
     ff_effects_dualsense: Option<i16>,
     ff_effects_deck: Option<i16>,
     hat_state: HashMap<AbsoluteAxisCode, i32>,
+    interval: Interval,
 }
 
 impl GamepadEventDevice {
@@ -64,6 +67,9 @@ impl GamepadEventDevice {
         // Create an event translator if a capability map was given
         let translator = capability_map.map(|map| EventTranslator::new(&map, axes_info.clone()));
 
+        // Set polling interval
+        let interval = interval(Duration::from_millis(10));
+
         Ok(Self {
             device,
             axes_info,
@@ -72,6 +78,7 @@ impl GamepadEventDevice {
             ff_effects_dualsense: None,
             ff_effects_deck: None,
             hat_state: HashMap::new(),
+            interval,
         })
     }
 
@@ -353,7 +360,8 @@ impl GamepadEventDevice {
 
 impl SourceInputDevice for GamepadEventDevice {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
         let mut native_events = vec![];
 
         // Poll the translator for any scheduled events
@@ -498,7 +506,7 @@ impl SourceOutputDevice for GamepadEventDevice {
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
-    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+    async fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
         log::trace!("Received output event: {:?}", event);
 
         // Only process output events if FF is supported
@@ -550,7 +558,7 @@ impl SourceOutputDevice for GamepadEventDevice {
 
     /// Upload the given force feedback effect data to the source device. Returns
     /// a device-specific id of the uploaded effect if it is successful.
-    fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
+    async fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
         log::trace!("Uploading FF effect data");
         if self.device.supported_ff().is_none() {
             log::debug!("Device does not support FF effects");
@@ -567,7 +575,11 @@ impl SourceOutputDevice for GamepadEventDevice {
     }
 
     /// Update the effect with the given id using the given effect data.
-    fn update_effect(&mut self, effect_id: i16, effect: FFEffectData) -> Result<(), OutputError> {
+    async fn update_effect(
+        &mut self,
+        effect_id: i16,
+        effect: FFEffectData,
+    ) -> Result<(), OutputError> {
         log::trace!("Update FF effect {effect_id}");
         if self.device.supported_ff().is_none() {
             log::debug!("Device does not support FF effects");
@@ -586,7 +598,7 @@ impl SourceOutputDevice for GamepadEventDevice {
     }
 
     /// Erase the effect with the given id from the source device.
-    fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
+    async fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
         log::trace!("Erasing FF effect data");
         if self.device.supported_ff().is_none() {
             log::debug!("Device does not support FF effects");

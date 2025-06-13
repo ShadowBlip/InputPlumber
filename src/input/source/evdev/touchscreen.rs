@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::time::Duration;
 use std::{collections::HashMap, error::Error, os::fd::AsRawFd};
 
 use evdev::{
@@ -7,6 +8,7 @@ use evdev::{
     SynchronizationCode,
 };
 use nix::fcntl::{FcntlArg, OFlag};
+use tokio::time::{interval, Interval};
 
 use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::config::TouchscreenConfig;
@@ -107,6 +109,7 @@ pub struct TouchscreenEventDevice {
     touch_state: [TouchState; 10], // NOTE: Max of 10 touch inputs
     dirty_states: HashSet<usize>,
     last_touch_idx: usize,
+    interval: Interval,
 }
 
 impl TouchscreenEventDevice {
@@ -184,6 +187,9 @@ impl TouchscreenEventDevice {
         // Create an event translator if a capability map was given
         let translator = capability_map.map(|map| EventTranslator::new(&map, axes_info.clone()));
 
+        // Set polling interval
+        let interval = interval(Duration::from_millis(10));
+
         Ok(Self {
             device,
             orientation,
@@ -192,6 +198,7 @@ impl TouchscreenEventDevice {
             touch_state: Default::default(),
             dirty_states: HashSet::with_capacity(10),
             last_touch_idx: 0,
+            interval,
         })
     }
 
@@ -304,7 +311,8 @@ impl TouchscreenEventDevice {
 
 impl SourceInputDevice for TouchscreenEventDevice {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
         let mut native_events = vec![];
 
         // Poll the translator for any scheduled events
@@ -331,6 +339,7 @@ impl SourceInputDevice for TouchscreenEventDevice {
             let events: Vec<InputEvent> = events.into_iter().collect();
             events
         };
+        log::trace!("Read events from device: {events:?}");
 
         // Convert the events into native events if no translator exists
         if self.translator.is_none() {
@@ -370,6 +379,8 @@ impl SourceInputDevice for TouchscreenEventDevice {
             .flatten()
             .collect();
         native_events.extend(translated_events);
+
+        log::trace!("Sending events: {native_events:?}");
 
         Ok(native_events)
     }
