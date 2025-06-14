@@ -15,6 +15,14 @@ pub enum PackedInputDataReport {
 }
 
 impl PackedInputDataReport {
+    pub fn new_bt() -> Self {
+        Self::Bluetooth(BluetoothPackedInputDataReport::new())
+    }
+
+    pub fn new_usb() -> Self {
+        Self::Usb(USBPackedInputDataReport::new())
+    }
+
     pub fn unpack(buf: &[u8], size: usize) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let report_id = buf[0];
         match report_id {
@@ -544,6 +552,12 @@ pub struct BluetoothPackedInputDataReport {
     pub bt_crc_fail_count: u8,
 }
 
+impl BluetoothPackedInputDataReport {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for BluetoothPackedInputDataReport {
     fn default() -> Self {
         Self {
@@ -791,6 +805,47 @@ impl Default for UsbPackedOutputReportShort {
         Self {
             report_id: 0x02,
             state: Default::default(),
+        }
+    }
+}
+
+// When using bluetooth, the first byte after the reportID is uint8_t seq_tag,
+// while the next one is uint8_t tag, following bytes are the same as USB.
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "78")]
+pub struct BluetoothPackedOutputReport {
+    // byte 0
+    #[packed_field(bytes = "0")]
+    pub report_id: u8, // Report ID (always 0x31)
+
+    // byte 1
+    #[packed_field(bytes = "1")]
+    pub seq_tag: u8,
+
+    // byte 2
+    #[packed_field(bytes = "2")]
+    pub tag: u8,
+
+    // byte 3-49
+    #[packed_field(bytes = "3..=49")]
+    pub state: SetStatePackedOutputData,
+
+    #[packed_field(bytes = "50..=73", endian = "lsb")]
+    pub reserved: [u8; 24],
+
+    #[packed_field(bytes = "74..=77", endian = "lsb")]
+    pub crc32: u32,
+}
+
+impl Default for BluetoothPackedOutputReport {
+    fn default() -> Self {
+        Self {
+            report_id: 0x31,
+            seq_tag: 0x00,
+            tag: 0x00,
+            state: Default::default(),
+            reserved: Default::default(),
+            crc32: Default::default(),
         }
     }
 }
