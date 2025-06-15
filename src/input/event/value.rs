@@ -1,5 +1,3 @@
-use tabled::derive::display::debug;
-
 use crate::{
     config::capability_map::CapabilityConfig,
     input::capability::{Capability, Gamepad, Mouse, Touch, Touchpad},
