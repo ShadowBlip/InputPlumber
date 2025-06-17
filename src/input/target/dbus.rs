@@ -72,6 +72,13 @@ impl DBusDevice {
             let include_event = if matches!(&source_cap, Capability::Gamepad(Gamepad::Axis(_))) {
                 match event.action {
                     Action::Left => {
+                        // If the opposite axis is pressed, emit a "release" event
+                        // for it.
+                        if self.state.pressed_right {
+                            let other_event = DBusEvent::new(Action::Right, InputValue::Float(0.0));
+                            translated.push(other_event);
+                            self.state.pressed_right = false;
+                        }
                         if self.state.pressed_left && event.as_f64() < AXIS_THRESHOLD {
                             event.value = InputValue::Float(0.0);
                             self.state.pressed_left = false;
@@ -85,6 +92,13 @@ impl DBusDevice {
                         }
                     }
                     Action::Right => {
+                        // If the opposite axis is pressed, emit a "release" event
+                        // for it.
+                        if self.state.pressed_left {
+                            let other_event = DBusEvent::new(Action::Left, InputValue::Float(0.0));
+                            translated.push(other_event);
+                            self.state.pressed_left = false;
+                        }
                         if self.state.pressed_right && event.as_f64() < AXIS_THRESHOLD {
                             event.value = InputValue::Float(0.0);
                             self.state.pressed_right = false;
@@ -98,6 +112,13 @@ impl DBusDevice {
                         }
                     }
                     Action::Up => {
+                        // If the opposite axis is pressed, emit a "release" event
+                        // for it.
+                        if self.state.pressed_down {
+                            let other_event = DBusEvent::new(Action::Down, InputValue::Float(0.0));
+                            translated.push(other_event);
+                            self.state.pressed_down = false;
+                        }
                         if self.state.pressed_up && event.as_f64() < AXIS_THRESHOLD {
                             event.value = InputValue::Float(0.0);
                             self.state.pressed_up = false;
@@ -111,6 +132,13 @@ impl DBusDevice {
                         }
                     }
                     Action::Down => {
+                        // If the opposite axis is pressed, emit a "release" event
+                        // for it.
+                        if self.state.pressed_up {
+                            let other_event = DBusEvent::new(Action::Up, InputValue::Float(0.0));
+                            translated.push(other_event);
+                            self.state.pressed_up = false;
+                        }
                         if self.state.pressed_down && event.as_f64() < AXIS_THRESHOLD {
                             event.value = InputValue::Float(0.0);
                             self.state.pressed_down = false;
