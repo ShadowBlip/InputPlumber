@@ -5,6 +5,7 @@ use tokio::sync::mpsc::{channel, error::SendError, Sender};
 use crate::config::CompositeDeviceConfig;
 use crate::input::event::native::NativeEvent;
 use crate::input::target::client::TargetDeviceClient;
+use crate::input::target::TargetDeviceTypeId;
 use crate::input::{capability::Capability, event::Event, output_event::OutputEvent};
 use crate::udev::device::UdevDevice;
 
@@ -225,7 +226,10 @@ impl CompositeDeviceClient {
     /// Set the given target devices on the composite device. This will create
     /// new target devices, attach them to this device, and stop/remove any
     /// existing devices.
-    pub async fn set_target_devices(&self, devices: Vec<String>) -> Result<(), ClientError> {
+    pub async fn set_target_devices(
+        &self,
+        devices: Vec<TargetDeviceTypeId>,
+    ) -> Result<(), ClientError> {
         self.tx
             .send(CompositeCommand::SetTargetDevices(devices))
             .await?;

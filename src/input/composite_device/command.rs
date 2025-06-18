@@ -8,7 +8,7 @@ use crate::{
         capability::Capability,
         event::{native::NativeEvent, Event},
         output_event::OutputEvent,
-        target::client::TargetDeviceClient,
+        target::{client::TargetDeviceClient, TargetDeviceTypeId},
     },
     udev::device::UdevDevice,
 };
@@ -26,6 +26,7 @@ pub enum CompositeCommand {
     GetDBusDevicePaths(mpsc::Sender<Vec<String>>),
     GetInterceptMode(mpsc::Sender<InterceptMode>),
     GetName(mpsc::Sender<String>),
+    #[allow(dead_code)]
     GetProfileName(mpsc::Sender<String>),
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
     GetTargetCapabilities(mpsc::Sender<HashSet<Capability>>),
@@ -38,10 +39,11 @@ pub enum CompositeCommand {
     RemoveRecentEvent(Capability),
     SetInterceptActivation(Vec<Capability>, Capability),
     SetInterceptMode(InterceptMode),
-    SetTargetDevices(Vec<String>),
+    SetTargetDevices(Vec<TargetDeviceTypeId>),
     SourceDeviceAdded(UdevDevice),
     SourceDeviceRemoved(UdevDevice),
     SourceDeviceStopped(UdevDevice),
+    #[allow(dead_code)]
     UpdateSourceCapabilities(String, HashSet<Capability>),
     UpdateTargetCapabilities(String, HashSet<Capability>),
     WriteChordEvent(Vec<NativeEvent>),

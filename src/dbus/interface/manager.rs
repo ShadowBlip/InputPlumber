@@ -126,6 +126,11 @@ impl ManagerInterface {
     /// Create a target device of the given type. Returns the DBus path to
     /// the created target device.
     async fn create_target_device(&self, kind: String) -> fdo::Result<String> {
+        let Ok(kind) = TargetDeviceTypeId::try_from(kind.as_str()) else {
+            return Err(fdo::Error::InvalidArgs(format!(
+                "Invalid target device type: {kind}."
+            )));
+        };
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(

@@ -106,8 +106,15 @@ impl CompositeDeviceInterface {
     /// current virtual devices for the composite device and create and attach
     /// new target devices.
     async fn set_target_devices(&self, target_device_types: Vec<String>) -> fdo::Result<()> {
+        let mut target_device_type_ids = Vec::with_capacity(target_device_types.len());
+        for kind in target_device_types {
+            let type_id = kind.as_str().try_into().map_err(|_| {
+                fdo::Error::InvalidArgs(format!("Invalid target device type: {kind}"))
+            })?;
+            target_device_type_ids.push(type_id);
+        }
         self.composite_device
-            .set_target_devices(target_device_types)
+            .set_target_devices(target_device_type_ids)
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))
     }

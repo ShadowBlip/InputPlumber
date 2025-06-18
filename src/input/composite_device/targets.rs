@@ -10,8 +10,10 @@ use zbus::Connection;
 use crate::{
     dbus::interface::composite_device::CompositeDeviceInterface,
     input::{
-        capability::Capability, event::native::NativeEvent, manager::ManagerCommand,
-        target::client::TargetDeviceClient,
+        capability::Capability,
+        event::native::NativeEvent,
+        manager::ManagerCommand,
+        target::{client::TargetDeviceClient, TargetDeviceTypeId},
     },
 };
 
@@ -42,7 +44,7 @@ pub struct CompositeDeviceTargets {
     target_devices_queued: HashSet<String>,
     /// List of active target device types (e.g. "deck", "ds5", "xb360") that
     /// were active before system suspend.
-    target_devices_suspended: Vec<String>,
+    target_devices_suspended: Vec<TargetDeviceTypeId>,
     /// Map of DBusDevice DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
     target_dbus_devices: HashMap<String, TargetDeviceClient>,
@@ -83,7 +85,7 @@ impl CompositeDeviceTargets {
 
     /// Returns the list of active target device types (e.g. "deck", "ds5", "xb360")
     /// that were active before system suspend.
-    pub fn get_suspended_devices(&self) -> Vec<String> {
+    pub fn get_suspended_devices(&self) -> Vec<TargetDeviceTypeId> {
         self.target_devices_suspended.clone()
     }
 
@@ -95,7 +97,10 @@ impl CompositeDeviceTargets {
     /// Set the given target devices on the composite device. This will create
     /// new target devices, attach them to this device, and stop/remove any
     /// existing devices.
-    pub async fn set_devices(&mut self, device_types: Vec<String>) -> Result<(), Box<dyn Error>> {
+    pub async fn set_devices(
+        &mut self,
+        device_types: Vec<TargetDeviceTypeId>,
+    ) -> Result<(), Box<dyn Error>> {
         let dbus_path = self.path.as_str();
         log::info!("[{dbus_path}] Setting target devices: {device_types:?}");
 
@@ -123,14 +128,14 @@ impl CompositeDeviceTargets {
         }
 
         // Identify which target devices are new
-        let mut device_types_to_start: Vec<String> = vec![];
+        let mut device_types_to_start: Vec<TargetDeviceTypeId> = vec![];
         for kind in device_types.iter() {
             if self.target_kind_running(kind).await? {
                 log::debug!("[{dbus_path}] Target device {kind} already running, nothing to do.");
                 continue;
             }
 
-            device_types_to_start.push(kind.clone());
+            device_types_to_start.push(*kind);
         }
 
         // Identify the targets that need to close
@@ -231,12 +236,7 @@ impl CompositeDeviceTargets {
     }
 
     // Deterimines if a given target device kind is already running
-    async fn target_kind_running(&self, kind: &str) -> Result<bool, Box<dyn Error>> {
-        // TODO: Save this on the DS5 target device so we can properly look it up.
-        let kind = match kind {
-            "ds5" => "ds5_edge",
-            _ => kind,
-        };
+    async fn target_kind_running(&self, kind: &TargetDeviceTypeId) -> Result<bool, Box<dyn Error>> {
         for target in self.target_devices.values() {
             let target_type = match target.get_type().await {
                 Ok(value) => value,
@@ -244,7 +244,7 @@ impl CompositeDeviceTargets {
                     return Err(format!("Failed to request target type: {e:?}").into());
                 }
             };
-            if kind == target_type {
+            if *kind == target_type {
                 return Ok(true);
             }
         }

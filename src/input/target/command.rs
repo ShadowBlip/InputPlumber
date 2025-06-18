@@ -5,6 +5,8 @@ use crate::input::{
     event::native::NativeEvent,
 };
 
+use super::TargetDeviceTypeId;
+
 /// A [TargetCommand] is a message that can be sent to a [TargetDevice] over
 /// a channel.
 #[derive(Debug, Clone)]
@@ -16,7 +18,7 @@ pub enum TargetCommand {
     /// Return the input capabilities of the target device
     GetCapabilities(Sender<Vec<Capability>>),
     /// Return the type of target input device
-    GetType(Sender<String>),
+    GetType(Sender<TargetDeviceTypeId>),
     /// Clear all local state on the target device
     ClearState,
     /// Stop the target device

@@ -10,7 +10,7 @@ use crate::input::{
     event::native::NativeEvent,
 };
 
-use super::command::TargetCommand;
+use super::{command::TargetCommand, TargetDeviceTypeId};
 
 /// Possible errors for a target device client
 #[derive(Error, Debug)]
@@ -84,7 +84,7 @@ impl TargetDeviceClient {
 
     /// Returns a string identifier of the type of target device. This identifier
     /// should be the same text identifier used in device and input configs.
-    pub async fn get_type(&self) -> Result<String, ClientError> {
+    pub async fn get_type(&self) -> Result<TargetDeviceTypeId, ClientError> {
         let (tx, mut rx) = channel(1);
         self.tx.send(TargetCommand::GetType(tx)).await?;
         if let Some(value) = rx.recv().await {
