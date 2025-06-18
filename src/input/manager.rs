@@ -85,7 +85,7 @@ pub enum ManagerCommand {
         config: CompositeDeviceConfig,
     },
     CreateTargetDevice {
-        kind: String,
+        kind: TargetDeviceTypeId,
         sender: mpsc::Sender<Result<String, ManagerError>>,
     },
     StopTargetDevice {

@@ -481,7 +481,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
 
                     // Receive commands/input events
                     if let Err(e) = TargetDriver::receive_commands(
-                        self.type_id.as_str(),
+                        &self.type_id,
                         &mut composite_device,
                         &mut rx,
                         &mut implementation,
@@ -539,7 +539,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
     /// Read commands sent to this device from the channel until it is
     /// empty.
     fn receive_commands(
-        type_id: &str,
+        type_id: &TargetDeviceTypeId,
         composite_device: &mut Option<CompositeDeviceClient>,
         rx: &mut mpsc::Receiver<TargetCommand>,
         implementation: &mut MutexGuard<'_, T>,
@@ -561,7 +561,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                         sender.blocking_send(capabilities)?;
                     }
                     TargetCommand::GetType(sender) => {
-                        sender.blocking_send(type_id.to_string())?;
+                        sender.blocking_send(*type_id)?;
                     }
                     TargetCommand::ClearState => {
                         implementation.clear_state();

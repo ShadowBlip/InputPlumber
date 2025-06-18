@@ -39,6 +39,7 @@ use crate::{
         source::{
             evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice, SourceDevice,
         },
+        target::TargetDeviceTypeId,
     },
     udev::{device::UdevDevice, hide_device, unhide_device},
 };
@@ -1675,6 +1676,18 @@ impl CompositeDevice {
 
         // Set the target devices to use if it is defined in the profile
         if let Some(target_devices) = profile.target_devices.clone() {
+            let target_devices = target_devices
+                .iter()
+                .filter_map(|kind| {
+                    let res = TargetDeviceTypeId::try_from(kind.as_str());
+                    if res.is_err() {
+                        log::warn!("Skipping unsupported target device in profile: {kind}");
+                        None
+                    } else {
+                        res.ok()
+                    }
+                })
+                .collect();
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
                 if let Err(e) = tx
