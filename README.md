@@ -11,6 +11,19 @@
   <br>
 </p>
 
+Table of Contents:
+- [About](#about)
+    - [Features](#features)
+- [Install](#install)
+- [Documentation](#documentation)
+- [Usage](#usage)
+    - [Input Profiles](#input-profiles)
+    - [Intercept Mode](#intercept-mode)
+    - [Virtual Keyboard](#virtual-keyboard)
+    - [Device Compositing & Capability Maps](#device-compositing--capability-maps)
+    - [Troubleshooting](#troubleshooting)
+- [License](#license)
+
 ## About
 
 InputPlumber is an open source input routing and control daemon for Linux. It can
