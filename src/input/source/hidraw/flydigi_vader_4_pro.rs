@@ -253,7 +253,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 normalize_trigger_value(trigg),
             ),
         },
-        /*         event::Event::Inertia(accel_event) => match accel_event {
+        event::Event::Inertia(accel_event) => match accel_event {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Accelerometer),
                 InputValue::Vector3 {
@@ -270,7 +270,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
                     z: Some(value.z as f64),
                 },
             ),
-        }, */
+        },
     }
 }
 
