@@ -467,4 +467,4 @@ Select the device event number [0-13]: 3
 
 ## License
 
-InputPlumber is licensed under THE GNU GPLv3+. See LICENSE for details.
+InputPlumber is licensed under THE GNU GPLv3+. See [LICENSE](LICENSE) for details.
