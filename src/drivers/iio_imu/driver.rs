@@ -1,4 +1,9 @@
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{
+    collections::HashMap,
+    error::Error,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use industrial_io::{Channel, ChannelType, Device, Direction};
 
@@ -12,9 +17,9 @@ use super::{
 /// Driver for reading IIO IMU data
 pub struct Driver {
     mount_matrix: MountMatrix,
-    accel: HashMap<String, Channel>,
+    accel: HashMap<String, Arc<Mutex<Channel>>>,
     accel_info: HashMap<String, AxisInfo>,
-    gyro: HashMap<String, Channel>,
+    gyro: HashMap<String, Arc<Mutex<Channel>>>,
     gyro_info: HashMap<String, AxisInfo>,
     pub sample_delay: Duration,
 }
@@ -116,7 +121,7 @@ impl Driver {
             let Some(info) = self.accel_info.get(id) else {
                 continue;
             };
-            let data = channel.attr_read_int("raw")?;
+            let data = channel.lock().unwrap().attr_read_int("raw")?;
 
             // processed_value = (raw + offset) * scale
             let value = (data + info.offset) as f64 * info.scale;
@@ -144,7 +149,7 @@ impl Driver {
             let Some(info) = self.gyro_info.get(id) else {
                 continue;
             };
-            let data = channel.attr_read_int("raw")?;
+            let data = channel.lock().unwrap().attr_read_int("raw")?;
 
             // processed_value = (raw + offset) * scale
             let value = (data + info.offset) as f64 * info.scale;
@@ -194,7 +199,10 @@ impl Driver {
 fn get_channels_with_type(
     device: &Device,
     channel_type: ChannelType,
-) -> (HashMap<String, Channel>, HashMap<String, AxisInfo>) {
+) -> (
+    HashMap<String, Arc<Mutex<Channel>>>,
+    HashMap<String, AxisInfo>,
+) {
     let mut channels = HashMap::new();
     let mut channel_info = HashMap::new();
     device
@@ -276,8 +284,11 @@ fn get_channels_with_type(
                 scales_avail,
             };
             channel_info.insert(id.clone(), info);
-            channels.insert(id, channel);
+            channels.insert(id, Arc::new(Mutex::new(channel)));
         });
 
     (channels, channel_info)
 }
+
+// A mutex is used to access channels
+unsafe impl Send for Driver {}

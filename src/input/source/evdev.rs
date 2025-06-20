@@ -3,7 +3,7 @@ pub mod gamepad;
 pub mod keyboard;
 pub mod touchscreen;
 
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{collections::HashMap, error::Error};
 
 use evdev::{Device, EventType};
 use keyboard::KeyboardEventDevice;
@@ -15,13 +15,13 @@ use crate::{
         capability_map::{load_capability_mappings, CapabilityMapConfig},
     },
     constants::BUS_SOURCES_PREFIX,
-    input::composite_device::client::CompositeDeviceClient,
+    input::{capability::Capability, composite_device::client::CompositeDeviceClient},
     udev::device::UdevDevice,
 };
 
 use self::{blocked::BlockedEventDevice, gamepad::GamepadEventDevice};
 
-use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
+use super::{InputError, SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 
 /// List of available drivers
 enum DriverType {
@@ -70,16 +70,14 @@ impl SourceDeviceCompatible for EventDevice {
 
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
-            EventDevice::Blocked(source_driver) => source_driver.run().await,
-            EventDevice::Gamepad(source_driver) => source_driver.run().await,
-            EventDevice::Touchscreen(source_driver) => source_driver.run().await,
-            EventDevice::Keyboard(source_driver) => source_driver.run().await,
+            EventDevice::Blocked(mut source_driver) => source_driver.run().await,
+            EventDevice::Gamepad(mut source_driver) => source_driver.run().await,
+            EventDevice::Touchscreen(mut source_driver) => source_driver.run().await,
+            EventDevice::Keyboard(mut source_driver) => source_driver.run().await,
         }
     }
 
-    fn get_capabilities(
-        &self,
-    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             EventDevice::Gamepad(source_driver) => source_driver.get_capabilities(),
@@ -119,10 +117,7 @@ impl EventDevice {
 
         match driver_type {
             DriverType::Blocked => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(200),
-                    buffer_size: 4096,
-                };
+                let options = SourceDriverOptions { buffer_size: 4096 };
                 let device = BlockedEventDevice::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,

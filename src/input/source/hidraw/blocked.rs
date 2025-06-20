@@ -1,11 +1,7 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    input::{
-        capability::Capability,
-        event::native::NativeEvent,
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
-    },
+    input::source::{SourceInputDevice, SourceOutputDevice},
     udev::device::UdevDevice,
 };
 
@@ -23,14 +19,6 @@ impl BlockedHidrawDevice {
     }
 }
 
-impl SourceInputDevice for BlockedHidrawDevice {
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        Ok(vec![])
-    }
-
-    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(vec![])
-    }
-}
+impl SourceInputDevice for BlockedHidrawDevice {}
 
 impl SourceOutputDevice for BlockedHidrawDevice {}

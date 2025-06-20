@@ -3,17 +3,13 @@ use std::{error::Error, fmt::Debug};
 use evdev::Device;
 
 use crate::{
-    input::{
-        capability::Capability,
-        event::native::NativeEvent,
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
-    },
+    input::source::{SourceInputDevice, SourceOutputDevice},
     udev::device::UdevDevice,
 };
 
 /// Source device implementation to block evdev events
 pub struct BlockedEventDevice {
-    device: Device,
+    _device: Device,
 }
 
 impl BlockedEventDevice {
@@ -25,19 +21,11 @@ impl BlockedEventDevice {
         device.grab()?;
         log::info!("Blocking input events from {path}");
 
-        Ok(Self { device })
+        Ok(Self { _device: device })
     }
 }
 
-impl SourceInputDevice for BlockedEventDevice {
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        Ok(vec![])
-    }
-
-    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(vec![])
-    }
-}
+impl SourceInputDevice for BlockedEventDevice {}
 
 impl SourceOutputDevice for BlockedEventDevice {}
 

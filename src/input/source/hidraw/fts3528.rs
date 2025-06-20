@@ -1,4 +1,11 @@
-use std::{error::Error, fmt::Debug};
+use std::{
+    error::Error,
+    fmt::Debug,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use tokio::time::{interval, Interval};
 
 use crate::{
     drivers::fts3528::{
@@ -17,22 +24,25 @@ use crate::{
 
 /// FTS3528 Touchscreen source device implementation
 pub struct Fts3528Touchscreen {
-    driver: Driver,
+    driver: Arc<Mutex<Driver>>,
+    interval: Interval,
 }
 
 impl Fts3528Touchscreen {
     /// Create a new FTS3528 touchscreen source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = Driver::new(device_info.devnode())?;
-        Ok(Self { driver })
+        let driver = Arc::new(Mutex::new(Driver::new(device_info.devnode())?));
+        let interval = interval(Duration::from_micros(2500));
+        Ok(Self { driver, interval })
     }
 }
 
 impl SourceInputDevice for Fts3528Touchscreen {
     /// Poll the given input device for input events
-    fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        let events = self.driver.poll()?;
+    async fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        self.interval.tick().await;
+        let events = self.driver.lock().unwrap().poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
     }
