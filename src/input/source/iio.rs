@@ -6,7 +6,9 @@ use std::error::Error;
 use glob_match::glob_match;
 
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
+    config,
+    constants::BUS_SOURCES_PREFIX,
+    input::{composite_device::client::CompositeDeviceClient, info::DeviceInfoRef},
     udev::device::UdevDevice,
 };
 
@@ -29,7 +31,7 @@ pub enum IioDevice {
 }
 
 impl SourceDeviceCompatible for IioDevice {
-    fn get_device_ref(&self) -> &UdevDevice {
+    fn get_device_ref(&self) -> DeviceInfoRef {
         match self {
             IioDevice::BmiImu(source_driver) => source_driver.info_ref(),
             IioDevice::AccelGryo3D(source_driver) => source_driver.info_ref(),
@@ -90,12 +92,14 @@ impl IioDevice {
             DriverType::Unknown => Err("No driver for iio interface found".into()),
             DriverType::BmiImu => {
                 let device = BmiImu::new(device_info.clone(), iio_config)?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::BmiImu(source_device))
             }
             DriverType::AccelGryo3D => {
                 let device = AccelGyro3dImu::new(device_info.clone(), iio_config)?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::AccelGryo3D(source_device))
             }
         }

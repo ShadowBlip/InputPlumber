@@ -7,10 +7,10 @@ use crate::{
     input::{
         capability::Capability,
         event::{native::NativeEvent, Event},
+        info::DeviceInfo,
         output_event::OutputEvent,
         target::{client::TargetDeviceClient, TargetDeviceTypeId},
     },
-    udev::device::UdevDevice,
 };
 
 use super::InterceptMode;
@@ -40,9 +40,9 @@ pub enum CompositeCommand {
     SetInterceptActivation(Vec<Capability>, Capability),
     SetInterceptMode(InterceptMode),
     SetTargetDevices(Vec<TargetDeviceTypeId>),
-    SourceDeviceAdded(UdevDevice),
-    SourceDeviceRemoved(UdevDevice),
-    SourceDeviceStopped(UdevDevice),
+    SourceDeviceAdded(DeviceInfo),
+    SourceDeviceRemoved(DeviceInfo),
+    SourceDeviceStopped(DeviceInfo),
     #[allow(dead_code)]
     UpdateSourceCapabilities(String, HashSet<Capability>),
     UpdateTargetCapabilities(String, HashSet<Capability>),

@@ -2,7 +2,9 @@ pub mod multicolor;
 use self::multicolor::LedMultiColor;
 use super::{SourceDeviceCompatible, SourceDriver};
 use crate::{
-    config, constants::BUS_SOURCES_PREFIX, input::composite_device::client::CompositeDeviceClient,
+    config,
+    constants::BUS_SOURCES_PREFIX,
+    input::{composite_device::client::CompositeDeviceClient, info::DeviceInfoRef},
     udev::device::UdevDevice,
 };
 use std::error::Error;
@@ -17,7 +19,7 @@ pub enum LedDevice {
 }
 
 impl SourceDeviceCompatible for LedDevice {
-    fn get_device_ref(&self) -> &UdevDevice {
+    fn get_device_ref(&self) -> DeviceInfoRef {
         match self {
             LedDevice::MultiColor(source_driver) => source_driver.info_ref(),
         }
@@ -69,11 +71,13 @@ impl LedDevice {
         match driver_type {
             DriverType::LedMultiColor => {
                 let device = LedMultiColor::new(device_info.clone())?;
-                let source_device = SourceDriver::new(composite_device, device, device_info, conf);
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::MultiColor(source_device))
             }
         }
     }
+
     /// Return the driver type for the given device info
     fn get_driver_type(device: &UdevDevice) -> DriverType {
         let device_name = device.sysname();
