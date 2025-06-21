@@ -13,7 +13,7 @@ use led::LedDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
-use crate::{config, udev::device::UdevDevice};
+use crate::config;
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,
@@ -24,6 +24,7 @@ use super::{
     capability::Capability,
     composite_device::client::CompositeDeviceClient,
     event::{context::EventContext, native::NativeEvent, Event},
+    info::{DeviceInfo, DeviceInfoRef},
     output_event::OutputEvent,
 };
 
@@ -180,7 +181,7 @@ pub struct SourceDriver<T: SourceInputDevice + SourceOutputDevice> {
     event_include_list: HashSet<Capability>,
     event_exclude_list: HashSet<Capability>,
     implementation: Arc<Mutex<T>>,
-    device_info: UdevDevice,
+    device_info: DeviceInfo,
     composite_device: CompositeDeviceClient,
     tx: mpsc::Sender<SourceCommand>,
     rx: mpsc::Receiver<SourceCommand>,
@@ -191,7 +192,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     pub fn new(
         composite_device: CompositeDeviceClient,
         device: T,
-        device_info: UdevDevice,
+        device_info: DeviceInfo,
         config: Option<config::SourceDevice>,
     ) -> Self {
         let options = SourceDriverOptions::default();
@@ -202,7 +203,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     pub fn new_with_options(
         composite_device: CompositeDeviceClient,
         device: T,
-        device_info: UdevDevice,
+        device_info: DeviceInfo,
         options: SourceDriverOptions,
         config: Option<config::SourceDevice>,
     ) -> Self {
@@ -235,7 +236,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
         }
         let event_filter_enabled = !events_exclude.is_empty() || !events_include.is_empty();
         if event_filter_enabled {
-            let devnode = device_info.devnode();
+            let devnode = device_info.path();
             if !events_include.is_empty() {
                 log::debug!("Source device '{devnode}' filter includes events: {events_include:?}");
             }
@@ -315,7 +316,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
 
     /// Returns the path to the device (e.g. "/dev/input/event0")
     pub fn get_device_path(&self) -> String {
-        self.device_info.devnode()
+        self.device_info.path()
     }
 
     /// Returns a transmitter channel that can be used to send events to this device
@@ -324,8 +325,10 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     }
 
     /// Returns udev device information about the device as a reference
-    pub fn info_ref(&self) -> &UdevDevice {
-        &self.device_info
+    pub fn info_ref(&self) -> DeviceInfoRef {
+        match &self.device_info {
+            DeviceInfo::Udev(device) => device.into(),
+        }
     }
 
     /// Run the source device, consuming the device.
@@ -482,7 +485,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
 
 pub(crate) trait SourceDeviceCompatible {
     /// Returns a copy of the UdevDevice
-    fn get_device_ref(&self) -> &UdevDevice;
+    fn get_device_ref(&self) -> DeviceInfoRef;
 
     /// Returns a unique identifier for the source device.
     fn get_id(&self) -> String;
@@ -510,8 +513,8 @@ pub enum SourceDevice {
 }
 
 impl SourceDevice {
-    /// Returns a copy of the UdevDevice
-    pub fn get_device_ref(&self) -> &UdevDevice {
+    /// Returns a copy of the DeviceInfo
+    pub fn get_device_ref(&self) -> DeviceInfoRef {
         match self {
             SourceDevice::Event(device) => device.get_device_ref(),
             SourceDevice::HidRaw(device) => device.get_device_ref(),

@@ -41,14 +41,14 @@ use crate::{
         },
         target::TargetDeviceTypeId,
     },
-    udev::{device::UdevDevice, hide_device, unhide_device},
+    udev::{hide_device, unhide_device},
 };
 
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
 
 use super::{
-    manager::ManagerCommand, output_event::OutputEvent, source::client::SourceDeviceClient,
-    target::client::TargetDeviceClient,
+    info::DeviceInfo, manager::ManagerCommand, output_event::OutputEvent,
+    source::client::SourceDeviceClient, target::client::TargetDeviceClient,
 };
 
 /// Size of the command channel buffer for processing input events and commands.
@@ -161,7 +161,7 @@ impl CompositeDevice {
         conn: Connection,
         manager: mpsc::Sender<ManagerCommand>,
         config: CompositeDeviceConfig,
-        device_info: UdevDevice,
+        device_info: DeviceInfo,
         dbus_path: String,
         capability_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error>> {
@@ -369,13 +369,13 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::SourceDeviceStopped(device) => {
-                        log::debug!("Detected source device stopped: {}", device.devnode());
+                        log::debug!("Detected source device stopped: {}", device.path());
                         if let Err(e) = self.on_source_device_removed(device).await {
                             log::error!("Failed to remove source device: {:?}", e);
                         }
                     }
                     CompositeCommand::SourceDeviceRemoved(device) => {
-                        log::debug!("Detected source device removed: {}", device.devnode());
+                        log::debug!("Detected source device removed: {}", device.path());
                         devices_removed = true;
                         if let Err(e) = self.on_source_device_removed(device).await {
                             log::error!("Failed to remove source device: {:?}", e);
@@ -608,6 +608,7 @@ impl CompositeDevice {
         let sources = self.source_devices_discovered.drain(..);
         for source_device in sources {
             let device_id = source_device.get_id();
+            log::debug!("Starting source device: {device_id}");
             // If the source device is blocked, don't bother running it
             if self.source_devices_blocked.contains(&device_id) {
                 log::debug!("Source device '{device_id}' blocked. Skipping running.");
@@ -620,9 +621,10 @@ impl CompositeDevice {
 
             // Add the IIO IMU Dbus interface. We do this here because it needs the source
             // device transmitter and this is the only place we can refrence it at the moment.
-            let device = source_device.get_device_ref().clone();
+            let device = source_device.get_device_ref().to_owned();
             if let SourceDevice::Iio(_) = source_device {
-                SourceIioImuInterface::listen_on_dbus(self.conn.clone(), device.clone()).await?;
+                let DeviceInfo::Udev(device) = device.clone();
+                SourceIioImuInterface::listen_on_dbus(self.conn.clone(), device).await?;
             }
 
             self.source_device_tasks.spawn(async move {
@@ -1471,7 +1473,7 @@ impl CompositeDevice {
     }
 
     /// Executed whenever a source device is added to this [CompositeDevice].
-    async fn on_source_device_added(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
+    async fn on_source_device_added(&mut self, device: DeviceInfo) -> Result<(), Box<dyn Error>> {
         if let Err(e) = self.add_source_device(device) {
             return Err(e.to_string().into());
         }
@@ -1488,8 +1490,8 @@ impl CompositeDevice {
     }
 
     /// Executed whenever a source device is removed from this [CompositeDevice]
-    async fn on_source_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
-        let path = device.devnode();
+    async fn on_source_device_removed(&mut self, device: DeviceInfo) -> Result<(), Box<dyn Error>> {
+        let path = device.path();
         let id = device.get_id();
 
         // Remove any ffb effects this device registered
@@ -1541,7 +1543,7 @@ impl CompositeDevice {
     /// Creates and adds a source device using the given [SourceDeviceInfo]
     fn add_source_device(
         &mut self,
-        device: UdevDevice,
+        device: DeviceInfo,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Check to see if this source device should be blocked.
         let mut is_blocked = false;
@@ -1553,49 +1555,56 @@ impl CompositeDevice {
             }
         }
 
-        let subsystem = device.subsystem();
+        log::debug!("Adding source device: {:?}", device.name());
+        let source_device = match device {
+            DeviceInfo::Udev(device) => {
+                let subsystem = device.subsystem();
 
-        // Hide the device if specified
-        let should_passthru = source_config
-            .as_ref()
-            .and_then(|c| c.passthrough)
-            .unwrap_or(false);
-        let should_hide = !should_passthru && subsystem.as_str() != "iio";
-        if should_hide {
-            let source_path = device.devnode();
-            self.source_devices_to_hide.push(source_path);
-        }
-
-        let source_device = match subsystem.as_str() {
-            "input" => {
-                log::debug!("Adding EVDEV source device: {:?}", device.name());
-                if is_blocked {
-                    is_blocked_evdev = true;
+                // Hide the device if specified
+                let should_passthru = source_config
+                    .as_ref()
+                    .and_then(|c| c.passthrough)
+                    .unwrap_or(false);
+                let should_hide = !should_passthru && subsystem.as_str() != "iio";
+                if should_hide {
+                    let source_path = device.devnode();
+                    self.source_devices_to_hide.push(source_path);
                 }
-                let device = EventDevice::new(device, self.client(), source_config.clone())?;
-                SourceDevice::Event(device)
-            }
-            "hidraw" => {
-                log::debug!("Adding HIDRAW source device: {:?}", device.name());
-                let device = HidRawDevice::new(device, self.client(), source_config.clone())?;
-                SourceDevice::HidRaw(device)
-            }
-            "iio" => {
-                log::debug!("Adding IIO source device: {:?}", device.name());
-                let device = IioDevice::new(device, self.client(), source_config.clone())?;
-                SourceDevice::Iio(device)
-            }
-            "leds" => {
-                log::debug!("Adding LED source device: {:?}", device.sysname());
-                let device = LedDevice::new(device, self.client(), source_config.clone())?;
-                SourceDevice::Led(device)
-            }
-            _ => {
-                return Err(format!(
-                    "Unspported subsystem: {subsystem}, unable to add source device {}",
-                    device.name()
-                )
-                .into())
+
+                match subsystem.as_str() {
+                    "input" => {
+                        log::debug!("Adding EVDEV source device: {:?}", device.name());
+                        if is_blocked {
+                            is_blocked_evdev = true;
+                        }
+                        let device =
+                            EventDevice::new(device, self.client(), source_config.clone())?;
+                        SourceDevice::Event(device)
+                    }
+                    "hidraw" => {
+                        log::debug!("Adding HIDRAW source device: {:?}", device.name());
+                        let device =
+                            HidRawDevice::new(device, self.client(), source_config.clone())?;
+                        SourceDevice::HidRaw(device)
+                    }
+                    "iio" => {
+                        log::debug!("Adding IIO source device: {:?}", device.name());
+                        let device = IioDevice::new(device, self.client(), source_config.clone())?;
+                        SourceDevice::Iio(device)
+                    }
+                    "leds" => {
+                        log::debug!("Adding LED source device: {:?}", device.sysname());
+                        let device = LedDevice::new(device, self.client(), source_config.clone())?;
+                        SourceDevice::Led(device)
+                    }
+                    _ => {
+                        return Err(format!(
+                            "Unspported subsystem: {subsystem}, unable to add source device {}",
+                            device.name()
+                        )
+                        .into())
+                    }
+                }
             }
         };
 
@@ -1616,7 +1625,7 @@ impl CompositeDevice {
         let id = source_device.get_id();
         if let Some(device_config) = self
             .config
-            .get_matching_device(source_device.get_device_ref())
+            .get_matching_device(&source_device.get_device_ref().to_owned())
         {
             if let Some(blocked) = device_config.blocked {
                 // Blocked event devices should still be run so they can be
