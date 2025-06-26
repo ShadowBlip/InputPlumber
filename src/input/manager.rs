@@ -114,6 +114,7 @@ pub enum ManagerCommand {
     SetGamepadOrder {
         dbus_paths: Vec<String>,
     },
+    GamepadReorderingFinished,
 }
 
 /// Manages input devices
@@ -170,6 +171,8 @@ pub struct Manager {
     /// List of composite device dbus paths with gamepad devices in player order.
     /// E.g. ["/org/shadowblip/InputPlumber/CompositeDevice0"]
     target_gamepad_order: Vec<String>,
+    /// Whether or not target gamepad reordering is changing.
+    target_gamepad_order_changing: bool,
     /// Defines whether or not InputPlumber should try to automatically manage all
     /// input devices that have a [CompositeDeviceConfig] definition
     manage_all_devices: bool,
@@ -210,6 +213,7 @@ impl Manager {
             composite_device_targets: HashMap::new(),
             manage_all_devices: false,
             target_gamepad_order: vec![],
+            target_gamepad_order_changing: false,
         }
     }
 
@@ -514,6 +518,10 @@ impl Manager {
                 }
                 ManagerCommand::SetGamepadOrder { dbus_paths } => {
                     self.set_gamepad_order(dbus_paths).await;
+                }
+                ManagerCommand::GamepadReorderingFinished => {
+                    log::info!("Finished reordering target devices");
+                    self.target_gamepad_order_changing = false;
                 }
             }
         }
@@ -1809,6 +1817,17 @@ impl Manager {
     /// Set the player order of the given composite device paths. Each device
     /// will be suspended and resumed in player order.
     async fn set_gamepad_order(&mut self, order: Vec<String>) {
+        // If gamepad reordering is already in progress, requeue the request
+        let tx = self.tx.clone();
+        if self.target_gamepad_order_changing {
+            log::debug!("Gamepad reordering in progress. Requeuing reordering request.");
+            tokio::task::spawn(async move {
+                let _ = tx
+                    .send(ManagerCommand::SetGamepadOrder { dbus_paths: order })
+                    .await;
+            });
+            return;
+        }
         log::info!("Setting player order to: {order:?}");
 
         // Ensure the given paths are valid composite device paths
@@ -1829,6 +1848,8 @@ impl Manager {
             .map(|path| self.composite_devices.get(&path).unwrap().clone())
             .collect();
 
+        self.target_gamepad_order_changing = true;
+
         tokio::task::spawn(async move {
             // Suspend all composite devices
             for device in devices.iter() {
@@ -1848,8 +1869,11 @@ impl Manager {
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-        });
 
-        //
+            // Notify the manager that gamepad reordering has completed
+            if let Err(e) = tx.send(ManagerCommand::GamepadReorderingFinished).await {
+                log::error!("Failed to signal gamepad reordering finished. This is bad: {e:?}");
+            }
+        });
     }
 }
