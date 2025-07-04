@@ -249,7 +249,7 @@ impl Driver {
                 let left = [
                     DPadDirection::Left,
                     DPadDirection::DownLeft,
-                    DPadDirection::DownRight,
+                    DPadDirection::UpLeft,
                 ]
                 .contains(&state.dpad_state);
                 let right = [
