@@ -1,5 +1,8 @@
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 use thiserror::Error;
+use tokio::sync::mpsc::error::SendTimeoutError;
+use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
 
 use crate::config::CompositeDeviceConfig;
@@ -8,15 +11,19 @@ use crate::input::info::DeviceInfo;
 use crate::input::target::client::TargetDeviceClient;
 use crate::input::target::TargetDeviceTypeId;
 use crate::input::{capability::Capability, event::Event, output_event::OutputEvent};
+use crate::sync::{ReceiveTimeoutError, TimeoutReceiver};
 
 use super::{CompositeCommand, InterceptMode};
 
+/// Maximum duration to wait for a response from a command. If this timeout
+/// is reached, that typically indicates a deadlock somewhere in the code.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 /// Possible errors for a composite device client
 #[derive(Error, Debug)]
 pub enum ClientError {
-    #[error("failed to send command to device")]
+    #[error("failed to send command to device: {0}")]
     SendError(SendError<CompositeCommand>),
-    #[error("service encountered an error processing the request")]
+    #[error("service encountered an error processing the request: {0}")]
     ServiceError(Box<dyn std::error::Error>),
     #[error("device no longer exists")]
     ChannelClosed,
@@ -45,20 +52,55 @@ impl CompositeDeviceClient {
         Self { tx }
     }
 
+    /// Send the given command to the composite device. This method uses a timeout
+    /// to detect potential deadlocks.
+    async fn send(&self, cmd: CompositeCommand) -> Result<(), ClientError> {
+        let result = self.tx.send_timeout(cmd, DEFAULT_TIMEOUT).await;
+        let Err(err) = result else {
+            return Ok(());
+        };
+        match err {
+            SendTimeoutError::Timeout(ref cmd) => {
+                log::error!("POSSIBLE DEADLOCK: timed out after {DEFAULT_TIMEOUT:?} sending command to composite device: {cmd:?}");
+                Err(ClientError::ServiceError(err.into()))
+            }
+            SendTimeoutError::Closed(_) => Err(ClientError::ChannelClosed),
+        }
+    }
+
+    /// Use the given receiver to wait for a response from the composite device.
+    /// This method uses a timeout to detect potential deadlocks.
+    async fn recv<T>(mut rx: Receiver<T>) -> Option<T>
+    where
+        T: Send + Sync,
+    {
+        let result = rx.recv_timeout(DEFAULT_TIMEOUT).await;
+        let Err(err) = result else {
+            return result.ok();
+        };
+        match err {
+            ReceiveTimeoutError::Timeout => {
+                log::error!("POSSIBLE DEADLOCK: timed out after {DEFAULT_TIMEOUT:?} waiting for response from composite device");
+                None
+            }
+            ReceiveTimeoutError::Closed => None,
+        }
+    }
+
     /// Get the name of the composite device
     pub async fn get_name(&self) -> Result<String, ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(CompositeCommand::GetName(tx)).await?;
-        if let Some(name) = rx.recv().await {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetName(tx)).await?;
+        if let Some(name) = Self::recv(rx).await {
             return Ok(name);
         }
         Err(ClientError::ChannelClosed)
     }
 
     /// Process the given event from the given device
+    #[allow(dead_code)]
     pub async fn process_event(&self, device_id: String, event: Event) -> Result<(), ClientError> {
-        self.tx
-            .send(CompositeCommand::ProcessEvent(device_id, event))
+        self.send(CompositeCommand::ProcessEvent(device_id, event))
             .await?;
         Ok(())
     }
@@ -76,8 +118,7 @@ impl CompositeDeviceClient {
 
     /// Process the given output event
     pub async fn process_output_event(&self, event: OutputEvent) -> Result<(), ClientError> {
-        self.tx
-            .send(CompositeCommand::ProcessOutputEvent(event))
+        self.send(CompositeCommand::ProcessOutputEvent(event))
             .await?;
         Ok(())
     }
@@ -91,15 +132,16 @@ impl CompositeDeviceClient {
 
     /// Get capabilities from all source devices
     pub async fn get_capabilities(&self) -> Result<HashSet<Capability>, ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(CompositeCommand::GetCapabilities(tx)).await?;
-        if let Some(capabilities) = rx.recv().await {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetCapabilities(tx)).await?;
+        if let Some(capabilities) = Self::recv(rx).await {
             return Ok(capabilities);
         }
         Err(ClientError::ChannelClosed)
     }
 
     /// Get capabilities from all source devices (blocking)
+    #[allow(dead_code)]
     pub fn blocking_get_capabilities(&self) -> Result<HashSet<Capability>, ClientError> {
         let (tx, mut rx) = channel(1);
         self.tx
@@ -110,17 +152,19 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+
     /// Get the [CompositeDeviceConfig] from the [CompositeDevice]
     pub async fn get_config(&self) -> Result<CompositeDeviceConfig, ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(CompositeCommand::GetConfig(tx)).await?;
-        if let Some(config) = rx.recv().await {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetConfig(tx)).await?;
+        if let Some(config) = Self::recv(rx).await {
             return Ok(config);
         }
         Err(ClientError::ChannelClosed)
     }
 
     /// Get the [CompositeDeviceConfig] from the [CompositeDevice] (blocking)
+    #[allow(dead_code)]
     pub fn blocking_get_config(&self) -> Result<CompositeDeviceConfig, ClientError> {
         let (tx, mut rx) = channel(1);
         self.tx.blocking_send(CompositeCommand::GetConfig(tx))?;
@@ -132,11 +176,11 @@ impl CompositeDeviceClient {
 
     /// Get capabilities from all target devices
     pub async fn get_target_capabilities(&self) -> Result<HashSet<Capability>, ClientError> {
-        let (tx, mut rx) = channel(1);
+        let (tx, rx) = channel(1);
         self.tx
             .send(CompositeCommand::GetTargetCapabilities(tx))
             .await?;
-        if let Some(capabilities) = rx.recv().await {
+        if let Some(capabilities) = Self::recv(rx).await {
             return Ok(capabilities);
         }
         Err(ClientError::ChannelClosed)
@@ -152,9 +196,9 @@ impl CompositeDeviceClient {
 
     /// Get the intercept mode of the composite device
     pub async fn get_intercept_mode(&self) -> Result<InterceptMode, ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(CompositeCommand::GetInterceptMode(tx)).await?;
-        if let Some(mode) = rx.recv().await {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetInterceptMode(tx)).await?;
+        if let Some(mode) = Self::recv(rx).await {
             return Ok(mode);
         }
         Err(ClientError::ChannelClosed)
@@ -162,17 +206,18 @@ impl CompositeDeviceClient {
 
     /// Get the source device paths of the composite device
     pub async fn get_source_device_paths(&self) -> Result<Vec<String>, ClientError> {
-        let (tx, mut rx) = channel(1);
+        let (tx, rx) = channel(1);
         self.tx
             .send(CompositeCommand::GetSourceDevicePaths(tx))
             .await?;
-        if let Some(paths) = rx.recv().await {
+        if let Some(paths) = Self::recv(rx).await {
             return Ok(paths);
         }
         Err(ClientError::ChannelClosed)
     }
 
     /// Get the source device paths of the composite device (blocking)
+    #[allow(dead_code)]
     pub fn blocking_get_source_device_paths(&self) -> Result<Vec<String>, ClientError> {
         let (tx, mut rx) = channel(1);
         self.tx
@@ -185,11 +230,11 @@ impl CompositeDeviceClient {
 
     /// Get the target device paths of the composite device
     pub async fn get_target_device_paths(&self) -> Result<Vec<String>, ClientError> {
-        let (tx, mut rx) = channel(1);
+        let (tx, rx) = channel(1);
         self.tx
             .send(CompositeCommand::GetTargetDevicePaths(tx))
             .await?;
-        if let Some(paths) = rx.recv().await {
+        if let Some(paths) = Self::recv(rx).await {
             return Ok(paths);
         }
         Err(ClientError::ChannelClosed)
@@ -197,11 +242,11 @@ impl CompositeDeviceClient {
 
     /// Get the DBus device paths of the composite device
     pub async fn get_dbus_device_paths(&self) -> Result<Vec<String>, ClientError> {
-        let (tx, mut rx) = channel(1);
+        let (tx, rx) = channel(1);
         self.tx
             .send(CompositeCommand::GetDBusDevicePaths(tx))
             .await?;
-        if let Some(paths) = rx.recv().await {
+        if let Some(paths) = Self::recv(rx).await {
             return Ok(paths);
         }
         Err(ClientError::ChannelClosed)
@@ -248,10 +293,11 @@ impl CompositeDeviceClient {
     }
 
     /// Get the name of the currently loaded profile
+    #[allow(dead_code)]
     pub async fn get_profile_name(&self) -> Result<String, ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(CompositeCommand::GetProfileName(tx)).await?;
-        if let Some(name) = rx.recv().await {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetProfileName(tx)).await?;
+        if let Some(name) = Self::recv(rx).await {
             return Ok(name);
         }
         Err(ClientError::ChannelClosed)
@@ -259,11 +305,11 @@ impl CompositeDeviceClient {
 
     /// Load the device profile from the given path
     pub async fn load_profile_path(&self, path: String) -> Result<(), ClientError> {
-        let (tx, mut rx) = channel(1);
+        let (tx, rx) = channel(1);
         self.tx
             .send(CompositeCommand::LoadProfilePath(path, tx))
             .await?;
-        if let Some(result) = rx.recv().await {
+        if let Some(result) = Self::recv(rx).await {
             return match result {
                 Ok(_) => Ok(()),
                 Err(e) => Err(ClientError::ServiceError(e.into())),
@@ -274,11 +320,11 @@ impl CompositeDeviceClient {
 
     /// Load the device profile from the given path
     pub async fn load_profile_from_yaml(&self, profile: String) -> Result<(), ClientError> {
-        let (tx, mut rx) = channel(1);
+        let (tx, rx) = channel(1);
         self.tx
             .send(CompositeCommand::LoadProfileFromYaml(profile, tx))
             .await?;
-        if let Some(result) = rx.recv().await {
+        if let Some(result) = Self::recv(rx).await {
             return match result {
                 Ok(_) => Ok(()),
                 Err(e) => Err(ClientError::ServiceError(e.into())),
@@ -288,6 +334,7 @@ impl CompositeDeviceClient {
     }
 
     /// Update the input capabilities for the given source device
+    #[allow(dead_code)]
     pub async fn update_source_capabilities(
         &self,
         device_id: String,
@@ -303,6 +350,7 @@ impl CompositeDeviceClient {
     }
 
     /// Update the input capabilities for the given source device (blocking)
+    #[allow(dead_code)]
     pub fn blocking_update_source_capabilities(
         &self,
         device_id: String,
@@ -317,6 +365,7 @@ impl CompositeDeviceClient {
     }
 
     /// Update the input capabilities for the given target device
+    #[allow(dead_code)]
     pub async fn update_target_capabilities(
         &self,
         dbus_path: String,
@@ -345,8 +394,9 @@ impl CompositeDeviceClient {
         Ok(())
     }
     /// Write the given event to the appropriate target device.
+    #[allow(dead_code)]
     pub async fn write_event(&self, event: NativeEvent) -> Result<(), ClientError> {
-        self.tx.send(CompositeCommand::WriteEvent(event)).await?;
+        self.send(CompositeCommand::WriteEvent(event)).await?;
         Ok(())
     }
 
@@ -360,6 +410,7 @@ impl CompositeDeviceClient {
 
     /// Write the given event to the appropriate target device, bypassing intercept
     /// logic.
+    #[allow(dead_code)]
     pub async fn write_send_event(&self, event: NativeEvent) -> Result<(), ClientError> {
         self.tx
             .send(CompositeCommand::WriteSendEvent(event))
@@ -376,12 +427,14 @@ impl CompositeDeviceClient {
     }
 
     /// Translate and write the given event to the appropriate target devices
+    #[allow(dead_code)]
     pub async fn handle_event(&self, event: NativeEvent) -> Result<(), ClientError> {
-        self.tx.send(CompositeCommand::HandleEvent(event)).await?;
+        self.send(CompositeCommand::HandleEvent(event)).await?;
         Ok(())
     }
 
     /// Remove the given event type from list of recently translated events
+    #[allow(dead_code)]
     pub async fn remove_recent_event(&self, capability: Capability) -> Result<(), ClientError> {
         self.tx
             .send(CompositeCommand::RemoveRecentEvent(capability))
@@ -407,16 +460,16 @@ impl CompositeDeviceClient {
 
     /// Stop the composite device
     pub async fn stop(&self) -> Result<(), ClientError> {
-        self.tx.send(CompositeCommand::Stop).await?;
+        self.send(CompositeCommand::Stop).await?;
         Ok(())
     }
 
     /// Calls the suspend handler to perform system suspend-related tasks.
     pub async fn suspend(&self) -> Result<(), ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(CompositeCommand::Suspend(tx)).await?;
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::Suspend(tx)).await?;
 
-        if let Some(result) = rx.recv().await {
+        if let Some(result) = Self::recv(rx).await {
             return Ok(result);
         }
         Err(ClientError::ChannelClosed)
@@ -424,10 +477,10 @@ impl CompositeDeviceClient {
 
     /// Calls the resume handler to perform system wake from suspend-related tasks.
     pub async fn resume(&self) -> Result<(), ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(CompositeCommand::Resume(tx)).await?;
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::Resume(tx)).await?;
 
-        if let Some(result) = rx.recv().await {
+        if let Some(result) = Self::recv(rx).await {
             return Ok(result);
         }
         Err(ClientError::ChannelClosed)
@@ -435,10 +488,10 @@ impl CompositeDeviceClient {
 
     /// Returns true if the target devices are suspended
     pub async fn is_suspended(&self) -> Result<bool, ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(CompositeCommand::IsSuspended(tx)).await?;
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::IsSuspended(tx)).await?;
 
-        if let Some(result) = rx.recv().await {
+        if let Some(result) = Self::recv(rx).await {
             return Ok(result);
         }
         Err(ClientError::ChannelClosed)
