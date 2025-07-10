@@ -1,6 +1,8 @@
 use zbus::{fdo, object_server::SignalEmitter};
 use zbus_macros::interface;
 
+use crate::dbus::interface::NamedInterface;
+
 /// The [TargetDBusInterface] provides a DBus interface that can be exposed for managing
 /// a [DBusDevice]. It works by sending command messages to a channel that the
 /// [DBusDevice] is listening on.
@@ -15,6 +17,12 @@ impl TargetDBusInterface {
 impl Default for TargetDBusInterface {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl NamedInterface for TargetDBusInterface {
+    fn interface_name() -> &'static str {
+        "org.shadowblip.Input.DBusDevice"
     }
 }
 

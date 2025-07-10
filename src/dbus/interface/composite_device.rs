@@ -16,6 +16,8 @@ use crate::{
     },
 };
 
+use super::NamedInterface;
+
 /// The [CompositeDeviceInterface] provides a DBus interface that can be exposed for managing
 /// a [CompositeDevice]. It works by sending command messages to a channel that the
 /// [CompositeDevice] is listening on.
@@ -36,6 +38,12 @@ impl CompositeDeviceInterface {
             profile,
             profile_path,
         }
+    }
+}
+
+impl NamedInterface for CompositeDeviceInterface {
+    fn interface_name() -> &'static str {
+        "org.shadowblip.Input.CompositeDevice"
     }
 }
 
@@ -293,6 +301,21 @@ impl CompositeDeviceInterface {
             };
             capability_strings.push(str);
         }
+
+        Ok(capability_strings)
+    }
+
+    #[zbus(property)]
+    async fn output_capabilities(&self) -> fdo::Result<Vec<String>> {
+        let capabilities = self
+            .composite_device
+            .get_output_capabilities()
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let capability_strings = capabilities
+            .into_iter()
+            .map(|cap| cap.to_string())
+            .collect();
 
         Ok(capability_strings)
     }

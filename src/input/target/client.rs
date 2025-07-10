@@ -145,6 +145,30 @@ impl TargetDeviceClient {
         Ok(())
     }
 
+    /// Notifies the target device that input capabilities of the source device(s)
+    /// have changed.
+    pub async fn notify_capabilities_changed(
+        &self,
+        capabilities: HashSet<Capability>,
+    ) -> Result<(), ClientError> {
+        self.tx
+            .send(TargetCommand::NotifyCapabilitiesChanged(capabilities))
+            .await?;
+        Ok(())
+    }
+
+    /// Notifies the target device that output capabilities of the source device(s)
+    /// have changed.
+    pub async fn notify_output_capabilities_changed(
+        &self,
+        capabilities: HashSet<OutputCapability>,
+    ) -> Result<(), ClientError> {
+        self.tx
+            .send(TargetCommand::NotifyOutputCapabilitiesChanged(capabilities))
+            .await?;
+        Ok(())
+    }
+
     /// Stop the target device.
     pub async fn stop(&self) -> Result<(), ClientError> {
         self.send(TargetCommand::Stop).await?;

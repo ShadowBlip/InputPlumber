@@ -10,6 +10,7 @@ use crate::{
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         event::{native::NativeEvent, value::InputValue},
+        output_capability::OutputCapability,
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -112,7 +113,7 @@ impl XpadUhid {
 
                 // Do rumble
                 if let Err(e) = self.driver.rumble(left_speed, right_speed) {
-                    let err = format!("Failed to do rumble: {:?}", e);
+                    let err = format!("Failed to do rumble: {e:?}");
                     return Err(err.into());
                 }
             }
@@ -137,6 +138,12 @@ impl SourceInputDevice for XpadUhid {
 }
 
 impl SourceOutputDevice for XpadUhid {
+    /// Returns the possible output events this device is capable of (e.g. force feedback, LED,
+    /// etc.)
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(OUTPUT_CAPABILITIES.into())
+    }
+
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
@@ -378,3 +385,5 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
 ];
+
+pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[OutputCapability::ForceFeedback];

@@ -10,6 +10,8 @@ use zbus_macros::interface;
 
 use crate::input::target::TargetDeviceTypeId;
 
+use super::NamedInterface;
+
 /// The [TargetInterface] provides a DBus interface that can be exposed for managing
 /// a target input device.
 pub struct TargetInterface {
@@ -23,6 +25,12 @@ impl TargetInterface {
             dev_name: device_type.name().to_owned(),
             device_type: device_type.as_str().to_owned(),
         }
+    }
+}
+
+impl NamedInterface for TargetInterface {
+    fn interface_name() -> &'static str {
+        "org.shadowblip.Input.Target"
     }
 }
 

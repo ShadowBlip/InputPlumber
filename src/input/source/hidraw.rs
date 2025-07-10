@@ -35,7 +35,10 @@ use crate::{
     config,
     constants::BUS_SOURCES_PREFIX,
     drivers,
-    input::{composite_device::client::CompositeDeviceClient, info::DeviceInfoRef},
+    input::{
+        capability::Capability, composite_device::client::CompositeDeviceClient,
+        info::DeviceInfoRef, output_capability::OutputCapability,
+    },
     udev::device::UdevDevice,
 };
 
@@ -46,7 +49,7 @@ use self::{
     legos_xinput::LegionSXInputController, opineo::OrangePiNeoTouchpad, steam_deck::DeckController,
 };
 
-use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
+use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 
 /// List of available drivers
 enum DriverType {
@@ -193,9 +196,7 @@ impl SourceDeviceCompatible for HidRawDevice {
         }
     }
 
-    fn get_capabilities(
-        &self,
-    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
             HidRawDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_capabilities(),
@@ -216,6 +217,36 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::ZotacZone(source_driver) => source_driver.get_capabilities(),
+        }
+    }
+
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        match self {
+            HidRawDevice::Blocked(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::DualSense(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::Fts3528Touchscreen(source_driver) => {
+                source_driver.get_output_capabilities()
+            }
+            HidRawDevice::HoripadSteam(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::LegionGoDCombined(source_driver) => {
+                source_driver.get_output_capabilities()
+            }
+            HidRawDevice::LegionGoDSplit(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::LegionGoFPS(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::LegionGoSConfig(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::LegionGoSTouchpad(source_driver) => {
+                source_driver.get_output_capabilities()
+            }
+            HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::LegionGoXInput(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::MsiClaw(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::RogAlly(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::SteamDeck(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::Vader4Pro(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::XpadUhid(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::ZotacZone(source_driver) => source_driver.get_output_capabilities(),
         }
     }
 

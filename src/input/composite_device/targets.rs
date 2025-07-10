@@ -91,6 +91,28 @@ impl CompositeDeviceTargets {
 
     /// Sets the DBus target devices attached to a [CompositeDevice]
     pub fn set_dbus_devices(&mut self, devices: HashMap<String, TargetDeviceClient>) {
+        // Notify the dbus device of the source device(s) capabilities
+        for dbus_device in devices.values() {
+            let device = self.device.clone();
+            let target = dbus_device.clone();
+            tokio::task::spawn(async move {
+                let source_capabilities = device.get_capabilities().await.unwrap_or_default();
+                let source_output_capabilities =
+                    device.get_output_capabilities().await.unwrap_or_default();
+                target
+                    .set_composite_device(device)
+                    .await
+                    .unwrap_or_default();
+                target
+                    .notify_capabilities_changed(source_capabilities)
+                    .await
+                    .unwrap_or_default();
+                target
+                    .notify_output_capabilities_changed(source_output_capabilities)
+                    .await
+                    .unwrap_or_default();
+            });
+        }
         self.target_dbus_devices = devices;
     }
 
@@ -436,6 +458,23 @@ impl CompositeDeviceTargets {
                 );
             }
             log::debug!("[{dbus_path}] Attached device {path}");
+
+            // Notify the target device of the supported source capabilities
+            let device = self.device.clone();
+            let target_clone = target.clone();
+            tokio::task::spawn(async move {
+                let source_capabilities = device.get_capabilities().await.unwrap_or_default();
+                let source_output_capabilities =
+                    device.get_output_capabilities().await.unwrap_or_default();
+                target_clone
+                    .notify_capabilities_changed(source_capabilities)
+                    .await
+                    .unwrap_or_default();
+                target_clone
+                    .notify_output_capabilities_changed(source_output_capabilities)
+                    .await
+                    .unwrap_or_default();
+            });
 
             // Track the target device by capabilities it has
             for cap in caps {

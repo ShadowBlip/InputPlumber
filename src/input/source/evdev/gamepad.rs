@@ -14,6 +14,7 @@ use crate::drivers::steam_deck::hid_report::{
     CommandType, PackedHapticReport, PackedRumbleReport, PadSide,
 };
 use crate::input::event::evdev::translator::EventTranslator;
+use crate::input::output_capability::{OutputCapability, LED};
 use crate::{
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
@@ -162,6 +163,14 @@ impl GamepadEventDevice {
         if report.rumble_emulation_left == 0 && report.rumble_emulation_right == 0 {
             log::trace!("Stopping FF effect");
             effect.stop()?;
+
+            // Also stop any other effects
+            for (id, effect) in self.ff_effects.iter_mut() {
+                if let Err(e) = effect.stop() {
+                    log::trace!("Failed to stop effect {id}: {e}");
+                }
+            }
+
             return Ok(());
         }
 
@@ -228,6 +237,14 @@ impl GamepadEventDevice {
         if left_speed == 0 && right_speed == 0 {
             log::trace!("Stopping FF effect");
             effect.stop()?;
+
+            // Also stop any other effects
+            for (id, effect) in self.ff_effects.iter_mut() {
+                if let Err(e) = effect.stop() {
+                    log::trace!("Failed to stop effect {id}: {e}");
+                }
+            }
+
             return Ok(());
         }
 
@@ -495,6 +512,30 @@ impl SourceInputDevice for GamepadEventDevice {
 }
 
 impl SourceOutputDevice for GamepadEventDevice {
+    /// Returns the possible output events this device is capable of handling
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        let mut capabilities = vec![];
+
+        // Loop through all supported events to find output events
+        let events = self.device.supported_events();
+        for event in events.iter() {
+            match event {
+                EventType::FORCEFEEDBACK => {
+                    capabilities.push(OutputCapability::ForceFeedback);
+                    capabilities.push(OutputCapability::ForceFeedbackUpload);
+                    capabilities.push(OutputCapability::ForceFeedbackErase);
+                }
+                EventType::LED => {
+                    capabilities.push(OutputCapability::LED(LED::Color));
+                    capabilities.push(OutputCapability::LED(LED::Brightness));
+                }
+                _ => (),
+            }
+        }
+
+        Ok(capabilities)
+    }
+
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.

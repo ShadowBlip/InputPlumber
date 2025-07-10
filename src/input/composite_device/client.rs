@@ -8,6 +8,7 @@ use tokio::sync::mpsc::{channel, error::SendError, Sender};
 use crate::config::CompositeDeviceConfig;
 use crate::input::event::native::NativeEvent;
 use crate::input::info::DeviceInfo;
+use crate::input::output_capability::OutputCapability;
 use crate::input::target::client::TargetDeviceClient;
 use crate::input::target::TargetDeviceTypeId;
 use crate::input::{capability::Capability, event::Event, output_event::OutputEvent};
@@ -18,6 +19,7 @@ use super::{CompositeCommand, InterceptMode};
 /// Maximum duration to wait for a response from a command. If this timeout
 /// is reached, that typically indicates a deadlock somewhere in the code.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Possible errors for a composite device client
 #[derive(Error, Debug)]
 pub enum ClientError {
@@ -152,6 +154,31 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+    /// Get the output capabilities from all source devices
+    pub async fn get_output_capabilities(&self) -> Result<HashSet<OutputCapability>, ClientError> {
+        let (tx, rx) = channel(1);
+        self.tx
+            .send(CompositeCommand::GetOutputCapabilities(tx))
+            .await?;
+        if let Some(capabilities) = Self::recv(rx).await {
+            return Ok(capabilities);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Get the output capabilities from all source devices (blocking)
+    #[allow(dead_code)]
+    pub fn blocking_get_output_capabilities(
+        &self,
+    ) -> Result<HashSet<OutputCapability>, ClientError> {
+        let (tx, mut rx) = channel(1);
+        self.tx
+            .blocking_send(CompositeCommand::GetOutputCapabilities(tx))?;
+        if let Some(capabilities) = rx.blocking_recv() {
+            return Ok(capabilities);
+        }
+        Err(ClientError::ChannelClosed)
+    }
 
     /// Get the [CompositeDeviceConfig] from the [CompositeDevice]
     pub async fn get_config(&self) -> Result<CompositeDeviceConfig, ClientError> {
