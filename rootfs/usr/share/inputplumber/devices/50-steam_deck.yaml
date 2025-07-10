@@ -34,17 +34,17 @@ source_devices:
       product_id: 0x1205
       interface_num: 2
   # Touchscreen
-  - group: touchscreen
-    unique: false
-    udev:
-      properties:
-        - name: ID_INPUT_TOUCHSCREEN
-          value: "1"
-      sys_name: "event*"
-      subsystem: input
-    config:
-      touchscreen:
-        orientation: "right"
+  #- group: touchscreen
+  #  unique: false
+  #  udev:
+  #    properties:
+  #      - name: ID_INPUT_TOUCHSCREEN
+  #        value: "1"
+  #    sys_name: "event*"
+  #    subsystem: input
+  #  config:
+  #    touchscreen:
+  #      orientation: "right"
   # Keyboard
   - group: keyboard
     evdev:
@@ -64,5 +64,5 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
-  - touchscreen
+  #- touchscreen
   - touchpad
