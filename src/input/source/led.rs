@@ -1,10 +1,15 @@
 pub mod multicolor;
 use self::multicolor::LedMultiColor;
-use super::{SourceDeviceCompatible, SourceDriver};
+use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver};
 use crate::{
     config,
     constants::BUS_SOURCES_PREFIX,
-    input::{composite_device::client::CompositeDeviceClient, info::DeviceInfoRef},
+    input::{
+        capability::Capability,
+        composite_device::client::CompositeDeviceClient,
+        info::DeviceInfoRef,
+        output_capability::{OutputCapability, LED},
+    },
     udev::device::UdevDevice,
 };
 use std::error::Error;
@@ -43,12 +48,17 @@ impl SourceDeviceCompatible for LedDevice {
         }
     }
 
-    fn get_capabilities(
-        &self,
-    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
             LedDevice::MultiColor(source_driver) => source_driver.get_capabilities(),
         }
+    }
+
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![
+            OutputCapability::LED(LED::Color),
+            OutputCapability::LED(LED::Brightness),
+        ])
     }
 
     fn get_device_path(&self) -> String {

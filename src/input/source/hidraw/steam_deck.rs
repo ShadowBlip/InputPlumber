@@ -25,6 +25,7 @@ use crate::{
             Touchpad,
         },
         event::{native::NativeEvent, value::InputValue},
+        output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -207,6 +208,12 @@ impl SourceInputDevice for DeckController {
 }
 
 impl SourceOutputDevice for DeckController {
+    /// Returns the possible output events this device is capable of (e.g. force feedback, LED,
+    /// etc.)
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(OUTPUT_CAPABILITIES.into())
+    }
+
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
@@ -637,4 +644,10 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Touch))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
+];
+
+pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[
+    OutputCapability::ForceFeedback,
+    OutputCapability::Haptics(Haptic::TrackpadLeft),
+    OutputCapability::Haptics(Haptic::TrackpadRight),
 ];

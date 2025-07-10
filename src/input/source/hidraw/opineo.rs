@@ -8,7 +8,8 @@ use crate::{
     input::{
         capability::{Capability, Touch, TouchButton, Touchpad},
         event::{native::NativeEvent, value::InputValue},
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
+        output_capability::{OutputCapability, LED},
+        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -68,7 +69,13 @@ impl SourceInputDevice for OrangePiNeoTouchpad {
     }
 }
 
-impl SourceOutputDevice for OrangePiNeoTouchpad {}
+impl SourceOutputDevice for OrangePiNeoTouchpad {
+    /// Returns the possible output events this device is capable of (e.g. force feedback, LED,
+    /// etc.)
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(OUTPUT_CAPABILITIES.into())
+    }
+}
 
 impl Debug for OrangePiNeoTouchpad {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -164,4 +171,9 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
+];
+
+pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[
+    OutputCapability::ForceFeedback,
+    OutputCapability::LED(LED::Color),
 ];

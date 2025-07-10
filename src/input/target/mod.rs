@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     env,
     error::Error,
     io,
@@ -354,6 +355,14 @@ pub trait TargetInputDevice {
         Ok(())
     }
 
+    /// Called when the input capabilities of the source device(s) change.
+    fn on_capabilities_changed(
+        &mut self,
+        _capabilities: HashSet<Capability>,
+    ) -> Result<(), InputError> {
+        Ok(())
+    }
+
     /// Stop the target device
     fn stop(&mut self) -> Result<(), InputError> {
         Ok(())
@@ -380,6 +389,14 @@ pub trait TargetOutputDevice {
     #[allow(dead_code)]
     fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
         Ok(vec![])
+    }
+
+    /// Called when the output capabilities of the source device(s) change.
+    fn on_output_capabilities_changed(
+        &mut self,
+        _capabilities: HashSet<OutputCapability>,
+    ) -> Result<(), OutputError> {
+        Ok(())
     }
 }
 
@@ -640,6 +657,12 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                     TargetCommand::GetCapabilities(sender) => {
                         let capabilities = implementation.get_capabilities().unwrap_or_default();
                         sender.blocking_send(capabilities)?;
+                    }
+                    TargetCommand::NotifyCapabilitiesChanged(capabilities) => {
+                        implementation.on_capabilities_changed(capabilities)?;
+                    }
+                    TargetCommand::NotifyOutputCapabilitiesChanged(capabilities) => {
+                        implementation.on_output_capabilities_changed(capabilities)?;
                     }
                     TargetCommand::GetType(sender) => {
                         sender.blocking_send(*type_id)?;
