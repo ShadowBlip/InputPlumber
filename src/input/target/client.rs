@@ -1,24 +1,35 @@
+use std::{collections::HashSet, time::Duration};
+
 use thiserror::Error;
 use tokio::sync::mpsc::{
     channel,
-    error::{SendError, TrySendError},
-    Sender,
+    error::{SendError, SendTimeoutError, TrySendError},
+    Receiver, Sender,
 };
 
-use crate::input::{
-    capability::Capability, composite_device::client::CompositeDeviceClient,
-    event::native::NativeEvent,
+use crate::{
+    input::{
+        capability::Capability, composite_device::client::CompositeDeviceClient,
+        event::native::NativeEvent, output_capability::OutputCapability,
+    },
+    sync::{ReceiveTimeoutError, TimeoutReceiver},
 };
 
 use super::{command::TargetCommand, TargetDeviceTypeId};
 
+/// Maximum duration to wait for a response from a command. If this timeout
+/// is reached, that typically indicates a deadlock somewhere in the code.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Possible errors for a target device client
 #[derive(Error, Debug)]
 pub enum ClientError {
-    #[error("failed to send command to device")]
+    #[error("failed to send command to device: {0}")]
     SendError(SendError<TargetCommand>),
-    #[error("failed to try to send command to device")]
+    #[error("failed to try to send command to device: {0}")]
     TrySendError(TrySendError<TargetCommand>),
+    #[error("service encountered an error processing the request: {0}")]
+    ServiceError(Box<dyn std::error::Error>),
     #[error("device no longer exists")]
     ChannelClosed,
 }
@@ -53,6 +64,41 @@ impl TargetDeviceClient {
         Self { tx }
     }
 
+    /// Send the given command to the target device. This method uses a timeout
+    /// to detect potential deadlocks.
+    async fn send(&self, cmd: TargetCommand) -> Result<(), ClientError> {
+        let result = self.tx.send_timeout(cmd, DEFAULT_TIMEOUT).await;
+        let Err(err) = result else {
+            return Ok(());
+        };
+        match err {
+            SendTimeoutError::Timeout(ref cmd) => {
+                log::error!("POSSIBLE DEADLOCK: timed out after {DEFAULT_TIMEOUT:?} sending command to composite device: {cmd:?}");
+                Err(ClientError::ServiceError(err.into()))
+            }
+            SendTimeoutError::Closed(_) => Err(ClientError::ChannelClosed),
+        }
+    }
+
+    /// Use the given receiver to wait for a response from the target device.
+    /// This method uses a timeout to detect potential deadlocks.
+    async fn recv<T>(mut rx: Receiver<T>) -> Option<T>
+    where
+        T: Send + Sync,
+    {
+        let result = rx.recv_timeout(DEFAULT_TIMEOUT).await;
+        let Err(err) = result else {
+            return result.ok();
+        };
+        match err {
+            ReceiveTimeoutError::Timeout => {
+                log::error!("POSSIBLE DEADLOCK: timed out after {DEFAULT_TIMEOUT:?} waiting for response from target device");
+                None
+            }
+            ReceiveTimeoutError::Closed => None,
+        }
+    }
+
     /// Write the given input event to the target device.
     pub async fn write_event(&self, event: NativeEvent) -> Result<(), ClientError> {
         self.tx.try_send(TargetCommand::WriteEvent(event))?;
@@ -66,17 +112,15 @@ impl TargetDeviceClient {
         &self,
         device: CompositeDeviceClient,
     ) -> Result<(), ClientError> {
-        self.tx
-            .send(TargetCommand::SetCompositeDevice(device))
-            .await?;
+        self.send(TargetCommand::SetCompositeDevice(device)).await?;
         Ok(())
     }
 
     /// Returns the target device input capabilities that the device can handle.
     pub async fn get_capabilities(&self) -> Result<Vec<Capability>, ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(TargetCommand::GetCapabilities(tx)).await?;
-        if let Some(value) = rx.recv().await {
+        let (tx, rx) = channel(1);
+        self.send(TargetCommand::GetCapabilities(tx)).await?;
+        if let Some(value) = Self::recv(rx).await {
             return Ok(value);
         }
         Err(ClientError::ChannelClosed)
@@ -85,9 +129,9 @@ impl TargetDeviceClient {
     /// Returns a string identifier of the type of target device. This identifier
     /// should be the same text identifier used in device and input configs.
     pub async fn get_type(&self) -> Result<TargetDeviceTypeId, ClientError> {
-        let (tx, mut rx) = channel(1);
-        self.tx.send(TargetCommand::GetType(tx)).await?;
-        if let Some(value) = rx.recv().await {
+        let (tx, rx) = channel(1);
+        self.send(TargetCommand::GetType(tx)).await?;
+        if let Some(value) = Self::recv(rx).await {
             return Ok(value);
         }
         Err(ClientError::ChannelClosed)
@@ -97,13 +141,13 @@ impl TargetDeviceClient {
     /// whenever the composite device has entered intercept mode to indicate
     /// that the target device should stop sending input.
     pub async fn clear_state(&self) -> Result<(), ClientError> {
-        self.tx.send(TargetCommand::ClearState).await?;
+        self.send(TargetCommand::ClearState).await?;
         Ok(())
     }
 
     /// Stop the target device.
     pub async fn stop(&self) -> Result<(), ClientError> {
-        self.tx.send(TargetCommand::Stop).await?;
+        self.send(TargetCommand::Stop).await?;
         Ok(())
     }
 
