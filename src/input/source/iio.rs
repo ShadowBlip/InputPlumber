@@ -8,13 +8,16 @@ use glob_match::glob_match;
 use crate::{
     config,
     constants::BUS_SOURCES_PREFIX,
-    input::{composite_device::client::CompositeDeviceClient, info::DeviceInfoRef},
+    input::{
+        capability::Capability, composite_device::client::CompositeDeviceClient,
+        info::DeviceInfoRef, output_capability::OutputCapability,
+    },
     udev::device::UdevDevice,
 };
 
 use self::{accel_gyro_3d::AccelGyro3dImu, bmi_imu::BmiImu};
 
-use super::{SourceDeviceCompatible, SourceDriver};
+use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver};
 
 /// List of available drivers
 enum DriverType {
@@ -59,13 +62,15 @@ impl SourceDeviceCompatible for IioDevice {
         }
     }
 
-    fn get_capabilities(
-        &self,
-    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
             IioDevice::BmiImu(source_driver) => source_driver.get_capabilities(),
             IioDevice::AccelGryo3D(source_driver) => source_driver.get_capabilities(),
         }
+    }
+
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![])
     }
 
     fn get_device_path(&self) -> String {

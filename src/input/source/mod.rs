@@ -25,6 +25,7 @@ use super::{
     composite_device::client::CompositeDeviceClient,
     event::{context::EventContext, native::NativeEvent, Event},
     info::{DeviceInfo, DeviceInfoRef},
+    output_capability::OutputCapability,
     output_event::OutputEvent,
 };
 
@@ -125,6 +126,12 @@ pub trait SourceOutputDevice {
         //log::trace!("Received output event: {event:?}");
         let _ = event;
         Ok(())
+    }
+
+    /// Returns the possible output events this device is capable of (e.g. force feedback, LED,
+    /// etc.)
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![])
     }
 
     /// Upload the given force feedback effect data to the source device. Returns
@@ -314,6 +321,15 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
         Ok(caps)
     }
 
+    /// Returns the possible output events this device is capable of. (e.g. force feedback, LEDs,
+    /// etc.)
+    pub fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        self.implementation
+            .lock()
+            .unwrap()
+            .get_output_capabilities()
+    }
+
     /// Returns the path to the device (e.g. "/dev/input/event0")
     pub fn get_device_path(&self) -> String {
         self.device_info.path()
@@ -499,6 +515,9 @@ pub(crate) trait SourceDeviceCompatible {
     /// Returns the capabilities that this source device can fulfill.
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError>;
 
+    /// Returns the output capabilities that this source device can fulfill.
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError>;
+
     /// Returns the full path to the device handler (e.g. /dev/input/event3, /dev/hidraw0)
     fn get_device_path(&self) -> String;
 }
@@ -560,6 +579,16 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_capabilities(),
             SourceDevice::Iio(device) => device.get_capabilities(),
             SourceDevice::Led(device) => device.get_capabilities(),
+        }
+    }
+
+    /// Returns the output capabilities that this source device can fulfill.
+    pub fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        match self {
+            SourceDevice::Event(device) => device.get_output_capabilities(),
+            SourceDevice::HidRaw(device) => device.get_output_capabilities(),
+            SourceDevice::Iio(device) => device.get_output_capabilities(),
+            SourceDevice::Led(device) => device.get_output_capabilities(),
         }
     }
 

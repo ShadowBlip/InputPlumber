@@ -35,6 +35,7 @@ use crate::{
             value::{InputValue, TranslationError},
             Event,
         },
+        output_capability::OutputCapability,
         output_event::UinputOutputEvent,
         source::{
             evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice, SourceDevice,
@@ -82,6 +83,8 @@ pub struct CompositeDevice {
     name: String,
     /// Capabilities describe all input capabilities from all source devices
     capabilities: HashSet<Capability>,
+    /// Output capabilities describe all output capabilities from all source devices
+    output_capabilities: HashSet<OutputCapability>,
     /// Capability mapping for the CompositeDevice
     capability_map: Option<CapabilityMapConfig>,
     /// Currently loaded [DeviceProfile] for the [CompositeDevice]. The [DeviceProfile]
@@ -173,6 +176,7 @@ impl CompositeDevice {
             config,
             name,
             capabilities: HashSet::new(),
+            output_capabilities: HashSet::new(),
             capability_map,
             device_profile: None,
             device_profile_path: None,
@@ -254,7 +258,7 @@ impl CompositeDevice {
     }
 
     /// Creates a new instance of the composite device interface on DBus.
-    pub async fn listen_on_dbus(&self) -> Result<JoinHandle<()>, Box<dyn Error>> {
+    pub async fn listen_on_dbus(&mut self) -> Result<JoinHandle<()>, Box<dyn Error>> {
         let conn = self.conn.clone();
         let client = self.client();
         let path = String::from(self.dbus_path());
@@ -321,6 +325,11 @@ impl CompositeDevice {
                     CompositeCommand::GetCapabilities(sender) => {
                         if let Err(e) = sender.send(self.capabilities.clone()).await {
                             log::error!("Failed to send capabilities: {:?}", e);
+                        }
+                    }
+                    CompositeCommand::GetOutputCapabilities(sender) => {
+                        if let Err(e) = sender.send(self.output_capabilities.clone()).await {
+                            log::debug!("Failed to send output capabilities: {:?}", e);
                         }
                     }
                     CompositeCommand::GetTargetCapabilities(sender) => {
@@ -1618,6 +1627,11 @@ impl CompositeDevice {
                     continue;
                 }
                 self.capabilities.insert(cap);
+            }
+
+            let output_capabilities = source_device.get_output_capabilities()?;
+            for cap in output_capabilities {
+                self.output_capabilities.insert(cap);
             }
         }
 

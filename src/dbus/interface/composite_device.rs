@@ -297,6 +297,21 @@ impl CompositeDeviceInterface {
         Ok(capability_strings)
     }
 
+    #[zbus(property)]
+    async fn output_capabilities(&self) -> fdo::Result<Vec<String>> {
+        let capabilities = self
+            .composite_device
+            .get_output_capabilities()
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let capability_strings = capabilities
+            .into_iter()
+            .map(|cap| cap.to_string())
+            .collect();
+
+        Ok(capability_strings)
+    }
+
     /// List of capabilities that all target devices implement
     #[zbus(property)]
     async fn target_capabilities(&self) -> fdo::Result<Vec<String>> {

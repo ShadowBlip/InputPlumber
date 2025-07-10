@@ -6,6 +6,7 @@ use packed_struct::types::SizedInteger;
 
 use crate::drivers::dualsense::driver::{DS5_EDGE_PID, DS5_PID, DS5_VID};
 use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
+use crate::input::output_capability::{OutputCapability, LED};
 use crate::{
     drivers::dualsense::{self, driver::Driver},
     input::{
@@ -119,7 +120,7 @@ impl DualSenseController {
 
                 // Do rumble
                 if let Err(e) = self.driver.rumble(left_speed as u8, right_speed as u8) {
-                    let err = format!("Failed to do rumble: {:?}", e);
+                    let err = format!("Failed to do rumble: {e:?}");
                     return Err(err.into());
                 }
             }
@@ -155,6 +156,12 @@ impl SourceInputDevice for DualSenseController {
 }
 
 impl SourceOutputDevice for DualSenseController {
+    /// Returns the possible output events this device is capable of (e.g. force feedback, LED,
+    /// etc.)
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(OUTPUT_CAPABILITIES.into())
+    }
+
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
@@ -486,4 +493,9 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Touch))),
     Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
+];
+
+pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[
+    OutputCapability::ForceFeedback,
+    OutputCapability::LED(LED::Color),
 ];
