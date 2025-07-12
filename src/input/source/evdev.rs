@@ -15,13 +15,16 @@ use crate::{
         capability_map::{load_capability_mappings, CapabilityMapConfig},
     },
     constants::BUS_SOURCES_PREFIX,
-    input::{composite_device::client::CompositeDeviceClient, info::DeviceInfoRef},
+    input::{
+        capability::Capability, composite_device::client::CompositeDeviceClient,
+        info::DeviceInfoRef, output_capability::OutputCapability,
+    },
     udev::device::UdevDevice,
 };
 
 use self::{blocked::BlockedEventDevice, gamepad::GamepadEventDevice};
 
-use super::{SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
+use super::{OutputError, SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 
 /// List of available drivers
 enum DriverType {
@@ -77,14 +80,21 @@ impl SourceDeviceCompatible for EventDevice {
         }
     }
 
-    fn get_capabilities(
-        &self,
-    ) -> Result<Vec<crate::input::capability::Capability>, super::InputError> {
+    fn get_capabilities(&self) -> Result<Vec<Capability>, super::InputError> {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             EventDevice::Gamepad(source_driver) => source_driver.get_capabilities(),
             EventDevice::Touchscreen(source_driver) => source_driver.get_capabilities(),
             EventDevice::Keyboard(source_driver) => source_driver.get_capabilities(),
+        }
+    }
+
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        match self {
+            EventDevice::Blocked(source_driver) => source_driver.get_output_capabilities(),
+            EventDevice::Gamepad(source_driver) => source_driver.get_output_capabilities(),
+            EventDevice::Touchscreen(source_driver) => source_driver.get_output_capabilities(),
+            EventDevice::Keyboard(source_driver) => source_driver.get_output_capabilities(),
         }
     }
 

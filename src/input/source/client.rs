@@ -3,13 +3,17 @@ use std::{sync::mpsc::channel, time::Duration};
 use evdev::FFEffectData;
 use thiserror::Error;
 use tokio::sync::mpsc::{
-    error::{SendError, TrySendError},
+    error::{SendError, SendTimeoutError, TrySendError},
     Sender,
 };
 
 use crate::input::output_event::OutputEvent;
 
 use super::command::SourceCommand;
+
+/// Maximum duration to wait for a response from a command. If this timeout
+/// is reached, that typically indicates a deadlock somewhere in the code.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Possible errors for a source device client
 #[derive(Error, Debug)]
@@ -53,11 +57,27 @@ impl SourceDeviceClient {
         Self { tx }
     }
 
+    /// Send the given command to the source device. This method uses a timeout
+    /// to detect potential deadlocks.
+    async fn send(&self, cmd: SourceCommand) -> Result<(), ClientError> {
+        let result = self.tx.send_timeout(cmd, DEFAULT_TIMEOUT).await;
+        let Err(err) = result else {
+            return Ok(());
+        };
+        match err {
+            SendTimeoutError::Timeout(ref cmd) => {
+                log::error!("POSSIBLE DEADLOCK: timed out after {DEFAULT_TIMEOUT:?} sending command to composite device: {cmd:?}");
+                Err(ClientError::ServiceError(err.into()))
+            }
+            SendTimeoutError::Closed(_) => Err(ClientError::ChannelClosed),
+        }
+    }
+
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
     pub async fn write_event(&self, event: OutputEvent) -> Result<(), ClientError> {
-        self.tx.send(SourceCommand::WriteEvent(event)).await?;
+        self.send(SourceCommand::WriteEvent(event)).await?;
         Ok(())
     }
 
