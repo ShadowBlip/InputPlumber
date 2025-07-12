@@ -100,6 +100,9 @@ pub enum ManagerCommand {
     TargetDeviceStopped {
         path: String,
     },
+    RemoveFromGamepadOrder {
+        device_path: String,
+    },
     CompositeDeviceStopped(String),
     GetManageAllDevices {
         sender: mpsc::Sender<bool>,
@@ -363,20 +366,36 @@ impl Manager {
                         });
                     log::debug!("Used target devices: {:?}", self.composite_device_targets);
 
-                    let is_suspended = match device.is_suspended().await {
-                        Ok(suspended) => suspended,
-                        Err(e) => {
-                            log::debug!("Failed to check if device is suspended: {e:?}");
-                            continue;
+                    // Spawn a new task to query the composite device for its
+                    // suspended state in order to prevent deadlocks.
+                    let tx = self.tx.clone();
+                    let device = device.clone();
+                    tokio::task::spawn(async move {
+                        let is_suspended = match device.is_suspended().await {
+                            Ok(suspended) => suspended,
+                            Err(e) => {
+                                log::debug!("Failed to check if device is suspended: {e:?}");
+                                return;
+                            }
+                        };
+
+                        // If the composite device is suspended, do not remove the
+                        // target device from the gamepad ordering.
+                        if is_suspended {
+                            return;
                         }
-                    };
 
-                    // If the composite device is suspended, do not remove the
-                    // target device from the gamepad ordering.
-                    if is_suspended {
-                        continue;
-                    }
-
+                        // Notify the Manager to remove the gamepad from
+                        // the gamepad order.
+                        if let Err(e) = tx
+                            .send(ManagerCommand::RemoveFromGamepadOrder { device_path })
+                            .await
+                        {
+                            log::debug!("Failed to notify input manager to remove device from gamepad order: {e}");
+                        }
+                    });
+                }
+                ManagerCommand::RemoveFromGamepadOrder { device_path } => {
                     let new_order = self
                         .target_gamepad_order
                         .drain(..)
