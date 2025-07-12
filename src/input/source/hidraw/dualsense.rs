@@ -469,7 +469,6 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-    Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
