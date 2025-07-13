@@ -7,6 +7,7 @@ use zbus_macros::interface;
 use crate::{
     config::CompositeDeviceConfig,
     constants::BUS_PREFIX,
+    dbus::interface::Unregisterable,
     input::{manager::ManagerCommand, target::TargetDeviceTypeId},
 };
 
@@ -255,3 +256,5 @@ impl ManagerInterface {
         Ok(())
     }
 }
+
+impl Unregisterable for ManagerInterface {}

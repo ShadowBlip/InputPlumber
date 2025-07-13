@@ -1967,3 +1967,17 @@ impl CompositeDevice {
         });
     }
 }
+
+impl Drop for CompositeDevice {
+    fn drop(&mut self) {
+        let dbus = self.conn.clone();
+        let path = self.dbus_path().to_string();
+        tokio::task::spawn(async move {
+            let object_server = dbus.object_server();
+            object_server
+                .remove::<CompositeDeviceInterface, String>(path)
+                .await
+                .unwrap_or_default();
+        });
+    }
+}

@@ -32,6 +32,7 @@ use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
 use crate::dbus::interface::source::iio_imu::SourceIioImuInterface;
 use crate::dbus::interface::source::led::SourceLedInterface;
 use crate::dbus::interface::source::udev::SourceUdevDeviceInterface;
+use crate::dbus::interface::DBusInterfaceManager;
 use crate::dmi::data::DMIData;
 use crate::dmi::get_cpu_info;
 use crate::dmi::get_dmi_data;
@@ -133,8 +134,8 @@ pub enum ManagerCommand {
 /// physical gamepads EXCEPT for Steam virtual gamepads.
 /// https://github.com/godotengine/godot/pull/76045
 pub struct Manager {
-    /// The DBus connection
-    dbus: Connection,
+    /// Dbus interface
+    dbus: DBusInterfaceManager,
     /// System DMI data
     dmi_data: DMIData,
     /// System CPU info
@@ -184,6 +185,9 @@ pub struct Manager {
 impl Manager {
     /// Returns a new instance of Gamepad Manager
     pub fn new(conn: Connection) -> Manager {
+        let path = format!("{BUS_PREFIX}/Manager");
+        let dbus = DBusInterfaceManager::new(conn, path).expect("Manager path should be valid");
+
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
 
         log::debug!("Loading DMI data");
@@ -201,7 +205,7 @@ impl Manager {
         log::debug!("Got CPU info: {cpu_info:?}");
 
         Manager {
-            dbus: conn,
+            dbus,
             dmi_data,
             cpu_info,
             rx,
@@ -223,8 +227,6 @@ impl Manager {
     /// Starts listening for [Command] messages to be sent from clients and
     /// dispatch those events.
     pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let dbus_for_listen_on_dbus = self.dbus.clone();
-
         let cmd_tx_all_devices = self.tx.clone();
 
         // Watch for hidraw/evdev inotify events.
@@ -249,11 +251,11 @@ impl Manager {
 
         log::debug!("Starting input manager task...");
 
+        self.listen_on_dbus()?;
         let _ = tokio::join!(
             Self::discover_all_devices(&cmd_tx_all_devices),
             Self::watch_iio_devices(self.tx.clone()),
             Self::watch_devnodes(self.tx.clone(), &mut watcher_rx),
-            Self::listen_on_dbus(dbus_for_listen_on_dbus, self.tx.clone()),
             self.events_loop()
         );
 
@@ -578,7 +580,7 @@ impl Manager {
         log::info!("Found matching source device for config {path:?}");
         let config = config.clone();
         let device = CompositeDevice::new(
-            self.dbus.clone(),
+            self.dbus.connection().clone(),
             self.tx.clone(),
             config,
             device,
@@ -608,7 +610,7 @@ impl Manager {
         };
 
         // Create the target device to emulate based on the kind
-        let device = TargetDevice::from_type_id(target_id, self.dbus.clone())?;
+        let device = TargetDevice::from_type_id(target_id, self.dbus.connection().clone())?;
 
         Ok(device)
     }
@@ -909,7 +911,7 @@ impl Manager {
 
         // Remove the DBus interface
         let dbus_path = ObjectPath::from_string_unchecked(path.clone());
-        let conn = self.dbus.clone();
+        let conn = self.dbus.connection().clone();
         task::spawn(async move {
             log::debug!("Stopping dbus interface: {dbus_path}");
             let result = conn
@@ -1221,7 +1223,7 @@ impl Manager {
                 log::debug!("Event device added: {dev_name} ({dev_sysname})");
 
                 // Create a DBus interface for the event device
-                let conn = self.dbus.clone();
+                let conn = self.dbus.connection().clone();
                 let path = evdev::get_dbus_path(sys_name.clone());
                 log::debug!(
                     "Attempting to listen on dbus for {dev_path} | {dev_name} ({dev_sysname})"
@@ -1303,7 +1305,7 @@ impl Manager {
                 log::debug!("hidraw device added: {dev_name} ({dev_sysname})");
 
                 // Create a DBus interface for the event device
-                let conn = self.dbus.clone();
+                let conn = self.dbus.connection().clone();
                 let path = hidraw::get_dbus_path(sys_name.clone());
 
                 log::debug!("Attempting to listen on dbus for {dev_path} | {dev_sysname}");
@@ -1339,11 +1341,12 @@ impl Manager {
                     };
 
                     // Check bluez to see if that uniq is a bluetooth device
-                    let object_manager = zbus::fdo::ObjectManagerProxy::builder(&self.dbus)
-                        .destination("org.bluez")?
-                        .path("/")?
-                        .build()
-                        .await?;
+                    let object_manager =
+                        zbus::fdo::ObjectManagerProxy::builder(self.dbus.connection())
+                            .destination("org.bluez")?
+                            .path("/")?
+                            .build()
+                            .await?;
                     let objects: ManagedObjects = object_manager.get_managed_objects().await?;
 
                     // Check each dbus object for a connected device
@@ -1356,7 +1359,7 @@ impl Manager {
                         }
 
                         // Get a reference to the device
-                        let bt_device = Device1Proxy::builder(&self.dbus)
+                        let bt_device = Device1Proxy::builder(self.dbus.connection())
                             .destination("org.bluez")?
                             .path(path)?
                             .build()
@@ -1403,7 +1406,7 @@ impl Manager {
                 log::debug!("iio device added: {} ({})", device.name(), device.sysname());
 
                 // Create a DBus interface for the event device
-                let conn = self.dbus.clone();
+                let conn = self.dbus.connection().clone();
                 let path = iio::get_dbus_path(sys_name.clone());
 
                 log::debug!("Attempting to listen on dbus for device {dev_name} ({dev_sysname}) | {dev_path}");
@@ -1449,7 +1452,7 @@ impl Manager {
                 log::debug!("LED device added: {} ({})", device.name(), device.sysname());
 
                 // Create a DBus interface for the LED device
-                let conn = self.dbus.clone();
+                let conn = self.dbus.connection().clone();
                 log::debug!("Attempting to listen on dbus for {dev_path} | {sysname}");
                 task::spawn(async move {
                     let result = SourceLedInterface::listen_on_dbus(conn, dev).await;
@@ -1485,7 +1488,7 @@ impl Manager {
         log::debug!("Device removed: {dev_name} ({sys_name})");
         let path = ObjectPath::from_string_unchecked(format!("{BUS_SOURCES_PREFIX}/{sys_name}"));
         log::debug!("Device dbus path: {path}");
-        let conn = self.dbus.clone();
+        let conn = self.dbus.connection().clone();
         task::spawn(async move {
             log::debug!("Stopping dbus interfaces: {path}");
 
@@ -1799,17 +1802,14 @@ impl Manager {
     }
 
     /// Creates a DBus object and return the (active) handle to the listener
-    async fn listen_on_dbus(
-        dbus: Connection,
-        tx: mpsc::Sender<ManagerCommand>,
-    ) -> tokio::task::JoinHandle<()> {
-        let iface = ManagerInterface::new(tx);
-        let manager_path = format!("{}/Manager", BUS_PREFIX);
-        task::spawn(async move {
-            if let Err(e) = dbus.object_server().at(manager_path, iface).await {
-                log::error!("Failed create manager dbus interface: {e:?}");
-            }
-        })
+    fn listen_on_dbus(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let iface = ManagerInterface::new(self.tx.clone());
+        if let Err(e) = self.dbus.register(iface) {
+            log::error!("Failed to register manager dbus interface: {e}");
+            return Err(e.into());
+        }
+
+        Ok(())
     }
 
     async fn add_device_to_composite_device(
@@ -1827,7 +1827,7 @@ impl Manager {
         self.target_gamepad_order = order.clone();
 
         // Update the gamepad order on the dbus interface
-        let conn = self.dbus.clone();
+        let conn = self.dbus.connection().clone();
         tokio::task::spawn(async move {
             if let Err(e) = ManagerInterface::update_target_gamepad_order(&conn, order).await {
                 log::warn!("Failed to emit gamepad order changed signal: {e}");
@@ -1895,6 +1895,20 @@ impl Manager {
             if let Err(e) = tx.send(ManagerCommand::GamepadReorderingFinished).await {
                 log::error!("Failed to signal gamepad reordering finished. This is bad: {e:?}");
             }
+        });
+    }
+}
+
+impl Drop for Manager {
+    fn drop(&mut self) {
+        let dbus = self.dbus.connection().clone();
+        tokio::task::spawn(async move {
+            let manager_path = format!("{BUS_PREFIX}/Manager");
+            let object_server = dbus.object_server();
+            object_server
+                .remove::<ManagerInterface, String>(manager_path)
+                .await
+                .unwrap_or_default();
         });
     }
 }

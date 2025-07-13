@@ -422,6 +422,7 @@ pub struct TargetDriver<T: TargetInputDevice + TargetOutputDevice> {
     type_id: TargetDeviceTypeId,
     options: TargetDriverOptions,
     dbus: Connection,
+    dbus_path: Option<String>,
     implementation: Arc<Mutex<T>>,
     composite_device: Option<CompositeDeviceClient>,
     scheduled_events: Vec<ScheduledNativeEvent>,
@@ -448,6 +449,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
             type_id,
             options,
             dbus,
+            dbus_path: None,
             implementation: Arc::new(Mutex::new(device)),
             composite_device: None,
             scheduled_events: Vec::new(),
@@ -464,6 +466,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
     /// Run the target device, consuming the device.
     pub async fn run(mut self, dbus_path: String) -> Result<(), Box<dyn Error>> {
         log::debug!("Started running target device: {dbus_path}");
+        self.dbus_path = Some(dbus_path.clone());
         let metrics_enabled = match env::var("ENABLE_METRICS") {
             Ok(value) => value.as_str() == "1",
             Err(_) => false,
@@ -475,8 +478,8 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
         let client = self.client();
         let task =
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut composite_device = self.composite_device;
-                let mut rx = self.rx;
+                let mut composite_device = self.composite_device.take();
+                let rx = &mut self.rx;
                 let mut implementation = self.implementation.lock().unwrap();
 
                 // Start the DBus interface for the device
@@ -522,7 +525,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                     if let Err(e) = TargetDriver::receive_commands(
                         &self.type_id,
                         &mut composite_device,
-                        &mut rx,
+                        rx,
                         &metrics_tx,
                         &mut implementation,
                     ) {
@@ -564,7 +567,6 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                 if metrics_enabled {
                     Self::stop_metrics_interface(&self.dbus, dbus_path.as_str());
                 }
-                implementation.stop_dbus_interface(self.dbus, dbus_path.clone());
                 implementation.stop()?;
                 log::debug!("Target device stopped: {dbus_path}");
 
@@ -737,6 +739,18 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
         }
 
         Ok(())
+    }
+}
+
+impl<T: TargetInputDevice + TargetOutputDevice> Drop for TargetDriver<T> {
+    fn drop(&mut self) {
+        let Some(dbus_path) = self.dbus_path.as_ref() else {
+            return;
+        };
+        self.implementation
+            .lock()
+            .unwrap()
+            .stop_dbus_interface(self.dbus.clone(), dbus_path.clone());
     }
 }
 
