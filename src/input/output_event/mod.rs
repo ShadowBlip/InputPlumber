@@ -1,6 +1,10 @@
+pub mod native;
+pub mod value;
+
 use std::sync::mpsc::Sender;
 
 use ::evdev::{FFEffectData, InputEvent};
+use native::NativeOutputEvent;
 
 use crate::drivers::{
     dualsense::hid_report::SetStatePackedOutputData,
@@ -10,8 +14,10 @@ use crate::drivers::{
 use super::output_capability::{Haptic, OutputCapability};
 
 /// Output events are events that flow from target devices back to source devices
+/// TODO: Remove this in favor of directly using NativeOutputEvent
 #[derive(Debug, Clone)]
 pub enum OutputEvent {
+    Native(NativeOutputEvent),
     Evdev(InputEvent),
     Uinput(UinputOutputEvent),
     DualSense(SetStatePackedOutputData),
@@ -23,6 +29,7 @@ impl OutputEvent {
     /// Returns the capability of the output event
     fn as_capability(&self) -> Vec<OutputCapability> {
         match self {
+            OutputEvent::Native(event) => todo!(),
             OutputEvent::Evdev(event) => match event.destructure() {
                 evdev::EventSummary::Synchronization(_, _, _) => {
                     vec![OutputCapability::NotImplemented]
