@@ -561,12 +561,13 @@ impl Manager {
     /// Create a [CompositeDevice] from the given configuration
     async fn create_composite_device_from_config(
         &mut self,
+        path: PathBuf,
         config: &CompositeDeviceConfig,
         device: DeviceInfo,
     ) -> Result<CompositeDevice, Box<dyn Error>> {
         // Lookup the capability map associated with this config if it exists
         let capability_map = if let Some(map_id) = config.capability_map_id.clone() {
-            log::debug!("Found capability mapping in config: {}", map_id);
+            log::debug!("Found capability mapping in config: {map_id}");
             let capability_map = load_capability_mappings();
             capability_map.get(&map_id).cloned()
         } else {
@@ -574,7 +575,7 @@ impl Manager {
         };
 
         // Create a composite device to manage these devices
-        log::info!("Found matching source device for: {:?}", config.name);
+        log::info!("Found matching source device for config {path:?}");
         let config = config.clone();
         let device = CompositeDevice::new(
             self.dbus.clone(),
@@ -973,6 +974,12 @@ impl Manager {
         id: String,
         device: DeviceInfo,
     ) -> Result<(), Box<dyn Error>> {
+        // Ignore the device if it's already in use.
+        if let Some(device_path) = self.source_devices_used.get(&id) {
+            log::debug!("Source device {id} already in use by {device_path}. Skipping.");
+            return Ok(());
+        }
+
         // Check all existing composite devices to see if this device is part of
         // their config
         'start: for composite_device in self.composite_devices.keys() {
@@ -1082,8 +1089,8 @@ impl Manager {
         // a match that will automatically create a CompositeDevice.
         let configs = self.load_device_configs().await;
         log::debug!("Checking unused configs");
-        for config in configs {
-            log::trace!("Checking config {:?} for device", config.name);
+        for (path, config) in configs {
+            log::trace!("Checking if config {path:?} matches device",);
 
             // Check to see if 'auto_manage' is enabled for this config.
             let auto_manage = config
@@ -1093,15 +1100,14 @@ impl Manager {
                 .unwrap_or(false);
             if !self.manage_all_devices && !auto_manage {
                 log::trace!(
-                    "Config {:?} does not have 'auto_manage' option enabled. Skipping.",
-                    config.name
+                    "Config {path:?} does not have 'auto_manage' option enabled. Skipping.",
                 );
                 continue;
             }
 
             // Check to see if this configuration matches the system
             if !config.has_valid_matches(&self.dmi_data, &self.cpu_info) {
-                log::trace!("Configuration does not match system");
+                log::trace!("Configuration {path:?} does not match system");
                 continue;
             }
 
@@ -1114,11 +1120,11 @@ impl Manager {
                     }
                 }
                 log::info!(
-                    "Found a matching {} device {id}, creating CompositeDevice",
+                    "Found a matching {} device {id} in config {path:?}, creating CompositeDevice",
                     device.kind()
                 );
                 let dev = self
-                    .create_composite_device_from_config(&config, device)
+                    .create_composite_device_from_config(path, &config, device)
                     .await?;
 
                 // Get the target input devices from the config
@@ -1759,10 +1765,10 @@ impl Manager {
     /// Looks in all default locations for [CompositeDeviceConfig] definitions and
     /// load/parse them. Returns an array of these configs which can be used
     /// to automatically create a [CompositeDevice].
-    pub async fn load_device_configs(&self) -> Vec<CompositeDeviceConfig> {
+    pub async fn load_device_configs(&self) -> Vec<(PathBuf, CompositeDeviceConfig)> {
         let task = task::spawn_blocking(move || {
             log::trace!("Loading device configurations");
-            let mut devices: Vec<CompositeDeviceConfig> = Vec::new();
+            let mut devices: Vec<(PathBuf, CompositeDeviceConfig)> = Vec::new();
             let paths = get_devices_paths();
             let files = get_multidir_sorted_files(paths.as_slice(), |entry| {
                 entry.path().extension().unwrap_or_default() == "yaml"
@@ -1782,7 +1788,7 @@ impl Manager {
                     continue;
                 }
                 let device = device.unwrap();
-                devices.push(device);
+                devices.push((file, device));
             }
 
             devices
