@@ -1,10 +1,9 @@
-use std::error::Error;
-
-use crate::udev::device::{AttributeGetter, AttributeSetter, UdevDevice};
-use zbus::{fdo, Connection};
+use crate::{
+    dbus::interface::Unregisterable,
+    udev::device::{AttributeGetter, AttributeSetter, UdevDevice},
+};
+use zbus::fdo;
 use zbus_macros::interface;
-
-use crate::input::source::iio::get_dbus_path;
 
 /// DBusInterface exposing information about a HIDRaw device
 pub struct SourceIioImuInterface {
@@ -14,30 +13,6 @@ pub struct SourceIioImuInterface {
 impl SourceIioImuInterface {
     pub fn new(device: UdevDevice) -> SourceIioImuInterface {
         SourceIioImuInterface { device }
-    }
-
-    /// Creates a new instance of the source hidraw interface on DBus. Returns
-    /// a structure with information about the source device.
-    pub async fn listen_on_dbus(
-        conn: Connection,
-        device: UdevDevice,
-    ) -> Result<(), Box<dyn Error>> {
-        let iface = SourceIioImuInterface::new(device);
-        let Ok(id) = iface.id() else {
-            return Ok(());
-        };
-        let path = get_dbus_path(id);
-
-        tokio::task::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let result = conn.object_server().at(path.clone(), iface).await;
-            if let Err(e) = result {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
-        Ok(())
     }
 }
 
@@ -209,3 +184,5 @@ impl SourceIioImuInterface {
         }
     }
 }
+
+impl Unregisterable for SourceIioImuInterface {}

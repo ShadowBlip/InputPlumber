@@ -5,9 +5,9 @@ use tokio::sync::mpsc::{self, error::TryRecvError, Receiver};
 use zbus::Connection;
 
 use crate::{
-    dbus::interface::target::{
-        debug::{TargetDebugInterface, TargetDebugInterfaceSignals},
-        TargetInterface,
+    dbus::interface::{
+        target::debug::{TargetDebugInterface, TargetDebugInterfaceSignals},
+        DBusInterfaceManager,
     },
     drivers::unified_gamepad::reports::{
         input_capability_report::{InputCapabilityInfo, InputCapabilityReport},
@@ -172,54 +172,14 @@ impl DebugDevice {
 }
 
 impl TargetInputDevice for DebugDevice {
-    /// Start the DBus interface for this target device
     fn start_dbus_interface(
         &mut self,
-        dbus: Connection,
-        path: String,
-        client: TargetDeviceClient,
-        type_id: TargetDeviceTypeId,
+        dbus: &mut DBusInterfaceManager,
+        _client: TargetDeviceClient,
+        _type_id: TargetDeviceTypeId,
     ) {
-        log::debug!("Starting dbus interface: {path}");
-        log::trace!("Using device client: {client:?}");
-        self.dbus_path = Some(path.clone());
-        tokio::task::spawn(async move {
-            let generic_interface = TargetInterface::new(&type_id);
-            let iface = TargetDebugInterface::new();
-
-            let object_server = dbus.object_server();
-            let (gen_result, result) = tokio::join!(
-                object_server.at(path.clone(), generic_interface),
-                object_server.at(path.clone(), iface)
-            );
-
-            if gen_result.is_err() || result.is_err() {
-                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
-    }
-
-    fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
-        log::debug!("Stopping dbus interface for {path}");
-        tokio::task::spawn(async move {
-            let object_server = dbus.object_server();
-            let (target, generic) = tokio::join!(
-                object_server.remove::<TargetDebugInterface, String>(path.clone()),
-                object_server.remove::<TargetInterface, String>(path.clone())
-            );
-            if generic.is_err() || target.is_err() {
-                if let Err(err) = target {
-                    log::debug!("Failed to stop debug interface {path}: {err}");
-                }
-                if let Err(err) = generic {
-                    log::debug!("Failed to stop target interface {path}: {err}");
-                }
-            } else {
-                log::debug!("Stopped dbus interface for {path}");
-            }
-        });
+        let iface = TargetDebugInterface::new();
+        dbus.register(iface);
     }
 
     fn on_composite_device_attached(

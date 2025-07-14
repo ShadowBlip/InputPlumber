@@ -9,6 +9,8 @@ use crate::{
     input::{composite_device::client::CompositeDeviceClient, output_event::OutputEvent},
 };
 
+use super::Unregisterable;
+
 /// [ForceFeedbacker] is any device that can implement force feedback
 pub trait ForceFeedbacker {
     fn rumble(&mut self, value: f64) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
@@ -81,3 +83,6 @@ where
         Ok(())
     }
 }
+
+impl<T> Unregisterable for ForceFeedbackInterface<T> where T: ForceFeedbacker + Send + Sync + 'static
+{}

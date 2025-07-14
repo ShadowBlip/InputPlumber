@@ -1,6 +1,8 @@
 use zbus::{fdo, object_server::SignalEmitter};
 use zbus_macros::interface;
 
+use crate::dbus::interface::Unregisterable;
+
 /// The [TargetDBusInterface] provides a DBus interface that can be exposed for managing
 /// a [DBusDevice]. It works by sending command messages to a channel that the
 /// [DBusDevice] is listening on.
@@ -46,3 +48,5 @@ impl TargetDBusInterface {
         y: f64,
     ) -> zbus::Result<()>;
 }
+
+impl Unregisterable for TargetDBusInterface {}

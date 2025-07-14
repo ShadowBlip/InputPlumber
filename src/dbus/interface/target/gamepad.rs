@@ -1,6 +1,8 @@
 use zbus::fdo;
 use zbus_macros::interface;
 
+use crate::dbus::interface::Unregisterable;
+
 /// The [TargetGamepadInterface] provides a DBus interface that can be exposed for managing
 /// a [GenericGamepad].
 pub struct TargetGamepadInterface {
@@ -27,3 +29,5 @@ impl TargetGamepadInterface {
         Ok(self.dev_name.clone())
     }
 }
+
+impl Unregisterable for TargetGamepadInterface {}
