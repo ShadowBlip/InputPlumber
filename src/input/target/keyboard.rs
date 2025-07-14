@@ -4,10 +4,9 @@ use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
     AbsInfo, AbsoluteAxisCode, AttributeSet, InputEvent, KeyCode,
 };
-use zbus::Connection;
 
 use crate::{
-    dbus::interface::target::{keyboard::TargetKeyboardInterface, TargetInterface},
+    dbus::interface::{target::keyboard::TargetKeyboardInterface, DBusInterfaceManager},
     input::{
         capability::{Capability, Keyboard},
         event::{evdev::EvdevEvent, native::NativeEvent},
@@ -223,27 +222,12 @@ impl KeyboardDevice {
 impl TargetInputDevice for KeyboardDevice {
     fn start_dbus_interface(
         &mut self,
-        dbus: Connection,
-        path: String,
+        dbus: &mut DBusInterfaceManager,
         client: TargetDeviceClient,
-        type_id: TargetDeviceTypeId,
+        _type_id: TargetDeviceTypeId,
     ) {
-        log::debug!("Starting dbus interface: {path}");
-        tokio::task::spawn(async move {
-            let generic_interface = TargetInterface::new(&type_id);
-            let iface = TargetKeyboardInterface::new(client);
-
-            let object_server = dbus.object_server();
-            let (gen_result, result) = tokio::join!(
-                object_server.at(path.clone(), generic_interface),
-                object_server.at(path.clone(), iface)
-            );
-            if gen_result.is_err() || result.is_err() {
-                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
+        let iface = TargetKeyboardInterface::new(client);
+        dbus.register(iface);
     }
 
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
@@ -422,22 +406,6 @@ impl TargetInputDevice for KeyboardDevice {
             Capability::Keyboard(Keyboard::KeyF24),
             Capability::Keyboard(Keyboard::KeyProg1),
         ])
-    }
-
-    fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
-        log::debug!("Stopping dbus interface for {path}");
-        tokio::task::spawn(async move {
-            let object_server = dbus.object_server();
-            let (target, generic) = tokio::join!(
-                object_server.remove::<TargetKeyboardInterface, String>(path.clone()),
-                object_server.remove::<TargetInterface, String>(path.clone())
-            );
-            if generic.is_err() || target.is_err() {
-                log::debug!("Failed to stop dbus interface: {path} generic: {generic:?} type-specific: {target:?}");
-            } else {
-                log::debug!("Stopped dbus interface for {path}");
-            }
-        });
     }
 }
 

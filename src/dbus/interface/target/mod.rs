@@ -10,6 +10,8 @@ use zbus_macros::interface;
 
 use crate::input::target::TargetDeviceTypeId;
 
+use super::Unregisterable;
+
 /// The [TargetInterface] provides a DBus interface that can be exposed for managing
 /// a target input device.
 pub struct TargetInterface {
@@ -42,3 +44,5 @@ impl TargetInterface {
         Ok(self.device_type.clone())
     }
 }
+
+impl Unregisterable for TargetInterface {}

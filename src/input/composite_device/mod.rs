@@ -13,11 +13,7 @@ use std::{
 
 use evdev::InputEvent;
 use targets::CompositeDeviceTargets;
-use tokio::{
-    sync::mpsc,
-    task::{JoinHandle, JoinSet},
-    time::Duration,
-};
+use tokio::{sync::mpsc, task::JoinSet, time::Duration};
 use zbus::Connection;
 
 use crate::{
@@ -25,9 +21,7 @@ use crate::{
         capability_map::CapabilityMapConfig, path::get_profiles_path, CompositeDeviceConfig,
         DeviceProfile, ProfileMapping,
     },
-    dbus::interface::{
-        composite_device::CompositeDeviceInterface, source::iio_imu::SourceIioImuInterface,
-    },
+    dbus::interface::{composite_device::CompositeDeviceInterface, DBusInterfaceManager},
     input::{
         capability::{Capability, Gamepad, GamepadButton, Mouse},
         event::{
@@ -75,8 +69,8 @@ pub enum InterceptMode {
 /// can translate input to any target devices
 #[derive(Debug)]
 pub struct CompositeDevice {
-    /// Connection to DBus
-    conn: Connection,
+    /// DBus interface(s) for this device
+    dbus: DBusInterfaceManager,
     /// Configuration for the CompositeDevice
     config: CompositeDeviceConfig,
     /// Name of the [CompositeDeviceConfig] loaded for the device
@@ -108,8 +102,6 @@ pub struct CompositeDevice {
     /// Keep track of translated events we've emitted so we can send
     /// release events
     emitted_mappings: HashSet<String>,
-    /// The DBus path this [CompositeDevice] is listening on
-    dbus_path: String,
     /// Mode defining how inputs should be routed
     intercept_mode: InterceptMode,
     /// Transmit channel for sending commands to this composite device
@@ -171,8 +163,9 @@ impl CompositeDevice {
         log::info!("Creating CompositeDevice with config: {}", config.name);
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         let name = config.name.clone();
+        let dbus = DBusInterfaceManager::new(conn.clone(), dbus_path.clone())?;
         let mut device = Self {
-            conn: conn.clone(),
+            dbus,
             config,
             name,
             capabilities: HashSet::new(),
@@ -185,7 +178,6 @@ impl CompositeDevice {
             translatable_active_inputs: Vec::new(),
             translated_recent_events: HashSet::new(),
             emitted_mappings: HashSet::new(),
-            dbus_path: dbus_path.clone(),
             intercept_mode: InterceptMode::None,
             tx: tx.clone(),
             rx,
@@ -254,33 +246,24 @@ impl CompositeDevice {
 
     /// Return the DBus path of the composite device
     pub fn dbus_path(&self) -> &str {
-        self.dbus_path.as_str()
+        self.dbus.path()
     }
 
     /// Creates a new instance of the composite device interface on DBus.
-    pub async fn listen_on_dbus(&mut self) -> Result<JoinHandle<()>, Box<dyn Error>> {
-        let conn = self.conn.clone();
+    pub async fn listen_on_dbus(&mut self) -> Result<(), Box<dyn Error>> {
         let client = self.client();
-        let path = String::from(self.dbus_path());
         let profile = self.device_profile.clone();
         let profile_path = self.device_profile_path.clone();
-        Ok(tokio::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let iface = CompositeDeviceInterface::new(client, profile, profile_path);
-            if let Err(e) = conn.object_server().at(path.clone(), iface).await {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started listening on dbus interface: {path}");
-            }
-        }))
+        let iface = CompositeDeviceInterface::new(client, profile, profile_path);
+        self.dbus.register(iface);
+
+        Ok(())
     }
 
     /// Starts the [CompositeDevice] and listens for events from all source
     /// devices to translate the events and send them to the appropriate target.
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         log::debug!("Starting composite device");
-
-        let dbus_path = self.dbus_path.clone();
 
         // Start all source devices
         self.run_source_devices().await?;
@@ -432,8 +415,8 @@ impl CompositeDevice {
                             Err(e) => Err(e.to_string()),
                         };
                         CompositeDeviceInterface::update_profile(
-                            &self.conn,
-                            &self.dbus_path,
+                            self.dbus.connection(),
+                            self.dbus.path(),
                             Some(profile),
                             None,
                         );
@@ -459,8 +442,8 @@ impl CompositeDevice {
                             Err(e) => Err(e.to_string()),
                         };
                         CompositeDeviceInterface::update_profile(
-                            &self.conn,
-                            &self.dbus_path,
+                            self.dbus.connection(),
+                            self.dbus.path(),
                             Some(profile),
                             Some(path),
                         );
@@ -502,18 +485,27 @@ impl CompositeDevice {
                         self.set_intercept_activation(activation_caps, target_cap)
                     }
                     CompositeCommand::Stop => {
-                        log::debug!("Got STOP signal. Stopping CompositeDevice: {dbus_path}");
+                        log::debug!(
+                            "Got STOP signal. Stopping CompositeDevice: {}",
+                            self.dbus.path()
+                        );
                         break 'main;
                     }
                     CompositeCommand::Suspend(sender) => {
-                        log::info!("Preparing to suspend target devices for: {dbus_path}");
+                        log::info!(
+                            "Preparing to suspend target devices for: {}",
+                            self.dbus.path()
+                        );
                         self.targets.handle_suspend().await;
                         if let Err(e) = sender.send(()).await {
                             log::error!("Failed to send suspend response: {e:?}");
                         }
                     }
                     CompositeCommand::Resume(sender) => {
-                        log::info!("Preparing to resume target devices for: {dbus_path}");
+                        log::info!(
+                            "Preparing to resume target devices for: {}",
+                            self.dbus.path()
+                        );
                         self.targets.handle_resume().await;
                         if let Err(e) = sender.send(()).await {
                             log::error!("Failed to send resume response: {e:?}");
@@ -533,15 +525,18 @@ impl CompositeDevice {
             // the device unless configured to persist.
             if devices_removed && self.source_devices_used.is_empty() {
                 if persist {
-                    log::debug!("No source devices remain, but CompositeDevice {dbus_path} has persist enabled. Clearing target devices states.");
+                    log::debug!("No source devices remain, but CompositeDevice {} has persist enabled. Clearing target devices states.", self.dbus.path());
                     self.targets.clear_state().await;
                 } else {
-                    log::debug!("No source devices remain. Stopping CompositeDevice {dbus_path}");
+                    log::debug!(
+                        "No source devices remain. Stopping CompositeDevice {}",
+                        self.dbus.path()
+                    );
                     break 'main;
                 }
             }
         }
-        log::info!("CompositeDevice stopping: {dbus_path}");
+        log::info!("CompositeDevice stopping: {}", self.dbus.path());
 
         // Stop all target devices
         log::debug!("Stopping target devices");
@@ -573,7 +568,7 @@ impl CompositeDevice {
             res?;
         }
 
-        log::info!("CompositeDevice stopped: {dbus_path}");
+        log::info!("CompositeDevice stopped: {}", self.dbus.path());
 
         Ok(())
     }
@@ -627,14 +622,7 @@ impl CompositeDevice {
             let source_tx = source_device.client();
             self.source_devices.insert(device_id.clone(), source_tx);
             let tx = self.tx.clone();
-
-            // Add the IIO IMU Dbus interface. We do this here because it needs the source
-            // device transmitter and this is the only place we can refrence it at the moment.
             let device = source_device.get_device_ref().to_owned();
-            if let SourceDevice::Iio(_) = source_device {
-                let DeviceInfo::Udev(device) = device.clone();
-                SourceIioImuInterface::listen_on_dbus(self.conn.clone(), device).await?;
-            }
 
             self.source_device_tasks.spawn(async move {
                 if let Err(e) = source_device.run().await {
@@ -1936,15 +1924,15 @@ impl CompositeDevice {
 
     /// Emit a DBus signal when source devices change
     async fn signal_sources_changed(&self) {
-        let dbus_path = self.dbus_path.clone();
-        let conn = self.conn.clone();
+        let dbus_path = self.dbus.path().to_string();
+        let conn = self.dbus.connection().clone();
 
         tokio::task::spawn(async move {
             // Get the object instance at the given path so we can send DBus signal
             // updates
             let iface_ref = match conn
                 .object_server()
-                .interface::<_, CompositeDeviceInterface>(dbus_path.clone())
+                .interface::<_, CompositeDeviceInterface>(dbus_path)
                 .await
             {
                 Ok(iface) => iface,
@@ -1964,20 +1952,6 @@ impl CompositeDevice {
             {
                 log::error!("Failed to send source devices changed signal: {e:?}");
             }
-        });
-    }
-}
-
-impl Drop for CompositeDevice {
-    fn drop(&mut self) {
-        let dbus = self.conn.clone();
-        let path = self.dbus_path().to_string();
-        tokio::task::spawn(async move {
-            let object_server = dbus.object_server();
-            object_server
-                .remove::<CompositeDeviceInterface, String>(path)
-                .await
-                .unwrap_or_default();
         });
     }
 }

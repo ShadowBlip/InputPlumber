@@ -1,7 +1,10 @@
 use zbus::{fdo, object_server::SignalEmitter};
 use zbus_macros::interface;
 
-use crate::drivers::unified_gamepad::reports::input_capability_report::InputCapabilityReport;
+use crate::{
+    dbus::interface::Unregisterable,
+    drivers::unified_gamepad::reports::input_capability_report::InputCapabilityReport,
+};
 
 /// The [TargetDBusInterface] provides a DBus interface that can be exposed for managing
 /// a [DBusDevice]. It works by sending command messages to a channel that the
@@ -44,3 +47,5 @@ impl TargetDebugInterface {
     #[zbus(signal)]
     pub async fn input_report(emitter: &SignalEmitter<'_>, data: Vec<u8>) -> zbus::Result<()>;
 }
+
+impl Unregisterable for TargetDebugInterface {}

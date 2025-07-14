@@ -3,12 +3,12 @@ use std::{
     error::Error,
 };
 
-use zbus::{names::InterfaceName, object_server::Interface, Connection};
+use zbus::object_server::Interface;
 
 use crate::{
     dbus::interface::{
-        force_feedback::ForceFeedbackInterface,
-        target::{dbus::TargetDBusInterface, TargetInterface},
+        force_feedback::ForceFeedbackInterface, target::dbus::TargetDBusInterface,
+        DBusInterfaceManager,
     },
     input::{
         capability::{Capability, Gamepad, GamepadButton},
@@ -52,20 +52,22 @@ struct State {
 #[derive(Debug)]
 pub struct DBusDevice {
     state: State,
-    conn: Connection,
-    dbus_path: Option<String>,
-    dbus_interfaces: HashSet<InterfaceName<'static>>,
+    dbus: Option<DBusInterfaceManager>,
     device: Option<CompositeDeviceClient>,
+}
+
+impl Default for DBusDevice {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DBusDevice {
     // Create a new [DBusDevice] instance.
-    pub fn new(conn: Connection) -> Self {
+    pub fn new() -> Self {
         Self {
             state: State::default(),
-            conn,
-            dbus_path: None,
-            dbus_interfaces: HashSet::new(),
+            dbus: None,
             device: None,
         }
     }
@@ -240,12 +242,13 @@ impl DBusDevice {
         }
 
         // DBus events can only be written if there is a DBus path reference.
-        let Some(path) = self.dbus_path.clone() else {
-            return Err("No dbus path exists to send events to".into());
+        let Some(dbus) = self.dbus.as_ref() else {
+            return Err("No dbus interface manager exists to send events to".into());
         };
 
         // Send the input event signal based on the type of value
-        let conn = self.conn.clone();
+        let path = dbus.path().to_string();
+        let conn = dbus.connection().clone();
         tokio::task::spawn(async move {
             // Get the object instance at the given path so we can send DBus signal
             // updates
@@ -340,31 +343,14 @@ impl DBusDevice {
 impl TargetInputDevice for DBusDevice {
     fn start_dbus_interface(
         &mut self,
-        dbus: Connection,
-        path: String,
+        dbus: &mut DBusInterfaceManager,
         _client: TargetDeviceClient,
-        type_id: TargetDeviceTypeId,
+        _type_id: TargetDeviceTypeId,
     ) {
-        log::debug!("Starting dbus interface: {path}");
-        self.dbus_path = Some(path.clone());
-
-        let generic_interface = TargetInterface::new(&type_id);
-        self.dbus_interfaces.insert(TargetInterface::name());
+        self.dbus =
+            DBusInterfaceManager::new(dbus.connection().clone(), dbus.path().to_string()).ok();
         let iface = TargetDBusInterface::new();
-        self.dbus_interfaces.insert(TargetDBusInterface::name());
-
-        tokio::task::spawn(async move {
-            let object_server = dbus.object_server();
-            let (gen_result, result) = tokio::join!(
-                object_server.at(path.clone(), generic_interface),
-                object_server.at(path.clone(), iface)
-            );
-            if gen_result.is_err() || result.is_err() {
-                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
+        dbus.register(iface);
     }
 
     fn on_composite_device_attached(
@@ -424,38 +410,6 @@ impl TargetInputDevice for DBusDevice {
 
         Ok(capabilities)
     }
-
-    fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
-        log::debug!("Stopping dbus interface for {path}");
-        let ifaces = self.dbus_interfaces.clone();
-        self.dbus_interfaces.clear();
-
-        tokio::task::spawn(async move {
-            let object_server = dbus.object_server();
-
-            // Remove the ForceFeedbackInterface if it exists
-            let ff_iface_name = ForceFeedbackInterface::<CompositeDeviceClient>::name();
-            if ifaces.contains(&ff_iface_name) {
-                let result = object_server
-                    .remove::<ForceFeedbackInterface<CompositeDeviceClient>, String>(path.clone())
-                    .await;
-                if let Err(e) = result {
-                    log::trace!("Error removing force feedback interface: {e}");
-                }
-            }
-
-            // Remove all other interfaces
-            let (target, generic) = tokio::join!(
-                object_server.remove::<TargetDBusInterface, String>(path.clone()),
-                object_server.remove::<TargetInterface, String>(path.clone())
-            );
-            if generic.is_err() || target.is_err() {
-                log::debug!("Failed to stop dbus interface: {path} generic: {generic:?} type-specific: {target:?}");
-            } else {
-                log::debug!("Stopped dbus interface for {path}");
-            }
-        });
-    }
 }
 
 impl TargetOutputDevice for DBusDevice {
@@ -464,32 +418,20 @@ impl TargetOutputDevice for DBusDevice {
         capabilities: HashSet<OutputCapability>,
     ) -> Result<(), OutputError> {
         log::info!("Output capabilities changed: {capabilities:?}");
-        let Some(path) = self.dbus_path.as_ref() else {
-            log::warn!("No dbus path set to update interfaces!");
+        let Some(dbus) = self.dbus.as_mut() else {
+            log::warn!("No dbus interface manager set to update interfaces!");
             return Ok(());
         };
 
         // Look for dbus interfaces to start/stop based on output capability
         let supports_ff = capabilities.contains(&OutputCapability::ForceFeedback);
         let ff_iface_name = ForceFeedbackInterface::<CompositeDeviceClient>::name();
-        let has_ff_iface = self.dbus_interfaces.contains(&ff_iface_name);
 
         // Remove output interfaces if they are no longer supported
-        if has_ff_iface && !supports_ff {
-            let dbus = self.conn.clone();
-            let path = path.clone();
-            self.dbus_interfaces.remove(&ff_iface_name);
-            tokio::task::spawn(async move {
-                let object_server = dbus.object_server();
-                let result = object_server
-                    .remove::<ForceFeedbackInterface<CompositeDeviceClient>, String>(path.clone())
-                    .await;
-                if let Err(e) = result {
-                    log::trace!("Error removing force feedback interface: {e}");
-                }
-            });
-        }
-        if !capabilities.contains(&OutputCapability::ForceFeedback) {
+        if !supports_ff {
+            if dbus.has_interface(&ff_iface_name) {
+                dbus.unregister(&ff_iface_name);
+            }
             return Ok(());
         }
         let Some(device) = self.device.clone() else {
@@ -498,17 +440,8 @@ impl TargetOutputDevice for DBusDevice {
         };
 
         // Start the force feedback interface
-        self.dbus_interfaces.insert(ff_iface_name);
-        let dbus = self.conn.clone();
-        let path = path.clone();
-        tokio::task::spawn(async move {
-            log::debug!("Starting ForceFeedback interface at: {path}");
-            let iface = ForceFeedbackInterface::new(device);
-            let object_server = dbus.object_server();
-            if let Err(e) = object_server.at(path, iface).await {
-                log::warn!("Failed to start ForceFeedbackInterface: {e}");
-            }
-        });
+        let iface = ForceFeedbackInterface::new(device);
+        dbus.register(iface);
 
         Ok(())
     }

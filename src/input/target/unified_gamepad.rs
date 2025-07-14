@@ -3,10 +3,8 @@ use std::{collections::HashSet, error::Error, fmt::Debug, fs::File};
 use packed_struct::prelude::*;
 use tokio::sync::mpsc::{self, error::TryRecvError, Receiver};
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
-use zbus::Connection;
 
 use crate::{
-    dbus::interface::target::{gamepad::TargetGamepadInterface, TargetInterface},
     drivers::unified_gamepad::{
         capability::InputCapability,
         driver::{UNIFIED_CONTROLLER_PID, UNIFIED_CONTROLLER_VID},
@@ -32,10 +30,7 @@ use crate::{
     },
 };
 
-use super::{
-    client::TargetDeviceClient, InputError, OutputError, TargetDeviceTypeId, TargetInputDevice,
-    TargetOutputDevice,
-};
+use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
 /// A [UnifiedGamepadDevice] implements the Unified Controller Input Specification
 pub struct UnifiedGamepadDevice {
@@ -198,35 +193,6 @@ impl UnifiedGamepadDevice {
 }
 
 impl TargetInputDevice for UnifiedGamepadDevice {
-    /// Start the DBus interface for this target device
-    fn start_dbus_interface(
-        &mut self,
-        dbus: Connection,
-        path: String,
-        client: TargetDeviceClient,
-        type_id: TargetDeviceTypeId,
-    ) {
-        log::debug!("Starting dbus interface: {path}");
-        log::trace!("Using device client: {client:?}");
-        self.dbus_path = Some(path.clone());
-        tokio::task::spawn(async move {
-            let generic_interface = TargetInterface::new(&type_id);
-            let iface = TargetGamepadInterface::new(type_id.name().to_owned());
-
-            let object_server = dbus.object_server();
-            let (gen_result, result) = tokio::join!(
-                object_server.at(path.clone(), generic_interface),
-                object_server.at(path.clone(), iface)
-            );
-
-            if gen_result.is_err() || result.is_err() {
-                log::debug!("Failed to start dbus interface: {path} generic: {gen_result:?} type-specific: {result:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
-    }
-
     fn on_composite_device_attached(
         &mut self,
         composite_device: CompositeDeviceClient,

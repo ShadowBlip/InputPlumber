@@ -25,7 +25,6 @@ use crate::config::SourceDevice;
 use crate::constants::BUS_PREFIX;
 use crate::constants::BUS_SOURCES_PREFIX;
 use crate::constants::BUS_TARGETS_PREFIX;
-use crate::dbus::interface::composite_device::CompositeDeviceInterface;
 use crate::dbus::interface::manager::ManagerInterface;
 use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
 use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
@@ -50,6 +49,7 @@ use crate::udev::device::UdevDevice;
 use super::composite_device::client::CompositeDeviceClient;
 use super::info::DeviceInfo;
 use super::target::client::TargetDeviceClient;
+use super::target::TargetDeviceClass;
 
 use crate::watcher;
 use crate::watcher::WatchEvent;
@@ -150,9 +150,10 @@ pub struct Manager {
     /// Mapping of source devices to their SourceDevice objects.
     /// E.g. {"evdev://event0": <SourceDevice>}
     source_devices: HashMap<String, SourceDevice>,
-    /// Mapping of source devices to their DBus path
-    /// E.g. {"evdev://event0": "/org/shadowblip/InputPlumber/devices/source/event0"}
-    source_device_dbus_paths: HashMap<String, String>,
+    /// Mapping of source devices to their [DBusInterfaceManager] that contains
+    /// its dbus path and interfaces used.
+    /// E.g. {"evdev://event0": <DBusInterfaceManager>}
+    source_device_dbus_paths: HashMap<String, DBusInterfaceManager>,
     /// Map of source devices being used by a [CompositeDevice].
     /// E.g. {"evdev://event0": "/org/shadowblip/InputPlumber/CompositeDevice0"}
     source_devices_used: HashMap<String, String>,
@@ -251,7 +252,7 @@ impl Manager {
 
         log::debug!("Starting input manager task...");
 
-        self.listen_on_dbus()?;
+        self.listen_on_dbus();
         let _ = tokio::join!(
             Self::discover_all_devices(&cmd_tx_all_devices),
             Self::watch_iio_devices(self.tx.clone()),
@@ -603,31 +604,32 @@ impl Manager {
     }
 
     /// Create target input device to emulate based on the given device type.
-    async fn create_target_device(&mut self, kind: &str) -> Result<TargetDevice, Box<dyn Error>> {
+    /// Returns the DBus path for the device and the device itself.
+    async fn create_target_device(
+        &self,
+        kind: &str,
+    ) -> Result<(String, TargetDevice), Box<dyn Error>> {
         log::trace!("Creating target device: {kind}");
         let Ok(target_id) = TargetDeviceTypeId::try_from(kind) else {
             return Err("Invalid target device ID".to_string().into());
         };
 
         // Create the target device to emulate based on the kind
-        let device = TargetDevice::from_type_id(target_id, self.dbus.connection().clone())?;
+        let path = self.next_target_path(target_id.device_class())?;
+        let dbus = DBusInterfaceManager::new(self.dbus.connection().clone(), path.clone())?;
+        let device = TargetDevice::from_type_id(target_id, dbus)?;
 
-        Ok(device)
+        Ok((path, device))
     }
 
     /// Start and run the given target devices. Returns a HashMap of transmitters
     /// to send events to the given targets.
     async fn start_target_devices(
         &mut self,
-        targets: Vec<TargetDevice>,
+        targets: Vec<(String, TargetDevice)>,
     ) -> Result<HashMap<String, TargetDeviceClient>, Box<dyn Error>> {
         let mut target_devices = HashMap::new();
-        for target in targets {
-            // Get the target device class to determine the DBus path to use for
-            // the device.
-            let device_class = target.dbus_device_class();
-            let path = self.next_target_path(device_class)?;
-
+        for (path, target) in targets {
             // Get a client reference to communicate with the target device
             let Some(client) = target.client() else {
                 log::trace!("No client implemented for target device");
@@ -638,7 +640,7 @@ impl Manager {
 
             // Run the target device
             tokio::spawn(async move {
-                if let Err(e) = target.run(path.clone()).await {
+                if let Err(e) = target.run().await {
                     log::error!("Failed to run target device {path}: {e:?}");
                 }
                 log::debug!("Target device closed at: {path}");
@@ -909,22 +911,6 @@ impl Manager {
     async fn on_composite_device_stopped(&mut self, path: String) -> Result<(), Box<dyn Error>> {
         log::debug!("Removing composite device: {}", path);
 
-        // Remove the DBus interface
-        let dbus_path = ObjectPath::from_string_unchecked(path.clone());
-        let conn = self.dbus.connection().clone();
-        task::spawn(async move {
-            log::debug!("Stopping dbus interface: {dbus_path}");
-            let result = conn
-                .object_server()
-                .remove::<CompositeDeviceInterface, ObjectPath>(dbus_path.clone())
-                .await;
-            if let Err(e) = result {
-                log::error!("Failed to remove dbus interface {dbus_path}: {e:?}");
-            } else {
-                log::debug!("Stopped dbus interface: {dbus_path}");
-            }
-        });
-
         // Find any source devices that were in use by the composite device
         let mut to_remove = Vec::new();
         for (id, composite_dbus_path) in self.source_devices_used.iter() {
@@ -1185,7 +1171,6 @@ impl Manager {
         }
         sources.remove(idx.unwrap());
         self.source_devices.remove(&id);
-        self.source_device_dbus_paths.remove(&id);
         self.source_devices_used.remove(&id);
 
         Ok(())
@@ -1201,7 +1186,6 @@ impl Manager {
             log::debug!("Device discarded for missing sysname: {dev_name} at {dev_path}");
             return Ok(());
         }
-        let sysname = sys_name.clone();
         let dev = device.clone();
 
         log::debug!("Device added: {dev_name} ({dev_sysname}): {dev_path}");
@@ -1211,8 +1195,29 @@ impl Manager {
 
         // Get the device id
         let id = device.get_id();
+        if self.source_device_dbus_paths.contains_key(&id) {
+            log::debug!(
+                "Device already exists with id {id}: {dev_name} ({dev_sysname}): {dev_path}"
+            );
+            return Ok(());
+        }
 
-        // Create a DBus interface depending on the device subsystem
+        // Get the DBus path based on the device subsystem
+        let path = match subsystem.as_str() {
+            "input" => evdev::get_dbus_path(sys_name),
+            "hidraw" => hidraw::get_dbus_path(sys_name),
+            "iio" => iio::get_dbus_path(sys_name),
+            "leds" => led::get_dbus_path(sys_name),
+            _ => return Err(format!("Device subsystem not supported: {subsystem:?}").into()),
+        };
+
+        // Create a DBus interface manager for the source device
+        let conn = self.dbus.connection().clone();
+        let mut dbus = DBusInterfaceManager::new(conn, path)?;
+
+        // Register subsystem-specific DBus interfaces and check to see if the
+        // device should be managed by inputplumber or not.
+        let mut notify_device_added = true;
         match subsystem.as_str() {
             "input" => {
                 if device.devnode().is_empty() {
@@ -1220,40 +1225,19 @@ impl Manager {
                     return Ok(());
                 }
 
-                log::debug!("Event device added: {dev_name} ({dev_sysname})");
+                log::debug!("event device added: {dev_name} ({dev_sysname})");
 
-                // Create a DBus interface for the event device
-                let conn = self.dbus.connection().clone();
-                let path = evdev::get_dbus_path(sys_name.clone());
-                log::debug!(
-                    "Attempting to listen on dbus for {dev_path} | {dev_name} ({dev_sysname})"
-                );
+                // Register the evdev dbus interface
+                let evdev_iface = SourceEventDeviceInterface::new(dev);
+                dbus.register(evdev_iface);
 
-                let dbus_path = path.clone();
-                task::spawn(async move {
-                    let result = SourceUdevDeviceInterface::listen_on_dbus(
-                        conn.clone(),
-                        dbus_path.as_str(),
-                        sysname.as_str(),
-                        dev.clone(),
-                    )
-                    .await;
-                    if let Err(e) = result {
-                        log::error!("Error creating source udev dbus interface: {e:?}");
+                // Check to see if the device should be managed or not
+                'check_manage: {
+                    if !device.is_virtual() {
+                        log::trace!("{dev_name} ({dev_sysname}) is a real device - {dev_path}");
+                        break 'check_manage;
                     }
-                    let result =
-                        SourceEventDeviceInterface::listen_on_dbus(conn, sysname, dev).await;
-                    if let Err(e) = result {
-                        log::error!("Error creating source evdev dbus interface: {e:?}");
-                    }
-                    log::debug!("Finished adding source device on dbus");
-                });
 
-                // Add the device as a source device
-                self.source_device_dbus_paths.insert(id.clone(), path);
-
-                // Check to see if the device is virtual
-                if device.is_virtual() {
                     // Look up the connected device using udev
                     let device_info = udev::get_device(dev_path.clone()).await?;
 
@@ -1278,7 +1262,7 @@ impl Manager {
 
                     if !is_bluetooth && !is_whitelisted {
                         log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
-                        return Ok(());
+                        notify_device_added = false;
                     }
                     if is_bluetooth {
                         log::debug!("{dev_name} ({dev_sysname}) is a virtual device node for a bluetooth device. Treating as real - {dev_path}");
@@ -1286,16 +1270,9 @@ impl Manager {
                     if is_whitelisted {
                         log::debug!("{dev_name} ({dev_sysname}) is a virtual device node for a whitelisted device. Treating as real - {dev_path}")
                     }
-                } else {
-                    log::trace!("{dev_name} ({dev_sysname}) is a real device - {dev_path}");
                 }
-
-                // Signal that a source device was added
-                log::debug!("Spawning task to add source device: {id}");
-                self.on_source_device_added(id.clone(), device.into())
-                    .await?;
-                log::debug!("Finished adding {id}");
             }
+
             "hidraw" => {
                 if device.devnode().is_empty() {
                     log::debug!("hidraw device discarded for missing devnode: {dev_name} ({dev_sysname}) at {dev_path}");
@@ -1304,40 +1281,23 @@ impl Manager {
 
                 log::debug!("hidraw device added: {dev_name} ({dev_sysname})");
 
-                // Create a DBus interface for the event device
-                let conn = self.dbus.connection().clone();
-                let path = hidraw::get_dbus_path(sys_name.clone());
+                // Register the hidraw dbus interface
+                let hidraw_iface = SourceHIDRawInterface::new(dev);
+                dbus.register(hidraw_iface);
 
-                log::debug!("Attempting to listen on dbus for {dev_path} | {dev_sysname}");
-                let dbus_path = path.clone();
-                task::spawn(async move {
-                    let result = SourceUdevDeviceInterface::listen_on_dbus(
-                        conn.clone(),
-                        dbus_path.as_str(),
-                        sysname.as_str(),
-                        dev.clone(),
-                    )
-                    .await;
-                    if let Err(e) = result {
-                        log::error!("Error creating source udev dbus interface: {e:?}");
+                // Check to see if the device should be managed or not
+                'check_manage: {
+                    if !device.is_virtual() {
+                        log::trace!("{dev_name} ({dev_sysname})  is a real device -{dev_path}");
+                        break 'check_manage;
                     }
-                    let result = SourceHIDRawInterface::listen_on_dbus(conn, sysname, dev).await;
-                    if let Err(e) = result {
-                        log::error!("Error creating source evdev dbus interface: {e:?}");
-                    }
-                    log::debug!("Finished adding source device on dbus");
-                });
 
-                // Add the device as a source device
-                self.source_device_dbus_paths.insert(id.clone(), path);
-
-                // Check to see if the device is virtual
-                if device.is_virtual() {
                     // Check to see if this virtual device is a bluetooth device
                     let uniq = device.uniq();
                     if uniq.is_empty() {
                         log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}.");
-                        return Ok(());
+                        notify_device_added = false;
+                        break 'check_manage;
                     };
 
                     // Check bluez to see if that uniq is a bluetooth device
@@ -1383,18 +1343,11 @@ impl Manager {
 
                     if !matches_bluetooth {
                         log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}.");
-                        return Ok(());
+                        notify_device_added = false;
+                        break 'check_manage;
                     }
                     log::debug!("{dev_name} ({dev_sysname}) is a virtual device node for a bluetooth device. Treating as real - {dev_path}");
-                } else {
-                    log::trace!("{dev_name} ({dev_sysname})  is a real device -{dev_path}");
                 }
-
-                // Signal that a source device was added
-                log::debug!("Spawing task to add source device: {id}");
-                self.on_source_device_added(id.clone(), device.into())
-                    .await?;
-                log::debug!("Finished adding hidraw device {id}");
             }
 
             "iio" => {
@@ -1405,72 +1358,25 @@ impl Manager {
 
                 log::debug!("iio device added: {} ({})", device.name(), device.sysname());
 
-                // Create a DBus interface for the event device
-                let conn = self.dbus.connection().clone();
-                let path = iio::get_dbus_path(sys_name.clone());
-
-                log::debug!("Attempting to listen on dbus for device {dev_name} ({dev_sysname}) | {dev_path}");
-                let dbus_path = path.clone();
-                task::spawn(async move {
-                    let result = SourceUdevDeviceInterface::listen_on_dbus(
-                        conn.clone(),
-                        dbus_path.as_str(),
-                        sysname.as_str(),
-                        dev.clone(),
-                    )
-                    .await;
-                    if let Err(e) = result {
-                        log::error!("Error creating source udev dbus interface: {e:?}");
-                    }
-
-                    let result = SourceIioImuInterface::listen_on_dbus(conn, dev).await;
-                    if let Err(e) = result {
-                        log::error!("Error creating source evdev dbus interface: {e:?}");
-                    }
-                    log::debug!("Finished adding source device on dbus");
-                });
-
-                // Add the device as a source device
-                self.source_device_dbus_paths.insert(id.clone(), path);
+                // Register the iio dbus interface
+                let iio_iface = SourceIioImuInterface::new(dev);
+                dbus.register(iio_iface);
 
                 // Check to see if the device is virtual
                 if device.is_virtual() {
                     log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
-                    return Ok(());
+                    notify_device_added = false;
                 } else {
                     log::trace!("Device {dev_name} ({dev_sysname}) is real - {dev_path}");
                 }
-
-                // Signal that a source device was added
-                log::debug!("Spawing task to add source device: {id}");
-                self.on_source_device_added(id.clone(), device.into())
-                    .await?;
-                log::debug!("Finished adding event device {id}");
             }
 
             "leds" => {
                 log::debug!("LED device added: {} ({})", device.name(), device.sysname());
 
-                // Create a DBus interface for the LED device
-                let conn = self.dbus.connection().clone();
-                log::debug!("Attempting to listen on dbus for {dev_path} | {sysname}");
-                task::spawn(async move {
-                    let result = SourceLedInterface::listen_on_dbus(conn, dev).await;
-                    if let Err(e) = result {
-                        log::error!("Error creating source evdev dbus interface: {e:?}");
-                    }
-                    log::debug!("Finished adding source device on dbus");
-                });
-
-                // Add the device as a source device
-                let path = led::get_dbus_path(sys_name.clone());
-                self.source_device_dbus_paths.insert(id.clone(), path);
-
-                // Signal that a source device was added
-                log::debug!("Spawing task to add source device: {id}");
-                self.on_source_device_added(id.clone(), device.into())
-                    .await?;
-                log::debug!("Finished adding LED device {id}");
+                // Register the led dbus interface
+                let led_iface = SourceLedInterface::new(dev);
+                dbus.register(led_iface);
             }
 
             _ => {
@@ -1478,74 +1384,50 @@ impl Manager {
             }
         };
 
+        // Register the generic udev dbus interface for the device. The
+        // [DBusInterfaceManager] will unregister all interfaces automatically
+        // if it goes out of scope.
+        let udev_iface = SourceUdevDeviceInterface::new(device.clone());
+        dbus.register(udev_iface);
+
+        // Track the lifetime of the source device to keep the dbus interface(s) up
+        self.source_device_dbus_paths.insert(id.clone(), dbus);
+
+        // Signal that a source device was added
+        if notify_device_added {
+            log::debug!("Spawning task to add source device: {id}");
+            self.on_source_device_added(id.clone(), device.into())
+                .await?;
+            log::debug!("Finished adding {id}");
+        }
+
         Ok(())
     }
 
     async fn on_udev_device_removed(&mut self, device: UdevDevice) -> Result<(), Box<dyn Error>> {
         let dev_name = device.name();
         let sys_name = device.sysname();
-        let subsystem = device.subsystem();
         log::debug!("Device removed: {dev_name} ({sys_name})");
         let path = ObjectPath::from_string_unchecked(format!("{BUS_SOURCES_PREFIX}/{sys_name}"));
         log::debug!("Device dbus path: {path}");
-        let conn = self.dbus.connection().clone();
-        task::spawn(async move {
-            log::debug!("Stopping dbus interfaces: {path}");
-
-            // Stop generic interfaces
-            let result = conn
-                .object_server()
-                .remove::<SourceUdevDeviceInterface, ObjectPath>(path.clone())
-                .await;
-            if let Err(e) = result {
-                log::error!("Failed to remove udev dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Stopped udev dbus interface: {path}");
-            }
-
-            // Stop subsystem-specific interfaces
-            let result = match subsystem.as_str() {
-                "input" => {
-                    conn.object_server()
-                        .remove::<SourceEventDeviceInterface, ObjectPath>(path.clone())
-                        .await
-                }
-                "hidraw" => {
-                    conn.object_server()
-                        .remove::<SourceHIDRawInterface, ObjectPath>(path.clone())
-                        .await
-                }
-                "iio" => {
-                    conn.object_server()
-                        .remove::<SourceIioImuInterface, ObjectPath>(path.clone())
-                        .await
-                }
-                _ => Err(zbus::Error::Failure(format!(
-                    "Invalid subsystem: '{subsystem}'"
-                ))),
-            };
-            if let Err(e) = result {
-                log::error!("Failed to remove dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Stopped dbus interface: {path}");
-            }
-        });
 
         let id = device.get_id();
 
         if id.is_empty() {
+            log::warn!("Removed device had an empty id: {device:?}");
             return Ok(());
         }
         log::debug!("Device ID: {id}");
 
         // Signal that a source device was removed
+        self.source_device_dbus_paths.remove(&id);
         self.on_source_device_removed(device.into(), id).await?;
 
         Ok(())
     }
 
     /// Returns the next available target device dbus path
-    fn next_target_path(&self, kind: &str) -> Result<String, Box<dyn Error>> {
+    fn next_target_path(&self, kind: TargetDeviceClass) -> Result<String, Box<dyn Error>> {
         let max = 2048;
         let mut i = 0;
         loop {
@@ -1802,14 +1684,9 @@ impl Manager {
     }
 
     /// Creates a DBus object and return the (active) handle to the listener
-    fn listen_on_dbus(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn listen_on_dbus(&mut self) {
         let iface = ManagerInterface::new(self.tx.clone());
-        if let Err(e) = self.dbus.register(iface) {
-            log::error!("Failed to register manager dbus interface: {e}");
-            return Err(e.into());
-        }
-
-        Ok(())
+        self.dbus.register(iface);
     }
 
     async fn add_device_to_composite_device(
@@ -1895,20 +1772,6 @@ impl Manager {
             if let Err(e) = tx.send(ManagerCommand::GamepadReorderingFinished).await {
                 log::error!("Failed to signal gamepad reordering finished. This is bad: {e:?}");
             }
-        });
-    }
-}
-
-impl Drop for Manager {
-    fn drop(&mut self) {
-        let dbus = self.dbus.connection().clone();
-        tokio::task::spawn(async move {
-            let manager_path = format!("{BUS_PREFIX}/Manager");
-            let object_server = dbus.object_server();
-            object_server
-                .remove::<ManagerInterface, String>(manager_path)
-                .await
-                .unwrap_or_default();
         });
     }
 }

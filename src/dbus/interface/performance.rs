@@ -8,6 +8,8 @@ use crate::input::{
     event::context::{EventContext, SerializedSpan},
 };
 
+use super::Unregisterable;
+
 /// The [PerformanceInterface] provides a simple dbus interface for collecting
 /// latency and performance metrics from a running device.
 pub struct PerformanceInterface {
@@ -79,3 +81,5 @@ impl Default for PerformanceInterface {
         Self::new()
     }
 }
+
+impl Unregisterable for PerformanceInterface {}

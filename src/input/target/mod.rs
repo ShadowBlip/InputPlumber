@@ -18,6 +18,7 @@ use unified_gamepad::UnifiedGamepadDevice;
 use crate::dbus::interface::{
     performance::PerformanceInterface,
     target::{gamepad::TargetGamepadInterface, TargetInterface},
+    DBusInterfaceManager,
 };
 
 use super::{
@@ -33,8 +34,6 @@ use super::{
 
 use std::convert::TryFrom;
 use std::fmt::Display;
-
-use zbus::Connection;
 
 use self::client::TargetDeviceClient;
 use self::command::TargetCommand;
@@ -156,6 +155,7 @@ impl From<io::Error> for OutputError {
 pub struct TargetDeviceTypeId {
     id: &'static str,
     name: &'static str,
+    device_class: TargetDeviceClass,
 }
 
 impl TargetDeviceTypeId {
@@ -165,70 +165,87 @@ impl TargetDeviceTypeId {
             TargetDeviceTypeId {
                 id: "null",
                 name: "Null Device",
+                device_class: TargetDeviceClass::Null,
             },
             TargetDeviceTypeId {
                 id: "dbus",
                 name: "DBus Device",
+                device_class: TargetDeviceClass::DBus,
             },
             TargetDeviceTypeId {
                 id: "deck",
                 name: "Valve Steam Deck Controller",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "deck-uhid",
                 name: "Valve Steam Deck Controller",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "ds5",
                 name: "Sony Interactive Entertainment DualSense Wireless Controller",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "ds5-edge",
                 name: "Sony Interactive Entertainment DualSense Edge Wireless Controller",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "hori-steam",
                 name: "HORI CO.,LTD. HORIPAD STEAM",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "keyboard",
                 name: "InputPlumber Keyboard",
+                device_class: TargetDeviceClass::Keyboard,
             },
             TargetDeviceTypeId {
                 id: "mouse",
                 name: "InputPlumber Mouse",
+                device_class: TargetDeviceClass::Mouse,
             },
             TargetDeviceTypeId {
                 id: "gamepad",
                 name: "InputPlumber Gamepad",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "touchpad",
                 name: "InputPlumber Touchpad",
+                device_class: TargetDeviceClass::Touchpad,
             },
             TargetDeviceTypeId {
                 id: "touchscreen",
                 name: "InputPlumber Touchscreen",
+                device_class: TargetDeviceClass::Touchscreen,
             },
             TargetDeviceTypeId {
                 id: "xb360",
                 name: "Microsoft X-Box 360 pad",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "xbox-elite",
                 name: "Microsoft X-Box One Elite pad",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "xbox-series",
                 name: "Microsoft Xbox Series S|X Controller",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "unified-gamepad",
                 name: "InputPlumber Unified Gamepad",
+                device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
                 id: "debug",
                 name: "Debug Device",
+                device_class: TargetDeviceClass::Debug,
             },
         ]
     }
@@ -249,6 +266,13 @@ impl TargetDeviceTypeId {
             self.id,
             "dbus" | "null" | "touchscreen" | "touchpad" | "mouse" | "keyboard" | "debug"
         )
+    }
+
+    /// Returns device class used to get the base name that should be used for this kind
+    /// of device. E.g. a gamepad will return "gamepad" so it can be named
+    /// "gamepad0", "gamepad1", etc. when requesting a DBus path.
+    pub fn device_class(&self) -> TargetDeviceClass {
+        self.device_class
     }
 }
 
@@ -273,36 +297,51 @@ impl TryFrom<&str> for TargetDeviceTypeId {
     }
 }
 
+/// The device class describes what kind of device a target device is.
+/// E.g. a gamepad will return "gamepad" so it can be named "gamepad0",
+/// "gamepad1", etc. when requesting a DBus path.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum TargetDeviceClass {
+    Null,
+    DBus,
+    Debug,
+    Gamepad,
+    Keyboard,
+    Mouse,
+    Touchscreen,
+    Touchpad,
+}
+
+impl Display for TargetDeviceClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            TargetDeviceClass::Null => "null",
+            TargetDeviceClass::DBus => "dbus",
+            TargetDeviceClass::Debug => "debug",
+            TargetDeviceClass::Gamepad => "gamepad",
+            TargetDeviceClass::Keyboard => "keyboard",
+            TargetDeviceClass::Mouse => "mouse",
+            TargetDeviceClass::Touchscreen => "touchscreen",
+            TargetDeviceClass::Touchpad => "touchpad",
+        };
+        write!(f, "{str}")
+    }
+}
+
 /// A [TargetInputDevice] is a device implementation that is capable of emitting
 /// input events. Input events originate from source devices, are processed by
 /// a composite device, and are sent to a target device to be emitted.
 pub trait TargetInputDevice {
-    /// Start the DBus interface for this target device
+    /// Start the DBus interface(s) for this target device
     fn start_dbus_interface(
         &mut self,
-        dbus: Connection,
-        path: String,
+        dbus: &mut DBusInterfaceManager,
         client: TargetDeviceClient,
         type_id: TargetDeviceTypeId,
     ) {
-        log::debug!("Starting dbus interface: {path}");
         log::trace!("Using device client: {client:?}");
-        tokio::task::spawn(async move {
-            let generic_interface = TargetInterface::new(&type_id);
-            let iface = TargetGamepadInterface::new(type_id.name().to_owned());
-
-            let object_server = dbus.object_server();
-            let results = tokio::join!(
-                object_server.at(path.clone(), generic_interface),
-                object_server.at(path.clone(), iface)
-            );
-
-            if results.0.is_err() || results.1.is_err() {
-                log::debug!("Failed to start dbus interface `{path}`: {results:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
+        let iface = TargetGamepadInterface::new(type_id.name().to_owned());
+        dbus.register(iface);
     }
 
     /// Write the given input event to the virtual device
@@ -321,23 +360,6 @@ pub trait TargetInputDevice {
     /// events to be written at the specified time.
     fn scheduled_events(&mut self) -> Option<Vec<ScheduledNativeEvent>> {
         None
-    }
-
-    /// Stop the DBus interface for this target device
-    fn stop_dbus_interface(&mut self, dbus: Connection, path: String) {
-        log::debug!("Stopping dbus interface for {path}");
-        tokio::task::spawn(async move {
-            let object_server = dbus.object_server();
-            let (target, generic) = tokio::join!(
-                object_server.remove::<TargetGamepadInterface, String>(path.clone()),
-                object_server.remove::<TargetInterface, String>(path.clone())
-            );
-            if generic.is_err() || target.is_err() {
-                log::debug!("Failed to stop dbus interface: {path} generic: {generic:?} type-specific: {target:?}");
-            } else {
-                log::debug!("Stopped dbus interface for {path}");
-            }
-        });
     }
 
     /// Clear any local state on the target device. This is typically called
@@ -421,8 +443,7 @@ impl Default for TargetDriverOptions {
 pub struct TargetDriver<T: TargetInputDevice + TargetOutputDevice> {
     type_id: TargetDeviceTypeId,
     options: TargetDriverOptions,
-    dbus: Connection,
-    dbus_path: Option<String>,
+    dbus: DBusInterfaceManager,
     implementation: Arc<Mutex<T>>,
     composite_device: Option<CompositeDeviceClient>,
     scheduled_events: Vec<ScheduledNativeEvent>,
@@ -432,7 +453,7 @@ pub struct TargetDriver<T: TargetInputDevice + TargetOutputDevice> {
 
 impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T> {
     /// Create a new target device with the given implementation
-    pub fn new(type_id: TargetDeviceTypeId, device: T, dbus: Connection) -> Self {
+    pub fn new(type_id: TargetDeviceTypeId, device: T, dbus: DBusInterfaceManager) -> Self {
         let options = TargetDriverOptions::default();
         TargetDriver::new_with_options(type_id, device, dbus, options)
     }
@@ -441,7 +462,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
     pub fn new_with_options(
         type_id: TargetDeviceTypeId,
         device: T,
-        dbus: Connection,
+        dbus: DBusInterfaceManager,
         options: TargetDriverOptions,
     ) -> Self {
         let (tx, rx) = mpsc::channel(options.buffer_size);
@@ -449,7 +470,6 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
             type_id,
             options,
             dbus,
-            dbus_path: None,
             implementation: Arc::new(Mutex::new(device)),
             composite_device: None,
             scheduled_events: Vec::new(),
@@ -464,9 +484,8 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
     }
 
     /// Run the target device, consuming the device.
-    pub async fn run(mut self, dbus_path: String) -> Result<(), Box<dyn Error>> {
-        log::debug!("Started running target device: {dbus_path}");
-        self.dbus_path = Some(dbus_path.clone());
+    pub async fn run(mut self) -> Result<(), Box<dyn Error>> {
+        log::debug!("Started running target device: {}", self.dbus.path());
         let metrics_enabled = match env::var("ENABLE_METRICS") {
             Ok(value) => value.as_str() == "1",
             Err(_) => false,
@@ -483,25 +502,19 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                 let mut implementation = self.implementation.lock().unwrap();
 
                 // Start the DBus interface for the device
-                implementation.start_dbus_interface(
-                    self.dbus.clone(),
-                    dbus_path.clone(),
-                    client,
-                    self.type_id,
-                );
+                let target_iface = TargetInterface::new(&self.type_id);
+                self.dbus.register(target_iface);
+                implementation.start_dbus_interface(&mut self.dbus, client, self.type_id);
 
                 // Start the performance metrics DBus interface for the device
                 // if metrics are enabled.
                 let metrics_tx = if metrics_enabled {
-                    Some(Self::start_metrics_interface(
-                        &self.dbus,
-                        dbus_path.as_str(),
-                    ))
+                    Some(Self::start_metrics_interface(&mut self.dbus))
                 } else {
                     None
                 };
 
-                log::debug!("Target device running: {dbus_path}");
+                log::debug!("Target device running: {}", self.dbus.path());
                 loop {
                     // Find any scheduled events that are ready to be sent
                     let mut ready_events = vec![];
@@ -563,12 +576,9 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                 }
 
                 // Stop the device
-                log::debug!("Target device stopping: {dbus_path}");
-                if metrics_enabled {
-                    Self::stop_metrics_interface(&self.dbus, dbus_path.as_str());
-                }
+                log::debug!("Target device stopping: {}", self.dbus.path());
                 implementation.stop()?;
-                log::debug!("Target device stopped: {dbus_path}");
+                log::debug!("Target device stopped: {}", self.dbus.path());
 
                 Ok(())
             });
@@ -583,34 +593,23 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
 
     /// Start the performance metrics dbus interface
     fn start_metrics_interface(
-        dbus: &Connection,
-        dbus_path: &str,
+        dbus: &mut DBusInterfaceManager,
     ) -> mpsc::Sender<(Capability, EventContext)> {
         // Create a channel to emit event metrics
         let (tx, mut rx) = mpsc::channel(2048);
 
-        // Spawn a task with the metrics dbus interface
-        let dbus_clone = dbus.clone();
-        let dbus_path_clone = dbus_path.to_string();
-        tokio::task::spawn(async move {
-            let metrics_interface = PerformanceInterface::new();
-            let object_server = dbus_clone.object_server();
-            let res = object_server
-                .at(dbus_path_clone.as_str(), metrics_interface)
-                .await;
-            if let Err(e) = res {
-                log::error!("Error running metrics interface: {e}");
-            }
-        });
+        // Register the metrics dbus interface
+        let metrics_interface = PerformanceInterface::new();
+        dbus.register(metrics_interface);
 
         // Spawn a task to read event metrics over the channel and emit them
         // over dbus.
-        let dbus = dbus.clone();
-        let dbus_path = dbus_path.to_string();
+        let conn = dbus.connection().clone();
+        let dbus_path = dbus.path().to_string();
         tokio::task::spawn(async move {
             while let Some((cap, ctx)) = rx.recv().await {
                 let result =
-                    PerformanceInterface::emit_metrics(&dbus, dbus_path.as_str(), cap, &ctx).await;
+                    PerformanceInterface::emit_metrics(&conn, dbus_path.as_str(), cap, &ctx).await;
                 if let Err(e) = result {
                     log::debug!("Error emitting metrics: {e}");
                 }
@@ -618,21 +617,6 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
         });
 
         tx
-    }
-
-    /// Stop the performance metrics dbus interface
-    fn stop_metrics_interface(dbus: &Connection, dbus_path: &str) {
-        let dbus = dbus.clone();
-        let dbus_path = dbus_path.to_string();
-        tokio::task::spawn(async move {
-            let object_server = dbus.object_server();
-            let res = object_server
-                .remove::<PerformanceInterface, String>(dbus_path)
-                .await;
-            if let Err(e) = res {
-                log::error!("Error stopping metrics interface: {e}");
-            }
-        });
     }
 
     /// Read commands sent to this device from the channel until it is
@@ -742,18 +726,6 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
     }
 }
 
-impl<T: TargetInputDevice + TargetOutputDevice> Drop for TargetDriver<T> {
-    fn drop(&mut self) {
-        let Some(dbus_path) = self.dbus_path.as_ref() else {
-            return;
-        };
-        self.implementation
-            .lock()
-            .unwrap()
-            .stop_dbus_interface(self.dbus.clone(), dbus_path.clone());
-    }
-}
-
 /// A [TargetDevice] is any virtual input device that emits input events
 #[derive(Debug)]
 pub enum TargetDevice {
@@ -776,15 +748,18 @@ pub enum TargetDevice {
 
 impl TargetDevice {
     /// Create a new target device from the given target device type id
-    pub fn from_type_id(id: TargetDeviceTypeId, dbus: Connection) -> Result<Self, Box<dyn Error>> {
+    pub fn from_type_id(
+        id: TargetDeviceTypeId,
+        dbus: DBusInterfaceManager,
+    ) -> Result<Self, Box<dyn Error>> {
         match id.as_str() {
             "dbus" => {
-                let device = DBusDevice::new(dbus.clone());
+                let device = DBusDevice::default();
                 let driver = TargetDriver::new(id, device, dbus);
                 Ok(Self::DBus(driver))
             }
             "debug" => {
-                let device = DebugDevice::new(dbus.clone());
+                let device = DebugDevice::new(dbus.connection().clone());
                 let driver = TargetDriver::new(id, device, dbus);
                 Ok(Self::Debug(driver))
             }
@@ -931,29 +906,6 @@ impl TargetDevice {
         }
     }
 
-    /// Returns a string of the base name that should be used for this kind
-    /// of device. E.g. a gamepad will return "gamepad" so it can be named
-    /// "gamepad0", "gamepad1", etc. when requesting a DBus path.
-    pub fn dbus_device_class(&self) -> &str {
-        match self {
-            TargetDevice::Null => "null",
-            TargetDevice::DBus(_) => "dbus",
-            TargetDevice::Debug(_) => "debug",
-            TargetDevice::DualSense(_) => "gamepad",
-            TargetDevice::HoripadSteam(_) => "gamepad",
-            TargetDevice::Keyboard(_) => "keyboard",
-            TargetDevice::Mouse(_) => "mouse",
-            TargetDevice::SteamDeck(_) => "gamepad",
-            TargetDevice::SteamDeckUhid(_) => "gamepad",
-            TargetDevice::Touchpad(_) => "touchpad",
-            TargetDevice::Touchscreen(_) => "touchscreen",
-            TargetDevice::XBox360(_) => "gamepad",
-            TargetDevice::XBoxElite(_) => "gamepad",
-            TargetDevice::XBoxSeries(_) => "gamepad",
-            TargetDevice::UnifiedGamepad(_) => "gamepad",
-        }
-    }
-
     /// Returns a client channel that can be used to send events to this device
     pub fn client(&self) -> Option<TargetDeviceClient> {
         match self {
@@ -976,23 +928,23 @@ impl TargetDevice {
     }
 
     /// Run the target device
-    pub async fn run(self, dbus_path: String) -> Result<(), Box<dyn Error>> {
+    pub async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
             TargetDevice::Null => Ok(()),
-            TargetDevice::DBus(device) => device.run(dbus_path).await,
-            TargetDevice::Debug(device) => device.run(dbus_path).await,
-            TargetDevice::DualSense(device) => device.run(dbus_path).await,
-            TargetDevice::HoripadSteam(device) => device.run(dbus_path).await,
-            TargetDevice::Keyboard(device) => device.run(dbus_path).await,
-            TargetDevice::Mouse(device) => device.run(dbus_path).await,
-            TargetDevice::SteamDeck(device) => device.run(dbus_path).await,
-            TargetDevice::SteamDeckUhid(device) => device.run(dbus_path).await,
-            TargetDevice::Touchpad(device) => device.run(dbus_path).await,
-            TargetDevice::Touchscreen(device) => device.run(dbus_path).await,
-            TargetDevice::XBox360(device) => device.run(dbus_path).await,
-            TargetDevice::XBoxElite(device) => device.run(dbus_path).await,
-            TargetDevice::XBoxSeries(device) => device.run(dbus_path).await,
-            TargetDevice::UnifiedGamepad(device) => device.run(dbus_path).await,
+            TargetDevice::DBus(device) => device.run().await,
+            TargetDevice::Debug(device) => device.run().await,
+            TargetDevice::DualSense(device) => device.run().await,
+            TargetDevice::HoripadSteam(device) => device.run().await,
+            TargetDevice::Keyboard(device) => device.run().await,
+            TargetDevice::Mouse(device) => device.run().await,
+            TargetDevice::SteamDeck(device) => device.run().await,
+            TargetDevice::SteamDeckUhid(device) => device.run().await,
+            TargetDevice::Touchpad(device) => device.run().await,
+            TargetDevice::Touchscreen(device) => device.run().await,
+            TargetDevice::XBox360(device) => device.run().await,
+            TargetDevice::XBoxElite(device) => device.run().await,
+            TargetDevice::XBoxSeries(device) => device.run().await,
+            TargetDevice::UnifiedGamepad(device) => device.run().await,
         }
     }
 }

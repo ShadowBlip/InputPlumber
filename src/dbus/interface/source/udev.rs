@@ -1,9 +1,9 @@
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
-use zbus::{fdo, Connection};
+use zbus::fdo;
 use zbus_macros::interface;
 
-use crate::udev::device::UdevDevice;
+use crate::{dbus::interface::Unregisterable, udev::device::UdevDevice};
 
 /// The [SourceUdevDeviceInterface] provides a DBus interface to expose udev
 /// information over dbus
@@ -14,32 +14,6 @@ pub struct SourceUdevDeviceInterface {
 impl SourceUdevDeviceInterface {
     pub fn new(device: UdevDevice) -> SourceUdevDeviceInterface {
         SourceUdevDeviceInterface { device }
-    }
-
-    /// Creates a new instance of the source udev interface on DBus. Returns
-    /// a structure with information about the source device.
-    pub async fn listen_on_dbus(
-        conn: Connection,
-        path: &str,
-        sys_name: &str,
-        device: UdevDevice,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let path = path.to_string();
-        let sys_name = sys_name.to_string();
-        log::debug!("Starting to listen on dbus interface for {sys_name}");
-        log::debug!("Got dbus path {path}");
-        let iface = SourceUdevDeviceInterface::new(device);
-        log::debug!("Created interface for {sys_name}");
-        tokio::task::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let result = conn.object_server().at(path.clone(), iface).await;
-            if let Err(e) = result {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
-        Ok(())
     }
 }
 
@@ -114,3 +88,5 @@ impl SourceUdevDeviceInterface {
         Ok(self.device.get_properties())
     }
 }
+
+impl Unregisterable for SourceUdevDeviceInterface {}

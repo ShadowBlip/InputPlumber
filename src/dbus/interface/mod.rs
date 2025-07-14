@@ -1,4 +1,4 @@
-use std::{collections::HashMap, convert::TryInto};
+use std::{collections::HashMap, convert::TryInto, fmt::Debug, string::String};
 
 use thiserror::Error;
 use zbus::{names::InterfaceName, object_server::Interface, zvariant::ObjectPath, Connection};
@@ -22,7 +22,7 @@ pub enum InterfaceError {
 pub struct DBusInterfaceManager {
     dbus: Connection,
     dbus_path: String,
-    dbus_ifaces: HashMap<InterfaceName<'static>, UnregisterFn>,
+    dbus_ifaces: HashMap<InterfaceName<'static>, Box<UnregisterFn>>,
 }
 
 impl DBusInterfaceManager {
@@ -32,13 +32,31 @@ impl DBusInterfaceManager {
     /// # Examples
     ///
     /// ```no_run
-    /// let dbus = Connection::system();
-    /// let mut registry = InterfaceRegistry::new(dbus, "/org/shadowblip/InputPlumber/Manager").unwrap();
+    /// use zbus_macros::interface;
+    /// use inputplumber::dbus::interface::Unregisterable;
+    /// use inputplumber::dbus::interface::DBusInterfaceManager;
     ///
-    /// let iface = MyIface::new();
-    /// registry.register(iface);
+    /// struct MyIface(u32);
+    ///
+    /// #[interface(name = "org.myiface.MyIface")]
+    /// impl MyIface {
+    ///      #[zbus(property)]
+    ///      async fn count(&self) -> u32 {
+    ///          self.0
+    ///      }
+    /// }
+    ///
+    /// impl Unregisterable for MyIface {}
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let conn = zbus::Connection::system().await.unwrap();
+    ///     let mut dbus = DBusInterfaceManager::new(conn, "/org/shadowblip/InputPlumber/Manager").unwrap();
+    ///     let iface = MyIface(42);
+    ///     dbus.register(iface);
+    /// }
     /// ```
-    pub fn new<'p, P>(dbus: Connection, path: P) -> Result<Self, InterfaceError>
+    pub fn new<'p, P>(conn: Connection, path: P) -> Result<Self, InterfaceError>
     where
         P: TryInto<ObjectPath<'p>>,
         P::Error: Into<zbus::Error>,
@@ -50,7 +68,7 @@ impl DBusInterfaceManager {
             }
         };
         Ok(Self {
-            dbus,
+            dbus: conn,
             dbus_path: dbus_path.to_string(),
             dbus_ifaces: Default::default(),
         })
@@ -71,14 +89,37 @@ impl DBusInterfaceManager {
     /// # Examples
     ///
     /// ```no_run
-    /// registry.register::<MyIface>(iface);
+    /// use zbus_macros::interface;
+    /// use inputplumber::dbus::interface::Unregisterable;
+    /// use inputplumber::dbus::interface::DBusInterfaceManager;
+    ///
+    /// struct MyIface(u32);
+    ///
+    /// #[interface(name = "org.myiface.MyIface")]
+    /// impl MyIface {
+    ///      #[zbus(property)]
+    ///      async fn count(&self) -> u32 {
+    ///          self.0
+    ///      }
+    /// }
+    ///
+    /// impl Unregisterable for MyIface {}
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let conn = zbus::Connection::system().await.unwrap();
+    ///     let mut dbus = DBusInterfaceManager::new(conn, "/org/shadowblip/InputPlumber/Manager").unwrap();
+    ///     let iface = MyIface(42);
+    ///     dbus.register(iface);
+    /// }
     /// ```
-    pub fn register<I>(&mut self, iface: I) -> Result<(), zbus::Error>
+    pub fn register<I>(&mut self, iface: I)
     where
         I: Interface + Unregisterable,
     {
         let iface_name = I::name();
-        self.dbus_ifaces.insert(iface_name.clone(), &I::unregister);
+        self.dbus_ifaces
+            .insert(iface_name.clone(), Box::new(&I::unregister));
 
         // Start the interface in its own task
         let dbus = self.dbus.clone();
@@ -92,8 +133,11 @@ impl DBusInterfaceManager {
             }
             log::debug!("Started dbus interface `{iface_name}` on `{dbus_path}`");
         });
+    }
 
-        Ok(())
+    /// Returns true if the interface with the given name has been registered.
+    pub fn has_interface(&self, iface_name: &InterfaceName<'static>) -> bool {
+        self.dbus_ifaces.contains_key(iface_name)
     }
 
     /// Unregister and remove the given dbus interface
@@ -101,7 +145,31 @@ impl DBusInterfaceManager {
     /// # Examples
     ///
     /// ```no_run
-    /// registry.unregister(&MyIface::name());
+    /// use zbus::object_server::Interface;
+    /// use zbus_macros::interface;
+    /// use inputplumber::dbus::interface::Unregisterable;
+    /// use inputplumber::dbus::interface::DBusInterfaceManager;
+    ///
+    /// struct MyIface(u32);
+    ///
+    /// #[interface(name = "org.myiface.MyIface")]
+    /// impl MyIface {
+    ///      #[zbus(property)]
+    ///      async fn count(&self) -> u32 {
+    ///          self.0
+    ///      }
+    /// }
+    ///
+    /// impl Unregisterable for MyIface {}
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let conn = zbus::Connection::system().await.unwrap();
+    ///     let mut dbus = DBusInterfaceManager::new(conn, "/org/shadowblip/InputPlumber/Manager").unwrap();
+    ///     let iface = MyIface(42);
+    ///     dbus.register(iface);
+    ///     dbus.unregister(&MyIface::name());
+    /// }
     /// ```
     pub fn unregister(&mut self, iface_name: &InterfaceName<'static>) {
         let Some(unregister) = self.dbus_ifaces.remove(iface_name) else {
@@ -113,12 +181,26 @@ impl DBusInterfaceManager {
     }
 
     /// Unregister all registered dbus interfaces. This is done automatically when
-    /// the [InterfaceRegistry] falls out of scope.
+    /// the [DBusInterfaceManager] falls out of scope.
     pub fn unregister_all(&mut self) {
         let ifaces: Vec<InterfaceName<'static>> = self.dbus_ifaces.keys().cloned().collect();
         for iface in ifaces {
             self.unregister(&iface);
         }
+    }
+}
+
+impl Debug for DBusInterfaceManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut dbus_ifaces: HashMap<String, &str> = HashMap::with_capacity(self.dbus_ifaces.len());
+        for (key, _value) in self.dbus_ifaces.iter() {
+            dbus_ifaces.insert(key.to_string(), "<UnregisterFn>");
+        }
+        f.debug_struct("DBusInterfaceManager")
+            .field("dbus", &self.dbus)
+            .field("dbus_path", &self.dbus_path)
+            .field("dbus_ifaces", &dbus_ifaces)
+            .finish()
     }
 }
 
@@ -136,6 +218,9 @@ impl Drop for DBusInterfaceManager {
 /// # Examples
 ///
 /// ```no_run
+/// use zbus_macros::interface;
+/// use inputplumber::dbus::interface::Unregisterable;
+///
 /// struct MyIface(u32);
 ///
 /// #[interface(name = "org.myiface.MyIface")]
@@ -167,4 +252,4 @@ pub trait Unregisterable {
     }
 }
 
-type UnregisterFn = &'static dyn Fn(Connection, String);
+type UnregisterFn = (dyn std::ops::Fn(Connection, String) + 'static + Send + Sync);

@@ -1,10 +1,13 @@
 use zbus::fdo;
 use zbus_macros::interface;
 
-use crate::input::{
-    capability::{Capability, Mouse},
-    event::{native::NativeEvent, value::InputValue},
-    target::client::TargetDeviceClient,
+use crate::{
+    dbus::interface::Unregisterable,
+    input::{
+        capability::{Capability, Mouse},
+        event::{native::NativeEvent, value::InputValue},
+        target::client::TargetDeviceClient,
+    },
 };
 
 /// The [TargetMouseInterface] provides a DBus interface that can be exposed for managing
@@ -47,3 +50,5 @@ impl TargetMouseInterface {
         Ok(())
     }
 }
+
+impl Unregisterable for TargetMouseInterface {}

@@ -1,9 +1,7 @@
-use std::error::Error;
-
-use zbus::{fdo, Connection};
+use zbus::fdo;
 use zbus_macros::interface;
 
-use crate::{input::source::hidraw::get_dbus_path, udev::device::UdevDevice};
+use crate::{dbus::interface::Unregisterable, udev::device::UdevDevice};
 
 /// DBusInterface exposing information about a HIDRaw device
 pub struct SourceHIDRawInterface {
@@ -13,31 +11,6 @@ pub struct SourceHIDRawInterface {
 impl SourceHIDRawInterface {
     pub fn new(device: UdevDevice) -> SourceHIDRawInterface {
         SourceHIDRawInterface { device }
-    }
-
-    /// Creates a new instance of the source hidraw interface on DBus. Returns
-    /// a structure with information about the source device.
-    pub async fn listen_on_dbus(
-        conn: Connection,
-        sys_name: String,
-        device: UdevDevice,
-    ) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting to listen on dbus interface for {sys_name}");
-        let path = get_dbus_path(sys_name.clone());
-        log::debug!("Got dbus path {path}");
-
-        let iface = SourceHIDRawInterface::new(device);
-        log::debug!("Created interface for {sys_name}");
-        tokio::task::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let result = conn.object_server().at(path.clone(), iface).await;
-            if let Err(e) = result {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
-        Ok(())
     }
 }
 
@@ -88,3 +61,5 @@ impl SourceHIDRawInterface {
         Ok(self.device.devpath())
     }
 }
+
+impl Unregisterable for SourceHIDRawInterface {}

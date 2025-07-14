@@ -1,10 +1,13 @@
 use zbus::fdo;
 use zbus_macros::interface;
 
-use crate::input::{
-    capability::{Capability, Keyboard},
-    event::{native::NativeEvent, value::InputValue},
-    target::client::TargetDeviceClient,
+use crate::{
+    dbus::interface::Unregisterable,
+    input::{
+        capability::{Capability, Keyboard},
+        event::{native::NativeEvent, value::InputValue},
+        target::client::TargetDeviceClient,
+    },
 };
 
 /// The [DBusInterface] provides a DBus interface that can be exposed for managing
@@ -217,3 +220,5 @@ fn capability_from_key_string(key: &str) -> Capability {
         _ => Capability::NotImplemented,
     }
 }
+
+impl Unregisterable for TargetKeyboardInterface {}

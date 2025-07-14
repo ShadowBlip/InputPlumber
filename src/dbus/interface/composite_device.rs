@@ -16,6 +16,8 @@ use crate::{
     },
 };
 
+use super::Unregisterable;
+
 /// The [CompositeDeviceInterface] provides a DBus interface that can be exposed for managing
 /// a [CompositeDevice]. It works by sending command messages to a channel that the
 /// [CompositeDevice] is listening on.
@@ -454,3 +456,5 @@ impl CompositeDeviceInterface {
         });
     }
 }
+
+impl Unregisterable for CompositeDeviceInterface {}

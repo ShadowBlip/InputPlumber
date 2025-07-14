@@ -1,11 +1,11 @@
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
 use evdev::EventType;
-use zbus::{fdo, Connection};
+use zbus::fdo;
 use zbus_macros::interface;
 
 use crate::{
-    input::source::evdev::{get_capabilities, get_dbus_path},
+    dbus::interface::Unregisterable, input::source::evdev::get_capabilities,
     udev::device::UdevDevice,
 };
 
@@ -28,30 +28,6 @@ impl SourceEventDeviceInterface {
             device,
             capabilities,
         }
-    }
-
-    /// Creates a new instance of the source evdev interface on DBus. Returns
-    /// a structure with information about the source device.
-    pub async fn listen_on_dbus(
-        conn: Connection,
-        sys_name: String,
-        device: UdevDevice,
-    ) -> Result<(), Box<dyn Error>> {
-        log::debug!("Starting to listen on dbus interface for {sys_name}");
-        let path = get_dbus_path(sys_name.clone());
-        log::debug!("Got dbus path {path}");
-        let iface = SourceEventDeviceInterface::new(device);
-        log::debug!("Created interface for {sys_name}");
-        tokio::task::spawn(async move {
-            log::debug!("Starting dbus interface: {path}");
-            let result = conn.object_server().at(path.clone(), iface).await;
-            if let Err(e) = result {
-                log::debug!("Failed to start dbus interface {path}: {e:?}");
-            } else {
-                log::debug!("Started dbus interface: {path}");
-            }
-        });
-        Ok(())
     }
 
     /// Returns all the event codes for the given event type that this evdev device
@@ -213,3 +189,5 @@ impl SourceEventDeviceInterface {
         Ok(self.supported_events(&EventType::FORCEFEEDBACK))
     }
 }
+
+impl Unregisterable for SourceEventDeviceInterface {}
