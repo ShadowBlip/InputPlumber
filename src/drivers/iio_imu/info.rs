@@ -73,18 +73,11 @@ impl fmt::Display for MountMatrix {
 /// normalize data into real units.
 ///   processed_value = (raw + offset) * scale
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct AxisInfo {
     pub offset: i64,
     pub sample_rate: f64,
     pub sample_rates_avail: Vec<f64>,
     pub scale: f64,
     pub scales_avail: Vec<f64>,
-}
-
-/// Scale and offset information for all axes
-#[derive(Clone, Debug, Default)]
-pub struct AxesInfo {
-    pub x: Option<AxisInfo>,
-    pub y: Option<AxisInfo>,
-    pub z: Option<AxisInfo>,
 }

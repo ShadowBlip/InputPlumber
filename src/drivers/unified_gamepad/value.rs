@@ -18,6 +18,7 @@ pub enum Value {
 
 impl Value {
     /// Return the [ValueType] for this [Value]
+    #[allow(dead_code)]
     pub fn value_type(&self) -> ValueType {
         match self {
             Value::None => ValueType::None,

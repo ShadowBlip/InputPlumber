@@ -112,6 +112,7 @@ format: ## Run rustfmt on all source files
 
 .PHONY: test
 test: test-autostart-rules ## Run all tests
+	cargo clippy --all -- -D warnings
 	cargo test -- --show-output
 
 .PHONY: test-autostart-rules

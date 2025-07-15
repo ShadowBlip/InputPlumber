@@ -17,7 +17,6 @@ mod constants;
 mod dbus;
 mod dmi;
 mod drivers;
-mod iio;
 mod input;
 mod sync;
 mod udev;

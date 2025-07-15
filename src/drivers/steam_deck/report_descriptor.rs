@@ -84,6 +84,7 @@ pub const CONTROLLER_DESCRIPTOR: [u8; 38] = [
 
 /// FTS3528:00 2808:1015
 /// Report descriptor for the Deck touchscreen (/dev/hidraw2 on Deck)
+#[allow(dead_code)]
 pub const TOUCHSCREEN_DESCRIPTOR: [u8; 543] = [
     0x05, 0x0d, // Usage Page (Digitizers)
     0x09, 0x04, // Usage (Touch Screen)

@@ -1,5 +1,6 @@
 /// Container for system DMI data
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct DMIData {
     pub bios_date: String,
     pub bios_release: String,

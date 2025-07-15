@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{collections::HashMap, error::Error};
 
 use industrial_io::{Channel, ChannelType, Device, Direction};
 
@@ -16,7 +16,6 @@ pub struct Driver {
     accel_info: HashMap<String, AxisInfo>,
     gyro: HashMap<String, Channel>,
     gyro_info: HashMap<String, AxisInfo>,
-    pub sample_delay: Duration,
 }
 
 impl Driver {
@@ -86,7 +85,6 @@ impl Driver {
             accel_info,
             gyro,
             gyro_info,
-            sample_delay: Duration::from_millis(8), //125Hz
         })
     }
 

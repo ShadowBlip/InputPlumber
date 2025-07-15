@@ -30,6 +30,7 @@ pub struct PackedInputDataReport {
 
 impl PackedInputDataReport {
     /// Returns true if any touches are sensed
+    #[allow(dead_code)]
     pub fn is_touching(&self) -> bool {
         self.touch1.is_touching()
             || self.touch2.is_touching()

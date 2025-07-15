@@ -1,4 +1,4 @@
-use std::{error::Error, f32::consts::PI, ffi::CString};
+use std::{error::Error, ffi::CString};
 
 use hidapi::HidDevice;
 use packed_struct::{types::SizedInteger, PackedStruct};

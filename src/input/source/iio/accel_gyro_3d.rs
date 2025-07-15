@@ -24,6 +24,7 @@ impl AccelGyro3dImu {
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         // Override the mount matrix if one is defined in the config
         let mount_matrix = if let Some(config) = config.as_ref() {
+            #[allow(deprecated)]
             if let Some(matrix_config) = config.mount_matrix.as_ref() {
                 let matrix = MountMatrix {
                     x: (matrix_config.x[0], matrix_config.x[1], matrix_config.x[2]),

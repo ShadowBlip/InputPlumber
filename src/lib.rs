@@ -5,7 +5,6 @@ pub mod constants;
 pub mod dbus;
 pub mod dmi;
 pub mod drivers;
-pub mod iio;
 pub mod input;
 pub mod sync;
 pub mod udev;

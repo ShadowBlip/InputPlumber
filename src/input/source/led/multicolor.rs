@@ -77,8 +77,11 @@ impl TryFrom<String> for ColorType {
 /// MultiColorChassis source device implementation
 pub struct LedMultiColor {
     brightness_path: PathBuf,
+    #[allow(dead_code)]
     current_brightness: u8,
+    #[allow(dead_code)]
     current_color: Vec<HashMap<ColorType, u8>>,
+    #[allow(dead_code)]
     device_info: UdevDevice,
     max_brightness: u8,
     multi_index_map: Vec<ColorType>,
@@ -175,6 +178,7 @@ impl LedMultiColor {
     // Retain below functions for dbus
     /// Reads the multi_intensity path and returns a Vec<HashMap<ColorType, u8>> with the current color setting
     /// "rgb" and "multi" ColorType's will be converted into three u8's for Red, Green, and Blue.
+    #[allow(dead_code)]
     fn read_color(&self) -> Result<Vec<HashMap<ColorType, u8>>, LedMcError> {
         read_color(
             self.multi_intensity_path.as_path(),
@@ -183,6 +187,7 @@ impl LedMultiColor {
     }
 
     /// Reads the brightness path and returns a u8 with the current brightness setting
+    #[allow(dead_code)]
     fn read_brightness(&self) -> Result<u8, Box<dyn Error + Send + Sync>> {
         read_brightness(self.brightness_path.as_path())
     }
@@ -191,6 +196,7 @@ impl LedMultiColor {
     /// created following the multi_index_map of the device. Ensure that Multi and Rgb ColorType
     /// indexes are accounted for if they were translated to Red Green Blue ColorType before
     /// sending to this function.
+    #[allow(dead_code)]
     fn write_colors(&self, colors: Vec<u32>) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Check for the correct quantity of colors.
         if colors.len() != self.multi_index_map.len() {
@@ -217,6 +223,7 @@ impl LedMultiColor {
     /// Converts a generic dbus provided Vec<u8> to a matching Vec<u32> based on the device's
     /// multi_index_map. This accounts for converting three u8 values into a singe Rgb or Multi
     /// value.
+    #[allow(dead_code)]
     fn dbus_write_colors(&self, colors: Vec<u8>) -> Result<(), Box<dyn Error + Send + Sync>> {
         let mut values = vec![];
         let mut visited_index = vec![];

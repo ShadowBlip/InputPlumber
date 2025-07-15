@@ -84,6 +84,7 @@ impl NativeEvent {
     }
 
     /// Set the source capability of the event if this is a translated event
+    #[allow(dead_code)]
     pub fn set_source_capability(&mut self, cap: Capability) {
         self.source_capability = Some(cap);
     }
