@@ -103,21 +103,6 @@ pub struct CapabilityMapConfigV1 {
     pub mapping: Vec<NativeCapabilityMapping>,
 }
 
-impl CapabilityMapConfigV1 {
-    /// Load a [CapabilityMapConfigV1] from the given YAML string
-    pub fn _from_yaml(content: String) -> Result<CapabilityMapConfigV1, LoadError> {
-        let device: CapabilityMapConfigV1 = serde_yaml::from_str(content.as_str())?;
-        Ok(device)
-    }
-
-    /// Load a [CapabilityMapConfigV1] from the given YAML file
-    pub fn from_yaml_file(path: String) -> Result<CapabilityMapConfigV1, LoadError> {
-        let file = std::fs::File::open(path)?;
-        let device: CapabilityMapConfigV1 = serde_yaml::from_reader(file)?;
-        Ok(device)
-    }
-}
-
 /// [CapabilityMapConfigV2] are used to fix or define the real capabilities of
 /// an input device.
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
@@ -128,21 +113,6 @@ pub struct CapabilityMapConfigV2 {
     pub name: String,
     pub id: String,
     pub mapping: Vec<CapabilityMapping>,
-}
-
-impl CapabilityMapConfigV2 {
-    /// Load a [CapabilityMap] from the given YAML string
-    pub fn _from_yaml(content: String) -> Result<CapabilityMapConfigV2, LoadError> {
-        let device: CapabilityMapConfigV2 = serde_yaml::from_str(content.as_str())?;
-        Ok(device)
-    }
-
-    /// Load a [CapabilityMap] from the given YAML file
-    pub fn from_yaml_file(path: String) -> Result<CapabilityMapConfigV2, LoadError> {
-        let file = std::fs::File::open(path)?;
-        let device: CapabilityMapConfigV2 = serde_yaml::from_reader(file)?;
-        Ok(device)
-    }
 }
 
 /// A [CapabilityMapping] defines how to map source input to an inputplumber

@@ -622,6 +622,7 @@ impl UdevDevice {
     }
 
     /// Returns the value of the given property from the device
+    #[allow(dead_code)]
     pub fn get_property(&self, property: &str) -> Option<String> {
         // Use cached properties if they exist
         if let Some(value) = self.properties.get(property) {

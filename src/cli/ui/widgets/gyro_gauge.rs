@@ -2,7 +2,7 @@ use ratatui::{
     prelude::*,
     style::Style,
     symbols::border,
-    widgets::{Block, Gauge, LineGauge, Widget},
+    widgets::{Block, Gauge, Widget},
 };
 
 use crate::drivers::unified_gamepad::capability::InputCapability;

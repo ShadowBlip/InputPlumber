@@ -4,7 +4,6 @@ use tokio::sync::mpsc::Sender;
 #[derive(Debug, Clone)]
 pub enum WatchEvent {
     Create { name: String, base_path: String },
-    Modify { name: String, base_path: String },
     Delete { name: String, base_path: String },
 }
 
@@ -64,14 +63,6 @@ pub fn watch(path: String, tx: Sender<WatchEvent>) {
                 }
             } else if event.mask.contains(EventMask::MODIFY) {
                 log::trace!("inotify MODIFY: {:?}", event.name);
-                let value = WatchEvent::Modify {
-                    name,
-                    base_path: path.clone(),
-                };
-                match tx.blocking_send(value) {
-                    Ok(_) => (),
-                    Err(e) => log::error!("Error sending event: {}", e),
-                }
             }
         }
     }

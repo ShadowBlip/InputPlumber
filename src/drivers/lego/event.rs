@@ -6,6 +6,7 @@ pub enum Event {
     TouchButton(TouchButtonEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
+    #[allow(dead_code)]
     Status(StatusEvent),
 }
 
@@ -39,6 +40,7 @@ pub struct JoyAxisInput {
 
 // Status inputs contain some value that corresponds to the current status of a device.
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct StatusInput {
     pub value: u8,
 }
@@ -149,6 +151,7 @@ pub enum TriggerEvent {
 
 /// StatusEvent has data on if controllers are in FPS mode, connected, and the battery state.
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum StatusEvent {
     LeftControllerBattery(StatusInput),
     LeftControllerMode0(StatusInput),

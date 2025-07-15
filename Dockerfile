@@ -16,6 +16,7 @@ RUN apt-get install -y \
 
 RUN rustup target add aarch64-unknown-linux-gnu
 RUN rustup toolchain install stable-aarch64-unknown-linux-gnu
+RUN rustup component add clippy
 
 ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
 ENV CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc

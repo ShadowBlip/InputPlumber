@@ -1719,10 +1719,6 @@ impl Manager {
                         log::error!("Unable to send command: {:?}", e);
                     }
                 }
-                WatchEvent::Modify {
-                    name: _,
-                    base_path: _,
-                } => (),
             }
         }
     }

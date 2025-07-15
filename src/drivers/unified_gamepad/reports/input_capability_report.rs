@@ -131,6 +131,7 @@ impl InputCapabilityReport {
     }
 
     /// Removes the given capability from the capability report
+    #[allow(dead_code)]
     pub fn remove_capability(&mut self, capability: InputCapability) {
         self.capabilities = self
             .capabilities

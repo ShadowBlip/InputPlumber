@@ -13,7 +13,7 @@ use crate::{
 
 /// Source device implementation to block evdev events
 pub struct BlockedEventDevice {
-    device: Device,
+    _device: Device,
 }
 
 impl BlockedEventDevice {
@@ -25,7 +25,7 @@ impl BlockedEventDevice {
         device.grab()?;
         log::info!("Blocking input events from {path}");
 
-        Ok(Self { device })
+        Ok(Self { _device: device })
     }
 }
 
