@@ -520,7 +520,7 @@ impl HidRawDevice {
 
         // Legion Go Dinput Combined
         if vid == drivers::lego::driver_dinput_combined::VID
-            && pid == drivers::lego::driver_dinput_combined::PID
+            && drivers::lego::driver_dinput_combined::PIDS.contains(&pid)
         {
             log::info!("Detected Legion Go DInput Combined Mode");
             return DriverType::LegionGoDCombined;
@@ -528,21 +528,21 @@ impl HidRawDevice {
 
         // Legion Go Dinput Split
         if vid == drivers::lego::driver_dinput_split::VID
-            && pid == drivers::lego::driver_dinput_split::PID
+            && drivers::lego::driver_dinput_split::PIDS.contains(&pid)
         {
             log::info!("Detected Legion Go DInput Split Mode");
             return DriverType::LegionGoDSplit;
         }
 
         // Legion Go FPS Mode
-        if vid == drivers::lego::driver_fps_mode::VID && pid == drivers::lego::driver_fps_mode::PID
+        if vid == drivers::lego::driver_fps_mode::VID && drivers::lego::driver_fps_mode::PIDS.contains(&pid)
         {
             log::info!("Detected Legion Go FPS Mode");
             return DriverType::LegionGoFPS;
         }
 
         // Legion Go XInput
-        if vid == drivers::lego::driver_xinput::VID && pid == drivers::lego::driver_xinput::PID {
+        if vid == drivers::lego::driver_xinput::VID && drivers::lego::driver_xinput::PIDS.contains(&pid) {
             log::info!("Detected Legion Go XInput Mode");
             return DriverType::LegionGoXInput;
         }

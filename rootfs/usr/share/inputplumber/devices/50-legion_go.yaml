@@ -23,7 +23,7 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  ## XInput - Connected 0x6182
+  ## XInput - Connected 0x6182 (Old PID)
   # Touchpad
   - group: mouse # Gamepad Mode
     hidraw:
@@ -53,7 +53,37 @@ source_devices:
       product_id: "6182"
       handler: event*
 
-  ## DInput - Attached 0x6183
+  ## XInput - Connected 0x61eb (New PID)
+  # Touchpad
+  - group: mouse # Gamepad Mode
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61eb
+      interface_num: 1
+  # Gamepad
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61eb
+      interface_num: 2
+  - group: gamepad
+    unique: true
+    evdev:
+      name: "{Lenovo Legion Controller for Windows,Generic X-Box pad}"
+      vendor_id: "17ef"
+      product_id: "61eb"
+      handler: event*
+  # Block all evdev devices; mouse, touchpad, keyboard
+  - group: gamepad
+    blocked: true
+    unique: false
+    evdev:
+      name: "  Legion Controller for Windows  *"
+      vendor_id: "17ef"
+      product_id: "61eb"
+      handler: event*
+
+  ## DInput - Attached 0x6183 (Old PID)
   # Touchpad
   - group: mouse
     hidraw:
@@ -72,7 +102,26 @@ source_devices:
       product_id: 0x6183
       interface_num: 2
 
-  ## DInput - Detached 0x6184
+  ## DInput - Attached 0x61ec (New PID)
+  # Touchpad
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ec
+      interface_num: 1
+  # Gamepad
+  - group: gamepad # Dinput report
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ec
+      interface_num: 0
+  - group: gamepad # XInput report 40Hz
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ec
+      interface_num: 2
+
+  ## DInput - Detached 0x6184 (Old PID)
   # Touchpad
   - group: mouse
     hidraw:
@@ -91,7 +140,26 @@ source_devices:
       product_id: 0x6184
       interface_num: 2
 
-  ## FPS Mode - 0x6185
+  ## DInput - Detached 0x61ed (New PID)
+  # Touchpad
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ed
+      interface_num: 1
+  # Gamepad
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ed
+      interface_num: 0
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ed
+      interface_num: 2
+
+  ## FPS Mode - 0x6185 (Old PID)
   # Touchpad
   - group: mouse
     hidraw:
@@ -115,6 +183,32 @@ source_devices:
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6185
+      interface_num: 2
+
+  ## FPS Mode - 0x61ee (New PID)
+  # Touchpad
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ee
+      interface_num: 1
+  # Mouse
+  - group: mouse
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ee
+      interface_num: 1
+  # Keyboard
+  - group: keyboard
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ee
+      interface_num: 0
+  # Gamepad
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ee
       interface_num: 2
 
   # IMU
@@ -156,7 +250,7 @@ source_devices:
     unique: false
     evdev:
       vendor_id: "17ef"
-      product_id: "618[3-5]"
+      product_id: "61(8[3-5]|e[c-e])"
       handler: event*
 
 # Optional configuration for the composite device

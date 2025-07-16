@@ -11,9 +11,11 @@ use super::{
     hid_report::{KeyboardDataReport, MouseDataReport, XInputDataReport},
 };
 
-// Hardware ID's
+// Hardware 
+const LEGO_PID: u16 = 0x6185;
+const LEGO_NEW_PID: u16 = 0x61ee;
+pub const PIDS: [u16; 2] = [LEGO_PID, LEGO_NEW_PID];
 pub const VID: u16 = 0x17ef;
-pub const PID: u16 = 0x6185;
 
 // Report ID's
 pub const KEYBOARD_TOUCH_DATA: u8 = 0x01;
@@ -54,7 +56,7 @@ impl Driver {
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
         let info = device.get_device_info()?;
-        if info.vendor_id() != VID || info.product_id() != PID {
+        if info.vendor_id() != VID || !PIDS.contains(&info.product_id()) {
             return Err(format!("Device '{fmtpath}' is not a Legion Go Controller").into());
         }
 
