@@ -51,8 +51,8 @@ plugins:
   # Publish artifacts as a GitHub release
   - - "@semantic-release/github"
     - assets:
-        - path: dist/inputplumber-*.deb
-        - path: dist/inputplumber-*.deb.sha256.txt
+        - path: dist/inputplumber_*.deb
+        - path: dist/inputplumber_*.deb.sha256.txt
         - path: dist/inputplumber-*.rpm
         - path: dist/inputplumber-*.rpm.sha256.txt
         - path: dist/inputplumber-*.tar.gz
