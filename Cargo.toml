@@ -4,7 +4,10 @@ version = "0.60.2"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Open source input manager for Linux"
-authors = ["William Edwards <shadowapex@gmail.com>", "Derek J. Clark <derekjohn.clark@gmail.com>"]
+authors = [
+  "William Edwards <shadowapex@gmail.com>",
+  "Derek J. Clark <derekjohn.clark@gmail.com>",
+]
 
 [package.metadata.generate-rpm]
 assets = [
@@ -25,6 +28,67 @@ auto-req = "no"
 [package.metadata.generate-rpm.requires]
 libiio = "*"
 libevdev = "*"
+
+# debian package needs pkg-config, libclang-dev, libiio-dev and libudev-dev to build
+# while runtime dependencies are libiio0 and libudev1
+# libevdev2 and libevdev-dev are listed but not needed
+[package.metadata.deb]
+license-file = ["LICENSE", "4"]
+extended-description = """\
+Input routing and control daemon for Linux.
+It can be used to combine any number of input devices
+(like gamepads, mice, and keyboards) and translate
+their input to a variety of virtual device formats."""
+depends = "$auto"
+section = "utility"
+priority = "optional"
+assets = [
+  [
+    "target/release/inputplumber",
+    "usr/bin/inputplumber",
+    "755",
+  ],
+  [
+    "rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf",
+    "usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf",
+    "644",
+  ],
+  [
+    "rootfs/usr/lib/systemd/system/*",
+    "usr/lib/systemd/system/",
+    "644",
+  ],
+  [
+    "rootfs/usr/lib/udev/hwdb.d/*",
+    "usr/lib/udev/hwdb.d/",
+    "644",
+  ],
+  [
+    "rootfs/usr/lib/udev/rules.d/*",
+    "usr/lib/udev/rules.d/",
+    "644",
+  ],
+  [
+    "rootfs/usr/share/inputplumber/devices/*",
+    "usr/share/inputplumber/devices/",
+    "644",
+  ],
+  [
+    "rootfs/usr/share/inputplumber/schema/*",
+    "usr/share/inputplumber/schema/",
+    "644",
+  ],
+  [
+    "rootfs/usr/share/inputplumber/capability_maps/*",
+    "usr/share/inputplumber/capability_maps/",
+    "644",
+  ],
+  [
+    "rootfs/usr/share/inputplumber/profiles/*",
+    "usr/share/inputplumber/profiles/",
+    "644",
+  ],
+]
 
 [[bin]]
 name = "generate"
@@ -75,26 +139,3 @@ strip = true
 lto = true
 codegen-units = 1
 
-# debian package needs pkg-config, libclang-dev, libiio-dev and libudev-dev to build
-# while runtime dependencies are libiio0 and libudev1
-# libevdev2 and libevdev-dev are listed but not needed
-[package.metadata.deb]
-license-file = ["LICENSE", "4"]
-extended-description = """\
-Input routing and control daemon for Linux.
-It can be used to combine any number of input devices
-(like gamepads, mice, and keyboards) and translate
-their input to a variety of virtual device formats."""
-depends = "$auto"
-section = "utility"
-priority = "optional"
-assets = [
-  ["target/release/inputplumber", "usr/bin/inputplumber", "755"],
-  ["rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", "usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", "644"],
-  ["rootfs/usr/lib/systemd/system/*", "usr/lib/systemd/system/", "644"],
-  ["rootfs/usr/lib/udev/hwdb.d/59-inputplumber.hwdb", "usr/lib/udev/hwdb.d/59-inputplumber.hwdb", "644"],
-  ["rootfs/usr/share/inputplumber/devices/*", "usr/share/inputplumber/devices/", "644"],
-  ["rootfs/usr/share/inputplumber/schema/*", "usr/share/inputplumber/schema/", "644"],
-  ["rootfs/usr/share/inputplumber/capability_maps/*", "usr/share/inputplumber/capability_maps/", "644"],
-  ["rootfs/usr/share/inputplumber/profiles/*", "usr/share/inputplumber/profiles/", "644"]
-]
