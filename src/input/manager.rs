@@ -1195,28 +1195,52 @@ impl Manager {
 
         // Get the device id
         let id = device.get_id();
-        if self.source_device_dbus_paths.contains_key(&id) {
-            log::debug!(
-                "Device already exists with id {id}: {dev_name} ({dev_sysname}): {dev_path}"
-            );
-            return Ok(());
+
+        // Create a DBus interface manager for the source device if one does not exist
+        if !self.source_device_dbus_paths.contains_key(&id) {
+            // Get the DBus path based on the device subsystem
+            let path = match subsystem.as_str() {
+                "input" => evdev::get_dbus_path(sys_name),
+                "hidraw" => hidraw::get_dbus_path(sys_name),
+                "iio" => iio::get_dbus_path(sys_name),
+                "leds" => led::get_dbus_path(sys_name),
+                _ => return Err(format!("Device subsystem not supported: {subsystem:?}").into()),
+            };
+            let conn = self.dbus.connection().clone();
+            let mut dbus = DBusInterfaceManager::new(conn, path)?;
+
+            // Register subsystem-specific DBus interfaces
+            match subsystem.as_str() {
+                "input" => {
+                    let evdev_iface = SourceEventDeviceInterface::new(dev);
+                    dbus.register(evdev_iface);
+                }
+                "hidraw" => {
+                    let hidraw_iface = SourceHIDRawInterface::new(dev);
+                    dbus.register(hidraw_iface);
+                }
+                "iio" => {
+                    let iio_iface = SourceIioImuInterface::new(dev);
+                    dbus.register(iio_iface);
+                }
+                "leds" => {
+                    let led_iface = SourceLedInterface::new(dev);
+                    dbus.register(led_iface);
+                }
+                _ => (),
+            }
+
+            // Register the generic udev dbus interface for the device. The
+            // [DBusInterfaceManager] will unregister all interfaces automatically
+            // if it goes out of scope.
+            let udev_iface = SourceUdevDeviceInterface::new(device.clone());
+            dbus.register(udev_iface);
+
+            // Track the lifetime of the source device to keep the dbus interface(s) up
+            self.source_device_dbus_paths.insert(id.clone(), dbus);
         }
 
-        // Get the DBus path based on the device subsystem
-        let path = match subsystem.as_str() {
-            "input" => evdev::get_dbus_path(sys_name),
-            "hidraw" => hidraw::get_dbus_path(sys_name),
-            "iio" => iio::get_dbus_path(sys_name),
-            "leds" => led::get_dbus_path(sys_name),
-            _ => return Err(format!("Device subsystem not supported: {subsystem:?}").into()),
-        };
-
-        // Create a DBus interface manager for the source device
-        let conn = self.dbus.connection().clone();
-        let mut dbus = DBusInterfaceManager::new(conn, path)?;
-
-        // Register subsystem-specific DBus interfaces and check to see if the
-        // device should be managed by inputplumber or not.
+        // Check to see if the device should be managed by inputplumber or not.
         let mut notify_device_added = true;
         match subsystem.as_str() {
             "input" => {
@@ -1226,10 +1250,6 @@ impl Manager {
                 }
 
                 log::debug!("event device added: {dev_name} ({dev_sysname})");
-
-                // Register the evdev dbus interface
-                let evdev_iface = SourceEventDeviceInterface::new(dev);
-                dbus.register(evdev_iface);
 
                 // Check to see if the device should be managed or not
                 'check_manage: {
@@ -1280,10 +1300,6 @@ impl Manager {
                 }
 
                 log::debug!("hidraw device added: {dev_name} ({dev_sysname})");
-
-                // Register the hidraw dbus interface
-                let hidraw_iface = SourceHIDRawInterface::new(dev);
-                dbus.register(hidraw_iface);
 
                 // Check to see if the device should be managed or not
                 'check_manage: {
@@ -1358,10 +1374,6 @@ impl Manager {
 
                 log::debug!("iio device added: {} ({})", device.name(), device.sysname());
 
-                // Register the iio dbus interface
-                let iio_iface = SourceIioImuInterface::new(dev);
-                dbus.register(iio_iface);
-
                 // Check to see if the device is virtual
                 if device.is_virtual() {
                     log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
@@ -1374,24 +1386,19 @@ impl Manager {
             "leds" => {
                 log::debug!("LED device added: {} ({})", device.name(), device.sysname());
 
-                // Register the led dbus interface
-                let led_iface = SourceLedInterface::new(dev);
-                dbus.register(led_iface);
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
+                    notify_device_added = false;
+                } else {
+                    log::trace!("Device {dev_name} ({dev_sysname}) is real - {dev_path}");
+                }
             }
 
             _ => {
                 return Err(format!("Device subsystem not supported: {subsystem:?}").into());
             }
         };
-
-        // Register the generic udev dbus interface for the device. The
-        // [DBusInterfaceManager] will unregister all interfaces automatically
-        // if it goes out of scope.
-        let udev_iface = SourceUdevDeviceInterface::new(device.clone());
-        dbus.register(udev_iface);
-
-        // Track the lifetime of the source device to keep the dbus interface(s) up
-        self.source_device_dbus_paths.insert(id.clone(), dbus);
 
         // Signal that a source device was added
         if notify_device_added {
