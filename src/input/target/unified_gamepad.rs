@@ -678,6 +678,7 @@ impl From<NativeEvent> for StateUpdate {
                     Self { capability, value }
                 }
             },
+            Capability::InputLayer(_) => Self::default(),
         }
     }
 }
@@ -934,6 +935,7 @@ impl From<Capability> for InputCapability {
                 Touch::Motion => Self::TouchscreenMotion,
                 Touch::Button(_) => Self::default(),
             },
+            Capability::InputLayer(_) => Self::default(),
         }
     }
 }
@@ -976,6 +978,7 @@ impl From<Capability> for InputCapabilityInfo {
                 Touch::Motion => Self::new(capability, ValueType::Touch),
                 Touch::Button(_) => Self::new(capability, ValueType::Bool),
             },
+            Capability::InputLayer(_) => Self::default(),
         }
     }
 }

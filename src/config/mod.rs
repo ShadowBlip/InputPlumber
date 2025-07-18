@@ -6,7 +6,7 @@ pub mod path;
 use std::io;
 
 use ::procfs::CpuInfo;
-use capability_map::CapabilityConfig;
+use capability_map::{CapabilityConfig, LayerMapping};
 use glob_match::glob_match;
 
 use serde::{Deserialize, Serialize};
@@ -33,12 +33,13 @@ pub enum LoadError {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct DeviceProfile {
-    pub version: u32, //useful?
-    pub kind: String, //useful?
-    pub name: String, //useful?
+    pub version: u32,
+    pub kind: String,
+    pub name: String,
     pub target_devices: Option<Vec<String>>,
     pub description: Option<String>,
     pub mapping: Vec<ProfileMapping>,
+    pub layers: Option<Vec<LayerMapping>>,
 }
 
 impl DeviceProfile {

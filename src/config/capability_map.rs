@@ -178,6 +178,7 @@ pub struct CapabilityConfig {
     pub dbus: Option<String>,
     pub touchpad: Option<TouchpadCapability>,
     pub touchscreen: Option<TouchCapability>,
+    pub layer: Option<LayerCapability>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
@@ -264,4 +265,20 @@ pub struct TouchCapability {
 pub struct TouchMotionCapability {
     pub region: Option<String>,
     pub speed_pps: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct LayerCapability {
+    pub name: String,
+}
+
+/// A layer mapping is used to translate input events whenever a given layer is
+/// activated. This can be used for things like button combos, where pressing
+/// and holding a button activates the layer, which contains different translations.
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct LayerMapping {
+    pub name: String,
+    pub mappings: Vec<NativeCapabilityMapping>,
 }

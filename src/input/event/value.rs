@@ -90,21 +90,12 @@ impl InputValue {
         target_config: &CapabilityConfig,
     ) -> Result<InputValue, TranslationError> {
         match source_cap {
-            // None values cannot be translated
             Capability::None => Err(TranslationError::ImpossibleTranslation(
                 "None events cannot be translated".to_string(),
             )),
-
-            // NotImplemented values cannot be translated
             Capability::NotImplemented => Ok(InputValue::None),
-
-            // Sync values can only be translated to '0'
             Capability::Sync => Ok(InputValue::Bool(false)),
-
-            // DBus -> ...
             Capability::DBus(_) => Ok(self.clone()),
-
-            // Gamepad -> ...
             Capability::Gamepad(gamepad) => {
                 match gamepad {
                     // Gamepad Button -> ...
@@ -154,6 +145,8 @@ impl InputValue {
                                 // Gamepad Button -> Touchscreen Button
                                 Touch::Button(_) => Err(TranslationError::NotImplemented),
                             },
+                            // Gamepad Button -> Input Layer Activation
+                            Capability::InputLayer(_) => Ok(self.clone()),
                         }
                     }
                     // Axis -> ...
@@ -199,6 +192,10 @@ impl InputValue {
                             },
                             // Axis -> Touchscreen
                             Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                            // Axis -> Input Layer Activation
+                            Capability::InputLayer(_) => {
+                                self.translate_axis_to_button(source_config)
+                            }
                         }
                     }
                     // Trigger -> ...
@@ -244,6 +241,10 @@ impl InputValue {
                         },
                         // Trigger -> Touchscreen
                         Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                        // Trigger -> Input Layer Activation
+                        Capability::InputLayer(_) => {
+                            self.translate_trigger_to_button(source_config)
+                        }
                     },
                     // Accelerometer -> ...
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
@@ -277,14 +278,11 @@ impl InputValue {
                             Touch::Motion => Err(TranslationError::NotImplemented),
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        Capability::InputLayer(_) => self.translate_dial_to_button(source_config),
                     },
                 }
             }
-
-            // Mouse -> ...
             Capability::Mouse(_) => Err(TranslationError::NotImplemented),
-
-            // Keyboard -> ...
             Capability::Keyboard(_) => match target_cap {
                 // Keyboard Key -> None
                 Capability::None => Ok(InputValue::None),
@@ -314,9 +312,9 @@ impl InputValue {
                 Capability::Touchpad(_) => Err(TranslationError::NotImplemented),
                 // Keyboard Key -> Touchscreen
                 Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                // Keyboard Key -> Input Layer Activation
+                Capability::InputLayer(_) => Ok(self.clone()),
             },
-
-            // Touchpad -> ...
             Capability::Touchpad(touch) => match touch {
                 // LeftPad -> ...
                 Touchpad::LeftPad(touch) => match touch {
@@ -370,6 +368,8 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Input Layer Activation
+                        Capability::InputLayer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
@@ -425,6 +425,8 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Input Layer Activation
+                        Capability::InputLayer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
@@ -480,12 +482,12 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Input Layer Activation
+                        Capability::InputLayer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
             },
-
-            // Touchscreen -> ...
             Capability::Touchscreen(touch) => match touch {
                 // Touchscreen Motion -> ...
                 Touch::Motion => match target_cap {
@@ -540,10 +542,16 @@ impl InputValue {
                         // Touchscreen Motion -> Touchscreen Button
                         Touch::Button(_) => Err(TranslationError::NotImplemented),
                     },
+                    // Touchscreen Motion -> Input Layer Activation
+                    Capability::InputLayer(_) => Err(TranslationError::NotImplemented),
                 },
                 // Touchscreen Button -> ...
                 Touch::Button(_) => Err(TranslationError::NotImplemented),
             },
+            // Input layer -> ...
+            Capability::InputLayer(_) => Err(TranslationError::ImpossibleTranslation(
+                "Layer activation should not be translated to other input".into(),
+            )),
         }
     }
 

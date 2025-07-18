@@ -55,6 +55,12 @@ impl CompositeDeviceInterface {
             .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
+    /// Currently active input layer
+    #[zbus(property)]
+    async fn active_layer(&self) -> fdo::Result<String> {
+        Ok("".to_string())
+    }
+
     /// Name of the currently loaded profile
     #[zbus(property)]
     async fn profile_name(&self) -> fdo::Result<String> {

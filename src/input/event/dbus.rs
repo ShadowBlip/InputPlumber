@@ -405,6 +405,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Touch::Motion => vec![Action::Touch],
             Touch::Button(_) => vec![Action::None],
         },
+        Capability::InputLayer(_) => vec![Action::None],
     }
 }
 

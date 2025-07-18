@@ -55,4 +55,5 @@ pub enum CompositeCommand {
     Suspend(mpsc::Sender<()>),
     Resume(mpsc::Sender<()>),
     IsSuspended(mpsc::Sender<bool>),
+    ActivateLayer(String, bool),
 }

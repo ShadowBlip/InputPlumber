@@ -243,6 +243,7 @@ impl HoripadSteamDevice {
             Capability::Keyboard(_) => (),
             Capability::Touchpad(_) => (),
             Capability::Touchscreen(_) => (),
+            Capability::InputLayer(_) => (),
         };
     }
 

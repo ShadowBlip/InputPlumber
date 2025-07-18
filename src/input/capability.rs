@@ -21,6 +21,7 @@ pub enum Capability {
     Keyboard(Keyboard),
     Touchpad(Touchpad),
     Touchscreen(Touch),
+    InputLayer(InputLayer),
 }
 
 impl Capability {
@@ -54,6 +55,7 @@ impl fmt::Display for Capability {
             Capability::DBus(_) => write!(f, "DBus"),
             Capability::Touchpad(_) => write!(f, "Touchpad"),
             Capability::Touchscreen(_) => write!(f, "Touchscreen"),
+            Capability::InputLayer(_) => write!(f, "InputLayer"),
         }
     }
 }
@@ -86,6 +88,9 @@ impl FromStr for Capability {
                 parts.join(":").as_str(),
             )?)),
             "Touchscreen" => Ok(Capability::Touchscreen(Touch::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "InputLayer" => Ok(Capability::InputLayer(InputLayer::from_str(
                 parts.join(":").as_str(),
             )?)),
             _ => Err(()),
@@ -258,6 +263,11 @@ impl From<CapabilityConfig> for Capability {
                 let button = button.unwrap();
                 return Capability::Touchscreen(Touch::Button(button));
             }
+        }
+
+        // Layer activation
+        if let Some(_) = value.layer.as_ref() {
+            return Capability::InputLayer(InputLayer::Activate);
         }
 
         Capability::NotImplemented
@@ -1279,6 +1289,29 @@ impl FromStr for TouchButton {
         match s {
             "Touch" => Ok(TouchButton::Touch),
             "Press" => Ok(TouchButton::Press),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum InputLayer {
+    Activate,
+}
+
+impl fmt::Display for InputLayer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Activate => write!(f, "Activate"),
+        }
+    }
+}
+
+impl FromStr for InputLayer {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Activate" => Ok(Self::Activate),
             _ => Err(()),
         }
     }

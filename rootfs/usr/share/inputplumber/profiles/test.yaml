@@ -121,3 +121,22 @@ mapping:
     target_events:
       - gamepad:
           button: South
+
+  # Button to input layer
+  - name: Activate input layer
+    source_event:
+      gamepad:
+        button: North
+    target_events:
+      - layer:
+          name: Combo layer
+
+layers:
+  - name: Combo layer
+    mapping:
+      - name: Open quick access menu
+        source_event:
+          gamepad:
+            button: South
+        target_events:
+          - dbus: ui_quick

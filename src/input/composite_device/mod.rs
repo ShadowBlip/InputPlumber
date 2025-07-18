@@ -42,7 +42,7 @@ use crate::{
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
 
 use super::{
-    info::DeviceInfo, manager::ManagerCommand, output_event::OutputEvent,
+    capability::InputLayer, info::DeviceInfo, manager::ManagerCommand, output_event::OutputEvent,
     source::client::SourceDeviceClient, target::client::TargetDeviceClient,
 };
 
@@ -140,6 +140,8 @@ pub struct CompositeDevice {
     intercept_mode_target_cap: Capability,
     /// List of currently active events that could trigger intercept mode.
     intercept_active_inputs: Vec<Capability>,
+    /// Structure for translating events based on active input layers
+    input_layers: Option<InputLayers>,
     /// List of currently active buttons and keys. Used to block "up" events for
     /// keys that have already been handled.
     active_inputs: Vec<Capability>,
@@ -196,6 +198,7 @@ impl CompositeDevice {
             ))],
             intercept_mode_target_cap: Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
             intercept_active_inputs: Vec::new(),
+            input_layers: Default::default(),
             active_inputs: Vec::new(),
             exclusive_inputs: HashMap::new(),
         };
@@ -516,6 +519,19 @@ impl CompositeDevice {
                         log::debug!("Checking if device is suspended: {is_suspended}");
                         if let Err(e) = sender.send(is_suspended).await {
                             log::error!("Failed to send suspended response: {e:?}");
+                        }
+                    }
+                    CompositeCommand::ActivateLayer(name, enabled) => {
+                        let Some(input_layers) = self.input_layers.as_mut() else {
+                            log::warn!("Input layers do not exist to update layers");
+                            continue;
+                        };
+                        if enabled {
+                            log::debug!("Activating input layer: {name}");
+                            input_layers.push_layer(name);
+                        } else {
+                            log::debug!("Deactivating input layer: {name}");
+                            input_layers.pop_layer();
                         }
                     }
                 }
@@ -841,6 +857,12 @@ impl CompositeDevice {
         // Track the delay for chord events.
         let mut sleep_time = 0;
 
+        // Handle input layer events
+        let cap = event.as_capability();
+        if cap == Capability::InputLayer(InputLayer::Activate) {
+            // TODO: this
+        }
+
         // Translate the event using the device profile.
         let mut events = if self.device_profile.is_some() {
             self.translate_event(&event)
@@ -921,6 +943,7 @@ impl CompositeDevice {
                     }
                 },
                 Capability::Touchscreen(_) => (),
+                Capability::InputLayer(_) => (),
             }
 
             // if this is a chord with no matches to the intercept_active_inputs, add a keypress
@@ -944,6 +967,11 @@ impl CompositeDevice {
             self.write_event(event).await?;
         }
         Ok(())
+    }
+
+    /// Activates or deactivates the given input layer
+    fn handle_layer_event(&mut self, name: LayerName, enabled: bool) {
+        //
     }
 
     /// Returns true if this is the first event in intercept_activation_caps, or a follow on event
@@ -1437,6 +1465,28 @@ impl CompositeDevice {
                         }
                     };
                     if matches!(value, InputValue::None) {
+                        continue;
+                    }
+
+                    // Handle input layer translations
+                    if target_cap == Capability::InputLayer(InputLayer::Activate) {
+                        let Some(layer) = target_event.layer.as_ref() else {
+                            continue;
+                        };
+
+                        // Enqueue the input layer activation event to activate/deactivate
+                        // an input layer.
+                        let layer_name = layer.name.clone();
+                        let layer_enabled = value.pressed();
+
+                        let tx = self.tx.clone();
+                        tokio::task::spawn(async move {
+                            let cmd = CompositeCommand::ActivateLayer(layer_name, layer_enabled);
+                            if let Err(e) = tx.send(cmd).await {
+                                log::warn!("Failed to send layer activation event: {e}");
+                            }
+                        });
+
                         continue;
                     }
 
@@ -1953,5 +2003,80 @@ impl CompositeDevice {
                 log::error!("Failed to send source devices changed signal: {e:?}");
             }
         });
+    }
+}
+
+/// Alias for an input layer name string
+type LayerName = String;
+
+/// Structure and logic for managing event translations through input layers.
+#[derive(Debug, Default)]
+struct InputLayers {
+    /// Stack of currently active input layers
+    active_layers: Vec<LayerName>,
+    /// Map of source events for each input layer from a profile to translate
+    /// source events into target events.
+    mappings: HashMap<LayerName, HashMap<Capability, Vec<ProfileMapping>>>,
+    /// List of available input layers
+    valid_layers: HashSet<LayerName>,
+}
+
+impl InputLayers {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns the currently active input layer
+    fn active_layer(&self) -> Option<&LayerName> {
+        self.active_layers.last()
+    }
+
+    /// Pushes the given layer to the top of the stack
+    fn push_layer(&mut self, name: LayerName) {
+        // TODO: Validate name of layer
+        self.active_layers.push(name);
+    }
+
+    /// Pops the active layer from the stack and returns it
+    fn pop_layer(&mut self) -> Option<LayerName> {
+        self.active_layers.pop()
+    }
+
+    /// Returns true if the given event should be translated by the input layer
+    fn has_translation(&self, capability: Capability) -> bool {
+        let Some(active_layer) = self.active_layer() else {
+            return false;
+        };
+        let Some(layer_mappings) = self.mappings.get(active_layer) else {
+            return false;
+        };
+        layer_mappings.contains_key(&capability)
+    }
+
+    /// Translate the given event to one or more events based on the currently
+    /// active input layer.
+    fn translate_event(&self, event: &NativeEvent) {
+        //
+    }
+}
+
+impl From<&DeviceProfile> for Option<InputLayers> {
+    fn from(profile: &DeviceProfile) -> Self {
+        let layers = profile.layers.as_ref()?;
+        if layers.is_empty() {
+            return None;
+        }
+        let mut valid_layers = HashSet::with_capacity(layers.len());
+        for layer in layers.iter() {
+            valid_layers.insert(layer.name.clone());
+        }
+
+        let input_layers = InputLayers {
+            active_layers: Vec::with_capacity(layers.len()),
+            mappings: todo!(),
+            valid_layers,
+        };
+
+        Some(input_layers)
     }
 }
