@@ -813,13 +813,23 @@ impl Manager {
             .unwrap();
         sources.push(source_device);
 
-        device.listen_on_dbus().await?;
-
         // Get a handle to the device
         let client = device.client();
 
         // Keep track of target devices that this composite device is using
         let mut target_device_paths = Vec::new();
+
+        // Queue target devices based on the configuration
+        let mut target_devices = Vec::new();
+        if let Some(target_devices_config) = target_types {
+            for kind in target_devices_config {
+                let Ok(target_id) = TargetDeviceTypeId::try_from(kind.as_str()) else {
+                    return Err("Invalid target device ID".to_string().into());
+                };
+                target_devices.push(target_id);
+            }
+        }
+        client.set_target_devices(target_devices).await?;
 
         // Create a DBus target device
         log::debug!("Creating target devices for {composite_path}");
@@ -830,6 +840,7 @@ impl Manager {
             target_device_paths.push(dbus_path.clone());
         }
         device.set_dbus_devices(dbus_devices);
+        device.listen_on_dbus().await?;
 
         // Add the device to our maps
         self.composite_devices
@@ -844,7 +855,6 @@ impl Manager {
 
         // Run the device
         let composite_path = String::from(device.dbus_path());
-        let composite_path_clone = composite_path.clone();
         let tx = self.tx.clone();
         let task = tokio::spawn(async move {
             if let Err(e) = device.run().await {
@@ -861,46 +871,6 @@ impl Manager {
                     "Error sending to composite device {composite_path} the stopped signal: {}",
                     e.to_string()
                 );
-            }
-        });
-
-        // Create target devices based on the configuration
-        let mut target_devices = Vec::new();
-        if let Some(target_devices_config) = target_types {
-            for kind in target_devices_config {
-                let device = self.create_target_device(kind.as_str()).await?;
-                target_devices.push(device);
-            }
-        }
-
-        // Start the target input devices
-        let targets = self.start_target_devices(target_devices).await?;
-        let target_paths = targets.keys();
-        for target_path in target_paths {
-            target_device_paths.push(target_path.clone());
-        }
-
-        // Attach the target devices
-        let tx = self.tx.clone();
-        tokio::task::spawn(async move {
-            // Queue the target device attachment to the composite device
-            for target_path in targets.into_keys() {
-                let (sender, mut receiver) = mpsc::channel(1);
-                let result = tx
-                    .send(ManagerCommand::AttachTargetDevice {
-                        target_path,
-                        composite_path: composite_path_clone.clone(),
-                        sender,
-                    })
-                    .await;
-
-                if let Err(e) = result {
-                    log::error!("Failed to send target device attach command to manager: {e:?}");
-                    continue;
-                }
-                tokio::task::spawn(async move {
-                    receiver.recv().await;
-                });
             }
         });
 
