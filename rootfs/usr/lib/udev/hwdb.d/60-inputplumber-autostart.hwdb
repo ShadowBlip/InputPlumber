@@ -88,6 +88,9 @@ dmi:*svnONE-NETBOOK:pnONEXPLAYERF1Pro:*
 dmi:*svnONE-NETBOOK:pnONEXPLAYERX1A:*
 dmi:*svnONE-NETBOOK:pnONEXPLAYERX1i:*
 dmi:*svnONE-NETBOOK:pnONEXPLAYERX1mini:*
+# OneXPlayer G1
+dmi:*svnONE-NETBOOK:*pnONEXPLAYERG1A:*
+dmi:*svnONE-NETBOOK:*pnONEXPLAYERG1i:*
 # OrangePi Neo
 dmi:*svnOrangePi:pnNEO-01:*
 # Zotac Zone
