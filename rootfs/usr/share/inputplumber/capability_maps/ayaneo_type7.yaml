@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: AYANEO Type 7
+
+# Unique identifier of the capability mapping
+id: aya7
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: LC
+    source_events:
+      - keyboard: KeyF21
+    target_event:
+      gamepad:
+        button: LeftTop
+  - name: RC
+    source_events:
+      - keyboard: KeyF22
+    target_event:
+      gamepad:
+        button: RightTop
+  - name: Aya Space
+    source_events:
+      - keyboard: KeyF23
+    target_event:
+      gamepad:
+        button: Guide
+  - name: Quick Access
+    source_events:
+      - keyboard: KeyF24
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+# List of events to filter from the source devices
+filtered_events: []
