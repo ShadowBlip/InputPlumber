@@ -28,6 +28,7 @@ source_devices:
       phys_path: usb-0000:04:00.3-4/input0
       handler: event*
   - group: keyboard
+    passthrough: true
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
