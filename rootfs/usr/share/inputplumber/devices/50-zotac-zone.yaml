@@ -41,12 +41,13 @@ source_devices:
       product_id: "1590"
       handler: event*
     capability_map_id: zone1
-  - group: mouse
-    evdev:
-      name: ZOTAC Gaming Zone Mouse
-      vendor_id: "1ee9"
-      product_id: "1590"
-      handler: event*
+  # TODO: Reevaluate if new firmware with ABS mode is added.
+  #- group: mouse
+  #  evdev:
+  #    name: ZOTAC Gaming Zone Mouse
+  #    vendor_id: "1ee9"
+  #    product_id: "1590"
+  #    handler: event*
   - group: mouse
     evdev:
       name: ZOTAC Gaming Zone Dials
