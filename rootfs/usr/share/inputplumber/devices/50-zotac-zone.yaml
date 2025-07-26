@@ -42,6 +42,7 @@ source_devices:
       handler: event*
     capability_map_id: zone1
   - group: mouse
+    passthrough: true #TODO: Reevaluate if new firmware with ABS mode is added.
     evdev:
       name: ZOTAC Gaming Zone Mouse
       vendor_id: "1ee9"
