@@ -160,7 +160,7 @@ dist/$(NAME)-$(ARCH).tar.gz: build $(ALL_ROOTFS)
 dist-deb: dist/$(NAME)_$(VERSION)-1_$(ARCH_DEB).deb ## Build a redistributable deb package
 dist/$(NAME)_$(VERSION)-1_$(ARCH_DEB).deb: target/$(TARGET_ARCH)/release/$(NAME)
 	mkdir -p dist
-	cargo install --version 3.2.1 cargo-deb
+	cargo install --version 3.3.0 cargo-deb
 	cargo deb --target $(TARGET_ARCH)
 	cp ./target/$(TARGET_ARCH)/debian/$(NAME)_$(VERSION)-1_$(ARCH_DEB).deb dist
 	cd dist && sha256sum $(NAME)_$(VERSION)-1_$(ARCH_DEB).deb > $(NAME)_$(VERSION)-1_$(ARCH_DEB).deb.sha256.txt
