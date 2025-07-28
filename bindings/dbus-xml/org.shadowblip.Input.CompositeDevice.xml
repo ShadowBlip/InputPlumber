@@ -2,47 +2,6 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node>
-  <interface name="org.shadowblip.Input.CompositeDevice">
-    <!--
-     Load the device profile from the given path
-     -->
-    <method name="LoadProfilePath">
-      <arg name="path" type="s" direction="in"/>
-    </method>
-    <!--
-     List of capabilities that all source devices implement
-     -->
-    <property name="Capabilities" type="as" access="read"/>
-    <!--
-     Target dbus devices that this [CompositeDevice] is managing
-     -->
-    <property name="DbusDevices" type="as" access="read"/>
-    <!--
-     The intercept mode of the composite device.
-     -->
-    <property name="InterceptMode" type="u" access="readwrite"/>
-    <!--
-     Name of the composite device
-     -->
-    <property name="Name" type="s" access="read"/>
-    <!--
-     Name of the currently loaded profile
-     -->
-    <property name="ProfileName" type="s" access="read"/>
-    <!--
-     List of source devices that this composite device is processing inputs for
-     -->
-    <property name="SourceDevicePaths" type="as" access="read"/>
-    <!--
-     Target devices that this [CompositeDevice] is managing
-     -->
-    <property name="TargetDevices" type="as" access="read"/>
-  </interface>
-  <interface name="org.freedesktop.DBus.Introspectable">
-    <method name="Introspect">
-      <arg type="s" direction="out"/>
-    </method>
-  </interface>
   <interface name="org.freedesktop.DBus.Properties">
     <method name="Get">
       <arg name="interface_name" type="s" direction="in"/>
@@ -58,9 +17,6 @@
       <arg name="interface_name" type="s" direction="in"/>
       <arg type="a{sv}" direction="out"/>
     </method>
-    <!--
-     Emits the `org.freedesktop.DBus.Properties.PropertiesChanged` signal.
-     -->
     <signal name="PropertiesChanged">
       <arg name="interface_name" type="s"/>
       <arg name="changed_properties" type="a{sv}"/>
@@ -73,6 +29,89 @@
     <method name="GetMachineId">
       <arg type="s" direction="out"/>
     </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.shadowblip.Input.CompositeDevice">
+    <!--
+     Name of the composite device
+     -->
+    <property name="Name" type="s" access="read"/>
+    <!--
+     Name of the currently loaded profile
+     -->
+    <property name="ProfileName" type="s" access="read"/>
+    <!--
+     Optional path to the currently loaded profile
+     -->
+    <property name="ProfilePath" type="s" access="read"/>
+    <!--
+     Stop the composite device and all target devices
+     -->
+    <method name="Stop">
+    </method>
+    <!--
+     Returns the currently loaded profile encoded in YAML format
+     -->
+    <method name="GetProfileYaml">
+    </method>
+    <!--
+     Load the device profile from the given path
+     -->
+    <method name="LoadProfilePath">
+      <arg name="path" type="s" direction="in"/>
+    </method>
+    <!--
+     Load the device profile from the given YAML/JSON string
+     -->
+    <method name="LoadProfileFromYaml">
+      <arg name="profile" type="s" direction="in"/>
+    </method>
+
+    <!-- I couldn't be bothered to copy the docs for these. See src/dbus/interface/composite_device.rs -->
+    <method name="SendEvent">
+      <arg name="event" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
+    </method>
+    <method name="SendButtonChord">
+      <arg name="events" type="as" direction="in"/>
+    </method>
+    <method name="SetInterceptActivation">
+      <arg name="activation_events" type="as" direction="in"/>
+      <arg name="target_event" type="s" direction="in"/>
+    </method>
+
+    <!--
+     List of capabilities that all source devices implement
+     -->
+    <property name="Capabilities" type="as" access="read"/>
+    <!--
+     List of capabilities that all output devices implement
+     -->
+    <property name="OutputCapabilities" type="as" access="read"/>
+    <!--
+     List of capabilities that all target devices implement
+     -->
+    <property name="TargetCapabilities" type="as" access="read"/>
+    <!--
+     List of source devices that this composite device is processing inputs for
+     -->
+    <property name="SourceDevicePaths" type="as" access="read"/>
+    <!--
+     The intercept mode of the composite device.
+     -->
+    <property name="InterceptMode" type="u" access="readwrite"/>
+    <!--
+     Target devices that this [CompositeDevice] is managing
+     -->
+    <property name="TargetDevices" type="as" access="readwrite"/>
+    <!--
+     Target dbus devices that this [CompositeDevice] is managing
+     -->
+    <property name="DbusDevices" type="as" access="read"/>
   </interface>
 </node>
 

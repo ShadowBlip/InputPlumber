@@ -32,7 +32,7 @@ impl TargetMouseInterface {
     }
 
     /// Move the virtual mouse by the given amount relative to the cursor's
-    /// relative position.
+    /// current position.
     async fn move_cursor(&self, x: i32, y: i32) -> fdo::Result<()> {
         // Create a mouse motion event
         let value = InputValue::Vector2 {
