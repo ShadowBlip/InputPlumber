@@ -54,6 +54,8 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		$(PREFIX)/bin/$(NAME)
 	install -D -m 644 rootfs/usr/share/dbus-1/system.d/$(DBUS_NAME).conf \
 		$(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
+	install -D -m 644 -t $(PREFIX)/share/polkit-1/actions/ \
+		rootfs/usr/share/polkit-1/actions/*
 	install -D -m 644 -t $(PREFIX)/lib/systemd/system/ \
 		rootfs/usr/lib/systemd/system/*
 	install -D -m 644 -t $(PREFIX)/lib/udev/hwdb.d/ \
@@ -77,6 +79,7 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/bin/$(NAME)
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
+	rm $(PREFIX)/share/polkit-1/actions/$(DBUS_NAME).policy
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
 	rm $(PREFIX)/lib/systemd/system/$(NAME)-suspend.service
 	rm $(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb

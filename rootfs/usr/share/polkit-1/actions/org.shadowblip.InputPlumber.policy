@@ -1,0 +1,865 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "https://specifications.freedesktop.org/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+  <action id="org.shadowblip.Input.CompositeDevice.LoadProfilePath">
+    <description>Load the device profile from the given path</description>
+    <message>Authorization required to load device profile from a specified path.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.LoadProfileFromYaml">
+    <description>Load the device profile from the given YAML/JSON string</description>
+    <message>Authorization required to load device profile from a given YAML/JSON string.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.Stop">
+    <description>Stop the composite device and all target devices</description>
+    <message>Authorization required to stop the composite device and target devices.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.SendEvent">
+    <description>Send an event to the composite device</description>
+    <message>Authorization required to send an event to the composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.SendButtonChord">
+    <description>Send a button chord to the composite device</description>
+    <message>Authorization required to send a button chord to the composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.SetInterceptActivation">
+    <description>Set intercept activation for the composite device</description>
+    <message>Authorization required to set intercept activation for the composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.SetInterceptMode">
+    <description>Modify intercept mode of the composite device</description>
+    <message>Authorization required to modify the intercept mode of the composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.SetTargetDevices">
+    <description>Modify target devices managed by the composite device</description>
+    <message>Authorization required to modify target devices managed by the composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.DbusDevices">
+    <description>Read target D-Bus devices managed by the composite device</description>
+    <message>Authorization required to read target D-Bus devices managed by the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.DBusDevice.InputEvent">
+    <description>Emit an input event from the DBus device</description>
+    <message>Authorization required to emit an input event from the DBus device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.DBusDevice.TouchEvent">
+    <description>Emit a touch event from the DBus device</description>
+    <message>Authorization required to emit a touch event from the DBus device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.DBusDevice.Name">
+    <description>Read the name of the DBus device</description>
+    <message>Authorization required to read the name of the DBus device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Gamepad.Name">
+    <description>Read the name of the Gamepad DBus device</description>
+    <message>Authorization required to read the name of the Gamepad DBus device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Keyboard.SendKey">
+    <description>Send the given key to the virtual keyboard</description>
+    <message>Authorization required to send a key to the virtual keyboard.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Keyboard.Name">
+    <description>Read the name of the Keyboard DBus device</description>
+    <message>Authorization required to read the name of the Keyboard DBus device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.Version">
+    <description>Read InputPlumber Manager version</description>
+    <message>Authorization required to read the InputPlumber Manager version.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.SupportedTargetDevices">
+    <description>Read supported target devices</description>
+    <message>Authorization required to read supported target devices.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.SupportedTargetDeviceIds">
+    <description>Read supported target device IDs</description>
+    <message>Authorization required to read supported target device IDs.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.SetGamepadOrder">
+    <description>Modify GamepadOrder</description>
+    <message>Authorization required to change the Gamepad order.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.SetManageAllDevices">
+    <description>Modify ManageAllDevices flag</description>
+    <message>Authorization required to toggle managing all devices.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.CreateCompositeDevice">
+    <description>Create a composite device</description>
+    <message>Authorization required to create a composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.CreateTargetDevice">
+    <description>Create a target device</description>
+    <message>Authorization required to create a target device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.StopTargetDevice">
+    <description>Stop a target device</description>
+    <message>Authorization required to stop a target device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.AttachTargetDevice">
+    <description>Attach a target device to a composite device</description>
+    <message>Authorization required to attach a target device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.HookSleep">
+    <description>Prepare for system sleep</description>
+    <message>Authorization required to hook into system suspend.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.HookWake">
+    <description>Prepare for system wake</description>
+    <message>Authorization required to hook into system resume.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Mouse.MoveCursor">
+    <description>Move the virtual mouse cursor</description>
+    <message>Authorization required to move the virtual mouse cursor.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Mouse.Name">
+    <description>Read the name of the Mouse DBus device</description>
+    <message>Authorization required to read the name of the Mouse DBus device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.DeviceClass">
+    <description>Read the device class of the input device</description>
+    <message>Authorization required to read the device class.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.DevicePath">
+    <description>Read the device path of the input device</description>
+    <message>Authorization required to read the device path.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.IdBustype">
+    <description>Read the bus type ID of the input device</description>
+    <message>Authorization required to read the bus type ID.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.IdProduct">
+    <description>Read the product ID of the input device</description>
+    <message>Authorization required to read the product ID.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.IdVendor">
+    <description>Read the vendor ID of the input device</description>
+    <message>Authorization required to read the vendor ID.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.IdVersion">
+    <description>Read the version ID of the input device</description>
+    <message>Authorization required to read the version ID.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.Name">
+    <description>Read the name of the input device</description>
+    <message>Authorization required to read the device name.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.PhysPath">
+    <description>Read the physical path of the input device</description>
+    <message>Authorization required to read the physical path.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.SysfsPath">
+    <description>Read the sysfs path of the input device</description>
+    <message>Authorization required to read the sysfs path.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.UniqueId">
+    <description>Read the unique ID of the input device</description>
+    <message>Authorization required to read the unique ID.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.SupportedKeys">
+    <description>Read supported key codes of the input device</description>
+    <message>Authorization required to read supported key codes.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.SupportedRelativeAxes">
+    <description>Read supported relative axes of the input device</description>
+    <message>Authorization required to read supported relative axes.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.SupportedAbsoluteAxes">
+    <description>Read supported absolute axes of the input device</description>
+    <message>Authorization required to read supported absolute axes.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.SupportedSwitches">
+    <description>Read supported switches of the input device</description>
+    <message>Authorization required to read supported switches.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.SupportedLeds">
+    <description>Read supported LEDs of the input device</description>
+    <message>Authorization required to read supported LEDs.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.SupportedSounds">
+    <description>Read supported sounds of the input device</description>
+    <message>Authorization required to read supported sounds.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.EventDevice.SupportedFf">
+    <description>Read supported force-feedback effects of the input device</description>
+    <message>Authorization required to read supported force-feedback effects.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.Name">
+    <description>Read the name of the HID raw device</description>
+    <message>Authorization required to read the HID raw device name.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.DevPath">
+    <description>Read the device path of the HID raw device</description>
+    <message>Authorization required to read the HID raw device path.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.IdProduct">
+    <description>Read the product ID of the HID raw device</description>
+    <message>Authorization required to read the HID raw device product ID.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.IdVendor">
+    <description>Read the vendor ID of the HID raw device</description>
+    <message>Authorization required to read the HID raw device vendor ID.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.InterfaceNumber">
+    <description>Read the interface number of the HID raw device</description>
+    <message>Authorization required to read the HID raw device interface number.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.Manufacturer">
+    <description>Read the manufacturer of the HID raw device</description>
+    <message>Authorization required to read the HID raw device manufacturer.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.Product">
+    <description>Read the product string of the HID raw device</description>
+    <message>Authorization required to read the HID raw device product string.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.SerialNumber">
+    <description>Read the serial number of the HID raw device</description>
+    <message>Authorization required to read the HID raw device serial number.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.HIDRawDevice.SysfsPath">
+    <description>Read the sysfs path of the HID raw device</description>
+    <message>Authorization required to read the HID raw device sysfs path.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.Id">
+    <description>Get the device ID</description>
+    <message>Authentication is required to get IIO IMU device ID</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.Name">
+    <description>Get the device name</description>
+    <message>Authentication is required to get IIO IMU device name</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.AccelSampleRate">
+    <description>Read accelerometer sample rate</description>
+    <message>Authentication is required to read accelerometer sample rate</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.AccelSampleRatesAvail">
+    <description>Read available accelerometer sample rates</description>
+    <message>Authentication is required to read available accelerometer sample rates</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.AngvelSampleRate">
+    <description>Read angular velocity sample rate</description>
+    <message>Authentication is required to read angular velocity sample rate</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.AngvelSampleRatesAvail">
+    <description>Read available angular velocity sample rates</description>
+    <message>Authentication is required to read available angular velocity sample rates</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.AccelScale">
+    <description>Read accelerometer scale</description>
+    <message>Authentication is required to read accelerometer scale</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.AccelScalesAvail">
+    <description>Read available accelerometer scales</description>
+    <message>Authentication is required to read available accelerometer scales</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.AngvelScale">
+    <description>Read angular velocity scale</description>
+    <message>Authentication is required to read angular velocity scale</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.AngvelScalesAvail">
+    <description>Read available angular velocity scales</description>
+    <message>Authentication is required to read available angular velocity scales</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.SetAccelSampleRate">
+    <description>Set accelerometer sample rate</description>
+    <message>Authentication is required to set accelerometer sample rate</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.SetAngvelSampleRate">
+    <description>Set angular velocity sample rate</description>
+    <message>Authentication is required to set angular velocity sample rate</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.SetAccelScale">
+    <description>Set accelerometer scale</description>
+    <message>Authentication is required to set accelerometer scale</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.IIOIMUDevice.SetAngvelScale">
+    <description>Set angular velocity scale</description>
+    <message>Authentication is required to set angular velocity scale</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.LEDDevice.Id">
+    <description>Get the LED device ID</description>
+    <message>Authentication is required to get LED device ID</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.DevicePath">
+    <description>Access device node path</description>
+    <message>Authentication required to get device node path</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.IdBustype">
+    <description>Access device bus type</description>
+    <message>Authentication required to get device bus type</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.IdProduct">
+    <description>Access device product ID</description>
+    <message>Authentication required to get device product ID</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.IdVendor">
+    <description>Access device vendor ID</description>
+    <message>Authentication required to get device vendor ID</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.IdVersion">
+    <description>Access device version</description>
+    <message>Authentication required to get device version</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.Name">
+    <description>Access device name</description>
+    <message>Authentication required to get device name</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.PhysPath">
+    <description>Access physical device path</description>
+    <message>Authentication required to get physical device path</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.Subsystem">
+    <description>Access device subsystem</description>
+    <message>Authentication required to get device subsystem</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.SysfsPath">
+    <description>Access device sysfs path</description>
+    <message>Authentication required to get device sysfs path</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.UniqueId">
+    <description>Access device unique ID</description>
+    <message>Authentication required to get device unique ID</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.UdevDevice.Properties">
+    <description>Access device properties</description>
+    <message>Authentication required to get device properties</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Debug.InputCapabilityReport">
+    <description>Access input capability report data</description>
+    <message>Authentication required to get input capability report data</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Touchscreen.Name">
+    <description>Access the touchscreen device name</description>
+    <message>Authentication required to get the touchscreen device name</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Output.ForceFeedback.Rumble">
+    <description>Allow sending force feedback rumble events</description>
+    <message>Authentication is required to send rumble events</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Output.ForceFeedback.Stop">
+    <description>Allow stopping all force feedback effects</description>
+    <message>Authentication is required to stop force feedback</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Metrics.Enabled">
+    <description>Get performance metrics enabled state</description>
+    <message>Authentication is required to query performance metrics enabled state</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Metrics.SetEnabled">
+    <description>Set performance metrics enabled state</description>
+    <message>Authentication is required to change performance metrics enabled state</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+</policyconfig>
