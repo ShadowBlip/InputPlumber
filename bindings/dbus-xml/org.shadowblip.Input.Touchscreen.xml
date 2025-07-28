@@ -35,20 +35,12 @@
       <arg type="s" direction="out"/>
     </method>
   </interface>
-  <interface name="org.shadowblip.Input.Mouse">
+  <interface name="org.shadowblip.Input.Touchscreen">
     <!--
-     Name of the composite device
+     Name of the target device
      -->
     <property name="Name" type="s" access="read"/>
-
-    <!--
-     Move the virtual mouse by the given amount relative to the cursor's
-     current position.
-     -->
-    <method name="MoveCursor">
-      <arg name="x" type="i" direction="in"/>
-      <arg name="y" type="i" direction="in"/>
-    </method>
+    </signal>
   </interface>
 </node>
 

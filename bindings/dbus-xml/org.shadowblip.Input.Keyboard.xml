@@ -2,11 +2,6 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node>
-  <interface name="org.freedesktop.DBus.Introspectable">
-    <method name="Introspect">
-      <arg type="s" direction="out"/>
-    </method>
-  </interface>
   <interface name="org.freedesktop.DBus.Properties">
     <method name="Get">
       <arg name="interface_name" type="s" direction="in"/>
@@ -22,14 +17,23 @@
       <arg name="interface_name" type="s" direction="in"/>
       <arg type="a{sv}" direction="out"/>
     </method>
-    <!--
-     Emits the `org.freedesktop.DBus.Properties.PropertiesChanged` signal.
-     -->
     <signal name="PropertiesChanged">
       <arg name="interface_name" type="s"/>
       <arg name="changed_properties" type="a{sv}"/>
       <arg name="invalidated_properties" type="as"/>
     </signal>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="Ping">
+    </method>
+    <method name="GetMachineId">
+      <arg type="s" direction="out"/>
+    </method>
   </interface>
   <interface name="org.shadowblip.Input.Keyboard">
     <!--
@@ -43,13 +47,6 @@
      Name of the composite device
      -->
     <property name="Name" type="s" access="read"/>
-  </interface>
-  <interface name="org.freedesktop.DBus.Peer">
-    <method name="Ping">
-    </method>
-    <method name="GetMachineId">
-      <arg type="s" direction="out"/>
-    </method>
   </interface>
 </node>
 
