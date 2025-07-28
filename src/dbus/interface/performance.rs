@@ -1,11 +1,14 @@
 use std::error::Error;
 
-use zbus::{fdo, object_server::SignalEmitter, Connection};
+use zbus::{fdo, message::Header, object_server::SignalEmitter, Connection};
 use zbus_macros::interface;
 
-use crate::input::{
-    capability::Capability,
-    event::context::{EventContext, SerializedSpan},
+use crate::{
+    dbus::polkit::check_polkit,
+    input::{
+        capability::Capability,
+        event::context::{EventContext, SerializedSpan},
+    },
 };
 
 use super::Unregisterable;
@@ -31,13 +34,20 @@ impl PerformanceInterface {
 )]
 impl PerformanceInterface {
     #[zbus(property)]
-    fn enabled(&self) -> fdo::Result<bool> {
+    async fn enabled(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<bool> {
+        check_polkit(hdr, "org.shadowblip.Input.Metrics.Enabled").await?;
         Ok(self.enabled)
     }
 
     #[zbus(property)]
-    fn set_enabled(&mut self, value: bool) {
+    async fn set_enabled(
+        &mut self,
+        value: bool,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<()> {
+        check_polkit(hdr, "org.shadowblip.Input.Metrics.SetEnabled").await?;
         self.enabled = value;
+        Ok(())
     }
 
     #[zbus(signal)]
@@ -61,7 +71,7 @@ impl PerformanceInterface {
             .object_server()
             .interface::<_, PerformanceInterface>(path)
             .await?;
-        let enabled = iface_ref.get().await.enabled()?;
+        let enabled = iface_ref.get().await.enabled(None).await?;
         if !enabled {
             return Ok(());
         }
