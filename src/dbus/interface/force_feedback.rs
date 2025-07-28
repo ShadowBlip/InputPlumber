@@ -1,10 +1,11 @@
 use std::{error::Error, future::Future};
 
 use packed_struct::types::{Integer, SizedInteger};
-use zbus::fdo;
+use zbus::{fdo, message::Header};
 use zbus_macros::interface;
 
 use crate::{
+    dbus::polkit::check_polkit,
     drivers::steam_deck::hid_report::PackedRumbleReport,
     input::{composite_device::client::CompositeDeviceClient, output_event::OutputEvent},
 };
@@ -66,7 +67,8 @@ where
     T: ForceFeedbacker + Send + Sync + 'static,
 {
     /// Send a simple rumble event
-    async fn rumble(&mut self, value: f64) -> fdo::Result<()> {
+    async fn rumble(&mut self, value: f64, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.Output.ForceFeedback.Rumble").await?;
         self.device
             .rumble(value)
             .await
@@ -75,7 +77,8 @@ where
     }
 
     /// Stop all currently playing force feedback effects
-    async fn stop(&mut self) -> fdo::Result<()> {
+    async fn stop(&mut self, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.Output.ForceFeedback.Stop").await?;
         self.device
             .stop()
             .await

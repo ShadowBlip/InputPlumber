@@ -1,7 +1,8 @@
-use zbus::fdo;
+use zbus::{fdo, message::Header};
 use zbus_macros::interface;
 
 use crate::dbus::interface::Unregisterable;
+use crate::dbus::polkit::check_polkit;
 
 /// The [TargetGamepadInterface] provides a DBus interface that can be exposed for managing
 /// a [GenericGamepad].
@@ -25,7 +26,8 @@ impl Default for TargetGamepadInterface {
 impl TargetGamepadInterface {
     /// Name of the DBus device
     #[zbus(property)]
-    async fn name(&self) -> fdo::Result<String> {
+    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.Gamepad.Name").await?;
         Ok(self.dev_name.clone())
     }
 }
