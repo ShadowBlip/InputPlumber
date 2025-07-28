@@ -14,6 +14,7 @@ authors = [
 assets = [
   { source = "target/release/inputplumber", dest = "/usr/bin/inputplumber", mode = "755" },
   { source = "rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", mode = "644" },
+  { source = "rootfs/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy", dest = "/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy", mode = "644" },
   { source = "rootfs/usr/lib/systemd/system/inputplumber.service", dest = "/usr/lib/systemd/system/inputplumber.service", mode = "644" },
   { source = "rootfs/usr/lib/systemd/system/inputplumber-suspend.service", dest = "/usr/lib/systemd/system/inputplumber-suspend.service", mode = "644" },
   { source = "rootfs/usr/share/inputplumber/devices/*.yaml", dest = "/usr/share/inputplumber/devices/", mode = "644" },
@@ -52,6 +53,11 @@ assets = [
   [
     "rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf",
     "usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf",
+    "644",
+  ],
+  [
+    "rootfs/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy",
+    "usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy",
     "644",
   ],
   [

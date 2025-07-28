@@ -10,7 +10,7 @@ URL:            https://github.com/ShadowBlip/InputPlumber
 
 BuildRequires:  libevdev-devel libiio-devel git make cargo libudev-devel llvm-devel clang-devel
 Requires:       libevdev libiio
-Recommends:     steam gamescope-session linuxconsoletools
+Recommends:     steam gamescope-session linuxconsoletools polkit
 Provides:       inputplumber
 Conflicts:      hhd
 
@@ -36,6 +36,7 @@ mkdir -p %{buildroot}/usr/share/inputplumber/capability_maps
 mkdir -p %{buildroot}/usr/share/inputplumber/devices
 mkdir -p %{buildroot}/usr/share/inputplumber/profiles
 mkdir -p %{buildroot}/usr/share/inputplumber/schema
+mkdir -p %{buildroot}/usr/share/polkit-1/actions
 
 install -D -m 755 %{_builddir}/InputPlumber/target/%{_arch}-unknown-linux-gnu/release/inputplumber %{buildroot}/usr/bin/inputplumber
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf %{buildroot}/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf
@@ -47,6 +48,7 @@ install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/capabi
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/devices/* %{buildroot}/usr/share/inputplumber/devices/
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/profiles/* %{buildroot}/usr/share/inputplumber/profiles/
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/schema/* %{buildroot}/usr/share/inputplumber/schema/
+install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy %{buildroot}/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy
 
 %post
 udevadm control --reload-rules
@@ -71,6 +73,7 @@ systemctl disable inputplumber.service
 /usr/share/inputplumber/devices/*.yaml
 /usr/share/inputplumber/profiles/*.yaml
 /usr/share/inputplumber/schema/*.json
+/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy
 
 %changelog
 * Tue Aug 6 2024 William Edwards [0.33.1-0]

@@ -1,8 +1,8 @@
 use crate::{
-    dbus::interface::Unregisterable,
+    dbus::{interface::Unregisterable, polkit::check_polkit},
     udev::device::{AttributeGetter, AttributeSetter, UdevDevice},
 };
-use zbus::fdo;
+use zbus::{fdo, message::Header};
 use zbus_macros::interface;
 
 /// DBusInterface exposing information about a HIDRaw device
@@ -20,18 +20,25 @@ impl SourceIioImuInterface {
 impl SourceIioImuInterface {
     /// Returns the human readable name of the device (e.g. XBox 360 Pad)
     #[zbus(property)]
-    fn id(&self) -> fdo::Result<String> {
+    async fn id(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.Source.IIOIMUDevice.Id").await?;
         Ok(self.device.sysname())
     }
 
     /// Returns the human readable name of the device (e.g. XBox 360 Pad)
     #[zbus(property)]
-    fn name(&self) -> fdo::Result<String> {
+    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.Source.IIOIMUDevice.Name").await?;
         Ok(self.device.name())
     }
 
     #[zbus(property)]
-    async fn accel_sample_rate(&self) -> fdo::Result<f64> {
+    async fn accel_sample_rate(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<f64> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.AccelSampleRate",
+        )
+        .await?;
         let Ok(dev) = self.device.get_device() else {
             return Ok(0.0);
         };
@@ -42,7 +49,15 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn accel_sample_rates_avail(&self) -> fdo::Result<Vec<f64>> {
+    async fn accel_sample_rates_avail(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<f64>> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.AccelSampleRatesAvail",
+        )
+        .await?;
         let Ok(dev) = self.device.get_device() else {
             return Ok(vec![0.0]);
         };
@@ -57,7 +72,15 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn angvel_sample_rate(&self) -> fdo::Result<f64> {
+    async fn angvel_sample_rate(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<f64> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.AngvelSampleRate",
+        )
+        .await?;
         let Ok(dev) = self.device.get_device() else {
             return Ok(0.0);
         };
@@ -68,7 +91,15 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn angvel_sample_rates_avail(&self) -> fdo::Result<Vec<f64>> {
+    async fn angvel_sample_rates_avail(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<f64>> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.AngvelSampleRatesAvail",
+        )
+        .await?;
         let Ok(dev) = self.device.get_device() else {
             return Ok(vec![0.0]);
         };
@@ -83,7 +114,16 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn set_accel_sample_rate(&self, sample_rate: f64) -> zbus::Result<()> {
+    async fn set_accel_sample_rate(
+        &self,
+        sample_rate: f64,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> zbus::Result<()> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.SetAccelSampleRate",
+        )
+        .await?;
         let Ok(mut dev) = self.device.get_device() else {
             return Ok(());
         };
@@ -97,7 +137,16 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn set_angvel_sample_rate(&self, sample_rate: f64) -> zbus::Result<()> {
+    async fn set_angvel_sample_rate(
+        &self,
+        sample_rate: f64,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> zbus::Result<()> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.SetAngvelSampleRate",
+        )
+        .await?;
         let Ok(mut dev) = self.device.get_device() else {
             return Ok(());
         };
@@ -111,7 +160,8 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn accel_scale(&self) -> fdo::Result<f64> {
+    async fn accel_scale(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<f64> {
+        check_polkit(hdr, "org.shadowblip.Input.Source.IIOIMUDevice.AccelScale").await?;
         let Ok(dev) = self.device.get_device() else {
             return Ok(0.0);
         };
@@ -122,7 +172,15 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn accel_scales_avail(&self) -> fdo::Result<Vec<f64>> {
+    async fn accel_scales_avail(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<f64>> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.AccelScalesAvail",
+        )
+        .await?;
         let Ok(dev) = self.device.get_device() else {
             return Ok(vec![0.0]);
         };
@@ -137,7 +195,8 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn angvel_scale(&self) -> fdo::Result<f64> {
+    async fn angvel_scale(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<f64> {
+        check_polkit(hdr, "org.shadowblip.Input.Source.IIOIMUDevice.AngvelScale").await?;
         let Ok(dev) = self.device.get_device() else {
             return Ok(0.0);
         };
@@ -148,7 +207,15 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn angvel_scales_avail(&self) -> fdo::Result<Vec<f64>> {
+    async fn angvel_scales_avail(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<f64>> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.AngvelScalesAvail",
+        )
+        .await?;
         let Ok(dev) = self.device.get_device() else {
             return Ok(vec![0.0]);
         };
@@ -163,7 +230,16 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn set_accel_scale(&self, scale: f64) -> zbus::Result<()> {
+    async fn set_accel_scale(
+        &self,
+        scale: f64,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> zbus::Result<()> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.SetAccelScale",
+        )
+        .await?;
         let Ok(mut dev) = self.device.get_device() else {
             return Ok(());
         };
@@ -174,7 +250,16 @@ impl SourceIioImuInterface {
     }
 
     #[zbus(property)]
-    async fn set_angvel_scale(&self, scale: f64) -> zbus::Result<()> {
+    async fn set_angvel_scale(
+        &self,
+        scale: f64,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> zbus::Result<()> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.Source.IIOIMUDevice.SetAngvelScale",
+        )
+        .await?;
         let Ok(mut dev) = self.device.get_device() else {
             return Ok(());
         };

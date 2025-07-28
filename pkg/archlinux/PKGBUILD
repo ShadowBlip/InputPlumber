@@ -8,6 +8,7 @@ arch=('x86_64')
 url="https://github.com/ShadowBlip/inputplumber"
 license=('GPL')
 depends=('dbus' 'libevdev' 'libiio')
+optdepends=('polkit')
 provides=('inputplumber')
 conflicts=('inputplumber-git')
 source=(inputplumber-$pkgver.tar.gz::https://github.com/ShadowBlip/inputplumber/releases/download/$pkgver/inputplumber-x86_64.tar.gz)
