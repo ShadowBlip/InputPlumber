@@ -1,7 +1,8 @@
-use zbus::{fdo, object_server::SignalEmitter};
+use zbus::{fdo, message::Header, object_server::SignalEmitter};
 use zbus_macros::interface;
 
 use crate::dbus::interface::Unregisterable;
+use crate::dbus::polkit::check_polkit;
 
 /// The [TargetDBusInterface] provides a DBus interface that can be exposed for managing
 /// a [DBusDevice]. It works by sending command messages to a channel that the
@@ -24,7 +25,8 @@ impl Default for TargetDBusInterface {
 impl TargetDBusInterface {
     /// Name of the DBus device
     #[zbus(property)]
-    async fn name(&self) -> fdo::Result<String> {
+    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.DBusDevice.Name").await?;
         Ok("DBusDevice".into())
     }
 

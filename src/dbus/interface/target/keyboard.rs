@@ -1,8 +1,8 @@
-use zbus::fdo;
+use zbus::{fdo, message::Header};
 use zbus_macros::interface;
 
 use crate::{
-    dbus::interface::Unregisterable,
+    dbus::{interface::Unregisterable, polkit::check_polkit},
     input::{
         capability::{Capability, Keyboard},
         event::{native::NativeEvent, value::InputValue},
@@ -27,12 +27,19 @@ impl TargetKeyboardInterface {
 impl TargetKeyboardInterface {
     /// Name of the composite device
     #[zbus(property)]
-    async fn name(&self) -> fdo::Result<String> {
+    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.Keyboard.Name").await?;
         Ok("Keyboard".into())
     }
 
     /// Send the given key to the virtual keyboard
-    async fn send_key(&self, key: String, value: bool) -> fdo::Result<()> {
+    async fn send_key(
+        &self,
+        key: String,
+        value: bool,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.Input.Keyboard.SendKey").await?;
         // Create a NativeEvent to send to the keyboard
         let capability = capability_from_key_string(key.as_str());
         if matches!(capability, Capability::NotImplemented) {
