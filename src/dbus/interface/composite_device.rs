@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use zbus::{
     fdo,
+    message::Header,
     zvariant::{self, Value},
     Connection,
 };
@@ -9,6 +10,7 @@ use zbus_macros::interface;
 
 use crate::{
     config::DeviceProfile,
+    dbus::polkit::check_polkit,
     input::{
         capability::{Capability, Gamepad, Mouse},
         composite_device::{client::CompositeDeviceClient, InterceptMode},
@@ -48,7 +50,8 @@ impl CompositeDeviceInterface {
 impl CompositeDeviceInterface {
     /// Name of the composite device
     #[zbus(property)]
-    async fn name(&self) -> fdo::Result<String> {
+    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.Name").await?;
         self.composite_device
             .get_name()
             .await
@@ -57,7 +60,8 @@ impl CompositeDeviceInterface {
 
     /// Name of the currently loaded profile
     #[zbus(property)]
-    async fn profile_name(&self) -> fdo::Result<String> {
+    async fn profile_name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.ProfileName").await?;
         let name = self
             .profile
             .as_ref()
@@ -68,12 +72,14 @@ impl CompositeDeviceInterface {
 
     /// Optional path to the currently loaded profile
     #[zbus(property)]
-    async fn profile_path(&self) -> fdo::Result<String> {
+    async fn profile_path(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.ProfilePath").await?;
         Ok(self.profile_path.clone().unwrap_or_default())
     }
 
     /// Stop the composite device and all target devices
-    async fn stop(&self) -> fdo::Result<()> {
+    async fn stop(&self, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.Input.CompositeDevice.Stop").await?;
         self.composite_device
             .stop()
             .await
@@ -81,14 +87,28 @@ impl CompositeDeviceInterface {
     }
 
     /// Returns the currently loaded profile encoded in YAML format
-    async fn get_profile_yaml(&self) -> fdo::Result<String> {
+    async fn get_profile_yaml(&self, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<String> {
+        check_polkit(
+            Some(hdr),
+            "org.shadowblip.Input.CompositeDevice.GetProfileYaml",
+        )
+        .await?;
         let data =
             serde_yaml::to_string(&self.profile).map_err(|e| fdo::Error::Failed(e.to_string()))?;
         Ok(data)
     }
 
     /// Load the device profile from the given path
-    async fn load_profile_path(&self, path: String) -> fdo::Result<()> {
+    async fn load_profile_path(
+        &self,
+        path: String,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(
+            Some(hdr),
+            "org.shadowblip.Input.CompositeDevice.LoadProfilePath",
+        )
+        .await?;
         self.composite_device
             .load_profile_path(path)
             .await
@@ -96,7 +116,16 @@ impl CompositeDeviceInterface {
     }
 
     /// Load the device profile from the given YAML/JSON string
-    async fn load_profile_from_yaml(&self, profile: String) -> fdo::Result<()> {
+    async fn load_profile_from_yaml(
+        &self,
+        profile: String,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(
+            Some(hdr),
+            "org.shadowblip.Input.CompositeDevice.LoadProfileFromYaml",
+        )
+        .await?;
         self.composite_device
             .load_profile_from_yaml(profile)
             .await
@@ -107,7 +136,16 @@ impl CompositeDeviceInterface {
     /// such as ["gamepad", "mouse", "keyboard"]. This method will stop all
     /// current virtual devices for the composite device and create and attach
     /// new target devices.
-    async fn set_target_devices(&self, target_device_types: Vec<String>) -> fdo::Result<()> {
+    async fn set_target_devices(
+        &self,
+        target_device_types: Vec<String>,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(
+            Some(hdr),
+            "org.shadowblip.Input.CompositeDevice.SetTargetDevices",
+        )
+        .await?;
         let mut target_device_type_ids = Vec::with_capacity(target_device_types.len());
         for kind in target_device_types {
             let type_id = kind.as_str().try_into().map_err(|_| {
@@ -122,7 +160,13 @@ impl CompositeDeviceInterface {
     }
 
     /// Directly write to the composite device's target devices with the given event
-    fn send_event(&self, event: String, value: zvariant::Value<'_>) -> fdo::Result<()> {
+    async fn send_event(
+        &self,
+        event: String,
+        value: zvariant::Value<'_>,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.Input.CompositeDevice.SendEvent").await?;
         let cap = Capability::from_str(event.as_str()).map_err(|_| {
             fdo::Error::Failed(format!(
                 "Failed to parse event string {event} into capability."
@@ -181,7 +225,16 @@ impl CompositeDeviceInterface {
     }
 
     /// Directly write to the composite device's target devices with the given button event list
-    async fn send_button_chord(&self, events: Vec<String>) -> fdo::Result<()> {
+    async fn send_button_chord(
+        &self,
+        events: Vec<String>,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(
+            Some(hdr),
+            "org.shadowblip.Input.CompositeDevice.SendButtonChord",
+        )
+        .await?;
         // Store built native events to send in a command to the CompositeDevice
         let mut chord: Vec<NativeEvent> = Vec::new();
 
@@ -229,7 +282,13 @@ impl CompositeDeviceInterface {
         &self,
         activation_events: Vec<String>,
         target_event: String,
+        #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<()> {
+        check_polkit(
+            Some(hdr),
+            "org.shadowblip.Input.CompositeDevice.SetInterceptActivation",
+        )
+        .await?;
         let mut activation_caps: Vec<Capability> = Vec::new();
 
         // Iterate in the given order for press events
@@ -268,7 +327,11 @@ impl CompositeDeviceInterface {
 
     /// List of capabilities that all source devices implement
     #[zbus(property)]
-    async fn capabilities(&self) -> fdo::Result<Vec<String>> {
+    async fn capabilities(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.Capabilities").await?;
         let capabilities = self
             .composite_device
             .get_capabilities()
@@ -300,7 +363,15 @@ impl CompositeDeviceInterface {
     }
 
     #[zbus(property)]
-    async fn output_capabilities(&self) -> fdo::Result<Vec<String>> {
+    async fn output_capabilities(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.CompositeDevice.OutputCapabilities",
+        )
+        .await?;
         let capabilities = self
             .composite_device
             .get_output_capabilities()
@@ -316,7 +387,15 @@ impl CompositeDeviceInterface {
 
     /// List of capabilities that all target devices implement
     #[zbus(property)]
-    async fn target_capabilities(&self) -> fdo::Result<Vec<String>> {
+    async fn target_capabilities(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.CompositeDevice.TargetCapabilities",
+        )
+        .await?;
         let capabilities = self
             .composite_device
             .get_target_capabilities()
@@ -349,7 +428,15 @@ impl CompositeDeviceInterface {
 
     /// List of source devices that this composite device is processing inputs for
     #[zbus(property)]
-    async fn source_device_paths(&self) -> fdo::Result<Vec<String>> {
+    async fn source_device_paths(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(
+            hdr,
+            "org.shadowblip.Input.CompositeDevice.SourceDevicePaths",
+        )
+        .await?;
         let paths = self
             .composite_device
             .get_source_device_paths()
@@ -361,7 +448,8 @@ impl CompositeDeviceInterface {
 
     /// The intercept mode of the composite device.
     #[zbus(property)]
-    async fn intercept_mode(&self) -> fdo::Result<u32> {
+    async fn intercept_mode(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<u32> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.InterceptMode").await?;
         let mode = self
             .composite_device
             .get_intercept_mode()
@@ -377,7 +465,12 @@ impl CompositeDeviceInterface {
     }
 
     #[zbus(property)]
-    async fn set_intercept_mode(&self, mode: u32) -> zbus::Result<()> {
+    async fn set_intercept_mode(
+        &self,
+        mode: u32,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> zbus::Result<()> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.SetInterceptMode").await?;
         let mode = match mode {
             0 => InterceptMode::None,
             1 => InterceptMode::Pass,
@@ -394,7 +487,11 @@ impl CompositeDeviceInterface {
 
     /// Target devices that this [CompositeDevice] is managing
     #[zbus(property)]
-    async fn target_devices(&self) -> fdo::Result<Vec<String>> {
+    async fn target_devices(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.TargetDevices").await?;
         let paths = self
             .composite_device
             .get_target_device_paths()
@@ -406,7 +503,11 @@ impl CompositeDeviceInterface {
 
     /// Target dbus devices that this [CompositeDevice] is managing
     #[zbus(property)]
-    async fn dbus_devices(&self) -> fdo::Result<Vec<String>> {
+    async fn dbus_devices(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.DbusDevices").await?;
         let paths = self
             .composite_device
             .get_dbus_device_paths()

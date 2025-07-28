@@ -1,13 +1,13 @@
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use zbus::{fdo, Connection};
+use zbus::{fdo, message::Header, Connection};
 use zbus_macros::interface;
 
 use crate::{
     config::CompositeDeviceConfig,
     constants::BUS_PREFIX,
-    dbus::interface::Unregisterable,
+    dbus::{interface::Unregisterable, polkit::check_polkit},
     input::{manager::ManagerCommand, target::TargetDeviceTypeId},
 };
 
@@ -37,18 +37,28 @@ impl ManagerInterface {
 )]
 impl ManagerInterface {
     #[zbus(property)]
-    async fn version(&self) -> fdo::Result<String> {
+    async fn version(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.InputPlumber.Version").await?;
         const VERSION: &str = env!("CARGO_PKG_VERSION");
         Ok(VERSION.to_string())
     }
 
     #[zbus(property)]
-    async fn gamepad_order(&self) -> fdo::Result<Vec<String>> {
+    async fn gamepad_order(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(hdr, "org.shadowblip.InputPlumber.GamepadOrder").await?;
         Ok(self.gamepad_order.clone())
     }
 
     #[zbus(property)]
-    async fn set_gamepad_order(&mut self, order: Vec<String>) -> fdo::Result<()> {
+    async fn set_gamepad_order(
+        &mut self,
+        order: Vec<String>,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<()> {
+        check_polkit(hdr, "org.shadowblip.InputPlumber.SetGamepadOrder").await?;
         self.tx
             .send_timeout(
                 ManagerCommand::SetGamepadOrder {
@@ -66,7 +76,11 @@ impl ManagerInterface {
     /// If set to 'true', InputPlumber will try to manage all input devices
     /// on the system that have a Composite Device configuration.
     #[zbus(property)]
-    async fn manage_all_devices(&self) -> fdo::Result<bool> {
+    async fn manage_all_devices(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<bool> {
+        check_polkit(hdr, "org.shadowblip.InputPlumber.ManageAllDevices").await?;
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(
@@ -83,7 +97,12 @@ impl ManagerInterface {
         Ok(response)
     }
     #[zbus(property)]
-    async fn set_manage_all_devices(&self, value: bool) -> zbus::Result<()> {
+    async fn set_manage_all_devices(
+        &self,
+        value: bool,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> zbus::Result<()> {
+        check_polkit(hdr, "org.shadowblip.InputPlumber.SetManageAllDevices").await?;
         self.tx
             .send_timeout(
                 ManagerCommand::SetManageAllDevices(value),
@@ -97,21 +116,38 @@ impl ManagerInterface {
     /// Returns a list of supported target device names. E.g. ["InputPlumber Mouse", "Microsoft
     /// XBox 360 Gamepad"]
     #[zbus(property)]
-    fn supported_target_devices(&self) -> fdo::Result<Vec<String>> {
+    async fn supported_target_devices(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(hdr, "org.shadowblip.InputPlumber.SupportedTargetDevices").await?;
         let supported = TargetDeviceTypeId::supported_types();
         Ok(supported.iter().map(|id| id.name().to_string()).collect())
     }
 
     /// Returns a list of supported target device ids. E.g. ["xb360", "deck"]
     #[zbus(property)]
-    fn supported_target_device_ids(&self) -> fdo::Result<Vec<String>> {
+    async fn supported_target_device_ids(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<String>> {
+        check_polkit(hdr, "org.shadowblip.InputPlumber.SupportedTargetDeviceIds").await?;
         let supported = TargetDeviceTypeId::supported_types();
         Ok(supported.iter().map(|id| id.to_string()).collect())
     }
 
     /// Create a composite device using the given composite device config. The
     /// path should be the absolute path to a composite device configuration file.
-    async fn create_composite_device(&self, config_path: String) -> fdo::Result<String> {
+    async fn create_composite_device(
+        &self,
+        config_path: String,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            Some(hdr),
+            "org.shadowblip.InputPlumber.CreateCompositeDevice",
+        )
+        .await?;
         let device = CompositeDeviceConfig::from_yaml_file(config_path)
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         self.tx
@@ -126,7 +162,12 @@ impl ManagerInterface {
 
     /// Create a target device of the given type. Returns the DBus path to
     /// the created target device.
-    async fn create_target_device(&self, kind: String) -> fdo::Result<String> {
+    async fn create_target_device(
+        &self,
+        kind: String,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<String> {
+        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.CreateTargetDevice").await?;
         let Ok(kind) = TargetDeviceTypeId::try_from(kind.as_str()) else {
             return Err(fdo::Error::InvalidArgs(format!(
                 "Invalid target device type: {kind}."
@@ -157,7 +198,12 @@ impl ManagerInterface {
     }
 
     /// Stop the given target device
-    async fn stop_target_device(&self, path: String) -> fdo::Result<()> {
+    async fn stop_target_device(
+        &self,
+        path: String,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.StopTargetDevice").await?;
         self.tx
             .send_timeout(
                 ManagerCommand::StopTargetDevice { path },
@@ -173,7 +219,9 @@ impl ManagerInterface {
         &self,
         target_path: String,
         composite_path: String,
+        #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.AttachTargetDevice").await?;
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(
@@ -200,7 +248,8 @@ impl ManagerInterface {
     }
 
     /// Used to prepare InputPlumber for system suspend
-    async fn hook_sleep(&self) -> fdo::Result<()> {
+    async fn hook_sleep(&self, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.HookSleep").await?;
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(
@@ -219,7 +268,8 @@ impl ManagerInterface {
     }
 
     /// Used to prepare InputPlumber for resume from system suspend
-    async fn hook_wake(&self) -> fdo::Result<()> {
+    async fn hook_wake(&self, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.HookWake").await?;
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(
