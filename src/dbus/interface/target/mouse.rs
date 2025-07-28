@@ -1,8 +1,8 @@
-use zbus::fdo;
+use zbus::{fdo, message::Header};
 use zbus_macros::interface;
 
 use crate::{
-    dbus::interface::Unregisterable,
+    dbus::{interface::Unregisterable, polkit::check_polkit},
     input::{
         capability::{Capability, Mouse},
         event::{native::NativeEvent, value::InputValue},
@@ -27,13 +27,20 @@ impl TargetMouseInterface {
 impl TargetMouseInterface {
     /// Name of the composite device
     #[zbus(property)]
-    async fn name(&self) -> fdo::Result<String> {
+    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.Mouse.Name").await?;
         Ok("Mouse".into())
     }
 
     /// Move the virtual mouse by the given amount relative to the cursor's
     /// current position.
-    async fn move_cursor(&self, x: i32, y: i32) -> fdo::Result<()> {
+    async fn move_cursor(
+        &self,
+        x: i32,
+        y: i32,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(Some(hdr), "org.shadowblip.Input.Mouse.MoveCursor").await?;
         // Create a mouse motion event
         let value = InputValue::Vector2 {
             x: Some(x as f64),
