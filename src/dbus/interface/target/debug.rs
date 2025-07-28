@@ -1,8 +1,8 @@
-use zbus::{fdo, object_server::SignalEmitter};
+use zbus::{fdo, message::Header, object_server::SignalEmitter};
 use zbus_macros::interface;
 
 use crate::{
-    dbus::interface::Unregisterable,
+    dbus::{interface::Unregisterable, polkit::check_polkit},
     drivers::unified_gamepad::reports::input_capability_report::InputCapabilityReport,
 };
 
@@ -35,7 +35,11 @@ impl TargetDebugInterface {
     /// Returns the input capability report data that can be used to decode
     /// the values from the input report.
     #[zbus(property)]
-    pub async fn input_capability_report(&self) -> fdo::Result<Vec<u8>> {
+    pub async fn input_capability_report(
+        &self,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<u8>> {
+        check_polkit(hdr, "org.shadowblip.Input.Debug.InputCapabilityReport").await?;
         let data = self
             .capability_report
             .pack_to_vec()
