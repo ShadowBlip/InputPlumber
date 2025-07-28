@@ -109,7 +109,7 @@ impl ManagerInterface {
         Ok(supported.iter().map(|id| id.to_string()).collect())
     }
 
-    /// Create a composite device using the give composite device config. The
+    /// Create a composite device using the given composite device config. The
     /// path should be the absolute path to a composite device configuration file.
     async fn create_composite_device(&self, config_path: String) -> fdo::Result<String> {
         let device = CompositeDeviceConfig::from_yaml_file(config_path)

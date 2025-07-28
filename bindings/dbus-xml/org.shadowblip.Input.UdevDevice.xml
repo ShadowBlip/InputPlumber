@@ -35,11 +35,7 @@
       <arg type="s" direction="out"/>
     </method>
   </interface>
-  <interface name="org.shadowblip.Input.Source.EventDevice">
-    <!--
-     Returns the detected device class of the device (e.g. "joystick", "touchscreen", etc.)
-     -->
-    <property name="DeviceClass" type="s" access="read"/>
+  <interface name="org.shadowblip.Input.Source.UdevDevice">
     <!--
      Returns the full device node path to the device (e.g. /dev/input/event3)
      -->
@@ -69,50 +65,13 @@
      -->
     <property name="PhysPath" type="s" access="read"/>
     <!--
-     Returns the set of supported "absolute axes" reported by the device.
-
-     These are most typically supported by joysticks and touchpads.
+     Returns the udev device properties of the device
      -->
-    <property name="SupportedAbsoluteAxes" type="aq" access="read"/>
+    <property name="Properties" type="a{ss}" access="read"/>
     <!--
-     Returns the set of supported force feedback effects supported by a device.
+     Returns the subsystem that the device belongs to. E.g. "input", "hidraw"
      -->
-    <property name="SupportedFf" type="aq" access="read"/>
-    <!--
-     Returns the set of supported keys reported by the device.
-
-     For keyboards, this is the set of all possible keycodes the keyboard may emit. Controllers,
-     mice, and other peripherals may also report buttons as keys.
-     -->
-    <property name="SupportedKeys" type="aq" access="read"/>
-    <!--
-     Returns a set of supported LEDs on the device.
-
-     Most commonly these are state indicator lights for things like Scroll Lock, but they
-     can also be found in cameras and other devices.
-     -->
-    <property name="SupportedLeds" type="aq" access="read"/>
-    <!--
-     Returns the set of supported "relative axes" reported by the device.
-
-     Standard mice will generally report `REL_X` and `REL_Y` along with wheel if supported.
-     -->
-    <property name="SupportedRelativeAxes" type="aq" access="read"/>
-    <!--
-     Returns the set of supported simple sounds supported by a device.
-
-     You can use these to make really annoying beep sounds come from an internal self-test
-     speaker, for instance.
-     -->
-    <property name="SupportedSounds" type="aq" access="read"/>
-    <!--
-     Returns the set of supported switches reported by the device.
-
-     These are typically used for things like software switches on laptop lids (which the
-     system reacts to by suspending or locking), or virtual switches to indicate whether a
-     headphone jack is plugged in (used to disable external speakers).
-     -->
-    <property name="SupportedSwitches" type="aq" access="read"/>
+    <property name="Subsystem" type="s" access="read"/>
     <!--
      Returns the full sysfs path of the device (e.g. /sys/devices/pci0000:00)
      -->
@@ -123,4 +82,3 @@
     <property name="UniqueId" type="s" access="read"/>
   </interface>
 </node>
-

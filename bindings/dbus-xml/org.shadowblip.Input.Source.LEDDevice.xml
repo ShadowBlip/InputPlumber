@@ -35,20 +35,11 @@
       <arg type="s" direction="out"/>
     </method>
   </interface>
-  <interface name="org.shadowblip.Input.Mouse">
+  <interface name="org.shadowblip.Input.Source.LEDDevice">
     <!--
-     Name of the composite device
+     Returns the human readable name of the device (e.g. XBox 360 Pad)
      -->
-    <property name="Name" type="s" access="read"/>
-
-    <!--
-     Move the virtual mouse by the given amount relative to the cursor's
-     current position.
-     -->
-    <method name="MoveCursor">
-      <arg name="x" type="i" direction="in"/>
-      <arg name="y" type="i" direction="in"/>
-    </method>
+    <property name="Id" type="s" access="read"/>
   </interface>
 </node>
 

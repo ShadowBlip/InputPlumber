@@ -35,20 +35,18 @@
       <arg type="s" direction="out"/>
     </method>
   </interface>
-  <interface name="org.shadowblip.Input.Mouse">
+  <interface name="org.shadowblip.Output.ForceFeedback">
     <!--
-     Name of the composite device
+     Send a simple rumble event
      -->
-    <property name="Name" type="s" access="read"/>
+    <method name="Rumble">
+      <arg name="value" type="i" direction="in"/>
+    </method>
 
     <!--
-     Move the virtual mouse by the given amount relative to the cursor's
-     current position.
+     Stop all currently playing force feedback effects
      -->
-    <method name="MoveCursor">
-      <arg name="x" type="i" direction="in"/>
-      <arg name="y" type="i" direction="in"/>
+    <method name="Stop">
     </method>
   </interface>
 </node>
-
