@@ -2,22 +2,6 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node>
-  <interface name="org.shadowblip.InputManager">
-    <!--
-     Create a composite device using the give composite device config. The
-     path should be the absolute path to a composite device configuration file.
-     -->
-    <method name="CreateCompositeDevice">
-      <arg name="config_path" type="s" direction="in"/>
-      <arg type="s" direction="out"/>
-    </method>
-    <property name="InterceptMode" type="s" access="read"/>
-  </interface>
-  <interface name="org.freedesktop.DBus.Introspectable">
-    <method name="Introspect">
-      <arg type="s" direction="out"/>
-    </method>
-  </interface>
   <interface name="org.freedesktop.DBus.Properties">
     <method name="Get">
       <arg name="interface_name" type="s" direction="in"/>
@@ -33,9 +17,6 @@
       <arg name="interface_name" type="s" direction="in"/>
       <arg type="a{sv}" direction="out"/>
     </method>
-    <!--
-     Emits the `org.freedesktop.DBus.Properties.PropertiesChanged` signal.
-     -->
     <signal name="PropertiesChanged">
       <arg name="interface_name" type="s"/>
       <arg name="changed_properties" type="a{sv}"/>
@@ -48,6 +29,68 @@
     <method name="GetMachineId">
       <arg type="s" direction="out"/>
     </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.shadowblip.InputManager">
+    <!--
+     Create a composite device using the given composite device config. The
+     path should be the absolute path to a composite device configuration file.
+     -->
+    <method name="CreateCompositeDevice">
+      <arg name="config_path" type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
+    <!--
+     Create a target device of the given type. Returns the DBus path to
+     the created target device.
+     -->
+    <method name="CreateTargetDevice">
+      <arg name="kind" type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
+    <!--
+     Stop the given target device
+     -->
+    <method name="StopTargetDevice">
+      <arg name="path" type="s" direction="in"/>
+    </method>
+    <!--
+     Attach the given target device to the given composite device
+     -->
+    <method name="AttachTargetDevice">
+      <arg name="target_path" type="s" direction="in"/>
+      <arg name="composite_path" type="s" direction="in"/>
+    </method>
+    <!--
+     Used to prepare InputPlumber for system suspend
+     -->
+    <method name="HookSleep">
+    </method>
+    <!--
+     Used to prepare InputPlumber for resume from system suspend
+     -->
+    <method name="HookWake">
+    </method>
+    <property name="GamepadOrder" type="as" access="readwrite"/>
+    <!--
+     If set to 'true', InputPlumber will try to manage all input devices
+     on the system that have a Composite Device configuration.
+     -->
+    <property name="ManageAllDevices" type="b" access="readwrite"/>
+    <!--
+     Returns a list of supported target device ids. E.g. ["xb360", "deck"]
+     -->
+    <property name="SupportedTargetDeviceIds" type="as" access="read"/>
+    <!--
+     Returns a list of supported target device names. E.g. ["InputPlumber Mouse", "Microsoft
+     XBox 360 Gamepad"]
+     -->
+    <property name="SupportedTargetDevices" type="as" access="read"/>
+    <property name="Version" type="s" access="read"/>
   </interface>
 </node>
 
