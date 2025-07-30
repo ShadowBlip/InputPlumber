@@ -4,6 +4,7 @@ version = "0.60.8"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Open source input manager for Linux"
+repository = "https://github.com/ShadowBlip/InputPlumber.git"
 authors = [
   "William Edwards <shadowapex@gmail.com>",
   "Derek J. Clark <derekjohn.clark@gmail.com>",
