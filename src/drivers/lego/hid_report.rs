@@ -1,29 +1,24 @@
 //! Reference: https://gitlab.com/open-sd/opensd/-/blob/main/src/opensdd/drivers/gamepad/hid_reports.hpp
 #![allow(warnings)]
+use futures::FutureExt;
 use packed_struct::prelude::*;
 
+use std::fmt::Display;
+use std::fmt::Formatter;
 /// Different reports types
 // When in some modes there's another report decriptor with the same ID
 // as the touchpad whic is a keyboard with macros tied to different buttons.
 // Not useful, I haven't enumerated this report here.
 pub enum ReportType {
     TouchpadData = 0x01,
-    MouseDataFPS = 0x02, // Same as Mouse Data in FPS mode, includes optical data
-    XInputData = 0x04,   // Always available and always has access to all buttons
-    DInputDataLeft = 0x07, // Left Stick, single side detached
-    DInputDataRight = 0x08, // Right Stick, single side detached
-    MouseData = 0x09,    // Mouse events while in gamepad mode
+    XInputData = 0x04, // Always available and always has access to all buttons
 }
 
 impl ReportType {
     pub fn to_u8(&self) -> u8 {
         match self {
             ReportType::TouchpadData => ReportType::TouchpadData as u8,
-            ReportType::MouseDataFPS => ReportType::MouseDataFPS as u8,
             ReportType::XInputData => ReportType::XInputData as u8,
-            ReportType::DInputDataLeft => ReportType::DInputDataLeft as u8,
-            ReportType::DInputDataRight => ReportType::DInputDataRight as u8,
-            ReportType::MouseData => ReportType::MouseData as u8,
         }
     }
 }
@@ -55,6 +50,38 @@ impl DPadDirection {
             Self::UpLeft => 1 | 1 << 3,         // 00001001
             Self::None => 0,                    // 00000000
         }
+    }
+}
+
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
+pub enum GamepadMode {
+    XInput = 0x00,
+    DInput,
+    Fps,
+    #[default]
+    Unknown,
+}
+
+impl From<u8> for GamepadMode {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::XInput,
+            1 => Self::DInput,
+            2 => Self::Fps,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+impl Display for GamepadMode {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let str = match *self {
+            GamepadMode::XInput => "xinput".to_string(),
+            GamepadMode::DInput => "dinput".to_string(),
+            GamepadMode::Fps => "fps".to_string(),
+            GamepadMode::Unknown => "unknown".to_string(),
+        };
+        write!(f, "{}", str)
     }
 }
 
@@ -99,7 +126,6 @@ impl DPadDirection {
 // Right Stick Down
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 ,  125 ,   -1 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000001.800014 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 7d ff 00 00 00 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-//
 //
 // Touchpad
 //
@@ -235,7 +261,7 @@ impl DPadDirection {
 //
 // M3
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    4 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
-//E: 000004.079905 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 80 80 00 00 04 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+// E: 000004.079905 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 80 80 00 00 04 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 //
 // Select
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,   99 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    2 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
@@ -248,6 +274,14 @@ impl DPadDirection {
 // Mouse Wheel Click
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 , -128 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000005.111268 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 80 80 00 00 00 80 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+//
+// Show Desktop
+// # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,   64 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
+// E: 000006.407970 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 80 80 00 00 00 40 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+//
+// Alt Tab
+// # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,   32 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
+// E: 000018.074026 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 80 80 00 00 00 20 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "60")]
 pub struct XInputDataReport {
@@ -275,8 +309,8 @@ pub struct XInputDataReport {
     #[packed_field(bytes = "8")]
     pub r_controller_mode0: u8, // 64 - 71
 
-    #[packed_field(bytes = "9")]
-    pub gamepad_mode: u8,
+    #[packed_field(bytes = "9", ty = "enum")]
+    pub gamepad_mode: GamepadMode,
     //#[packed_field(bytes = "10")]
     //pub unk_10: u8,
     //#[packed_field(bytes = "11")]
@@ -356,10 +390,10 @@ pub struct XInputDataReport {
     // BYTE 21: Mouse Wheel Click (-128)
     #[packed_field(bits = "168")]
     pub mouse_click: bool,
-    //#[packed_field(bits = "169")]
-    //pub unk_21_1: bool,
-    //#[packed_field(bits = "170")]
-    //pub unk_21_2: bool,
+    #[packed_field(bits = "169")]
+    pub show_desktop: bool,
+    #[packed_field(bits = "170")]
+    pub alt_tab: bool,
     //#[packed_field(bits = "171")]
     //pub unk_21_3: bool,
     //#[packed_field(bits = "172")]
@@ -446,569 +480,6 @@ pub struct XInputDataReport {
     //pub unk_58: u8,
     //#[packed_field(bytes = "59")]
     //pub unk_59: u8,
-}
-// KeyboardData
-//
-// No Input
-//
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000004.865592 15 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-////
-// Left Trigger
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 1 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000004.753924 15 01 02 00 00 00 00 00 00 00 00 00 00 00 00 00
-//
-// Left Stick Up
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 'w and W', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000367.791434 15 01 00 00 00 00 00 00 00 00 1a 00 00 00 00 00
-//
-// Left Sitck Down
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 's and S', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000003.931965 15 01 00 00 00 00 00 00 00 00 16 00 00 00 00 00
-//
-// Left Stick Left
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 'a and A', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000002.831953 15 01 00 00 00 00 00 00 00 00 04 00 00 00 00 00
-//
-// Left Stick Rightr
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 'd and D', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000002.225987 15 01 00 00 00 00 00 00 00 00 07 00 00 00 00 00
-//
-// Dpad Up
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '1 and !', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000002.371978 15 01 00 00 00 00 00 00 00 00 1e 00 00 00 00 00
-//
-// Dpad Down
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '3 and #', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000002.801907 15 01 00 00 00 00 00 00 00 00 20 00 00 00 00 00
-//
-// Dpad Left
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '2 and @', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000002.470040 15 01 00 00 00 00 00 00 00 00 1f 00 00 00 00 00
-//
-// Dpad Right
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '4 and $', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000002.330045 15 01 00 00 00 00 00 00 00 00 21 00 00 00 00 00
-// Menu
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 'Tab', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000136.626807 15 01 00 00 00 00 00 00 00 00 2b 00 00 00 00 00
-//
-// View
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 'ESCAPE', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000002.290003 15 01 00 00 00 00 00 00 00 00 29 00 00 00 00 00
-//
-// Left Stick Click
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 'm and M', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000002.780003 15 01 00 00 00 00 00 00 00 00 10 00 00 00 00 00
-//
-// Y1
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 'Spacebar', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
-// E: 000004.641655 15 01 00 00 00 00 00 00 00 00 2c 00 00 00 00 00
-//
-// Any key can be in any position, up to 6 keys + LeftShift can be held. Eg. Here is left stick up
-// and left, Y1, and Left trigger   .
-// # ReportID: 1 / LeftControl: 0 | LeftShift: 1 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000', 'w and W', 'a and A', 'Spacebar', '0x70000', '0x70000', '0x70000']
-// E: 000008.229872 15 01 02 00 00 00 00 00 00 00 1a 04 2c 00 00 00
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "15")]
-pub struct KeyboardDataReport {
-    #[packed_field(bytes = "0")]
-    pub report_id: u8,
-    #[packed_field(bytes = "1")]
-    pub report_size: u8,
-}
-
-// DInpuit doesn't have a complete implementation. Triggers and some buttons are not active. Two
-// identical reports, 7 and 8, indicate if the left or right controller is where the information is
-// coming from when detached. Report 7 also has the full controller when attached, but mapped
-// differently.
-
-// Axes
-//
-// Left Stick Left
-// # ReportID: 7 / X:     0 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000007.735942 13 07 00 00 80 00 08 80 08 00 00 00 00 00
-//
-// Left Stick Right
-// # ReportID: 7 / X:  4095 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000003.734726 13 07 ff 0f 80 00 08 80 08 00 00 00 00 00
-//
-// Left Stick Up
-// # ReportID: 7 / X:  2048 | Y:     0 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000010.387878 13 07 00 08 00 00 08 80 08 00 00 00 00 00
-//
-// Left Stick Down
-// # ReportID: 7 / X:  2048 | Y:  4095 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000009.355726 13 07 00 f8 ff 00 08 80 08 00 00 00 00 00
-//
-// Right Stick Left
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:     0 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000004.767933 13 07 00 08 80 00 00 80 08 00 00 00 00 00
-//
-// Right Stick Right
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  4095 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000005.617290 13 07 00 08 80 ff 0f 80 08 00 00 00 00 00
-//
-// Right Stick Up
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:     0 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000006.117911 13 07 00 08 80 00 08 00 08 00 00 00 00 00
-//
-// Right Stick Down
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  4095 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000006.732367 13 07 00 08 80 00 f8 ff 08 00 00 00 00 00
-//
-// Buttons
-//
-// DPad Up
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   0 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000806.520835 13 07 00 08 80 00 08 80 00 00 00 00 00 00
-//
-// Dpad Right
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   2 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000025.115069 13 07 00 08 80 00 08 80 02 00 00 00 00 00
-//
-// DPad Down
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   4 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.826058 13 07 00 08 80 00 08 80 04 00 00 00 00 00
-//
-// DPad Left
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   6 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.437427 13 07 00 08 80 00 08 80 06 00 00 00 00 00
-//
-// Button A
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000009.013915 13 07 00 08 80 00 08 80 08 01 00 00 00 00
-//
-// Button B
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000001.981636 13 07 00 08 80 00 08 80 08 02 00 00 00 00
-//
-// Button X
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  1  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000010.407126 13 07 00 08 80 00 08 80 08 08 00 00 00 00
-//
-// Button Y
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  1  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.643979 13 07 00 08 80 00 08 80 08 10 00 00 00 00
-//
-// Left Bumper
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  1  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000009.157302 13 07 00 08 80 00 08 80 08 40 00 00 00 00
-//
-// Right Bumper
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  1  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000005.876053 13 07 00 08 80 00 08 80 08 80 00 00 00 00
-//
-// Left Trigger
-// # ReportID: 7 / X:  2048 | Y:  1984 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  1  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.237866 13 07 00 08 7c 00 08 80 08 00 01 00 00 00
-//
-// Right Trigger
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  1  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.095731 13 07 00 08 80 00 08 80 08 00 02 00 00 00
-//
-// View
-// # ReportID: 6 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  1  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.045963 13 07 00 08 80 00 08 80 08 00 04 00 00 00
-//
-// Menu
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  1  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000005.027975 13 07 00 08 80 00 08 80 08 00 08 00 00 00
-//
-// Left Stick Click
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  1  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000003.263941 13 07 00 08 80 00 08 80 08 00 20 00 00 00
-//
-// Right Stick Click
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2088 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  1  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.127843 13 07 00 08 80 28 08 80 08 00 40 00 00 00
-
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "13")]
-pub struct DInputDataFullReport {
-    // Byte 0
-    #[packed_field(bytes = "0")]
-    pub report_id: u8,
-
-    // Byte 1-3
-    #[packed_field(bytes = "1", endian = "lsb")]
-    pub l_stick_x_lg: u8,
-    #[packed_field(bits = "16..=19", endian = "lsb")]
-    pub l_stick_y_sm: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bits = "20..=23", endian = "lsb")]
-    pub l_stick_x_sm: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bytes = "3", endian = "lsb")]
-    pub l_stick_y_lg: u8,
-
-    // Byte 4-6
-    #[packed_field(bytes = "4", endian = "lsb")]
-    pub r_stick_x_lg: u8,
-    #[packed_field(bits = "40..=43", endian = "lsb")]
-    pub r_stick_y_sm: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bits = "44..=47", endian = "lsb")]
-    pub r_stick_x_sm: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bytes = "6", endian = "lsb")]
-    pub r_stick_y_lg: u8,
-
-    // Buttons
-    // Byte 7
-    #[packed_field(bytes = "7", ty = "enum")]
-    pub dpad_state: DPadDirection,
-
-    // Byte 8
-    #[packed_field(bits = "64")]
-    pub rb: bool,
-    #[packed_field(bits = "65")]
-    pub lb: bool,
-    #[packed_field(bits = "66")]
-    pub unk_66: bool,
-    #[packed_field(bits = "67")]
-    pub y: bool,
-    #[packed_field(bits = "68")]
-    pub x: bool,
-    #[packed_field(bits = "69")]
-    pub unk_69: bool,
-    #[packed_field(bits = "70")]
-    pub b: bool,
-    #[packed_field(bits = "71")]
-    pub a: bool,
-
-    // Byte 9
-    #[packed_field(bits = "72")]
-    pub unk_72: bool,
-    #[packed_field(bits = "73")]
-    pub rs: bool,
-    #[packed_field(bits = "74")]
-    pub ls: bool,
-    #[packed_field(bits = "75")]
-    pub unk_75: bool,
-    #[packed_field(bits = "76")]
-    pub menu: bool,
-    #[packed_field(bits = "77")]
-    pub view: bool,
-    #[packed_field(bits = "78")]
-    pub rt: bool,
-    #[packed_field(bits = "79")]
-    pub lt: bool,
-}
-
-impl Default for DInputDataFullReport {
-    fn default() -> Self {
-        Self {
-            report_id: 0x11,
-            l_stick_x_lg: Default::default(),
-            l_stick_y_sm: Default::default(),
-            l_stick_x_sm: Default::default(),
-            l_stick_y_lg: Default::default(),
-            r_stick_x_lg: Default::default(),
-            r_stick_y_sm: Default::default(),
-            r_stick_x_sm: Default::default(),
-            r_stick_y_lg: Default::default(),
-            dpad_state: Default::default(),
-            rb: Default::default(),
-            lb: Default::default(),
-            unk_66: Default::default(),
-            y: Default::default(),
-            x: Default::default(),
-            unk_69: Default::default(),
-            b: Default::default(),
-            a: Default::default(),
-            unk_72: Default::default(),
-            rs: Default::default(),
-            ls: Default::default(),
-            unk_75: Default::default(),
-            menu: Default::default(),
-            view: Default::default(),
-            rt: Default::default(),
-            lt: Default::default(),
-        }
-    }
-}
-
-// DInputDataLeft
-// X and Y report backwards here.
-// No Input
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000031.877403 13 08 00 08 80 00 08 80 08 00 00 00 00 00
-//
-// Axes
-//z
-// Left Stick Right
-// # ReportID: 7 / X:  2048 | Y:     0 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000031.876378 13 07 00 08 00 00 08 80 08 00 00 00 00 00
-//
-// Left stick Left
-// # ReportID: 7 / X:  2112 | Y:  4095 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000004.423802 13 07 40 f8  00 08 80 08 00 00 00 00 00
-//
-// Left Stick Up
-// # ReportID: 7 / X:     0 | Y:  2543 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000001.740083 13 07 00 f0 9e 00 08 80 08 00 00 00 00 00
-//
-// Left Stick Down
-// # ReportID: 7 / X:  4095 | Y:  1743 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000013.201891 13 07 ff ff 6c 00 08 80 08 00 00 00 00 00
-//
-// Buttons
-//
-// D Pad Left
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000003.169857 13 07 00 08 80 00 08 80 08 01 00 00 00 00
-//
-// D Pad Down
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.826586 13 07 00 08 80 00 08 80 08 02 00 00 00 00
-//
-// D Pad Up
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  1  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000007.174470 13 07 00 08 80 00 08 80 08 04 00 00 00 00
-//
-// D Pad Right
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  1  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.173395 13 07 00 08 80 00 08 80 08 08 00 00 00 00
-//
-// Y1
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  1  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000005.835819 13 07 00 08 80 00 08 80 08 10 00 00 00 00
-//
-// Y2
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  1  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.618187 13 07 00 08 80 00 08 80 08 20 00 00 00 00
-//
-// Select
-// # ReportID: 7 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  1  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000012.496586 13 07 00 08 80 00 08 80 08 40 00 00 00 00
-//
-// Start
-// # ReportID: 7 / X:  2048 | Yz  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  1  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.754038 13 07 00 08 80 00 08 80 08 80 00 00 00 00
-//
-// # ReportID: 7 / X:  1808 | Y:  3247 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000004.928909 13 07 10 f7 ca 00 08 80 08 00 00 00 00 00 caf = 3247
-// # ReportID: 7 / X:  2480 | Y:  2063 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000012.289568 13 07 b0 f9 80 00 08 80 08 00 00 00 00 00 9b0 = 2480
-
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "13")]
-pub struct DInputDataLeftReport {
-    #[packed_field(bytes = "0")]
-    pub report_id: u8,
-
-    // Axes
-    #[packed_field(bytes = "1", endian = "lsb")]
-    pub l_stick_y_lg: u8,
-    #[packed_field(bits = "16..=19", endian = "lsb")]
-    pub l_stick_x_sm: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bits = "20..=23", endian = "lsb")]
-    pub l_stick_y_sm: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bytes = "3", endian = "lsb")]
-    pub l_stick_x_lg: u8,
-
-    // Buttons
-    #[packed_field(bits = "64")]
-    pub menu: bool,
-    #[packed_field(bits = "65")]
-    pub view: bool,
-    #[packed_field(bits = "66")]
-    pub y2: bool,
-    #[packed_field(bits = "67")]
-    pub y1: bool,
-    #[packed_field(bits = "68")]
-    pub right: bool,
-    #[packed_field(bits = "69")]
-    pub up: bool,
-    #[packed_field(bits = "70")]
-    pub down: bool,
-    #[packed_field(bits = "71")]
-    pub left: bool,
-}
-
-// DInputDataRight
-//
-// No Input
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000031.877403 13 08 00 08 80 00 08 80 08 00 00 00 00 00
-//
-// Axes
-//
-// Right Stick Right
-// # ReportID: 8 / X:  2015 | Y:  4095 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000006.268028 13 08 df f7 ff 00 08 80 08 00 00 00 00 00
-//
-// Right Stick Left
-// # ReportID: 8 / X:  2127 | Y:     0 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.751401 13 08 4f 08 00 00 08 80 08 00 00 00 00 00
-//
-// Right stick Up
-// # ReportID: 8 / X:  4095 | Y:  2272 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000004.429783 13 08 ff 0f 8e 00 08 80 08 00 00 00 00 00
-//
-// Right Stick Down
-// # ReportID: 8 / X:     0 | Y:  2192 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.402128 13 08 00 00 89 00 08 80 08 00 00 00 00 00
-//
-//
-// Buttons
-//
-// BTN B
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000003.239383 13 08 00 08 80 00 08 80 08 01 00 00 00 00
-//
-// BTN Y
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000002.726196 13 08 00 08 80 00 08 80 08 02 00 00 00 00
-//
-// BTN A
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  1  0  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000008.553870 13 08 00 08 80 00 08 80 08 04 00 00 00 00
-//
-// BTN X
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  1  0  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000009.883833 13 08 00 08 80 00 08 80 08 08 00 00 00 00
-//
-// Y3
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  1  0  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000004.087289 13 08 00 08 80 00 08 80 08 10 00 00 00 00
-//
-// M3
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  1  0  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000005.537981 13 08 00 08 80 00 08 80 08 20 00 00 00 00
-//
-// M2
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  1  0  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000011.902904 13 08 00 08 80 00 08 80 08 40 00 00 00 00
-//
-// Quick Access
-// # ReportID: 8 / X:  2048 | Y:  2048 | Z:  2048 | Rz:  2048 | Hat switch:   8 | # | Button: 0  0  0  0  0  0  0  1  0  0  0  0  0  0  0  0 | Accelerator:    0 | Brake:    0 | #
-// E: 000003.665268 13 08 00 08 80 00 08 80 08 80 00 00 00 00
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "13")]
-pub struct DInputDataRightReport {
-    #[packed_field(bytes = "0")]
-    pub report_id: u8,
-
-    // Axes
-    #[packed_field(bytes = "1", endian = "lsb")]
-    pub r_stick_y_lg: u8,
-    #[packed_field(bits = "16..=19", endian = "lsb")]
-    pub r_stick_x_sm: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bits = "20..=23", endian = "lsb")]
-    pub r_stick_y_sm: Integer<u8, packed_bits::Bits<4>>,
-    #[packed_field(bytes = "3", endian = "lsb")]
-    pub r_stick_x_lg: u8,
-
-    // Buttons
-    #[packed_field(bits = "64")]
-    pub quick_access: bool,
-    #[packed_field(bits = "65")]
-    pub m2: bool,
-    #[packed_field(bits = "66")]
-    pub m3: bool,
-    #[packed_field(bits = "67")]
-    pub y3: bool,
-    #[packed_field(bits = "68")]
-    pub x: bool,
-    #[packed_field(bits = "69")]
-    pub a: bool,
-    #[packed_field(bits = "70")]
-    pub y: bool,
-    #[packed_field(bits = "71")]
-    pub b: bool,
-}
-
-// MouseDataFPS, MouseData
-// Mouse data cones from two identical repoorts with different report ID's.  Report ID 2 is active
-// when the controler is in "FPS" mode. Report ID 9 is active when the controller is in Gamepad
-// mode. The optical sensor only produces events when in "FPS" mode. The scroll wheel is always on
-// one of these two reports. THe buttons are onyl active either when right controller is attached
-// in gamepad more or detached in FPS mode and produce no events if detached in gamepad mode.
-//
-// Negative Y
-// # ReportID: 2 / Button: 0  0  0  0  0 | # | X:     0 | Y:    -3 | Wheel:    0 | #
-// E: 000079.980905 7 02 00 00 d0 ff 00 00
-//
-// Positive Y
-// # ReportID: 2 / Button: 0  0  0  0  0 | # | X:     0 | Y:     4 | Wheel:    0 | #
-// E: 000080.116978 7 02 00 00 40 00 00 00
-//
-// Negative X
-// # ReportID: 2 / Button: 0  0  0  0  0 | # | X:    -2 | Y:     0 | Wheel:    0 | #
-// E: 000080.308914 7 02 00 fe 0f 00 00 00
-//
-// Positive X
-// # ReportID: 2 / Button: 0  0  0  0  0 | # | X:     5 | Y:     0 | Wheel:    0 | #
-// E: 000080.168904 7 02 00 05 00 00 00 00
-//
-// Negative x/y
-// # ReportID: 2 / Button: 0  0  0  0  0 | # | X:    -5 | Y:    -2 | Wheel:    0 | #
-// E: 000080.012905 7 02 00 fb ef ff 00 00
-//
-// positive x/y
-// # ReportID: 2 / Button: 0  0  0  0  0 | # | X:     3 | Y:     4 | Wheel:    0 | #
-// E: 000080.140901 7 02 00 03 40 00 00 00
-//
-// Wheel Down
-// # ReportID: 9 / Button: 0  0  0  0  0 | # | X:     0 | Y:     0 | Wheel:   -1 | #
-// E: 000000.000000 7 09 00 00 00 00 ff 00
-//
-// Wheel Up
-// # ReportID: 9 / Button: 0  0  0  0  0 | # | X:     0 | Y:     0 | Wheel:    1 | #
-// E: 000031.815593 7 09 00 00 00 00 01 00
-//
-// Buttons
-// M1/RB
-// # ReportID: 2 / Button: 1  0  0  0  0 | # | X:     0 | Y:     0 | Wheel:    0 | #
-// E: 000008.617821 7 02 01 00 00 00 00 00
-//
-// M2
-// # ReportID: 2 / Button: 0  1  0  0  0 | # | X:     0 | Y:     0 | Wheel:    0 | #
-// E: 000059.281125 7 02 02 00 00 00 00 00
-//
-// M3
-// # ReportID: 2 / Button: 0  0  0  1  0 | # | X:     0 | Y:     0 | Wheel:    0 | #
-// E: 000088.093102 7 02 08 00 00 00 00 00
-//
-// Y3
-// # ReportID: 2 / Button: 0  0  0  0  1 | # | X:     0 | Y:     0 | Wheel:    0 | #
-// E: 000106.102492 7 02 10 00 00 00 00 00
-//
-// Wheel Click
-// # ReportID: 9 / Button: 0  0  1  0  0 | # | X:     0 | Y:     0 | Wheel:    0 | #
-// E: 000070.303202 7 09 04 00 00 00 00 00
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "7")]
-pub struct MouseDataReport {
-    // State
-    #[packed_field(bytes = "0")]
-    pub report_id: u8,
-
-    // Buttons
-    #[packed_field(bits = "8")]
-    pub unk_1_0: bool,
-    #[packed_field(bits = "9")]
-    pub unk_1_1: bool,
-    #[packed_field(bits = "10")]
-    pub unk_1_2: bool,
-    #[packed_field(bits = "11")]
-    pub y3: bool,
-    #[packed_field(bits = "12")]
-    pub m3: bool,
-    #[packed_field(bits = "13")]
-    pub mouse_click: bool,
-    #[packed_field(bits = "14")]
-    pub m2: bool,
-    #[packed_field(bits = "15")]
-    pub m1: bool,
-
-    // Axes
-    #[packed_field(bits = "16..=27", endian = "lsb")]
-    pub mouse_x: Integer<i16, packed_bits::Bits<12>>,
-    #[packed_field(bits = "28..=39", endian = "msb")]
-    pub mouse_y: Integer<i16, packed_bits::Bits<12>>,
-    #[packed_field(bytes = "5")]
-    pub mouse_z: i8,
-    #[packed_field(bytes = "6")]
-    pub report_count: u8,
 }
 
 // TouchpadData
