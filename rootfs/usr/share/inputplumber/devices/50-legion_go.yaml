@@ -16,14 +16,43 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: "83E1"
+      product_name: "{83E1,83N0,83N1}"
       sys_vendor: LENOVO
       cpu_vendor: AuthenticAMD
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  ## XInput - Connected 0x6182 (Old PID)
+  ## evdevs
+  # Block all evdev touchpads
+  # Note: Dinput mode device name increments alphanumerically. Real world examples include 1-D6, 1-15, 1-44.
+  - group: gamepad
+    blocked: true
+    unique: false
+    evdev:
+      name: "{  Legion Controller for Windows  Touchpad,Legion-Controller [0-Z]-[0-Z][0-Z] Touchpad}"
+      vendor_id: "17ef"
+      product_id: "{618[2-5],61e[b-e]}"
+      handler: event*
+  - group: gamepad
+    blocked: true
+    unique: false
+    evdev:
+      name: "Legion-Controller [0-Z]-[0-Z][0-Z]"
+      vendor_id: "17ef"
+      product_id: "{618[2-4],61e[b-d]}" # Don't grab 5/e, thats FPS mode mouse & KB
+      handler: event*
+  # Don't block evdev gamepad, used for rumble
+  - group: gamepad
+    unique: false
+    evdev:
+      name: "{Lenovo Legion Controller for Windows,Generic X-Box pad}"
+      vendor_id: "17ef"
+      product_id: "{618[2-5],61e[b-e]}"
+      handler: event*
+
+  ## HIDRAWs
+  ## XInput - Connected 0x6182 (Go PID)
   # Touchpad
   - group: mouse # Gamepad Mode
     hidraw:
@@ -36,24 +65,8 @@ source_devices:
       vendor_id: 0x17ef
       product_id: 0x6182
       interface_num: 2
-  - group: gamepad
-    unique: true
-    evdev:
-      name: "{Lenovo Legion Controller for Windows,Generic X-Box pad}"
-      vendor_id: "17ef"
-      product_id: "6182"
-      handler: event*
-  # Block all evdev devices; mouse, touchpad, keyboard
-  - group: gamepad
-    blocked: true
-    unique: false
-    evdev:
-      name: "  Legion Controller for Windows  *"
-      vendor_id: "17ef"
-      product_id: "6182"
-      handler: event*
 
-  ## XInput - Connected 0x61eb (New PID)
+  ## XInput - Connected 0x61eb (Go 2 PID)
   # Touchpad
   - group: mouse # Gamepad Mode
     hidraw:
@@ -66,24 +79,8 @@ source_devices:
       vendor_id: 0x17ef
       product_id: 0x61eb
       interface_num: 2
-  - group: gamepad
-    unique: true
-    evdev:
-      name: "{Lenovo Legion Controller for Windows,Generic X-Box pad}"
-      vendor_id: "17ef"
-      product_id: "61eb"
-      handler: event*
-  # Block all evdev devices; mouse, touchpad, keyboard
-  - group: gamepad
-    blocked: true
-    unique: false
-    evdev:
-      name: "  Legion Controller for Windows  *"
-      vendor_id: "17ef"
-      product_id: "61eb"
-      handler: event*
-
-  ## DInput - Attached 0x6183 (Old PID)
+  
+  ## DInput - Attached 0x6183 (Go PID)
   # Touchpad
   - group: mouse
     hidraw:
@@ -102,7 +99,7 @@ source_devices:
       product_id: 0x6183
       interface_num: 2
 
-  ## DInput - Attached 0x61ec (New PID)
+  ## DInput - Attached 0x61ec (Go 2 PID)
   # Touchpad
   - group: mouse
     hidraw:
@@ -121,7 +118,7 @@ source_devices:
       product_id: 0x61ec
       interface_num: 2
 
-  ## DInput - Detached 0x6184 (Old PID)
+  ## DInput - Detached 0x6184 (Go PID)
   # Touchpad
   - group: mouse
     hidraw:
@@ -133,14 +130,9 @@ source_devices:
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x6184
-      interface_num: 0
-  - group: gamepad
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6184
       interface_num: 2
 
-  ## DInput - Detached 0x61ed (New PID)
+  ## DInput - Detached 0x61ed (Go 2 PID)
   # Touchpad
   - group: mouse
     hidraw:
@@ -152,32 +144,9 @@ source_devices:
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61ed
-      interface_num: 0
-  - group: gamepad
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61ed
       interface_num: 2
 
-  ## FPS Mode - 0x6185 (Old PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6185
-      interface_num: 1
-  # Mouse
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6185
-      interface_num: 1
-  # Keyboard
-  - group: keyboard
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6185
-      interface_num: 0
+  ## FPS Mode - 0x6185 (Go PID)
   # Gamepad
   - group: gamepad
     hidraw:
@@ -185,25 +154,7 @@ source_devices:
       product_id: 0x6185
       interface_num: 2
 
-  ## FPS Mode - 0x61ee (New PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61ee
-      interface_num: 1
-  # Mouse
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61ee
-      interface_num: 1
-  # Keyboard
-  - group: keyboard
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61ee
-      interface_num: 0
+  ## FPS Mode - 0x61ee (Go 2 PID)
   # Gamepad
   - group: gamepad
     hidraw:
@@ -212,17 +163,6 @@ source_devices:
       interface_num: 2
 
   # IMU
-  # Broken for now --causes IP to hard freeze
-  # Enabling only gyro_3d allows the tablet gyro to work without needing kernel patch
-  # TODO: Find out why this is broken and swap tablet gyro to controller gyro as default.
-  #  - group: imu
-  #    iio:
-  #      name: accel_3d
-  #      mount_matrix:
-  #        # TODO: Reverify on actual hardware
-  #        x: [0, 1, 0]
-  #        y: [-1, 0, 0]
-  #        z: [0, 0, -1]
   - group: imu
     iio:
       name: gyro_3d
@@ -244,14 +184,6 @@ source_devices:
   #    touchscreen:
   #      orientation: "left"
 
-  # Block all evdev devices; mouse, touchpad, gamepad, keyboard
-  - group: gamepad
-    blocked: true
-    unique: false
-    evdev:
-      vendor_id: "17ef"
-      product_id: "61(8[3-5]|e[c-e])"
-      handler: event*
 
 # Optional configuration for the composite device
 options:

@@ -2,8 +2,8 @@ use std::{error::Error, fmt::Debug};
 
 use crate::{
     drivers::lego::{
-        driver_xinput::{self, Driver},
-        event,
+        event, xinput_driver::Driver, MOUSE_WHEEL_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX,
+        STICK_Y_MIN, TRIGG_MAX,
     },
     input::{
         capability::{
@@ -17,11 +17,11 @@ use crate::{
 };
 
 /// Legion Go Controller source device implementation
-pub struct LegionControllerX {
+pub struct LegionXInputController {
     driver: Driver,
 }
 
-impl LegionControllerX {
+impl LegionXInputController {
     /// Create a new Legion controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -30,7 +30,7 @@ impl LegionControllerX {
     }
 }
 
-impl SourceInputDevice for LegionControllerX {
+impl SourceInputDevice for LegionXInputController {
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
@@ -44,9 +44,9 @@ impl SourceInputDevice for LegionControllerX {
     }
 }
 
-impl SourceOutputDevice for LegionControllerX {}
+impl SourceOutputDevice for LegionXInputController {}
 
-impl Debug for LegionControllerX {
+impl Debug for LegionXInputController {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LegionController").finish()
     }
@@ -75,66 +75,37 @@ fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
     raw_value / max
 }
 
-/// Normalize the value to something between -1.0 and 1.0 based on the Deck's
+/// Normalize the value to something between -1.0 and 1.0 based on the
 /// minimum and maximum axis ranges.
 fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
     match event {
-        event::AxisEvent::Touchpad(value) => {
-            let max = driver_xinput::PAD_X_MAX;
-            let x = normalize_unsigned_value(value.x as f64, max);
-
-            let max = driver_xinput::PAD_Y_MAX;
-            let y = normalize_unsigned_value(value.y as f64, max);
-
-            // If this is an UP event, don't override the position of X/Y
-            let (x, y) = if !value.is_touching {
-                (None, None)
-            } else {
-                (Some(x), Some(y))
-            };
-
-            InputValue::Touch {
-                index: value.index,
-                is_touching: value.is_touching,
-                pressure: Some(1.0),
-                x,
-                y,
-            }
-        }
         event::AxisEvent::LStick(value) => {
-            let min = driver_xinput::STICK_X_MIN;
-            let max = driver_xinput::STICK_X_MAX;
+            let min = STICK_X_MIN;
+            let max = STICK_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = driver_xinput::STICK_Y_MAX; // uses inverted Y-axis
-            let max = driver_xinput::STICK_Y_MIN;
+            let min = STICK_Y_MAX; // uses inverted Y-axis
+            let max = STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
         event::AxisEvent::RStick(value) => {
-            let min = driver_xinput::STICK_X_MIN;
-            let max = driver_xinput::STICK_X_MAX;
+            let min = STICK_X_MIN;
+            let max = STICK_X_MAX;
             let x = normalize_signed_value(value.x as f64, min, max);
             let x = Some(x);
 
-            let min = driver_xinput::STICK_Y_MAX; // uses inverted Y-axis
-            let max = driver_xinput::STICK_Y_MIN;
+            let min = STICK_Y_MAX; // uses inverted Y-axis
+            let max = STICK_Y_MIN;
             let y = normalize_signed_value(value.y as f64, min, max);
             let y = Some(-y); // Y-Axis is inverted
 
             InputValue::Vector2 { x, y }
         }
-        event::AxisEvent::Mouse(value) => {
-            let x = value.x as f64;
-            let x = Some(x);
-            let y = value.y as f64;
-            let y = Some(y);
-
-            InputValue::Vector2 { x, y }
-        }
+        event::AxisEvent::Touchpad(_) => InputValue::None,
     }
 }
 
@@ -143,15 +114,15 @@ fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
 fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
     match event {
         event::TriggerEvent::ATriggerL(value) => {
-            let max = driver_xinput::TRIGG_MAX;
+            let max = TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
         event::TriggerEvent::ATriggerR(value) => {
-            let max = driver_xinput::TRIGG_MAX;
+            let max = TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
         event::TriggerEvent::MouseWheel(value) => {
-            let max = driver_xinput::MOUSE_WHEEL_MAX;
+            let max = MOUSE_WHEEL_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
     }
@@ -262,12 +233,16 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 Capability::Mouse(Mouse::Button(MouseButton::Middle)),
                 InputValue::Bool(value.pressed),
             ),
+            event::GamepadButtonEvent::ShowDesktop(value) => NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::Keyboard)),
+                InputValue::Bool(value.pressed),
+            ),
+            event::GamepadButtonEvent::AltTab(value) => NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
+                InputValue::Bool(value.pressed),
+            ),
         },
         event::Event::Axis(axis) => match axis.clone() {
-            event::AxisEvent::Touchpad(_) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
-                normalize_axis_value(axis),
-            ),
             event::AxisEvent::LStick(_) => NativeEvent::new(
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
                 normalize_axis_value(axis),
@@ -276,8 +251,8 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
                 normalize_axis_value(axis),
             ),
-            event::AxisEvent::Mouse(_) => {
-                NativeEvent::new(Capability::Mouse(Mouse::Motion), normalize_axis_value(axis))
+            event::AxisEvent::Touchpad(_) => {
+                NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
             }
         },
         event::Event::Trigger(trigg) => match trigg.clone() {
@@ -292,28 +267,6 @@ fn translate_event(event: event::Event) -> NativeEvent {
             event::TriggerEvent::MouseWheel(_) => {
                 NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
             }
-        },
-        event::Event::MouseButton(button) => match button {
-            event::MouseButtonEvent::Y3(value) => NativeEvent::new(
-                Capability::Mouse(Mouse::Button(MouseButton::Extra)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::MouseButtonEvent::M1(value) => NativeEvent::new(
-                Capability::Mouse(Mouse::Button(MouseButton::Left)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::MouseButtonEvent::M2(value) => NativeEvent::new(
-                Capability::Mouse(Mouse::Button(MouseButton::Right)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::MouseButtonEvent::M3(value) => NativeEvent::new(
-                Capability::Mouse(Mouse::Button(MouseButton::Side)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::MouseButtonEvent::Left(value) => NativeEvent::new(
-                Capability::Mouse(Mouse::Button(MouseButton::Middle)),
-                InputValue::Bool(value.pressed),
-            ),
         },
         event::Event::TouchButton(button) => match button {
             event::TouchButtonEvent::Left(value) => NativeEvent::new(
@@ -355,12 +308,4 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-    Capability::Mouse(Mouse::Button(MouseButton::Extra)),
-    Capability::Mouse(Mouse::Button(MouseButton::Left)),
-    Capability::Mouse(Mouse::Button(MouseButton::Middle)),
-    Capability::Mouse(Mouse::Button(MouseButton::Right)),
-    Capability::Mouse(Mouse::Button(MouseButton::Side)),
-    Capability::Mouse(Mouse::Motion),
-    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
-    Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];

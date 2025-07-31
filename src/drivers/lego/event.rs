@@ -2,7 +2,6 @@
 #[derive(Clone, Debug)]
 pub enum Event {
     GamepadButton(GamepadButtonEvent),
-    MouseButton(MouseButtonEvent),
     TouchButton(TouchButtonEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
@@ -25,12 +24,6 @@ pub struct TouchAxisInput {
     pub y: u16,
 }
 
-/// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
-pub struct MouseAxisInput {
-    pub x: i16,
-    pub y: i16,
-}
 /// Axis input contain (x, y) coordinates
 #[derive(Clone, Debug)]
 pub struct JoyAxisInput {
@@ -68,9 +61,9 @@ pub enum GamepadButtonEvent {
     B(BinaryInput),
     /// Y Button
     Y(BinaryInput),
-    /// Hamburger (☰) button
+    /// Hamburger (☰) button (Right controller Legion Go 2)
     Menu(BinaryInput),
-    /// Overlapping square ⧉  button
+    /// Overlapping square ⧉  button (Left controller Legion Go 2)
     View(BinaryInput),
     /// Legion button on left controller
     Legion(BinaryInput),
@@ -108,21 +101,11 @@ pub enum GamepadButtonEvent {
     M3(BinaryInput),
     /// Mouse wheel click on the back of the right controller
     MouseClick(BinaryInput),
-}
-
-/// Button events represend binary inputs
-#[derive(Clone, Debug)]
-pub enum MouseButtonEvent {
-    /// Y3 on the back of the right gamepad
-    Y3(BinaryInput),
-    /// M1 on the side of the right controller
-    M1(BinaryInput),
-    /// M2 on the side of the right controller
-    M2(BinaryInput),
-    /// M3 on the back of the right controller
-    M3(BinaryInput),
-    /// Mouse wheel click on the back of the right controller
-    Left(BinaryInput),
+    // Legion Go 2 Only
+    /// Show Desktop, 11 small squares icon immedialy below dpad.
+    ShowDesktop(BinaryInput),
+    /// Alt Tab, squares and rectangles icon below show desktop button.
+    AltTab(BinaryInput),
 }
 
 /// Button events represend binary inputs
@@ -138,7 +121,6 @@ pub enum AxisEvent {
     Touchpad(TouchAxisInput),
     LStick(JoyAxisInput),
     RStick(JoyAxisInput),
-    Mouse(MouseAxisInput),
 }
 
 /// Trigger events contain values indicating how far a trigger is pulled

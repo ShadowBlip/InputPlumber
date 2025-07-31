@@ -98,7 +98,7 @@ impl LegionSXInputController {
 
                 // Do rumble
                 if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
-                    let err = format!("Failed to do haptic rumble: {:?}", e);
+                    let err = format!("Failed to do haptic rumble: {e:?}");
                     return Err(err.into());
                 }
             }
@@ -117,7 +117,7 @@ impl LegionSXInputController {
         let right_speed = report.rumble_emulation_right;
 
         if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
-            let err = format!("Failed to do haptic rumble: {:?}", e);
+            let err = format!("Failed to do haptic rumble: {e:?}");
             return Err(err.into());
         }
 
