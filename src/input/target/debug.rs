@@ -180,6 +180,7 @@ impl TargetInputDevice for DebugDevice {
     ) {
         let iface = TargetDebugInterface::new();
         dbus.register(iface);
+        self.dbus_path = Some(dbus.path().to_string());
     }
 
     fn on_composite_device_attached(
