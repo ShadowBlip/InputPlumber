@@ -22,6 +22,7 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  # GPD Win4 2022 (6800U)
   - group: gamepad
     evdev:
       name: "Microsoft X-Box 360 pad"
@@ -36,8 +37,24 @@ source_devices:
     iio:
       name: i2c-BMI0160:00
       mount_matrix:
-        # Tested on 6800U
-        # TODO: Verify on other models
+        x: [-1, 0, 0]
+        y: [0, -1, 0]
+        z: [0, 0, 1]
+  # GPD Win4 2025 (HX 370)
+  - group: gamepad
+    evdev:
+      name: "Microsoft X-Box 360 pad"
+      phys_path: usb-0000:66:00.0-2.1/input0
+      handler: event*
+  - group: keyboard
+    evdev:
+      name: "  Mouse for Windows"
+      handler: event*
+      phys_path: usb-0000:66:00.0-2.2/input1
+  - group: imu
+    iio:
+      name: i2c-BMI0260:00
+      mount_matrix:
         x: [-1, 0, 0]
         y: [0, -1, 0]
         z: [0, 0, 1]
