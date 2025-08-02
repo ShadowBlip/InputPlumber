@@ -422,15 +422,22 @@ impl CompositeDeviceConfig {
         config: &SourceDevice,
         udevice: &UdevDevice,
     ) -> Option<SourceDevice> {
+        let subsystem = udevice.subsystem();
+
+        // TODO: This is a dirty hack to get around slow iio udev querying on
+        // some devices. Replace with proper mitigation.
+        let should_check_udev = { subsystem.as_str() != "iio" };
+
         // Check udev matches first
-        if let Some(udev_config) = config.udev.as_ref() {
-            if self.has_matching_udev(udevice, udev_config) {
-                return Some(config.clone());
+        if should_check_udev {
+            if let Some(udev_config) = config.udev.as_ref() {
+                if self.has_matching_udev(udevice, udev_config) {
+                    return Some(config.clone());
+                }
             }
         }
 
         // Use subsystem-specific device matching
-        let subsystem = udevice.subsystem();
         match subsystem.as_str() {
             "input" => {
                 let evdev_config = config.evdev.as_ref()?;
