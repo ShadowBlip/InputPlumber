@@ -35,20 +35,18 @@
       <arg type="s" direction="out"/>
     </method>
   </interface>
-  <interface name="org.shadowblip.Input.Mouse">
-    <!--
-     Name of the composite device
+  <interface name="org.shadowblip.Input.Debug">
+    <!-- 
+     Returns the input capability report data that can be used to decode
+     the values from the input report.
      -->
-    <property name="Name" type="s" access="read"/>
+    <property name="InputCapabilityReport" type="s" access="read"/>
 
     <!--
-     Move the virtual mouse by the given amount relative to the cursor's
-     current position.
+     Emitted when a input is emitted.
      -->
-    <method name="MoveCursor">
-      <arg name="x" type="i" direction="in"/>
-      <arg name="y" type="i" direction="in"/>
-    </method>
+    <signal name="InputReport">
+    </signal>
   </interface>
 </node>
 
