@@ -99,6 +99,6 @@ impl LedDevice {
 }
 /// Returns the DBus path for an [LedDevice] from a device id (E.g. leds://input7__numlock)
 pub fn get_dbus_path(id: String) -> String {
-    let name = id.replace(':', "_");
+    let name = id.replace(':', "_").replace("-", "_");
     format!("{}/{}", BUS_SOURCES_PREFIX, name)
 }
