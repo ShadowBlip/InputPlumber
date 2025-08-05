@@ -35,6 +35,7 @@ pub enum Action {
     Keyboard,
     Screenshot,
     Touch,
+    Custom(String),
 }
 
 impl Action {
@@ -66,10 +67,14 @@ impl Action {
             Action::Keyboard => "ui_osk",
             Action::Screenshot => "ui_screenshot",
             Action::Touch => "ui_touch",
+            Action::Custom(_str) => "custom",
         }
     }
 
     pub fn as_string(&self) -> String {
+        if let Action::Custom(str) = self {
+            return str.clone();
+        }
         self.as_str().to_string()
     }
 }
@@ -105,7 +110,7 @@ impl FromStr for Action {
             "ui_osk" => Ok(Action::Keyboard),
             "ui_screenshot" => Ok(Action::Screenshot),
             "ui_touch" => Ok(Action::Touch),
-            _ => Err(()),
+            _ => Ok(Action::Custom(s.to_string())),
         }
     }
 }
