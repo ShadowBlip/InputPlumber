@@ -266,7 +266,7 @@
         },
         "dbus": {
           "type": "string",
-          "enum": [
+          "examples": [
             "ui_guide",
             "ui_quick",
             "ui_context",
