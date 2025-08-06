@@ -11,7 +11,7 @@ use crate::{
         DBusInterfaceManager,
     },
     input::{
-        capability::{Capability, Gamepad, GamepadButton},
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         composite_device::client::CompositeDeviceClient,
         event::{
             dbus::{Action, DBusEvent},
@@ -377,6 +377,54 @@ impl TargetInputDevice for DBusDevice {
         }
 
         Ok(())
+    }
+
+    fn clear_state(&mut self) {
+        let mut release_events = vec![];
+
+        // Release any "pressed" buttons
+        for (capability, value) in self.state.buttons.iter() {
+            if !*value {
+                continue;
+            }
+            let event = NativeEvent::new(capability.clone(), InputValue::Bool(false));
+            release_events.push(event);
+        }
+
+        // Release any axis directions
+        if self.state.pressed_up
+            || self.state.pressed_down
+            || self.state.pressed_left
+            || self.state.pressed_right
+        {
+            let capability = Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick));
+            let value = InputValue::Vector2 {
+                x: Some(0.0),
+                y: Some(0.0),
+            };
+            let event = NativeEvent::new(capability, value);
+            release_events.push(event);
+        }
+
+        // Release any triggers
+        if self.state.pressed_l2 {
+            let capability = Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger));
+            let value = InputValue::Float(0.0);
+            let event = NativeEvent::new(capability, value);
+            release_events.push(event);
+        }
+        if self.state.pressed_r2 {
+            let capability = Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger));
+            let value = InputValue::Float(0.0);
+            let event = NativeEvent::new(capability, value);
+            release_events.push(event);
+        }
+
+        for event in release_events {
+            if let Err(e) = self.write_event(event) {
+                log::trace!("Failed to write release event: {e}");
+            }
+        }
     }
 
     fn get_capabilities(&self) -> Result<Vec<crate::input::capability::Capability>, InputError> {
