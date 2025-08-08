@@ -1525,6 +1525,10 @@ impl CompositeDevice {
         // Signal to DBus that source devices have changed
         self.signal_sources_changed().await;
 
+        // Clear the state of target devices in case the source device was
+        // disconnected in the middle of an input.
+        self.targets.schedule_clear_state();
+
         log::debug!(
             "Current source device paths: {:?}",
             self.source_device_paths
