@@ -38,6 +38,19 @@ source_devices:
       vendor_id: 0b05
       product_id: 1b4c
       handler: event*
+  - group: gamepad # Gamepad in dinput mode without `asus_ally_hid` driver
+    udev:
+      attributes:
+        - name: name
+          value: "Asus Keyboard"
+        - name: "id/product"
+          value: "1b4c"
+      properties:
+        - name: ID_INPUT_JOYSTICK
+          value: "1"
+      subsystem: input
+      sys_name: event*
+    capability_map_id: aly2
   - group: keyboard
     unique: false
     evdev:
@@ -70,8 +83,6 @@ source_devices:
         x: [1, 0, 0]
         y: [0, -1, 0]
         z: [0, 0, -1]
-
-  #RGB
   - group: led
     udev:
       sys_name: ally:rgb:joystick_rings

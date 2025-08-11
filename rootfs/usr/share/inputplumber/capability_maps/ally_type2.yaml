@@ -1,0 +1,116 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: Ally Type 2
+
+# Unique identifier of the capability mapping
+id: aly2
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Start
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TR
+          value_type: button
+    target_event:
+      gamepad:
+        button: Start
+
+  - name: Select
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TL
+          value_type: button
+    target_event:
+      gamepad:
+        button: Select
+
+  - name: X button
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_C
+          value_type: button
+    target_event:
+      gamepad:
+        button: North
+
+  - name: Y button
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_NORTH
+          value_type: button
+    target_event:
+      gamepad:
+        button: West
+
+  - name: LB button
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_WEST
+          value_type: button
+    target_event:
+      gamepad:
+        button: LeftBumper
+
+  - name: RB button
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_Z
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightBumper
+
+  - name: Left Stick Click
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TL2
+          value_type: button
+    target_event:
+      gamepad:
+        button: LeftStick
+
+  - name: Right Stick Click
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TR2
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightStick
+
+  - name: Left Trigger
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_Z
+          value_type: trigger
+    target_event:
+      gamepad:
+        trigger:
+          name: LeftTrigger
+
+  - name: Right Trigger
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_RZ
+          value_type: trigger
+    target_event:
+      gamepad:
+        trigger:
+          name: RightTrigger
