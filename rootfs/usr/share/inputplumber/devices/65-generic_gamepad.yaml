@@ -19,6 +19,19 @@ maximum_sources: 1
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  # Ignore the Framework Laptop 16 keyboard
+  - group: gamepad
+    ignore: true
+    udev:
+      properties:
+        - name: ID_INPUT_JOYSTICK
+          value: "1"
+        - name: ID_MODEL
+          # Use a blob here since Framework has many keyboard variants.
+          value: "Laptop_16_Keyboard_Module*"
+      sys_name: "event*"
+      subsystem: input
+  # Generic gamepad
   - group: gamepad
     udev:
       properties:
