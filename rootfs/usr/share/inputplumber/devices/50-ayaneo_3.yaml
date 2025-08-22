@@ -22,6 +22,7 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  # 8840U
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
@@ -32,6 +33,18 @@ source_devices:
       name: AYANEO COMPOSITE DEVICE
       phys_path: usb-0000:c4:00.3-1/input1
       handler: event*
+  # Ai 9 370 HX
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c7:00.0-2/input0
+      handler: event*
+  - group: gamepad
+    evdev:
+      name: AYANEO COMPOSITE DEVICE
+      phys_path: usb-0000:c7:00.0-1/input1
+      handler: event*
+  # All devices
   - group: gamepad
     evdev:
       name: AT Translated Set 2 keyboard
@@ -45,7 +58,7 @@ source_devices:
       #   y: [-1, 0, 0]
       #   z: [0, 0, -1]
 
-  #RGB
+  # RGB
   - group: led
     udev: # Legacy
       sys_name: multicolor:chassis
