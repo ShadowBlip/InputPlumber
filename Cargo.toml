@@ -97,6 +97,9 @@ assets = [
   ],
 ]
 
+[features]
+polkit = []
+
 [[bin]]
 name = "generate"
 path = "./src/generate.rs"
