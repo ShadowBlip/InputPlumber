@@ -9,6 +9,7 @@ pub async fn check_polkit(hdr: Option<Header<'_>>, action_id: &str) -> fdo::Resu
     check_polkit_with_connection(hdr, action_id, connection).await
 }
 
+#[cfg(feature = "polkit")]
 pub async fn check_polkit_with_connection(
     hdr: Option<Header<'_>>,
     action_id: &str,
@@ -87,4 +88,13 @@ pub async fn check_polkit_with_connection(
             action_id
         )))
     }
+}
+
+#[cfg(not(feature = "polkit"))]
+pub async fn check_polkit_with_connection(
+    hdr: Option<Header<'_>>,
+    action_id: &str,
+    connection: Connection,
+) -> fdo::Result<()> {
+    Ok(())
 }
