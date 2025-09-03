@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: ROG Flow Z13 (2025)
+
+# Unique identifier of the capability mapping
+id: flw1
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Armoury Crate button
+    source_events:
+      - keyboard: KeyProg3
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+# List of events to filter from the source devices
+filtered_events: []
