@@ -231,7 +231,10 @@
             "KeyF22",
             "KeyF23",
             "KeyF24",
-            "KeyProg1"
+            "KeyProg1",
+            "KeyProg2",
+            "KeyProg3",
+            "KeyProg4"
           ]
         },
         "mouse": {

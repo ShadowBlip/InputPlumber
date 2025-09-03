@@ -224,6 +224,9 @@ fn capability_from_key_string(key: &str) -> Capability {
         "KEY_F23" => Capability::Keyboard(Keyboard::KeyF23),
         "KEY_F24" => Capability::Keyboard(Keyboard::KeyF24),
         "KEY_PROG1" => Capability::Keyboard(Keyboard::KeyProg1),
+        "KEY_PROG2" => Capability::Keyboard(Keyboard::KeyProg2),
+        "KEY_PROG3" => Capability::Keyboard(Keyboard::KeyProg3),
+        "KEY_PROG4" => Capability::Keyboard(Keyboard::KeyProg4),
         _ => Capability::NotImplemented,
     }
 }

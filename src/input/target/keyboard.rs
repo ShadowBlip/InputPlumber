@@ -209,6 +209,9 @@ impl KeyboardDevice {
         keys.insert(KeyCode::KEY_F23);
         keys.insert(KeyCode::KEY_F24);
         keys.insert(KeyCode::KEY_PROG1);
+        keys.insert(KeyCode::KEY_PROG2);
+        keys.insert(KeyCode::KEY_PROG3);
+        keys.insert(KeyCode::KEY_PROG4);
 
         let device = VirtualDeviceBuilder::new()?
             .name("InputPlumber Keyboard")
@@ -405,6 +408,9 @@ impl TargetInputDevice for KeyboardDevice {
             Capability::Keyboard(Keyboard::KeyF23),
             Capability::Keyboard(Keyboard::KeyF24),
             Capability::Keyboard(Keyboard::KeyProg1),
+            Capability::Keyboard(Keyboard::KeyProg2),
+            Capability::Keyboard(Keyboard::KeyProg3),
+            Capability::Keyboard(Keyboard::KeyProg4),
         ])
     }
 }
