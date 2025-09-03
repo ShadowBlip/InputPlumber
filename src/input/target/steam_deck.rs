@@ -56,8 +56,8 @@ pub enum ProductId {
     Generic = 0x12f0,
     ZotacZone = 0x12fc,
     AsusRogAlly = 0x12fd,
-    LenovoLegionGo,
-    LenovoLegionGoS,
+    LenovoLegionGo = 0x12fe,
+    LenovoLegionGoS = 0x12ff,
 }
 
 impl ProductId {
