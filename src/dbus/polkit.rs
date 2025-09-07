@@ -1,11 +1,9 @@
-use std::collections::HashMap;
-use zbus::zvariant::{OwnedValue, Value};
-use zbus::{fdo, message::Header, Connection, Proxy};
+use zbus::{fdo, message::Header, Connection};
 
 pub async fn check_polkit(hdr: Option<Header<'_>>, action_id: &str) -> fdo::Result<()> {
     let connection = Connection::system()
         .await
-        .map_err(|e| fdo::Error::Failed(format!("Failed to acquire dbus connection: {}", e)))?;
+        .map_err(|e| fdo::Error::Failed(format!("Failed to acquire dbus connection: {e}")))?;
     check_polkit_with_connection(hdr, action_id, connection).await
 }
 
@@ -92,9 +90,9 @@ pub async fn check_polkit_with_connection(
 
 #[cfg(not(feature = "polkit"))]
 pub async fn check_polkit_with_connection(
-    hdr: Option<Header<'_>>,
-    action_id: &str,
-    connection: Connection,
+    _hdr: Option<Header<'_>>,
+    _action_id: &str,
+    _connection: Connection,
 ) -> fdo::Result<()> {
     Ok(())
 }
