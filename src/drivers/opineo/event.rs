@@ -3,6 +3,7 @@
 pub enum Event {
     TouchAxis(TouchAxisEvent),
     TouchButton(TouchButtonEvent),
+    Trigger(TriggerEvent),
 }
 
 /// Axis input contain (x, y) coordinates
@@ -20,9 +21,21 @@ pub struct BinaryInput {
     pub pressed: bool,
 }
 
+/// Trigger input contains non-negative integers
+#[derive(Clone, Debug)]
+pub struct TriggerInput {
+    pub value: u8,
+}
+
 /// Button events represend binary inputs
 #[derive(Clone, Debug)]
 pub enum TouchButtonEvent {
     /// Tap to click button
     Left(BinaryInput),
+}
+
+/// Trigger events contain values indicating how far a trigger is pulled
+#[derive(Clone, Debug)]
+pub enum TriggerEvent {
+    PadForce(TriggerInput),
 }
