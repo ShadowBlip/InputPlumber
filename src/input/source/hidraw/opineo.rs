@@ -2,13 +2,13 @@ use std::{error::Error, fmt::Debug};
 
 use crate::{
     drivers::opineo::{
-        driver::{self, Driver, LPAD_NAMES, RPAD_NAMES},
+        driver::{self, Driver, LPAD_NAMES, PAD_FORCE_MAX, RPAD_NAMES},
         event,
     },
     input::{
-        capability::{Capability, Touch, TouchButton, Touchpad},
+        capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
         event::{native::NativeEvent, value::InputValue},
-        output_capability::{OutputCapability, LED},
+        output_capability::OutputCapability,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
@@ -120,6 +120,16 @@ fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
     }
 }
 
+/// Normalize the trigger value to something between 0.0 and 1.0 based on the
+/// Legion Go's maximum axis ranges.
+fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
+    match event {
+        event::TriggerEvent::PadForce(value) => {
+            InputValue::Float(normalize_unsigned_value(value.value as f64, PAD_FORCE_MAX))
+        }
+    }
+}
+
 /// Translate the given OrangePi NEO events into native events
 fn translate_events(events: Vec<event::Event>, touchpad_side: TouchpadSide) -> Vec<NativeEvent> {
     let mut translated = Vec::with_capacity(events.len());
@@ -145,8 +155,6 @@ fn translate_event(event: event::Event, touchpad_side: TouchpadSide) -> NativeEv
                 normalize_axis_value(axis),
             ),
         },
-        // TODO: Consider making a [TouchButton::Tap] event so we can do more events with touchpads
-        // that have physical buttons (e.g. Steam Deck).
         event::Event::TouchButton(button) => match button {
             event::TouchButtonEvent::Left(value) => match touchpad_side {
                 TouchpadSide::Unknown => {
@@ -162,18 +170,33 @@ fn translate_event(event: event::Event, touchpad_side: TouchpadSide) -> NativeEv
                 ),
             },
         },
+        event::Event::Trigger(trigg) => match trigg.clone() {
+            event::TriggerEvent::PadForce(_) => match touchpad_side {
+                TouchpadSide::Unknown => {
+                    NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
+                }
+                TouchpadSide::Left => NativeEvent::new(
+                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTouchpadForce)),
+                    normalize_trigger_value(trigg),
+                ),
+                TouchpadSide::Right => NativeEvent::new(
+                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
+                    normalize_trigger_value(trigg),
+                ),
+            },
+        },
     }
 }
 
-/// List of all capabilities that the OrangePi NEO driver implements
+/// List of all input capabilities that the OrangePi NEO driver implements
 pub const CAPABILITIES: &[Capability] = &[
+    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTouchpadForce)),
+    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
     Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];
 
-pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[
-    OutputCapability::ForceFeedback,
-    OutputCapability::LED(LED::Color),
-];
+/// List of all output capabilities that the OrangePi NEO supports
+pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[OutputCapability::ForceFeedback];
