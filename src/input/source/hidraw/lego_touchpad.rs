@@ -1,9 +1,9 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::lego::{event, touchpad_driver::Driver, PAD_X_MAX, PAD_Y_MAX},
+    drivers::lego::{event, touchpad_driver::Driver, PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX},
     input::{
-        capability::{Capability, Touch, TouchButton, Touchpad},
+        capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
         event::{native::NativeEvent, value::InputValue},
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -82,6 +82,17 @@ fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
     }
 }
 
+/// Normalize the trigger value to something between 0.0 and 1.0 based on the
+/// Legion Go's maximum axis ranges.
+fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
+    match event {
+        event::TriggerEvent::RpadForce(value) => {
+            InputValue::Float(normalize_unsigned_value(value.value as f64, PAD_FORCE_MAX))
+        }
+        _ => InputValue::None,
+    }
+}
+
 /// Translate the given Legion Go events into native events
 fn translate_events(events: Vec<event::Event>) -> Vec<NativeEvent> {
     events.into_iter().map(translate_event).collect()
@@ -105,9 +116,13 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
             }
         },
-        event::Event::Trigger(_) => {
-            NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
-        }
+        event::Event::Trigger(trigg) => match trigg.clone() {
+            event::TriggerEvent::RpadForce(_) => NativeEvent::new(
+                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
+                normalize_trigger_value(trigg),
+            ),
+            _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
+        },
         event::Event::TouchButton(button) => match button {
             event::TouchButtonEvent::Left(value) => NativeEvent::new(
                 Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
@@ -121,6 +136,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
 
 /// List of all capabilities that the Legion Go driver implements
 pub const CAPABILITIES: &[Capability] = &[
+    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];

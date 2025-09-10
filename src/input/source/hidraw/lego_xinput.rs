@@ -125,6 +125,7 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
             let max = MOUSE_WHEEL_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
+        _ => InputValue::None,
     }
 }
 
@@ -267,6 +268,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
             event::TriggerEvent::MouseWheel(_) => {
                 NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
             }
+            _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
         },
         event::Event::TouchButton(button) => match button {
             event::TouchButtonEvent::Left(value) => NativeEvent::new(
