@@ -55,9 +55,9 @@ pub enum ProductId {
     SteamDeck = 0x1205,
     Generic = 0x12f0,
     ZotacZone = 0x12fc,
-    AsusRogAlly,
-    LenovoLegionGo,
-    LenovoLegionGoS,
+    AsusRogAlly = 0x12fd,
+    LenovoLegionGo = 0x12fe,
+    LenovoLegionGoS = 0x12ff,
 }
 
 impl ProductId {
