@@ -74,6 +74,20 @@ impl OutputEvent {
             OutputEvent::SteamDeckRumble(_) => vec![OutputCapability::ForceFeedback],
         }
     }
+
+    /// Returns true if the output event is a force feedback/rumble event
+    pub fn is_force_feedback(&self) -> bool {
+        match self {
+            OutputEvent::Evdev(event) => matches!(
+                event.destructure(),
+                evdev::EventSummary::ForceFeedback(_, _, _)
+            ),
+            OutputEvent::Uinput(_) => true,
+            OutputEvent::DualSense(report) => report.use_rumble_not_haptics,
+            OutputEvent::SteamDeckHaptics(_) => true,
+            OutputEvent::SteamDeckRumble(_) => true,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -523,4 +523,22 @@ impl CompositeDeviceClient {
         }
         Err(ClientError::ChannelClosed)
     }
+
+    /// Returns whether or not the device should emit force feedback events
+    pub async fn get_ff_enabled(&self) -> Result<bool, ClientError> {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetForceFeedbackEnabled(tx))
+            .await?;
+        if let Some(result) = Self::recv(rx).await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Enable or disable force feedback output events from being emitted
+    pub async fn set_ff_enabled(&self, enabled: bool) -> Result<(), ClientError> {
+        self.send(CompositeCommand::SetForceFeedbackEnabled(enabled))
+            .await?;
+        Ok(())
+    }
 }
