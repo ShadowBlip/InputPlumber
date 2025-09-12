@@ -14,14 +14,17 @@ use std::{
 use evdev::InputEvent;
 use targets::CompositeDeviceTargets;
 use tokio::{sync::mpsc, task::JoinSet, time::Duration};
-use zbus::Connection;
+use zbus::{object_server::Interface, Connection};
 
 use crate::{
     config::{
         capability_map::CapabilityMapConfig, path::get_profiles_path, CompositeDeviceConfig,
         DeviceProfile, ProfileMapping,
     },
-    dbus::interface::{composite_device::CompositeDeviceInterface, DBusInterfaceManager},
+    dbus::interface::{
+        composite_device::CompositeDeviceInterface, force_feedback::ForceFeedbackInterface,
+        DBusInterfaceManager,
+    },
     input::{
         capability::{Capability, Gamepad, GamepadButton, Mouse},
         event::{
@@ -77,8 +80,12 @@ pub struct CompositeDevice {
     name: String,
     /// Capabilities describe all input capabilities from all source devices
     capabilities: HashSet<Capability>,
+    /// Capabilities sorted by source device id
+    capabilities_by_source: HashMap<String, HashSet<Capability>>,
     /// Output capabilities describe all output capabilities from all source devices
     output_capabilities: HashSet<OutputCapability>,
+    /// Output capabilities sorted by source device id.
+    output_capabilities_by_source: HashMap<String, HashSet<OutputCapability>>,
     /// Capability mapping for the CompositeDevice
     capability_map: Option<CapabilityMapConfig>,
     /// Currently loaded [DeviceProfile] for the [CompositeDevice]. The [DeviceProfile]
@@ -127,6 +134,9 @@ pub struct CompositeDevice {
     source_devices_used: Vec<String>,
     /// State of target devices attached to the composite device
     targets: CompositeDeviceTargets,
+    /// Whether or not force feedback output events should be routed to
+    /// supported source devices.
+    ff_enabled: bool,
     /// Set of available Force Feedback effect IDs that are not in use
     /// TODO: Just use the keys from ff_effect_id_source_map to determine next id
     ff_effect_ids: BTreeSet<i16>,
@@ -169,7 +179,9 @@ impl CompositeDevice {
             config,
             name,
             capabilities: HashSet::new(),
+            capabilities_by_source: HashMap::new(),
             output_capabilities: HashSet::new(),
+            output_capabilities_by_source: HashMap::new(),
             capability_map,
             device_profile: None,
             device_profile_path: None,
@@ -189,6 +201,7 @@ impl CompositeDevice {
             source_device_tasks: JoinSet::new(),
             source_devices_used: Vec::new(),
             targets: CompositeDeviceTargets::new(conn, dbus_path, tx.into(), manager),
+            ff_enabled: true,
             ff_effect_ids: (0..64).collect(),
             ff_effect_id_source_map: HashMap::new(),
             intercept_activation_caps: vec![Capability::Gamepad(Gamepad::Button(
@@ -483,6 +496,15 @@ impl CompositeDevice {
                     }
                     CompositeCommand::SetInterceptActivation(activation_caps, target_cap) => {
                         self.set_intercept_activation(activation_caps, target_cap)
+                    }
+                    CompositeCommand::GetForceFeedbackEnabled(sender) => {
+                        if let Err(e) = sender.send(self.ff_enabled).await {
+                            log::error!("Failed to send force feedback status: {e}");
+                        }
+                    }
+                    CompositeCommand::SetForceFeedbackEnabled(enabled) => {
+                        log::info!("Setting force feedback enabled: {enabled:?}");
+                        self.ff_enabled = enabled;
                     }
                     CompositeCommand::Stop => {
                         log::debug!(
@@ -782,6 +804,12 @@ impl CompositeDevice {
             log::trace!("Available effect IDs: {:?}", self.ff_effect_ids);
             log::debug!("Used effect IDs: {:?}", self.ff_effect_id_source_map);
 
+            return Ok(());
+        }
+
+        // If force feedback is disabled at the composite device level, don't
+        // forward any other FF events to source devices.
+        if !self.ff_enabled && event.is_force_feedback() {
             return Ok(());
         }
 
@@ -1513,6 +1541,51 @@ impl CompositeDevice {
             self.ff_effect_ids.insert(effect_id);
         }
 
+        // Remove tracked input capabilities
+        self.capabilities_by_source.remove(&id);
+        let mut capabilities_to_remove = vec![];
+        for capability in self.capabilities.iter() {
+            // Check if any surviving source devices use this capability
+            let capability_in_use = self
+                .capabilities_by_source
+                .iter()
+                .any(|(_, capabilities)| capabilities.contains(capability));
+            if capability_in_use {
+                continue;
+            }
+            capabilities_to_remove.push(capability.clone());
+        }
+        for capability in capabilities_to_remove {
+            self.capabilities.remove(&capability);
+        }
+
+        // Remove tracked output capabilities
+        self.output_capabilities_by_source.remove(&id);
+        let mut capabilities_to_remove = vec![];
+        for capability in self.output_capabilities.iter() {
+            // Check if any surviving source devices use this capability
+            let capability_in_use = self
+                .output_capabilities_by_source
+                .iter()
+                .any(|(_, capabilities)| capabilities.contains(capability));
+            if capability_in_use {
+                continue;
+            }
+            capabilities_to_remove.push(capability.clone());
+        }
+        for capability in capabilities_to_remove {
+            self.output_capabilities.remove(&capability);
+        }
+
+        // Remove any interfaces that are no longer required
+        let ff_iface_name = ForceFeedbackInterface::<CompositeDeviceClient>::name();
+        let supports_ff = self
+            .output_capabilities
+            .contains(&OutputCapability::ForceFeedback);
+        if !supports_ff && self.dbus.has_interface(&ff_iface_name) {
+            self.dbus.unregister(&ff_iface_name);
+        }
+
         if let Some(idx) = self.source_device_paths.iter().position(|str| str == &path) {
             self.source_device_paths.remove(idx);
         };
@@ -1610,25 +1683,44 @@ impl CompositeDevice {
         };
 
         // Get the capabilities of the source device.
-        // TODO: When we *remove* a source device, we also need to remove
-        // capabilities
+        let id = source_device.get_id();
         if !is_blocked {
-            let capabilities = source_device.get_capabilities()?;
-            for cap in capabilities {
-                if self.translatable_capabilities.contains(&cap) {
+            // Get the input capabilities of the source device and keep track
+            // of them.
+            let capabilities: HashSet<Capability> =
+                source_device.get_capabilities()?.into_iter().collect();
+            for cap in capabilities.iter() {
+                if self.translatable_capabilities.contains(cap) {
                     continue;
                 }
-                self.capabilities.insert(cap);
+                self.capabilities.insert(cap.clone());
             }
+            self.capabilities_by_source.insert(id.clone(), capabilities);
 
-            let output_capabilities = source_device.get_output_capabilities()?;
-            for cap in output_capabilities {
-                self.output_capabilities.insert(cap);
+            // Get the output capabilities of the source device and keep track
+            // of them.
+            let output_capabilities: HashSet<OutputCapability> = source_device
+                .get_output_capabilities()?
+                .into_iter()
+                .collect();
+            for cap in output_capabilities.iter() {
+                self.output_capabilities.insert(cap.clone());
+            }
+            self.output_capabilities_by_source
+                .insert(id.clone(), output_capabilities);
+
+            // Determine if the FF dbus interface should be created
+            let supports_ff = self
+                .output_capabilities
+                .contains(&OutputCapability::ForceFeedback);
+            let ff_iface_name = ForceFeedbackInterface::<CompositeDeviceClient>::name();
+            if supports_ff && !self.dbus.has_interface(&ff_iface_name) {
+                let iface = ForceFeedbackInterface::new(self.client());
+                self.dbus.register(iface);
             }
         }
 
         // Check if this device should be blocked from sending events to target devices.
-        let id = source_device.get_id();
         if let Some(device_config) = self
             .config
             .get_matching_device(&source_device.get_device_ref().to_owned())

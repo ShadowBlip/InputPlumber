@@ -823,6 +823,16 @@
     </defaults>
   </action>
 
+  <action id="org.shadowblip.Output.ForceFeedback.Enable">
+    <description>Allow toggling support for rumble events</description>
+    <message>Authentication is required to toggle rumble support</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
   <action id="org.shadowblip.Output.ForceFeedback.Rumble">
     <description>Allow sending force feedback rumble events</description>
     <message>Authentication is required to send rumble events</message>

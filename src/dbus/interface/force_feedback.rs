@@ -14,11 +14,25 @@ use super::Unregisterable;
 
 /// [ForceFeedbacker] is any device that can implement force feedback
 pub trait ForceFeedbacker {
+    fn get_enabled(&self) -> impl Future<Output = Result<bool, Box<dyn Error>>> + Send;
+    fn set_enabled(
+        &mut self,
+        enabled: bool,
+    ) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
     fn rumble(&mut self, value: f64) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
     fn stop(&mut self) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
 }
 
 impl ForceFeedbacker for CompositeDeviceClient {
+    async fn get_enabled(&self) -> Result<bool, Box<dyn Error>> {
+        Ok(self.get_ff_enabled().await?)
+    }
+
+    async fn set_enabled(&mut self, enabled: bool) -> Result<(), Box<dyn Error>> {
+        self.set_ff_enabled(enabled).await?;
+        Ok(())
+    }
+
     async fn rumble(&mut self, value: f64) -> Result<(), Box<dyn Error>> {
         let value = value.min(1.0);
         let value = value.max(0.0);
@@ -66,6 +80,28 @@ impl<T> ForceFeedbackInterface<T>
 where
     T: ForceFeedbacker + Send + Sync + 'static,
 {
+    /// Whether or not the device should send force feedback events
+    #[zbus(property)]
+    async fn enabled(&self) -> fdo::Result<bool> {
+        self.device
+            .get_enabled()
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))
+    }
+    #[zbus(property)]
+    async fn set_enabled(
+        &mut self,
+        enabled: bool,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<()> {
+        check_polkit(hdr, "org.shadowblip.Output.ForceFeedback.Enable").await?;
+        self.device
+            .set_enabled(enabled)
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        Ok(())
+    }
+
     /// Send a simple rumble event
     async fn rumble(&mut self, value: f64, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
         check_polkit(Some(hdr), "org.shadowblip.Output.ForceFeedback.Rumble").await?;

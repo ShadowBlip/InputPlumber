@@ -42,6 +42,8 @@ pub enum CompositeCommand {
     SetInterceptActivation(Vec<Capability>, Capability),
     SetInterceptMode(InterceptMode),
     SetTargetDevices(Vec<TargetDeviceTypeId>),
+    GetForceFeedbackEnabled(mpsc::Sender<bool>),
+    SetForceFeedbackEnabled(bool),
     SourceDeviceAdded(DeviceInfo),
     SourceDeviceRemoved(DeviceInfo),
     SourceDeviceStopped(DeviceInfo),
