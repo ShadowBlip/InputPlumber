@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashSet, str::FromStr};
 
 use zbus::{
     fdo,
@@ -402,7 +402,7 @@ impl CompositeDeviceInterface {
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
-        let mut capability_strings = Vec::new();
+        let mut capability_strings = HashSet::new();
         for cap in capabilities {
             let str = match cap {
                 Capability::Gamepad(gamepad) => match gamepad {
@@ -418,12 +418,13 @@ impl CompositeDeviceInterface {
                     Mouse::Button(button) => format!("Mouse:Button:{}", button),
                 },
                 Capability::Keyboard(key) => format!("Keyboard:{}", key),
+                Capability::DBus(action) => format!("DBus:{}", action.as_str()),
                 _ => cap.to_string(),
             };
-            capability_strings.push(str);
+            capability_strings.insert(str);
         }
 
-        Ok(capability_strings)
+        Ok(capability_strings.into_iter().collect())
     }
 
     /// List of source devices that this composite device is processing inputs for
