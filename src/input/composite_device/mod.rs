@@ -718,7 +718,7 @@ impl CompositeDevice {
 
     /// Process a single output event from a target device.
     async fn process_output_event(&mut self, event: OutputEvent) -> Result<(), Box<dyn Error>> {
-        //log::trace!("Received output event: {:?}", event);
+        log::trace!("Received output event: {:?}", event);
 
         // Handle any output events that need to upload FF effect data
         if let OutputEvent::Uinput(uinput) = event.borrow() {
@@ -813,8 +813,21 @@ impl CompositeDevice {
             return Ok(());
         }
 
-        // TODO: Only write the event to devices that are capabile of handling it
+        // Write the event to devices that are capable of handling it
+        let event_capabilities = event.as_capability();
         for (source_id, source) in self.source_devices.iter() {
+            // Check to see if the device supports processing the output event
+            let Some(src_capabilities) = self.output_capabilities_by_source.get(source_id) else {
+                log::trace!("Source device {source_id} contains no output capabilities");
+                continue;
+            };
+            let supports_event = event_capabilities
+                .iter()
+                .any(|cap| src_capabilities.contains(cap));
+            if !supports_event {
+                continue;
+            }
+
             // If this is a force feedback event, translate the effect id into
             // the source device's effect id.
             if let OutputEvent::Evdev(input_event) = event {
