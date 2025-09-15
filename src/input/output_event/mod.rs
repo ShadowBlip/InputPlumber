@@ -21,8 +21,7 @@ pub enum OutputEvent {
 
 impl OutputEvent {
     /// Returns the capability of the output event
-    #[allow(dead_code)]
-    fn as_capability(&self) -> Vec<OutputCapability> {
+    pub fn as_capability(&self) -> Vec<OutputCapability> {
         match self {
             OutputEvent::Evdev(event) => match event.destructure() {
                 evdev::EventSummary::Synchronization(_, _, _) => {
