@@ -21,9 +21,8 @@ assets = [
   { source = "rootfs/usr/share/inputplumber/schema/*.json", dest = "/usr/share/inputplumber/schema/", mode = "644" },
   { source = "rootfs/usr/share/inputplumber/capability_maps/*.yaml", dest = "/usr/share/inputplumber/capability_maps/", mode = "644" },
   { source = "rootfs/usr/share/inputplumber/profiles/*.yaml", dest = "/usr/share/inputplumber/profiles/", mode = "644" },
-  { source = "rootfs/usr/lib/udev/hwdb.d/59-inputplumber.hwdb", dest = "/usr/lib/udev/hwdb.d/59-inputplumber.hwdb", mode = "644" },
-  { source = "rootfs/usr/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb", dest = "/usr/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb", mode = "644" },
-  { source = "rootfs/usr/lib/udev/rules.d/90-inputplumber-autostart.rules", dest = "/usr/lib/udev/rules.d/90-inputplumber-autostart.rules", mode = "644" },
+  { source = "rootfs/usr/lib/udev/hwdb.d/*.hwdb", dest = "/usr/lib/udev/hwdb.d/", mode = "644" },
+  { source = "rootfs/usr/lib/udev/rules.d/*.rules", dest = "/usr/lib/udev/rules.d/", mode = "644" },
 ]
 auto-req = "no"
 
@@ -148,4 +147,3 @@ debug = false
 strip = true
 lto = true
 codegen-units = 1
-
