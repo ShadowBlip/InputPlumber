@@ -85,6 +85,7 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb
 	rm $(PREFIX)/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb
 	rm $(PREFIX)/lib/udev/rules.d/90-inputplumber-autostart.rules
+	rm $(PREFIX)/lib/udev/rules.d/99-inputplumber-device-setup.rules
 	rm -rf $(PREFIX)/share/$(NAME)/devices/
 	rm -rf $(PREFIX)/share/$(NAME)/schema/
 	rm -rf $(PREFIX)/share/$(NAME)/capability_maps/
