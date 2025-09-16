@@ -121,7 +121,7 @@ fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
 }
 
 /// Normalize the trigger value to something between 0.0 and 1.0 based on the
-/// Legion Go's maximum axis ranges.
+/// Orange Pi's maximum axis ranges.
 fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
     match event {
         event::TriggerEvent::PadForce(value) => {
