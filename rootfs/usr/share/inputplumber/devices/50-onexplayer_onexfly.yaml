@@ -18,6 +18,15 @@ matches:
   - dmi_data:
       product_name: ONEXPLAYER F1
       sys_vendor: ONE-NETBOOK
+  - dmi_data:
+      product_name: ONEXPLAYER F1 EVA-01
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
+      product_name: ONEXPLAYER F1 OLED
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
+      product_name: ONEXPLAYER F1Pro
+      sys_vendor: ONE-NETBOOK
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -27,11 +36,24 @@ source_devices:
       name: Microsoft X-Box 360 pad
       phys_path: usb-0000:c4:00.3-4/input0
       handler: event*
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c7:00.0-4/input0
+      handler: event*
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+  - group: gamepad
+    udev:
+      attributes:
+        - name: port
+          value: "0x3E8"
+      sys_name: "ttyS*"
+      subsystem: tty
+    
   - group: imu
     iio:
       name: i2c-BMI0160:00
@@ -50,4 +72,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: oxp3
+capability_map_id: oxp7
