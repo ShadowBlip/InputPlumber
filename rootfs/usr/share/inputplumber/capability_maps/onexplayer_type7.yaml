@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: OneXPlayer Type 7
+
+# Unique identifier of the capability mapping
+id: oxp7
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Turbo
+    source_events:
+      - keyboard: KeyLeftCtrl
+      - keyboard: KeyLeftAlt
+      - keyboard: KeyLeftMeta
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: KB (Short Press)
+    source_events:
+      - keyboard: KeyRightCtrl
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyO
+    target_event:
+      gamepad:
+        button: Keyboard
+  - name: Orange Button (Short Press)
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyD
+    target_event:
+      gamepad:
+        button: Guide
+  - name: Orange Button (Long Press)
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyG
+    target_event:
+      gamepad:
+        button: QuickAccess2
+  - name: Turbo + Orange Button
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeySysrq
+    target_event:
+      gamepad:
+        button: Screenshot
+  - name: KB + Orange Button
+    source_events:
+      - keyboard: KeyRightCtrl
+      - keyboard: KeyRightAlt
+      - keyboard: KeyDelete
+    target_event:
+      keyboard: KeyF13
+  - name: M2
+    source_events:
+      - gamepad:
+          button: Guide
+    target_event:
+      gamepad:
+        button: RightPaddle1
+
+# List of events to filter from the source devices
+filtered_events: []
