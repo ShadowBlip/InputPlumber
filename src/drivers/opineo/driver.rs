@@ -7,7 +7,10 @@ use std::{
 use hidapi::HidDevice;
 use packed_struct::{types::SizedInteger, PackedStruct};
 
-use crate::udev::device::UdevDevice;
+use crate::{
+    drivers::opineo::event::{TriggerEvent, TriggerInput},
+    udev::device::UdevDevice,
+};
 
 use super::{
     event::{BinaryInput, Event, TouchAxisEvent, TouchButtonEvent},
@@ -32,18 +35,24 @@ const HID_TIMEOUT: i32 = 10;
 // Input report axis ranges
 pub const PAD_X_MAX: f64 = 512.0;
 pub const PAD_Y_MAX: f64 = 512.0;
+pub const PAD_FORCE_MAX: f64 = 127.0;
+pub const PAD_FORCE_NORMAL: u8 = 32; /* Simulated average */
+
+const CLICK_DELAY: Duration = Duration::from_millis(75);
 
 pub struct Driver {
     /// HIDRAW device instance
     device: HidDevice,
+    /// Timestamp of the first touch event.
+    first_touch: Instant,
+    /// Whether or not we are currently holding a click-to-click.
+    is_clicked: bool,
     /// Whether or not we are detecting a touch event currently.
     is_touching: bool,
-    /// Whether or not we are currently holding a tap-to-click.
-    is_tapped: bool,
-    /// Timestamp of the last touch event. Used to track if the touch has ended.
+    /// Timestamp of the last touch event.
     last_touch: Instant,
-    /// Timestamp of the first touch event. Used to detect tap-to-click events
-    first_touch: Instant,
+    /// Whether or not a touch event was started that hasn't been cleared.
+    touch_started: bool,
     /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport>,
 }
@@ -62,9 +71,10 @@ impl Driver {
         Ok(Self {
             device,
             first_touch: Instant::now(),
-            is_tapped: false,
+            is_clicked: false,
             is_touching: false,
             last_touch: Instant::now(),
+            touch_started: false,
             touchpad_state: None,
         })
     }
@@ -77,8 +87,6 @@ impl Driver {
 
         let report_id = buf[0];
         let slice = &buf[..bytes_read];
-        //log::trace!("Got Report ID: {report_id}");
-        //log::trace!("Got Report Size: {bytes_read}");
 
         let mut events = match report_id {
             TOUCH_DATA => {
@@ -92,35 +100,43 @@ impl Driver {
                 self.handle_touchinput_report(sized_buf)?
             }
             _ => {
-                //log::trace!("Invalid Report ID.");
                 let events = vec![];
                 events
             }
         };
 
-        // There is no release event, so check to see if we are still touching.
-        if self.is_touching && (self.last_touch.elapsed() > Duration::from_millis(4)) {
-            let event: Event = self.release_touch();
-            events.push(event);
-            // Check for tap events
-            if self.first_touch.elapsed() < Duration::from_millis(200) {
-                // For double clicking, ensure the previous tap is cleared.
-                if self.is_tapped {
-                    let event: Event = self.release_tap();
-                    events.push(event);
-                }
-                let event: Event = self.start_tap();
-                events.push(event);
+        if self.is_touching {
+            if self.last_touch.elapsed() >= Duration::from_millis(4) {
+                self.is_touching = false;
             }
+            return Ok(events);
         }
 
-        // If we did a click event, see if we shoudl release it. Accounts for click and drag.
-        if !self.is_touching
-            && self.is_tapped
-            && (self.last_touch.elapsed() > Duration::from_millis(100))
-        {
-            let event: Event = self.release_tap();
+        // Check for quick click conditions
+        if self.touch_started && self.first_touch.elapsed() <= CLICK_DELAY * 2 {
+            // For double clicking, ensure the previous click is cleared.
+            if self.is_clicked {
+                let mut new_events = self.release_click();
+                events.append(&mut new_events);
+            }
+
+            let mut new_events = self.start_click();
+            events.append(&mut new_events);
+
+            return Ok(events);
+        }
+
+        // Check for release conditions
+        if self.touch_started && self.last_touch.elapsed() > CLICK_DELAY / 2 {
+            let event: Event = self.release_touch();
             events.push(event);
+
+            // If we did a click event, see if we should release it. Accounts for click and drag.
+            if self.is_clicked {
+                let mut new_events = self.release_click();
+                events.append(&mut new_events);
+                return Ok(events);
+            }
         }
 
         Ok(events)
@@ -172,8 +188,16 @@ impl Driver {
         //// Axis events
         if !self.is_touching {
             self.is_touching = true;
-            self.first_touch = Instant::now();
-            log::trace!("Started TOUCH event");
+            // Check for click events
+            if self.touch_started && self.last_touch.elapsed() <= CLICK_DELAY / 3 {
+                let mut new_events = self.start_click();
+                events.append(&mut new_events);
+            }
+            if !self.touch_started {
+                self.touch_started = true;
+                self.first_touch = Instant::now();
+                log::trace!("Started TOUCH event");
+            }
         }
         events.push(Event::TouchAxis(TouchAxisEvent {
             index: 0,
@@ -188,7 +212,7 @@ impl Driver {
 
     fn release_touch(&mut self) -> Event {
         log::trace!("Released TOUCH event.");
-        self.is_touching = false;
+        self.touch_started = false;
         Event::TouchAxis(TouchAxisEvent {
             index: 0,
             is_touching: false,
@@ -197,15 +221,38 @@ impl Driver {
         })
     }
 
-    fn start_tap(&mut self) -> Event {
+    fn start_click(&mut self) -> Vec<Event> {
         log::trace!("Started CLICK event.");
-        self.is_tapped = true;
-        Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true }))
+        log::trace!("First touch elapsed: {:?}", self.first_touch.elapsed());
+        log::trace!("Last touch elapsed: {:?}", self.last_touch.elapsed());
+        self.is_clicked = true;
+        let mut events = Vec::new();
+
+        let event = Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true }));
+        events.push(event);
+        // The touchpad doesn't have a force sensor. The deck target wont produce a "click"
+        // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
+        // around this.
+        let event = Event::Trigger(TriggerEvent::PadForce(TriggerInput {
+            value: PAD_FORCE_NORMAL,
+        }));
+        events.push(event);
+        events
     }
 
-    fn release_tap(&mut self) -> Event {
+    fn release_click(&mut self) -> Vec<Event> {
         log::trace!("Released CLICK event.");
-        self.is_tapped = false;
-        Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false }))
+        log::trace!("First touch elapsed: {:?}", self.first_touch.elapsed());
+        log::trace!("Last touch elapsed: {:?}", self.last_touch.elapsed());
+        self.is_clicked = false;
+        let mut events = Vec::new();
+        let event = Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false }));
+        events.push(event);
+        // The touchpad doesn't have a force sensor. The deck target wont produce a "click"
+        // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
+        // around this.
+        let event = Event::Trigger(TriggerEvent::PadForce(TriggerInput { value: 0 }));
+        events.push(event);
+        events
     }
 }
