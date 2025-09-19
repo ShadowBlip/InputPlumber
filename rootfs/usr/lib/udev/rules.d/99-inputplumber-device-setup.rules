@@ -1,0 +1,25 @@
+# AOKZOE/OneXPlayer
+# Turbo button takeover
+ACTION=="add|change", KERNEL=="oxp-platform", SUBSYSTEM=="platform", DRIVER=="oxp-platform", ATTR{tt_toggle}="1", GOTO="end"
+
+# Lenovo
+# Legion Go S Controller Settings
+ACTION=="add|change", KERNEL=="0003:1A86:E31[01]*", SUBSYSTEM=="hid", DRIVER=="lenovo-legos-hid", ATTR{gamepad/auto_sleep_time}="0", ATTR{gamepad/dpad_mode}="8-way", ATTR{gamepad/mode}="xinput", ATTR{gamepad/poll_rate}="250", ATTR{os_mode}="linux", ATTR{touchpad/linux_mode}="absolute", GOTO="end"
+
+# ASUS
+# ROG Ally Controller Settings
+## asus_ally_hid uses string values for gamepad_mode, i.e. "gamepad", asus_rog_ally uses numeric values, i.e. "1"
+#ACTION=="add|change", KERNEL=="0003:0B05:1ABE*", SUBSYSTEM=="hid", DRIVER=="asus_ally_hid", ATTRS{bInterfaceNumber}=="02", ATTR{btn_m1/remap}="KB_F15", ATTR{btn_m2/remap}="KB_F14", ATTR{gamepad_mode}="gamepad", GOTO="end"
+#ACTION=="add|change", KERNEL=="0003:0B05:1ABE*", SUBSYSTEM=="hid", DRIVER=="asus_ally_hid", ATTRS{bInterfaceNumber}=="05", ATTR{qam_mode}="0", GOTO="end"
+#ACTION=="add|change", KERNEL=="0003:0B05:1ABE*", SUBSYSTEM=="hid", DRIVER=="asus_rog_ally", ATTRS{bInterfaceNumber}=="02", ATTR{btn_m1/remap}="KB_F15", ATTR{btn_m2/remap}="KB_F14", ATTR{gamepad_mode}="1", ATTR{apply_all}="1", GOTO="end"
+#ACTION=="add|change", KERNEL=="0003:0B05:1ABE*", SUBSYSTEM=="hid", DRIVER=="asus_rog_ally", ATTRS{bInterfaceNumber}=="05", ATTR{qam_mode}="0", GOTO="end"
+#
+## ROG Ally X Controller Settings
+#ACTION=="add|change", KERNEL=="0003:0B05:1B4C*", SUBSYSTEM=="hid", DRIVER=="asus_ally_hid", ATTRS{bInterfaceNumber}=="02", ATTR{btn_m1/remap}="KB_F15", ATTR{btn_m2/remap}="KB_F14", ATTR{gamepad_mode}="gamepad",  GOTO="end"
+#ACTION=="add|change", KERNEL=="0003:0B05:1B4C*", SUBSYSTEM=="hid", DRIVER=="asus_ally_hid", ATTRS{bInterfaceNumber}=="05", ATTR{qam_mode}="0", GOTO="end"
+#ACTION=="add|change", KERNEL=="0003:0B05:1B4C*", SUBSYSTEM=="hid", DRIVER=="asus_rog_ally", ATTRS{bInterfaceNumber}=="02", ATTR{btn_m1/remap}="KB_F15", ATTR{btn_m2/remap}="KB_F14", ATTR{gamepad_mode}="1", ATTR{apply_all}="1", GOTO="end"
+#ACTION=="add|change", KERNEL=="0003:0B05:1B4C*", SUBSYSTEM=="hid", DRIVER=="asus_rog_ally", ATTRS{bInterfaceNumber}=="05", ATTR{qam_mode}="0", GOTO="end"
+
+LABEL="end"
+
+
