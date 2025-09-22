@@ -40,13 +40,16 @@
      Send a simple rumble event
      -->
     <method name="Rumble">
-      <arg name="value" type="i" direction="in"/>
+      <arg name="value" type="d" direction="in"/>
     </method>
-
     <!--
      Stop all currently playing force feedback effects
      -->
     <method name="Stop">
     </method>
+    <!--
+     Whether or not the device should send force feedback events
+     -->
+    <property name="Enabled" type="b" access="readwrite"/>
   </interface>
 </node>
