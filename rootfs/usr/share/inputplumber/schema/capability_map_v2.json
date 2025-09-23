@@ -1,15 +1,8 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CapabilityMapConfigV2",
-  "description": "[CapabilityMapConfigV2] are used to fix or define the real capabilities of an input device.",
+  "description": "[CapabilityMapConfigV2] are used to fix or define the real capabilities of\nan input device.",
   "type": "object",
-  "required": [
-    "id",
-    "kind",
-    "mapping",
-    "name",
-    "version"
-  ],
   "properties": {
     "id": {
       "type": "string"
@@ -20,7 +13,7 @@
     "mapping": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/CapabilityMapping"
+        "$ref": "#/$defs/CapabilityMapping"
       }
     },
     "name": {
@@ -29,15 +22,19 @@
     "version": {
       "type": "integer",
       "format": "uint32",
-      "minimum": 0.0
+      "minimum": 0
     }
   },
-  "definitions": {
+  "required": [
+    "version",
+    "kind",
+    "name",
+    "id",
+    "mapping"
+  ],
+  "$defs": {
     "AccelerometerCapability": {
       "type": "object",
-      "required": [
-        "name"
-      ],
       "properties": {
         "axis": {
           "type": [
@@ -61,13 +58,13 @@
         "name": {
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "name"
+      ]
     },
     "AxisCapability": {
       "type": "object",
-      "required": [
-        "name"
-      ],
       "properties": {
         "deadzone": {
           "type": [
@@ -85,10 +82,13 @@
         "name": {
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "name"
+      ]
     },
     "AxisDirection": {
-      "description": "The AxisDirection can be used to map one half of an axis to a particular capability. For example, you can map the negative values of `ABS_Y` to the `DPadDown` capability and the positive values of `ABS_Y` to `DPadUp`.",
+      "description": "The AxisDirection can be used to map one half of an axis to a particular\ncapability. For example, you can map the negative values of `ABS_Y` to the\n`DPadDown` capability and the positive values of `ABS_Y` to `DPadUp`.",
       "type": "string",
       "enum": [
         "none",
@@ -99,6 +99,16 @@
     "CapabilityConfig": {
       "type": "object",
       "properties": {
+        "accelerometer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "dbus": {
           "type": [
             "string",
@@ -108,7 +118,17 @@
         "gamepad": {
           "anyOf": [
             {
-              "$ref": "#/definitions/GamepadCapability"
+              "$ref": "#/$defs/GamepadCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gyroscope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceCapability"
             },
             {
               "type": "null"
@@ -124,7 +144,7 @@
         "mouse": {
           "anyOf": [
             {
-              "$ref": "#/definitions/MouseCapability"
+              "$ref": "#/$defs/MouseCapability"
             },
             {
               "type": "null"
@@ -134,7 +154,7 @@
         "touchpad": {
           "anyOf": [
             {
-              "$ref": "#/definitions/TouchpadCapability"
+              "$ref": "#/$defs/TouchpadCapability"
             },
             {
               "type": "null"
@@ -144,7 +164,7 @@
         "touchscreen": {
           "anyOf": [
             {
-              "$ref": "#/definitions/TouchCapability"
+              "$ref": "#/$defs/TouchCapability"
             },
             {
               "type": "null"
@@ -154,18 +174,13 @@
       }
     },
     "CapabilityMapping": {
-      "description": "A [CapabilityMapping] defines how to map source input to an inputplumber capability.",
+      "description": "A [CapabilityMapping] defines how to map source input to an inputplumber\ncapability.",
       "type": "object",
-      "required": [
-        "name",
-        "source_events",
-        "target_event"
-      ],
       "properties": {
         "mapping_type": {
           "anyOf": [
             {
-              "$ref": "#/definitions/MappingType"
+              "$ref": "#/$defs/MappingType"
             },
             {
               "type": "null"
@@ -178,37 +193,44 @@
         "source_events": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/SourceMapping"
+            "$ref": "#/$defs/SourceMapping"
           }
         },
         "target_event": {
-          "$ref": "#/definitions/CapabilityConfig"
+          "$ref": "#/$defs/CapabilityConfig"
         }
-      }
+      },
+      "required": [
+        "name",
+        "source_events",
+        "target_event"
+      ]
     },
     "DialCapability": {
-      "description": "The Dial direction can be used to map clockwise or counter-clockwise turns.",
       "type": "object",
-      "required": ["name", "direction"],
       "properties": {
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "name"
+      ]
     },
     "EvdevConfig": {
       "description": "An [EvdevConfig] defines a matching evdev input event",
       "type": "object",
-      "required": [
-        "event_code",
-        "event_type",
-        "value_type"
-      ],
       "properties": {
         "axis_direction": {
           "anyOf": [
             {
-              "$ref": "#/definitions/AxisDirection"
+              "$ref": "#/$defs/AxisDirection"
             },
             {
               "type": "null"
@@ -216,10 +238,10 @@
           ]
         },
         "event_code": {
-          "$ref": "#/definitions/EventCode"
+          "$ref": "#/$defs/EventCode"
         },
         "event_type": {
-          "$ref": "#/definitions/EventType"
+          "$ref": "#/$defs/EventType"
         },
         "event_value": {
           "type": [
@@ -227,36 +249,36 @@
             "null"
           ],
           "format": "uint16",
-          "minimum": 0.0
+          "maximum": 65535,
+          "minimum": 0
         },
         "value_type": {
-          "$ref": "#/definitions/ValueType"
+          "$ref": "#/$defs/ValueType"
         }
-      }
+      },
+      "required": [
+        "event_type",
+        "event_code",
+        "value_type"
+      ]
     },
     "EvdevMappingType": {
       "description": "How evdev source events should be translated",
       "oneOf": [
         {
-          "description": "Source events will be treated as an inclusive match to emit a single inputplumber event. Events emitted immediately upon match.",
+          "description": "Source events will be treated as an inclusive match to emit a single\ninputplumber event. Events emitted immediately upon match.",
           "type": "string",
-          "enum": [
-            "chord"
-          ]
+          "const": "chord"
         },
         {
-          "description": "Source events will be treated as an inclusive match to emit a single inputplumber event. Events emitted after button is released.",
+          "description": "Source events will be treated as an inclusive match to emit a single\ninputplumber event. Events emitted after button is released.",
           "type": "string",
-          "enum": [
-            "delayed_chord"
-          ]
+          "const": "delayed_chord"
         },
         {
-          "description": "Multiple source events will emit the same inputplumber event. Useful for mapping axis where different directions are triggered by separate events or multiple events to the same inputplumber event.",
+          "description": "Multiple source events will emit the same inputplumber event. Useful for mapping\naxis where different directions are triggered by separate events or multiple\nevents to the same inputplumber event.",
           "type": "string",
-          "enum": [
-            "multi_source"
-          ]
+          "const": "multi_source"
         }
       ]
     },
@@ -993,93 +1015,67 @@
         {
           "description": "A bookkeeping event. Usually not important to applications.",
           "type": "string",
-          "enum": [
-            "SYNC"
-          ]
+          "const": "SYNC"
         },
         {
-          "description": "A key changed state. A key, or button, is usually a momentary switch (in the circuit sense). It has two states: down, or up. There are events for when keys are pressed (become down) and released (become up). There are also \"key repeats\", where multiple events are sent while a key is down.",
+          "description": "A key changed state. A key, or button, is usually a momentary switch (in the circuit sense). It has two\nstates: down, or up. There are events for when keys are pressed (become down) and\nreleased (become up). There are also \"key repeats\", where multiple events are sent\nwhile a key is down.",
           "type": "string",
-          "enum": [
-            "KEY"
-          ]
+          "const": "KEY"
         },
         {
-          "description": "Movement on a relative axis. There is no absolute coordinate frame, just the fact that there was a change of a certain amount of units. Used for things like mouse movement or scroll wheels.",
+          "description": "Movement on a relative axis. There is no absolute coordinate frame, just the fact that\nthere was a change of a certain amount of units. Used for things like mouse movement or\nscroll wheels.",
           "type": "string",
-          "enum": [
-            "REL"
-          ]
+          "const": "REL"
         },
         {
           "description": "Movement on an absolute axis. Used for things such as touch events and joysticks.",
           "type": "string",
-          "enum": [
-            "ABS"
-          ]
+          "const": "ABS"
         },
         {
-          "description": "Miscellaneous events that don't fall into other categories. For example, Key presses may send `MSC_SCAN` events before each KEY event",
+          "description": "Miscellaneous events that don't fall into other categories. For example, Key presses may\nsend `MSC_SCAN` events before each KEY event",
           "type": "string",
-          "enum": [
-            "MSC"
-          ]
+          "const": "MSC"
         },
         {
-          "description": "Change in a switch value. Switches are boolean conditions and usually correspond to a toggle switch of some kind in hardware.",
+          "description": "Change in a switch value. Switches are boolean conditions and usually correspond to a\ntoggle switch of some kind in hardware.",
           "type": "string",
-          "enum": [
-            "SW"
-          ]
+          "const": "SW"
         },
         {
           "description": "An LED was toggled.",
           "type": "string",
-          "enum": [
-            "LED"
-          ]
+          "const": "LED"
         },
         {
           "description": "A sound was made.",
           "type": "string",
-          "enum": [
-            "SND"
-          ]
+          "const": "SND"
         },
         {
           "description": "Metadata about key repeat configuration.",
           "type": "string",
-          "enum": [
-            "REP"
-          ]
+          "const": "REP"
         },
         {
           "description": "Sent to the device with a previusly obtained effect id as a code in order to toggle the effect.",
           "type": "string",
-          "enum": [
-            "FF"
-          ]
+          "const": "FF"
         },
         {
           "description": "Used to trigger power events such as suspend or power off.",
           "type": "string",
-          "enum": [
-            "PWR"
-          ]
+          "const": "PWR"
         },
         {
           "description": "A force feedback effect's state changed.",
           "type": "string",
-          "enum": [
-            "FF_STATUS"
-          ]
+          "const": "FF_STATUS"
         },
         {
           "description": "An event originating from uinput.",
           "type": "string",
-          "enum": [
-            "UINPUT"
-          ]
+          "const": "UINPUT"
         }
       ]
     },
@@ -1089,7 +1085,7 @@
         "accelerometer": {
           "anyOf": [
             {
-              "$ref": "#/definitions/AccelerometerCapability"
+              "$ref": "#/$defs/AccelerometerCapability"
             },
             {
               "type": "null"
@@ -1099,7 +1095,7 @@
         "axis": {
           "anyOf": [
             {
-              "$ref": "#/definitions/AxisCapability"
+              "$ref": "#/$defs/AxisCapability"
             },
             {
               "type": "null"
@@ -1112,10 +1108,20 @@
             "null"
           ]
         },
+        "dial": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DialCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "gyro": {
           "anyOf": [
             {
-              "$ref": "#/definitions/GyroCapability"
+              "$ref": "#/$defs/GyroCapability"
             },
             {
               "type": "null"
@@ -1125,17 +1131,7 @@
         "trigger": {
           "anyOf": [
             {
-              "$ref": "#/definitions/TriggerCapability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "dial": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/DialCapability"
+              "$ref": "#/$defs/TriggerCapability"
             },
             {
               "type": "null"
@@ -1146,9 +1142,6 @@
     },
     "GyroCapability": {
       "type": "object",
-      "required": [
-        "name"
-      ],
       "properties": {
         "axis": {
           "type": [
@@ -1172,27 +1165,25 @@
         "name": {
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "name"
+      ]
     },
     "HidrawConfig": {
-      "description": "A [HidrawConfig] defines how to decode a particular event in an HID input report.",
+      "description": "A [HidrawConfig] defines how to decode a particular event in an HID input\nreport.",
       "type": "object",
-      "required": [
-        "bit_offset",
-        "byte_start",
-        "input_type",
-        "report_id"
-      ],
       "properties": {
         "bit_offset": {
           "type": "integer",
           "format": "uint8",
-          "minimum": 0.0
+          "maximum": 255,
+          "minimum": 0
         },
         "byte_start": {
           "type": "integer",
           "format": "uint64",
-          "minimum": 0.0
+          "minimum": 0
         },
         "input_type": {
           "type": "string"
@@ -1200,9 +1191,15 @@
         "report_id": {
           "type": "integer",
           "format": "uint32",
-          "minimum": 0.0
+          "minimum": 0
         }
-      }
+      },
+      "required": [
+        "report_id",
+        "input_type",
+        "byte_start",
+        "bit_offset"
+      ]
     },
     "MappingType": {
       "description": "[MappingType] defines how source events should be translated",
@@ -1211,7 +1208,7 @@
         "evdev": {
           "anyOf": [
             {
-              "$ref": "#/definitions/EvdevMappingType"
+              "$ref": "#/$defs/EvdevMappingType"
             },
             {
               "type": "null"
@@ -1232,7 +1229,17 @@
         "motion": {
           "anyOf": [
             {
-              "$ref": "#/definitions/MouseMotionCapability"
+              "$ref": "#/$defs/MouseMotionCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wheel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MouseWheelCapability"
             },
             {
               "type": "null"
@@ -1256,9 +1263,50 @@
             "null"
           ],
           "format": "uint64",
-          "minimum": 0.0
+          "minimum": 0
         }
       }
+    },
+    "MouseWheelCapability": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SourceCapability": {
+      "type": "object",
+      "properties": {
+        "axis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deadzone": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
     },
     "SourceMapping": {
       "description": "A [SourceMapping] defines input events to be mapped",
@@ -1267,7 +1315,7 @@
         "capability": {
           "anyOf": [
             {
-              "$ref": "#/definitions/CapabilityConfig"
+              "$ref": "#/$defs/CapabilityConfig"
             },
             {
               "type": "null"
@@ -1277,7 +1325,7 @@
         "evdev": {
           "anyOf": [
             {
-              "$ref": "#/definitions/EvdevConfig"
+              "$ref": "#/$defs/EvdevConfig"
             },
             {
               "type": "null"
@@ -1287,7 +1335,7 @@
         "hidraw": {
           "anyOf": [
             {
-              "$ref": "#/definitions/HidrawConfig"
+              "$ref": "#/$defs/HidrawConfig"
             },
             {
               "type": "null"
@@ -1308,7 +1356,7 @@
         "motion": {
           "anyOf": [
             {
-              "$ref": "#/definitions/TouchMotionCapability"
+              "$ref": "#/$defs/TouchMotionCapability"
             },
             {
               "type": "null"
@@ -1332,30 +1380,27 @@
             "null"
           ],
           "format": "uint64",
-          "minimum": 0.0
+          "minimum": 0
         }
       }
     },
     "TouchpadCapability": {
       "type": "object",
-      "required": [
-        "name",
-        "touch"
-      ],
       "properties": {
         "name": {
           "type": "string"
         },
         "touch": {
-          "$ref": "#/definitions/TouchCapability"
+          "$ref": "#/$defs/TouchCapability"
         }
-      }
+      },
+      "required": [
+        "name",
+        "touch"
+      ]
     },
     "TriggerCapability": {
       "type": "object",
-      "required": [
-        "name"
-      ],
       "properties": {
         "deadzone": {
           "type": [
@@ -1367,7 +1412,10 @@
         "name": {
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "name"
+      ]
     },
     "ValueType": {
       "type": "string",

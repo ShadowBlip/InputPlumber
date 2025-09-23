@@ -988,6 +988,7 @@ impl CompositeDevice {
                             continue;
                         }
                     }
+                    Mouse::Wheel => {}
                 },
                 Capability::Touchscreen(_) => (),
                 Capability::Gyroscope(_) => (),

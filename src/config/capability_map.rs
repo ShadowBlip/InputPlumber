@@ -275,6 +275,8 @@ pub struct MouseCapability {
     pub button: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub motion: Option<MouseMotionCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wheel: Option<MouseWheelCapability>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
@@ -284,6 +286,12 @@ pub struct MouseMotionCapability {
     pub direction: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speed_pps: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct MouseWheelCapability {
+    pub direction: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
