@@ -179,6 +179,7 @@ impl TargetInputDevice for MouseDevice {
             Capability::Mouse(Mouse::Button(MouseButton::Extra)),
             Capability::Mouse(Mouse::Button(MouseButton::WheelUp)),
             Capability::Mouse(Mouse::Button(MouseButton::WheelDown)),
+            Capability::Mouse(Mouse::Wheel),
             Capability::Mouse(Mouse::Motion),
         ])
     }

@@ -56,6 +56,7 @@ impl Capability {
             Capability::Mouse(mouse) => match mouse {
                 Mouse::Motion => "Mouse:Motion".to_string(),
                 Mouse::Button(button) => format!("Mouse:Button:{button}"),
+                Mouse::Wheel => "Mouse:Wheel".to_string(),
             },
             Capability::Keyboard(key) => format!("Keyboard:{key}"),
             Capability::None => "None".to_string(),
@@ -267,6 +268,11 @@ impl From<CapabilityConfig> for Capability {
                 let button = button.unwrap();
                 return Capability::Mouse(Mouse::Button(button));
             }
+
+            // Wheel
+            if mouse.wheel.is_some() {
+                return Capability::Mouse(Mouse::Wheel);
+            }
         }
 
         // DBus
@@ -437,6 +443,8 @@ pub enum Mouse {
     Motion,
     /// Mouse Buttons are typically binary mouse input that represents button presses
     Button(MouseButton),
+    /// Mouse wheel input is relative
+    Wheel,
 }
 
 impl fmt::Display for Mouse {
@@ -444,6 +452,7 @@ impl fmt::Display for Mouse {
         match self {
             Mouse::Motion => write!(f, "Motion"),
             Mouse::Button(_) => write!(f, "Button"),
+            Mouse::Wheel => write!(f, "Wheel"),
         }
     }
 }

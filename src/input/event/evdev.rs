@@ -465,6 +465,9 @@ impl EvdevEvent {
             EventType::RELATIVE => match RelativeAxisCode(code) {
                 RelativeAxisCode::REL_X => Capability::Mouse(Mouse::Motion),
                 RelativeAxisCode::REL_Y => Capability::Mouse(Mouse::Motion),
+                RelativeAxisCode::REL_WHEEL | RelativeAxisCode::REL_HWHEEL => {
+                    Capability::Mouse(Mouse::Wheel)
+                }
                 _ => Capability::NotImplemented,
             },
             EventType::MISC => Capability::NotImplemented,
@@ -561,6 +564,7 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
         Capability::Mouse(mouse) => match mouse {
             Mouse::Motion => Some(EventType::RELATIVE),
             Mouse::Button(_) => Some(EventType::KEY),
+            Mouse::Wheel => Some(EventType::RELATIVE),
         },
         Capability::Gamepad(gamepad) => match gamepad {
             Gamepad::Button(button) => match button {
@@ -701,6 +705,11 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 MouseButton::Extra => vec![KeyCode::BTN_EXTRA.0],
                 MouseButton::Side => vec![KeyCode::BTN_SIDE.0],
             },
+
+            Mouse::Wheel => vec![
+                RelativeAxisCode::REL_WHEEL.0,
+                RelativeAxisCode::REL_HWHEEL.0,
+            ],
         },
         Capability::Keyboard(key) => match key {
             Keyboard::Key0 => vec![KeyCode::KEY_0.0],
@@ -975,6 +984,8 @@ fn input_event_from_value(
                     EventType::RELATIVE => match RelativeAxisCode(code) {
                         RelativeAxisCode::REL_X => x.map(|v| v as i32),
                         RelativeAxisCode::REL_Y => y.map(|v| v as i32),
+                        RelativeAxisCode::REL_HWHEEL => x.map(|v| v as i32),
+                        RelativeAxisCode::REL_WHEEL => y.map(|v| v as i32),
                         _ => None,
                     },
                     _ => None,

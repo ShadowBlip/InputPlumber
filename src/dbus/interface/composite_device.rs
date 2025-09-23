@@ -13,7 +13,7 @@ use crate::{
     config::DeviceProfile,
     dbus::polkit::check_polkit,
     input::{
-        capability::{Capability, Gamepad, Mouse},
+        capability::Capability,
         composite_device::{client::CompositeDeviceClient, InterceptMode},
         event::{native::NativeEvent, value::InputValue},
     },
@@ -465,23 +465,7 @@ impl CompositeDeviceInterface {
 
         let mut capability_strings = HashSet::new();
         for cap in capabilities {
-            let str = match cap {
-                Capability::Gamepad(gamepad) => match gamepad {
-                    Gamepad::Button(button) => format!("Gamepad:Button:{}", button),
-                    Gamepad::Axis(axis) => format!("Gamepad:Axis:{}", axis),
-                    Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{}", trigger),
-                    Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
-                    Gamepad::Gyro => "Gamepad:Gyro".to_string(),
-                    Gamepad::Dial(dial) => format!("Gamepad:Dial:{dial}"),
-                },
-                Capability::Mouse(mouse) => match mouse {
-                    Mouse::Motion => "Mouse:Motion".to_string(),
-                    Mouse::Button(button) => format!("Mouse:Button:{}", button),
-                },
-                Capability::Keyboard(key) => format!("Keyboard:{}", key),
-                Capability::DBus(action) => format!("DBus:{}", action.as_str()),
-                _ => cap.to_string(),
-            };
+            let str = cap.to_capability_string();
             capability_strings.insert(str);
         }
 
