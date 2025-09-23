@@ -199,6 +199,15 @@ impl From<CapabilityConfig> for Capability {
                 let button = button.unwrap();
                 return Capability::Mouse(Mouse::Button(button));
             }
+
+            // Wheel
+            if let Some(wheel) = mouse.wheel.as_ref() {
+                let Ok(wheel) = MouseWheel::from_str(&wheel.name) else {
+                    log::error!("Invalid or unimplemented wheel: {}", wheel.name);
+                    return Capability::NotImplemented;
+                };
+                return Capability::Mouse(Mouse::Wheel(wheel));
+            }
         }
 
         // DBus
@@ -331,6 +340,8 @@ pub enum Mouse {
     Motion,
     /// Mouse Buttons are typically binary mouse input that represents button presses
     Button(MouseButton),
+    /// Mouse wheel input is relative
+    Wheel(MouseWheel),
 }
 
 impl fmt::Display for Mouse {
@@ -338,6 +349,7 @@ impl fmt::Display for Mouse {
         match self {
             Mouse::Motion => write!(f, "Motion"),
             Mouse::Button(_) => write!(f, "Button"),
+            Mouse::Wheel(_) => write!(f, "Wheel"),
         }
     }
 }
@@ -412,6 +424,35 @@ impl FromStr for MouseButton {
             "WheelRight" => Ok(MouseButton::WheelRight),
             "Extra1" => Ok(MouseButton::Extra),
             "Extra2" => Ok(MouseButton::Side),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum MouseWheel {
+    // Mouse wheel up or down
+    Vertical,
+    // Mouse wheel left or right
+    Horizontal,
+}
+
+impl fmt::Display for MouseWheel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MouseWheel::Vertical => write!(f, "Vertical"),
+            MouseWheel::Horizontal => write!(f, "Horizontal"),
+        }
+    }
+}
+
+impl FromStr for MouseWheel {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Vertical" => Ok(MouseWheel::Vertical),
+            "Horizontal" => Ok(MouseWheel::Horizontal),
             _ => Err(()),
         }
     }

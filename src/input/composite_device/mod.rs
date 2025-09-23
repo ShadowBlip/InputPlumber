@@ -919,6 +919,7 @@ impl CompositeDevice {
                             continue;
                         }
                     }
+                    Mouse::Wheel(_) => {}
                 },
                 Capability::Touchscreen(_) => (),
             }

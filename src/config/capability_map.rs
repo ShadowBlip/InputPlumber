@@ -236,6 +236,7 @@ pub struct DialCapability {
 pub struct MouseCapability {
     pub button: Option<String>,
     pub motion: Option<MouseMotionCapability>,
+    pub wheel: Option<MouseWheelCapability>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
@@ -243,6 +244,13 @@ pub struct MouseCapability {
 pub struct MouseMotionCapability {
     pub direction: Option<String>,
     pub speed_pps: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct MouseWheelCapability {
+    pub name: String,
+    pub direction: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]

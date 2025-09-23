@@ -9,7 +9,7 @@ use evdev::{
 use crate::{
     dbus::interface::{target::mouse::TargetMouseInterface, DBusInterfaceManager},
     input::{
-        capability::{Capability, Mouse, MouseButton},
+        capability::{Capability, Mouse, MouseButton, MouseWheel},
         composite_device::client::CompositeDeviceClient,
         event::{evdev::EvdevEvent, native::NativeEvent, value::InputValue},
         output_event::OutputEvent,
@@ -179,6 +179,8 @@ impl TargetInputDevice for MouseDevice {
             Capability::Mouse(Mouse::Button(MouseButton::Extra)),
             Capability::Mouse(Mouse::Button(MouseButton::WheelUp)),
             Capability::Mouse(Mouse::Button(MouseButton::WheelDown)),
+            Capability::Mouse(Mouse::Wheel(MouseWheel::Vertical)),
+            Capability::Mouse(Mouse::Wheel(MouseWheel::Horizontal)),
             Capability::Mouse(Mouse::Motion),
         ])
     }

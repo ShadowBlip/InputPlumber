@@ -6,6 +6,7 @@ use crate::{
 use super::dbus::Action;
 
 /// Possible errors while doing input value translation
+#[derive(Debug)]
 pub enum TranslationError {
     /// Translation not yet implemented
     NotImplemented,
@@ -138,6 +139,8 @@ impl InputValue {
                                 Mouse::Motion => Err(TranslationError::NotImplemented),
                                 // Gamepad Button -> Mouse Button
                                 Mouse::Button(_) => Ok(self.clone()),
+                                // Gamepad Button -> Mouse Wheel
+                                Mouse::Wheel(_) => self.translate_button_to_wheel(target_config),
                             },
                             // Gamepad Button -> Keyboard
                             Capability::Keyboard(_) => Ok(self.clone()),
@@ -183,11 +186,10 @@ impl InputValue {
                             },
                             // Axis -> Mouse
                             Capability::Mouse(mouse) => match mouse {
-                                // Axis -> Mouse Motion
                                 Mouse::Motion => self
                                     .translate_axis_to_mouse_motion(source_config, target_config),
-                                // Axis -> Mouse Button
                                 Mouse::Button(_) => self.translate_axis_to_button(source_config),
+                                Mouse::Wheel(_) => Err(TranslationError::NotImplemented),
                             },
                             // Axis -> Keyboard
                             Capability::Keyboard(_) => self.translate_axis_to_button(source_config),
@@ -233,6 +235,7 @@ impl InputValue {
                             Mouse::Motion => Err(TranslationError::NotImplemented),
                             // Trigger -> Mouse Button
                             Mouse::Button(_) => self.translate_trigger_to_button(source_config),
+                            Mouse::Wheel(_) => Err(TranslationError::NotImplemented),
                         },
                         // Trigger -> Keyboard
                         Capability::Keyboard(_) => self.translate_trigger_to_button(source_config),
@@ -266,6 +269,7 @@ impl InputValue {
                         Capability::Mouse(mouse) => match mouse {
                             Mouse::Motion => Err(TranslationError::NotImplemented),
                             Mouse::Button(_) => self.translate_dial_to_button(source_config),
+                            Mouse::Wheel(_) => Err(TranslationError::NotImplemented),
                         },
                         Capability::Keyboard(_) => self.translate_dial_to_button(source_config),
                         Capability::Touchpad(touch) => match touch {
@@ -307,6 +311,7 @@ impl InputValue {
                 Capability::Mouse(mouse) => match mouse {
                     Mouse::Motion => Err(TranslationError::NotImplemented),
                     Mouse::Button(_) => Ok(self.clone()),
+                    Mouse::Wheel(_) => self.translate_button_to_wheel(target_config),
                 },
                 // Keyboard Key -> Keyboard
                 Capability::Keyboard(_) => Ok(self.clone()),
@@ -340,6 +345,7 @@ impl InputValue {
                             // Touchscreen Motion -> Mouse Motion
                             Mouse::Motion => Err(TranslationError::NotImplemented),
                             Mouse::Button(_) => Err(TranslationError::NotImplemented),
+                            Mouse::Wheel(_) => Err(TranslationError::NotImplemented),
                         },
                         Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
                         // Touchpad Motion -> Touchpad
@@ -395,6 +401,7 @@ impl InputValue {
                             // Touchscreen Motion -> Mouse Motion
                             Mouse::Motion => Err(TranslationError::NotImplemented),
                             Mouse::Button(_) => Err(TranslationError::NotImplemented),
+                            Mouse::Wheel(_) => Err(TranslationError::NotImplemented),
                         },
                         Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
                         // Touchpad Motion -> Touchpad
@@ -450,6 +457,7 @@ impl InputValue {
                             // Touchscreen Motion -> Mouse Motion
                             Mouse::Motion => Err(TranslationError::NotImplemented),
                             Mouse::Button(_) => Err(TranslationError::NotImplemented),
+                            Mouse::Wheel(_) => Err(TranslationError::NotImplemented),
                         },
                         Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
                         // Touchpad Motion -> Touchpad
@@ -509,6 +517,7 @@ impl InputValue {
                         Mouse::Motion => Err(TranslationError::NotImplemented),
                         // Touchscreen Motion -> Mouse Button
                         Mouse::Button(_) => Err(TranslationError::NotImplemented),
+                        Mouse::Wheel(_) => Err(TranslationError::NotImplemented),
                     },
                     // Touchscreen Motion -> Keyboard
                     Capability::Keyboard(_) => Err(TranslationError::NotImplemented),
@@ -675,6 +684,37 @@ impl InputValue {
             Err(TranslationError::InvalidTargetConfig(
                 "No mouse config to translate axis to mouse motion".to_string(),
             ))
+        }
+    }
+
+    /// Translate the button value into an axis value based on the given config
+    fn translate_button_to_wheel(
+        &self,
+        target_config: &CapabilityConfig,
+    ) -> Result<InputValue, TranslationError> {
+        let Some(mouse_config) = target_config.mouse.as_ref() else {
+            return Err(TranslationError::InvalidTargetConfig(
+                "No mouse config to translate button to mouse wheel".to_string(),
+            ));
+        };
+        let Some(wheel) = mouse_config.wheel.as_ref() else {
+            return Err(TranslationError::InvalidTargetConfig(
+                "No mouse config found".to_string(),
+            ));
+        };
+        let Some(direction) = wheel.direction.as_ref() else {
+            return Err(TranslationError::InvalidTargetConfig(
+                "No wheel direction found to translate button to mouse wheel".to_string(),
+            ));
+        };
+        match direction.as_str() {
+            "up" => Ok(InputValue::Float(1.0)),
+            "down" => Ok(InputValue::Float(-1.0)),
+            "left" => Ok(InputValue::Float(-1.0)),
+            "right" => Ok(InputValue::Float(1.0)),
+            _ => Err(TranslationError::InvalidTargetConfig(
+                "Invalid mouse wheel config. Must be of value: up or down (Vertical) or left or right (Horizontal)".to_string(),
+            )),
         }
     }
 
