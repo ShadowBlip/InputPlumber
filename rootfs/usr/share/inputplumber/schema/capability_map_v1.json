@@ -289,6 +289,9 @@
         "motion": {
           "$ref": "#/definitions/MouseMotionEvent"
         },
+        "wheel": {
+          "$ref": "#/definitions/MouseWheelEvent"
+        },
         "button": {
           "type": "string",
           "enum": [
@@ -326,6 +329,24 @@
           "type": "number",
           "description": "Speed of the target motion event in pixels per second",
           "default": 800
+        }
+      }
+    },
+    "MouseWheelEvent": {
+      "title": "MouseWheelEvent",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "horizontal",
+            "vertical",
+            "left",
+            "right",
+            "up",
+            "down"
+          ]
         }
       }
     },

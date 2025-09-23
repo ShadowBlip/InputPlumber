@@ -140,6 +140,8 @@ impl ProfileMapping {
                             "up" => y.filter(|&y| y <= 0.0).is_some(),
                             // Down should be a positive value
                             "down" => y.filter(|&y| y >= 0.0).is_some(),
+                            "vertical" => y.is_some(),
+                            "horizontal" => x.is_some(),
                             _ => false,
                         },
                         // Other values should never be used if this was an axis

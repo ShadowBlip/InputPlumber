@@ -5,8 +5,8 @@ use crate::{
     drivers::lego::{
         driver::Driver,
         event::{self, AxisEvent},
-        MOUSE_WHEEL_MAX, PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX, STICK_X_MAX, STICK_X_MIN,
-        STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
+        PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
+        TRIGG_MAX,
     },
     input::{
         capability::{
