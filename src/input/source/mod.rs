@@ -341,7 +341,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     }
 
     /// Returns udev device information about the device as a reference
-    pub fn info_ref(&self) -> DeviceInfoRef {
+    pub fn info_ref(&self) -> DeviceInfoRef<'_> {
         match &self.device_info {
             DeviceInfo::Udev(device) => device.into(),
         }
@@ -501,10 +501,56 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
 
 pub(crate) trait SourceDeviceCompatible {
     /// Returns a copy of the UdevDevice
-    fn get_device_ref(&self) -> DeviceInfoRef;
+    fn get_device_ref(&self) -> DeviceInfoRef<'_>;
 
     /// Returns a unique identifier for the source device.
     fn get_id(&self) -> String;
+
+    /// Returns a persistent identifier to uniquely identify the source device
+    fn get_serial(&self) -> Option<String> {
+        match self.get_device_ref() {
+            DeviceInfoRef::Udev(device) => {
+                const PROPERTIES_TO_CHECK: &[&str] = &[
+                    "ID_SERIAL",
+                    "ID_USB_SERIAL",
+                    "ID_SERIAL_SHORT",
+                    "ID_USB_SERIAL_SHORT",
+                ];
+
+                for property in PROPERTIES_TO_CHECK {
+                    let Some(serial) = device.get_property(property) else {
+                        continue;
+                    };
+                    if serial.is_empty() || serial.as_str() == "noserial" {
+                        continue;
+                    }
+                    return Some(serial);
+                }
+
+                for property in PROPERTIES_TO_CHECK {
+                    let Some(serial) = device.get_property_from_tree(property) else {
+                        continue;
+                    };
+                    if serial.is_empty() || serial.as_str() == "noserial" {
+                        continue;
+                    }
+                    return Some(serial);
+                }
+
+                let serial = device.serial_number();
+                if !serial.is_empty() && serial.as_str() != "noserial" {
+                    return Some(serial);
+                }
+
+                let uniq = device.uniq();
+                if !uniq.is_empty() {
+                    return Some(uniq);
+                }
+
+                None
+            }
+        }
+    }
 
     /// Returns a client channel that can be used to send events to this device
     fn client(&self) -> SourceDeviceClient;
@@ -533,7 +579,7 @@ pub enum SourceDevice {
 
 impl SourceDevice {
     /// Returns a copy of the DeviceInfo
-    pub fn get_device_ref(&self) -> DeviceInfoRef {
+    pub fn get_device_ref(&self) -> DeviceInfoRef<'_> {
         match self {
             SourceDevice::Event(device) => device.get_device_ref(),
             SourceDevice::HidRaw(device) => device.get_device_ref(),
@@ -549,6 +595,16 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_id(),
             SourceDevice::Iio(device) => device.get_id(),
             SourceDevice::Led(device) => device.get_id(),
+        }
+    }
+
+    /// Returns a persistent identifier to uniquely identify the source device
+    pub fn get_persistent_id(&self) -> Option<String> {
+        match self {
+            SourceDevice::Event(device) => device.get_serial(),
+            SourceDevice::HidRaw(device) => device.get_serial(),
+            SourceDevice::Iio(_) => None,
+            SourceDevice::Led(_) => None,
         }
     }
 

@@ -30,6 +30,7 @@ pub enum CompositeCommand {
     GetName(mpsc::Sender<String>),
     #[allow(dead_code)]
     GetProfileName(mpsc::Sender<String>),
+    GetPersistentId(mpsc::Sender<String>),
     GetSourceDevicePaths(mpsc::Sender<Vec<String>>),
     GetTargetCapabilities(mpsc::Sender<HashSet<Capability>>),
     GetTargetDevicePaths(mpsc::Sender<Vec<String>>),
