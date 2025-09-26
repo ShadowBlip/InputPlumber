@@ -41,6 +41,10 @@
      -->
     <property name="Name" type="s" access="read"/>
     <!--
+     Persistent identifier for the device
+     -->
+    <property name="PersistentId" type="s" access="read"/>
+    <!--
      Name of the currently loaded profile
      -->
     <property name="ProfileName" type="s" access="read"/>

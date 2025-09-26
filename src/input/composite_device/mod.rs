@@ -130,6 +130,9 @@ pub struct CompositeDevice {
     source_device_paths: Vec<String>,
     /// All currently running source device threads
     source_device_tasks: JoinSet<()>,
+    /// List of unique identifiers for each source device.
+    /// E.g. {"evdev://event0": Some("abc123")}
+    source_device_persistent_ids: HashMap<String, Option<String>>,
     /// Unique identifiers for running source devices. E.g. ["evdev://event0"]
     source_devices_used: Vec<String>,
     /// State of target devices attached to the composite device
@@ -199,6 +202,7 @@ impl CompositeDevice {
             source_devices_blocked: HashSet::new(),
             source_device_paths: Vec::new(),
             source_device_tasks: JoinSet::new(),
+            source_device_persistent_ids: HashMap::new(),
             source_devices_used: Vec::new(),
             targets: CompositeDeviceTargets::new(conn, dbus_path, tx.into(), manager),
             ff_enabled: true,
@@ -538,6 +542,12 @@ impl CompositeDevice {
                         log::debug!("Checking if device is suspended: {is_suspended}");
                         if let Err(e) = sender.send(is_suspended).await {
                             log::error!("Failed to send suspended response: {e:?}");
+                        }
+                    }
+                    CompositeCommand::GetPersistentId(sender) => {
+                        let persist_id = self.get_persistent_id().await.unwrap_or_default();
+                        if let Err(e) = sender.send(persist_id).await {
+                            log::error!("Failed to send persistent id response: {e}");
                         }
                     }
                 }
@@ -1607,6 +1617,7 @@ impl CompositeDevice {
             self.source_devices_used.remove(idx);
         };
         self.source_devices_blocked.remove(&id);
+        self.source_device_persistent_ids.remove(&id);
 
         // Signal to DBus that source devices have changed
         self.signal_sources_changed().await;
@@ -1697,6 +1708,7 @@ impl CompositeDevice {
 
         // Get the capabilities of the source device.
         let id = source_device.get_id();
+        let persistent_id = source_device.get_persistent_id();
         if !is_blocked {
             // Get the input capabilities of the source device and keep track
             // of them.
@@ -1753,7 +1765,8 @@ impl CompositeDevice {
         let device_path = source_device.get_device_path();
         self.source_devices_discovered.push(source_device);
         self.source_device_paths.push(device_path);
-        self.source_devices_used.push(id);
+        self.source_devices_used.push(id.clone());
+        self.source_device_persistent_ids.insert(id, persistent_id);
 
         Ok(())
     }
@@ -2062,5 +2075,25 @@ impl CompositeDevice {
                 log::error!("Failed to send source devices changed signal: {e:?}");
             }
         });
+    }
+
+    /// Returns a unique id that can be used to persistently identify the device
+    async fn get_persistent_id(&self) -> Option<String> {
+        // Find a source device with a valid persistent identifier
+        let mut keys: Vec<&String> = self.source_device_persistent_ids.keys().collect();
+        keys.sort();
+        for key in keys {
+            let Some(Some(persist_id)) = self.source_device_persistent_ids.get(key) else {
+                continue;
+            };
+            log::debug!("Using persistent id from {key}: {persist_id}");
+            return Some(persist_id.clone());
+        }
+        log::debug!(
+            "No valid persistent id found: {:?}",
+            self.source_device_persistent_ids
+        );
+
+        None
     }
 }
