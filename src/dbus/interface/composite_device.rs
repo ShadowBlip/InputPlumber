@@ -58,6 +58,16 @@ impl CompositeDeviceInterface {
             .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
+    /// Unique persistent identifier of the device based on source device(s)
+    #[zbus(property)]
+    async fn persistent_id(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.PersistentId").await?;
+        self.composite_device
+            .get_persistent_id()
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))
+    }
+
     /// Name of the currently loaded profile
     #[zbus(property)]
     async fn profile_name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {

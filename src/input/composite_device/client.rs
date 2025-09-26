@@ -231,6 +231,16 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+    /// Get the persistent unique id for the composite device
+    pub async fn get_persistent_id(&self) -> Result<String, ClientError> {
+        let (tx, rx) = channel(1);
+        self.tx.send(CompositeCommand::GetPersistentId(tx)).await?;
+        if let Some(persist_id) = Self::recv(rx).await {
+            return Ok(persist_id);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
     /// Get the source device paths of the composite device
     pub async fn get_source_device_paths(&self) -> Result<Vec<String>, ClientError> {
         let (tx, rx) = channel(1);
