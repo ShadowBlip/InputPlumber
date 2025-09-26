@@ -58,6 +58,16 @@ impl CompositeDeviceInterface {
             .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
 
+    /// Unique identifier of the device based on source device(s)
+    #[zbus(property)]
+    async fn serial(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
+        check_polkit(hdr, "org.shadowblip.Input.CompositeDevice.Serial").await?;
+        self.composite_device
+            .get_serial()
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))
+    }
+
     /// Name of the currently loaded profile
     #[zbus(property)]
     async fn profile_name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
