@@ -130,6 +130,9 @@ pub struct CompositeDevice {
     source_device_paths: Vec<String>,
     /// All currently running source device threads
     source_device_tasks: JoinSet<()>,
+    /// List of unique identifiers for each source device.
+    /// E.g. {"evdev://event0": Some("abc123")}
+    source_device_serials: HashMap<String, Option<String>>,
     /// Unique identifiers for running source devices. E.g. ["evdev://event0"]
     source_devices_used: Vec<String>,
     /// State of target devices attached to the composite device
@@ -199,6 +202,7 @@ impl CompositeDevice {
             source_devices_blocked: HashSet::new(),
             source_device_paths: Vec::new(),
             source_device_tasks: JoinSet::new(),
+            source_device_serials: HashMap::new(),
             source_devices_used: Vec::new(),
             targets: CompositeDeviceTargets::new(conn, dbus_path, tx.into(), manager),
             ff_enabled: true,
@@ -538,6 +542,12 @@ impl CompositeDevice {
                         log::debug!("Checking if device is suspended: {is_suspended}");
                         if let Err(e) = sender.send(is_suspended).await {
                             log::error!("Failed to send suspended response: {e:?}");
+                        }
+                    }
+                    CompositeCommand::GetSerial(sender) => {
+                        let serial = self.get_serial().await.unwrap_or_default();
+                        if let Err(e) = sender.send(serial).await {
+                            log::error!("Failed to send serial response: {e}");
                         }
                     }
                 }
@@ -1607,6 +1617,7 @@ impl CompositeDevice {
             self.source_devices_used.remove(idx);
         };
         self.source_devices_blocked.remove(&id);
+        self.source_device_serials.remove(&id);
 
         // Signal to DBus that source devices have changed
         self.signal_sources_changed().await;
@@ -1697,6 +1708,7 @@ impl CompositeDevice {
 
         // Get the capabilities of the source device.
         let id = source_device.get_id();
+        let serial = source_device.get_serial();
         if !is_blocked {
             // Get the input capabilities of the source device and keep track
             // of them.
@@ -1753,7 +1765,8 @@ impl CompositeDevice {
         let device_path = source_device.get_device_path();
         self.source_devices_discovered.push(source_device);
         self.source_device_paths.push(device_path);
-        self.source_devices_used.push(id);
+        self.source_devices_used.push(id.clone());
+        self.source_device_serials.insert(id, serial);
 
         Ok(())
     }
@@ -2062,5 +2075,20 @@ impl CompositeDevice {
                 log::error!("Failed to send source devices changed signal: {e:?}");
             }
         });
+    }
+
+    /// Returns a serial number that can be used to uniquely identify the device
+    async fn get_serial(&self) -> Option<String> {
+        // Find a source device with a valid persistent identifier
+        let mut keys: Vec<&String> = self.source_device_serials.keys().collect();
+        keys.sort();
+        for key in keys {
+            let Some(serial) = self.source_device_serials.get(key) else {
+                continue;
+            };
+            return serial.clone();
+        }
+
+        None
     }
 }
