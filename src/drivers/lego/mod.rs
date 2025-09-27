@@ -3,6 +3,8 @@ pub mod hid_report;
 pub mod touchpad_driver;
 pub mod xinput_driver;
 
+use std::time::Duration;
+
 // Hardware ID's
 const LEGO_1_XINPUT_PID: u16 = 0x6182;
 const LEGO_1_DINPUT_ATTACHED_PID: u16 = 0x6183;
@@ -27,6 +29,8 @@ pub const PIDS: [u16; 8] = [
 pub const TP_IID: i32 = 0x01;
 pub const GP_IID: i32 = 0x02;
 
+const CLICK_DELAY: Duration = Duration::from_millis(75);
+
 // Report ID's
 pub const TOUCHPAD_DATA: u8 = 0x01;
 pub const XINPUT_DATA: u8 = 0x04;
@@ -38,6 +42,8 @@ const HID_TIMEOUT: i32 = 10;
 
 // Input report axis ranges
 pub const MOUSE_WHEEL_MAX: f64 = 120.0;
+pub const PAD_FORCE_MAX: f64 = 127.0;
+pub const PAD_FORCE_NORMAL: u8 = 32; /* Simulated average pressure */
 pub const PAD_X_MAX: f64 = 1024.0;
 pub const PAD_Y_MAX: f64 = 1024.0;
 pub const STICK_X_MAX: f64 = 255.0;

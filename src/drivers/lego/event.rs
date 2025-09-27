@@ -129,6 +129,7 @@ pub enum TriggerEvent {
     ATriggerL(TriggerInput),
     ATriggerR(TriggerInput),
     MouseWheel(MouseWheelInput),
+    RpadForce(TriggerInput),
 }
 
 /// StatusEvent has data on if controllers are in FPS mode, connected, and the battery state.
