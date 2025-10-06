@@ -113,6 +113,11 @@ all: build debug ## Build release and debug builds
 run: debug ## Build and run
 	sudo LOG_LEVEL=$(LOG_LEVEL) ENABLE_METRICS=$(ENABLE_METRICS) ./target/$(TARGET_ARCH)/debug/$(NAME)
 
+.PHONY: remote-debug
+remote-debug: ## Start a remote debugging server on a remote device and stop the inputplumber service
+	ssh -tt $(SSH_USER)@$(SSH_HOST) sudo systemctl stop inputplumber
+	ssh -tt $(SSH_USER)@$(SSH_HOST) sudo lldb-server platform --listen '*:1234' --server
+
 .PHONY: clean
 clean: ## Remove build artifacts
 	rm -rf target dist .cache
@@ -293,9 +298,9 @@ in-docker:
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
 	mkdir -p $(CACHE_DIR)/home
 	docker run --rm \
-		-v $(PWD):/src \
-		-v $(PWD)/$(CACHE_DIR)/home:/home/build \
-		--workdir /src \
+		-v "$(PWD):$(PWD)" \
+		-v "$(PWD)/$(CACHE_DIR)/home:/home/build" \
+		--workdir "$(PWD)" \
 		-e HOME=/home/build \
 		-e CARGO_HOME=/home/build/.cargo \
 		-e ARCH=$(ARCH) \
