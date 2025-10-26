@@ -188,9 +188,25 @@ impl TargetDeviceTypeId {
                 device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
+                id: "ds5-usb",
+                name: "Sony Interactive Entertainment DualSense Wireless Controller",
+            },
+            TargetDeviceTypeId {
+                id: "ds5-bt",
+                name: "Sony Interactive Entertainment DualSense Wireless Controller",
+            },
+            TargetDeviceTypeId {
                 id: "ds5-edge",
                 name: "Sony Interactive Entertainment DualSense Edge Wireless Controller",
                 device_class: TargetDeviceClass::Gamepad,
+            },
+            TargetDeviceTypeId {
+                id: "ds5-edge-usb",
+                name: "Sony Interactive Entertainment DualSense Edge Wireless Controller",
+            },
+            TargetDeviceTypeId {
+                id: "ds5-edge-bt",
+                name: "Sony Interactive Entertainment DualSense Edge Wireless Controller",
             },
             TargetDeviceTypeId {
                 id: "hori-steam",
