@@ -609,6 +609,16 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                     device_config.name = "ROG Ally X Controller".to_string();
                     device_config.product_id = ProductId::AsusRogAlly;
                 }
+                "ASUS ROG Xbox Ally" => {
+                    device_config.vendor = "ASUS".to_string();
+                    device_config.name = "ROG Xbox Ally Controller".to_string();
+                    device_config.product_id = ProductId::AsusRogAlly;
+                }
+                "ASUS ROG Xbox Ally X" => {
+                    device_config.vendor = "ASUS".to_string();
+                    device_config.name = "ROG Xbox Ally X Controller".to_string();
+                    device_config.product_id = ProductId::AsusRogAlly;
+                }
                 "Zotac Zone" => {
                     device_config.vendor = "Zotac".to_string();
                     device_config.name = "Zone Controller".to_string();

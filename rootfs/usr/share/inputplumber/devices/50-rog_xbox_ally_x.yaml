@@ -1,0 +1,113 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: ASUS ROG Xbox Ally X
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches:
+  - dmi_data:
+      board_name: RC73XA
+      sys_vendor: ASUSTeK COMPUTER INC.
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: gamepad # Used for setting attributes on load
+    hidraw:
+      vendor_id: 0x0b05
+      product_id: 0x1b4c
+      interface_num: 2
+  - group: gamepad # Used for setting attributes on load
+    hidraw:
+      vendor_id: 0x0b05
+      product_id: 0x1b4c
+      interface_num: 5
+  - group: gamepad
+    evdev:
+      name: ASUS ROG Ally X Gamepad
+      vendor_id: 0b05
+      product_id: 1b4c
+      handler: event*
+  - group: gamepad # Gamepad in dinput mode without `asus_ally_hid` driver
+    udev:
+      attributes:
+        - name: name
+          value: "Asus Keyboard"
+        - name: "id/product"
+          value: "1b4c"
+      properties:
+        - name: ID_INPUT_JOYSTICK
+          value: "1"
+      subsystem: input
+      sys_name: event*
+    capability_map_id: aly2
+  - group: keyboard
+    unique: false
+    evdev:
+      name: Asus Keyboard
+      vendor_id: 0b05
+      product_id: 1b4c
+      handler: event*
+  - group: mouse # New driver group name from `asus_ally_hid`
+    evdev:
+      name: "ROG Ally Mouse"
+      vendor_id: 0b05
+      product_id: 1b4c
+      handler: event*
+  - group: keyboard # New driver group name from `asus_ally_hid`
+    evdev:
+      name: "ROG Ally Keyboard"
+      vendor_id: 0b05
+      product_id: 1b4c
+      handler: event*
+  - group: gamepad # New driver group name from `asus_ally_hid`
+    evdev:
+      name: ROG Ally X Gamepad
+      vendor_id: 0b05
+      product_id: 1b4c
+      handler: event*
+  - group: imu
+    iio:
+      name: bmi323-imu
+      mount_matrix:
+        x: [1, 0, 0]
+        y: [0, -1, 0]
+        z: [0, 0, -1]
+  - group: led
+    udev:
+      sys_name: ally:rgb:joystick_rings
+      subsystem: leds
+  #- group: touchscreen
+  #  udev:
+  #    properties:
+  #      - name: ID_INPUT_TOUCHSCREEN
+  #        value: "1"
+  #    sys_name: "event*"
+  #    subsystem: input
+
+# Optional configuration for the composite device
+options:
+  # If true, InputPlumber will automatically try to manage the input device. If
+  # this is false, InputPlumber will not try to manage the device unless an
+  # external service enables management of the device. Defaults to 'false'
+  auto_manage: true
+
+# The target input device(s) to emulate by default
+target_devices:
+  - xbox-elite
+  - mouse
+  - keyboard
+  #- touchscreen
+
+# The ID of a device event mapping in the 'event_maps' folder
+capability_map_id: aly1

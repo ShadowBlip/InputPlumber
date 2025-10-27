@@ -4,9 +4,12 @@ dmi:*svnAnbernic:pnWin600:*
 dmi:*svnAOKZOE:pnAOKZOEA1AR07:*
 dmi:*svnAOKZOE:pnAOKZOEA1Pro:*
 dmi:*svnAOKZOE:pnAOKZOEA1X:*
-# ASUS Rog Ally/X
+# ASUS ROG Ally/X
 dmi:*svnASUSTeKCOMPUTERINC.:*rnRC71L:*
 dmi:*svnASUSTeKCOMPUTERINC.:*rnRC72LA:*
+# ASUS ROG Xbox Ally/X
+dmi:*svnASUSTeKCOMPUTERINC.:*rnRC73XA:*
+dmi:*svnASUSTeKCOMPUTERINC.:*rnRC73YA:*
 # ASUS ROG Flow Z13 (2025)
 dmi:*svnASUSTeKCOMPUTERINC.:*rnGZ302EA:*
 # AYANEO 2
