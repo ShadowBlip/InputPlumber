@@ -109,7 +109,7 @@ impl TouchpadDriver {
             events.push(Event::Button(ButtonEvent::RPadPress(BinaryInput {
                 pressed: state.pressed,
             })));
-            // The touchpad doesn't have a force sensor. TouchAxisInputhe deck target wont produce a "click"
+            // The touchpad doesn't have a force sensor. The deck target wont produce a "click"
             // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
             // around this.
             events.push(Event::Trigger(TriggerEvent::RpadForce(TriggerInput {
