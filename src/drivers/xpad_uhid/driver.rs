@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     event::{AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, TriggerEvent, TriggerInput},
-    hid_report::{XpadUhidOutputData, XpadUhidOutputReport},
+    hid_report::{OutputReport, XboxOneForceFeedbackOutputReport},
 };
 
 // Report ID
@@ -43,6 +43,8 @@ pub struct Driver {
     state: Option<XBoxSeriesInputDataReport>,
     /// Last DPad state
     dpad: DPadState,
+    /// Running count of sent output reports
+    frame: u8,
 }
 
 impl Driver {
@@ -65,17 +67,16 @@ impl Driver {
             device,
             state: None,
             dpad: Default::default(),
+            frame: Default::default(),
         })
     }
 
     /// Writes the given output state to the gamepad. This can be used to change
     /// the color of LEDs, activate rumble, etc.
-    pub fn write(&self, state: XpadUhidOutputData) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let report = XpadUhidOutputReport {
-            state,
-            ..Default::default()
+    pub fn write(&self, state: OutputReport) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let buf = match state {
+            OutputReport::XboxOneRumble(report) => report.pack()?,
         };
-        let buf = report.pack()?;
         let _bytes_written = self.device.write(&buf)?;
 
         Ok(())
@@ -83,13 +84,14 @@ impl Driver {
 
     /// Rumble the gamepad
     pub fn rumble(
-        &self,
-        _left_speed: u8,
-        _right_speed: u8,
+        &mut self,
+        left_speed: u8,
+        right_speed: u8,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let state = XpadUhidOutputData {};
+        self.frame = self.frame.wrapping_add(1);
+        let report = XboxOneForceFeedbackOutputReport::new(self.frame, left_speed, right_speed);
 
-        self.write(state)
+        self.write(OutputReport::XboxOneRumble(report))
     }
 
     /// Poll the device and read input reports

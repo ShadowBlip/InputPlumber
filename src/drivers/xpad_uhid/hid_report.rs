@@ -327,28 +327,101 @@ impl Default for XBoxSeriesInputDataReport {
     }
 }
 
-/// State data can be emitted from Output events to change data such as rumble.
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq, Default)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "47")]
-pub struct XpadUhidOutputData {}
-
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "63")]
-pub struct XpadUhidOutputReport {
-    // byte 0
-    #[packed_field(bytes = "0")]
-    pub report_id: u8, // Report ID
-
-    // byte 1-47
-    #[packed_field(bytes = "1..=47")]
-    pub state: XpadUhidOutputData,
+/// All possible output reports that can be written
+pub enum OutputReport {
+    XboxOneRumble(XboxOneForceFeedbackOutputReport),
 }
 
-impl Default for XpadUhidOutputReport {
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
+pub enum OutputReportType {
+    #[default]
+    ForceFeedback = 0x09,
+}
+
+impl OutputReportType {
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            Self::ForceFeedback => Self::ForceFeedback as u8,
+        }
+    }
+}
+
+/// Rumble state output report for Xbox One gamepads
+/// Reference: https://github.com/paroj/xpad/blob/master/xpad.c#L1830-L1846
+/// Reference: https://github.com/paroj/xpad/blob/master/xpad.c#L716-L734
+/// Reference: https://github.com/quantus/xbox-one-controller-protocol?tab=readme-ov-file#0x09-activate-rumble
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "13")]
+pub struct XboxOneForceFeedbackOutputReport {
+    /// Report ID
+    #[packed_field(bytes = "0", ty = "enum")]
+    pub report_id: OutputReportType,
+    /// Counter that should be incremented with each force feedback request
+    #[packed_field(bytes = "2")]
+    pub frame: u8,
+    /// Length of the command payload encoded with LEB128
+    #[packed_field(bytes = "3")]
+    pub command_payload_length: u8,
+    /// Motors to activate for rumble
+    #[packed_field(bits = "47")]
+    pub motor_right_enabled: bool,
+    #[packed_field(bits = "46")]
+    pub motor_left_enabled: bool,
+    #[packed_field(bits = "45")]
+    pub motor_right_trigger_enabled: bool,
+    #[packed_field(bits = "44")]
+    pub motor_left_trigger_enabled: bool,
+    /// Left trigger actuator force
+    #[packed_field(bytes = "6")]
+    pub left_trigger_force: u8,
+    /// Right trigger actuator force
+    #[packed_field(bytes = "7")]
+    pub right_trigger_force: u8,
+    /// Left actuator force
+    #[packed_field(bytes = "8")]
+    pub left_force: u8,
+    /// Right actuator force
+    #[packed_field(bytes = "9")]
+    pub right_force: u8,
+    /// On period duration
+    #[packed_field(bytes = "10")]
+    duration: u8,
+    /// Start delay duration
+    #[packed_field(bytes = "11")]
+    start_delay: u8,
+    /// Repeat count
+    #[packed_field(bytes = "12")]
+    loop_count: u8,
+}
+
+impl XboxOneForceFeedbackOutputReport {
+    pub fn new(frame: u8, left_force: u8, right_force: u8) -> Self {
+        Self {
+            frame,
+            left_force,
+            right_force,
+            ..Default::default()
+        }
+    }
+}
+
+impl Default for XboxOneForceFeedbackOutputReport {
     fn default() -> Self {
         Self {
-            report_id: 0x02,
-            state: Default::default(),
+            report_id: OutputReportType::ForceFeedback,
+            frame: 0,
+            command_payload_length: 0x09,
+            motor_right_enabled: true,
+            motor_left_enabled: true,
+            motor_right_trigger_enabled: true,
+            motor_left_trigger_enabled: true,
+            left_trigger_force: 0,
+            right_trigger_force: 0,
+            left_force: u8::MAX,
+            right_force: u8::MAX,
+            duration: u8::MAX,
+            start_delay: 0,
+            loop_count: u8::MAX,
         }
     }
 }
