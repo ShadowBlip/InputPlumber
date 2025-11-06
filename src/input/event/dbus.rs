@@ -413,6 +413,8 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Touch::Motion => vec![Action::Touch],
             Touch::Button(_) => vec![Action::None],
         },
+        Capability::Gyroscope(_) => vec![Action::None],
+        Capability::Accelerometer(_) => vec![Action::None],
     }
 }
 

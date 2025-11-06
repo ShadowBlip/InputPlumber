@@ -7,7 +7,7 @@ use tokio::sync::mpsc::{
     Sender,
 };
 
-use crate::input::output_event::OutputEvent;
+use crate::input::{capability::Capability, output_event::OutputEvent};
 
 use super::command::SourceCommand;
 
@@ -119,6 +119,22 @@ impl SourceDeviceClient {
             },
             Err(_err) => Err(ClientError::ChannelClosed),
         }
+    }
+
+    /// Update the event filter for this source device.
+    pub async fn get_filtered_events(&self) -> Result<Vec<Capability>, ClientError> {
+        let (tx, rx) = channel();
+        self.tx.send(SourceCommand::GetEventFilter(tx)).await?;
+        match rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(result) => Ok(result),
+            Err(_err) => Err(ClientError::ChannelClosed),
+        }
+    }
+
+    /// Update the event filter for this source device.
+    pub async fn set_filtered_events(&self, events: Vec<Capability>) -> Result<(), ClientError> {
+        self.tx.send(SourceCommand::SetEventFilter(events)).await?;
+        Ok(())
     }
 
     /// Stop the source device.

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::{collections::HashSet, str::FromStr};
 
 use zbus::{
@@ -350,23 +351,7 @@ impl CompositeDeviceInterface {
 
         let mut capability_strings = Vec::new();
         for cap in capabilities {
-            let str = match cap {
-                Capability::Gamepad(gamepad) => match gamepad {
-                    Gamepad::Button(button) => format!("Gamepad:Button:{}", button),
-                    Gamepad::Axis(axis) => format!("Gamepad:Axis:{}", axis),
-                    Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{}", trigger),
-                    Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
-                    Gamepad::Gyro => "Gamepad:Gyro".to_string(),
-                    Gamepad::Dial(dial) => format!("Gamepad:Dial:{dial}"),
-                },
-                Capability::Mouse(mouse) => match mouse {
-                    Mouse::Motion => "Mouse:Motion".to_string(),
-                    Mouse::Button(button) => format!("Mouse:Button:{}", button),
-                },
-                Capability::Keyboard(key) => format!("Keyboard:{}", key),
-                _ => cap.to_string(),
-            };
-            capability_strings.push(str);
+            capability_strings.push(cap.to_capability_string());
         }
 
         Ok(capability_strings)
@@ -526,6 +511,71 @@ impl CompositeDeviceInterface {
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(paths)
+    }
+
+    // Get list of filtered events by source device.
+    #[zbus(property)]
+    async fn filtered_events(&self) -> fdo::Result<HashMap<String, Vec<String>>> {
+        let events = self
+            .composite_device
+            .get_filtered_events()
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        let mut new_events = HashMap::new();
+        for (source, values) in events {
+            let vals = values
+                .iter()
+                .map(|val| val.to_capability_string())
+                .collect();
+            new_events.insert(source, vals);
+        }
+        Ok(new_events)
+    }
+
+    // Set list filtered events by source device.
+    #[zbus(property)]
+    async fn set_filtered_events(
+        &mut self,
+        events: HashMap<String, Vec<String>>,
+    ) -> fdo::Result<()> {
+        let mut new_events = HashMap::new();
+        for (source, caps) in events {
+            let mut vals = vec![];
+            for val in caps.iter() {
+                vals.push(
+                    Capability::try_from(val.clone())
+                        .map_err(|_| fdo::Error::Failed(format!("Invalid Capability: {val}")))?,
+                );
+            }
+            new_events.insert(source, vals);
+        }
+
+        self.composite_device
+            .set_filtered_events(new_events)
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        Ok(())
+    }
+
+    // Get list of all filterable events by source device.
+    #[zbus(property)]
+    async fn filterable_events(&self) -> fdo::Result<HashMap<String, Vec<String>>> {
+        let events = self
+            .composite_device
+            .get_filterable_events()
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        let mut new_events = HashMap::new();
+        for (source, values) in events {
+            let vals = values
+                .iter()
+                .map(|val| val.to_capability_string())
+                .collect();
+            new_events.insert(source, vals);
+        }
+        Ok(new_events)
     }
 }
 

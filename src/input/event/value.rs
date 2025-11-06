@@ -154,6 +154,10 @@ impl InputValue {
                                 // Gamepad Button -> Touchscreen Button
                                 Touch::Button(_) => Err(TranslationError::NotImplemented),
                             },
+                            // Gamepad Button -> Gyroscope
+                            Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                            // Gamepad Button -> Accelerometer
+                            Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                         }
                     }
                     // Axis -> ...
@@ -199,6 +203,10 @@ impl InputValue {
                             },
                             // Axis -> Touchscreen
                             Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                            // Axis -> Gyroscope
+                            Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                            // Axis -> Accelerometer
+                            Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                         }
                     }
                     // Trigger -> ...
@@ -244,6 +252,10 @@ impl InputValue {
                         },
                         // Trigger -> Touchscreen
                         Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                        // Trigger -> Gyroscope
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        // Trigger -> Accelerometer
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                     // Accelerometer -> ...
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
@@ -277,6 +289,8 @@ impl InputValue {
                             Touch::Motion => Err(TranslationError::NotImplemented),
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                 }
             }
@@ -314,6 +328,10 @@ impl InputValue {
                 Capability::Touchpad(_) => Err(TranslationError::NotImplemented),
                 // Keyboard Key -> Touchscreen
                 Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                // Keyboard Key -> Gyroscope
+                Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                // Keyboard Key -> Accelerometer
+                Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
             },
 
             // Touchpad -> ...
@@ -370,6 +388,10 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Gyroscope...
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Accelerometer ...
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
@@ -425,6 +447,10 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Gyroscope ...
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Accelerometer ...
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
@@ -480,6 +506,10 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Gyroscope ...
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Accelerometer ...
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
@@ -540,10 +570,16 @@ impl InputValue {
                         // Touchscreen Motion -> Touchscreen Button
                         Touch::Button(_) => Err(TranslationError::NotImplemented),
                     },
+                    // Touchscreen Motion -> Gyroscope ...
+                    Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                    // Touchscreen Motion -> Accelerometer ...
+                    Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                 },
                 // Touchscreen Button -> ...
                 Touch::Button(_) => Err(TranslationError::NotImplemented),
             },
+            Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+            Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
         }
     }
 

@@ -178,6 +178,8 @@ pub struct CapabilityConfig {
     pub dbus: Option<String>,
     pub touchpad: Option<TouchpadCapability>,
     pub touchscreen: Option<TouchCapability>,
+    pub gyroscope: Option<SourceCapability>,
+    pub accelerometer: Option<SourceCapability>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
@@ -264,4 +266,12 @@ pub struct TouchCapability {
 pub struct TouchMotionCapability {
     pub region: Option<String>,
     pub speed_pps: Option<u64>,
+}
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct SourceCapability {
+    pub name: String,
+    pub direction: Option<String>,
+    pub deadzone: Option<f64>,
+    pub axis: Option<String>,
 }

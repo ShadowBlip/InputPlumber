@@ -114,6 +114,17 @@ pub trait SourceInputDevice {
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError>;
+
+    /// Updates the list of events that will not propagate from the source device
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        let _ = events;
+        Ok(())
+    }
+
+    /// Gets the default filtered events list from the SourceDriver
+    fn get_default_event_filter(&self) -> Result<HashSet<Capability>, InputError> {
+        Ok(HashSet::new())
+    }
 }
 
 /// A [SourceOutputDevice] is a device implementation that can handle output events
@@ -360,6 +371,12 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
             tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
                 let mut rx = self.rx;
                 let mut implementation = self.implementation.lock().unwrap();
+                let mut event_filter = implementation
+                    .get_default_event_filter()
+                    .unwrap_or_default();
+                if let Err(e) = implementation.update_event_filter(event_filter.clone()) {
+                    log::error!("Failed to set default event filter for {device_id}: {e}");
+                };
                 loop {
                     // Create a context with performance metrics for each event
                     let mut context = if metrics_enabled {
@@ -396,6 +413,15 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                         {
                             continue;
                         }
+                        if !event_filter.is_empty()
+                            && Self::should_filter(
+                                &event_filter,
+                                &HashSet::new(),
+                                &event.as_capability(),
+                            )
+                        {
+                            continue;
+                        }
                         if let Some(ref context) = context {
                             let mut context = context.clone();
                             let send_span = context
@@ -414,7 +440,11 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                     }
 
                     // Receive commands/output events
-                    if let Err(e) = SourceDriver::receive_commands(&mut rx, &mut implementation) {
+                    if let Err(e) = SourceDriver::receive_commands(
+                        &mut rx,
+                        &mut implementation,
+                        &mut event_filter,
+                    ) {
                         log::debug!("Error receiving commands: {:?}", e);
                         break;
                     }
@@ -439,6 +469,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     fn receive_commands(
         rx: &mut mpsc::Receiver<SourceCommand>,
         implementation: &mut MutexGuard<'_, T>,
+        event_filter: &mut HashSet<Capability>,
     ) -> Result<(), Box<dyn Error>> {
         const MAX_COMMANDS: u8 = 64;
         let mut commands_processed = 0;
@@ -479,6 +510,17 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                     SourceCommand::Stop => {
                         implementation.stop()?;
                         return Err("Device stopped".into());
+                    }
+                    SourceCommand::SetEventFilter(events) => {
+                        let filter = HashSet::from_iter(events);
+                        *event_filter = filter;
+                        implementation.update_event_filter(event_filter.clone())?
+                    }
+                    SourceCommand::GetEventFilter(sender) => {
+                        let events = event_filter.clone().into_iter().collect();
+                        if let Err(e) = sender.send(events) {
+                            log::error!("Failed to get filtered events: {e}");
+                        };
                     }
                 },
                 Err(e) => match e {

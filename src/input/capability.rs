@@ -21,6 +21,8 @@ pub enum Capability {
     Keyboard(Keyboard),
     Touchpad(Touchpad),
     Touchscreen(Touch),
+    Gyroscope(Source),
+    Accelerometer(Source),
 }
 
 impl Capability {
@@ -40,6 +42,56 @@ impl Capability {
             false
         }
     }
+
+    pub fn to_capability_string(&self) -> String {
+        match self {
+            Capability::Gamepad(gamepad) => match gamepad {
+                Gamepad::Button(button) => format!("Gamepad:Button:{button}"),
+                Gamepad::Axis(axis) => format!("Gamepad:Axis:{axis}"),
+                Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{trigger}"),
+                Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
+                Gamepad::Gyro => "Gamepad:Gyro".to_string(),
+                Gamepad::Dial(dial) => format!("Gamepad:Dial:{dial}"),
+            },
+            Capability::Mouse(mouse) => match mouse {
+                Mouse::Motion => "Mouse:Motion".to_string(),
+                Mouse::Button(button) => format!("Mouse:Button:{button}"),
+            },
+            Capability::Keyboard(key) => format!("Keyboard:{key}"),
+            Capability::None => "None".to_string(),
+            Capability::NotImplemented => "NotImplemented".to_string(),
+            Capability::Sync => "Sync".to_string(),
+            Capability::DBus(action) => format!("DBus:{}", action.as_str()),
+            Capability::Touchpad(touchpad) => match touchpad {
+                Touchpad::LeftPad(touch) => match touch {
+                    Touch::Motion => "Touchpad:LeftPad:Touch:Motion".to_string(),
+                    Touch::Button(touch_button) => {
+                        format!("Touchpad:LeftPad:Touch:Button:{touch_button}")
+                    }
+                },
+                Touchpad::RightPad(touch) => match touch {
+                    Touch::Motion => "Touchpad:RightPad:Touch:Motion".to_string(),
+                    Touch::Button(touch_button) => {
+                        format!("Touchpad:RightPad:Touch:Button:{touch_button}")
+                    }
+                },
+                Touchpad::CenterPad(touch) => match touch {
+                    Touch::Motion => "Touchpad:CenterPad:Touch:Motion".to_string(),
+                    Touch::Button(touch_button) => {
+                        format!("Touchpad:CenterPad:Touch:Button:{touch_button}")
+                    }
+                },
+            },
+            Capability::Touchscreen(touch) => match touch {
+                Touch::Motion => "Touchscreen:Touch:Motion".to_string(),
+                Touch::Button(touch_button) => {
+                    format!("Touchscreen:Touch:Button:{touch_button}")
+                }
+            },
+            Capability::Gyroscope(source) => format!("Gyroscope:{source}"),
+            Capability::Accelerometer(source) => format!("Accelerometer:{source}"),
+        }
+    }
 }
 
 impl fmt::Display for Capability {
@@ -54,6 +106,8 @@ impl fmt::Display for Capability {
             Capability::DBus(_) => write!(f, "DBus"),
             Capability::Touchpad(_) => write!(f, "Touchpad"),
             Capability::Touchscreen(_) => write!(f, "Touchscreen"),
+            Capability::Gyroscope(_) => write!(f, "Gyroscope"),
+            Capability::Accelerometer(_) => write!(f, "Accelerometer"),
         }
     }
 }
@@ -88,8 +142,22 @@ impl FromStr for Capability {
             "Touchscreen" => Ok(Capability::Touchscreen(Touch::from_str(
                 parts.join(":").as_str(),
             )?)),
+            "Gyroscope" => Ok(Capability::Gyroscope(Source::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "Accelerometer" => Ok(Capability::Accelerometer(Source::from_str(
+                parts.join(":").as_str(),
+            )?)),
             _ => Err(()),
         }
+    }
+}
+
+impl TryFrom<String> for Capability {
+    type Error = ();
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_str(value.as_str())
     }
 }
 
@@ -257,6 +325,44 @@ impl From<CapabilityConfig> for Capability {
                 }
                 let button = button.unwrap();
                 return Capability::Touchscreen(Touch::Button(button));
+            }
+        }
+
+        // Gyroscope
+        if let Some(gyro_capability) = value.gyroscope.as_ref() {
+            let gyro = Source::from_str(&gyro_capability.name);
+            if gyro.is_err() {
+                log::error!(
+                    "Invalid or unimplemented gyroscope: {}",
+                    gyro_capability.name
+                );
+                return Capability::NotImplemented;
+            }
+
+            match gyro_capability.name.as_str() {
+                "Left" => return Capability::Gyroscope(Source::Left),
+                "Right" => return Capability::Gyroscope(Source::Right),
+                "Center" => return Capability::Gyroscope(Source::Center),
+                _ => return Capability::NotImplemented,
+            }
+        }
+
+        // Accelerometer
+        if let Some(accel_capability) = value.accelerometer.as_ref() {
+            let accel = Source::from_str(&accel_capability.name);
+            if accel.is_err() {
+                log::error!(
+                    "Invalid or unimplemented accelerometer: {}",
+                    accel_capability.name
+                );
+                return Capability::NotImplemented;
+            }
+
+            match accel_capability.name.as_str() {
+                "Left" => return Capability::Accelerometer(Source::Left),
+                "Right" => return Capability::Accelerometer(Source::Right),
+                "Center" => return Capability::Accelerometer(Source::Center),
+                _ => return Capability::NotImplemented,
             }
         }
 
@@ -1288,6 +1394,35 @@ impl FromStr for TouchButton {
         match s {
             "Touch" => Ok(TouchButton::Touch),
             "Press" => Ok(TouchButton::Press),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Source {
+    Left,
+    Right,
+    Center,
+}
+
+impl fmt::Display for Source {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Source::Left => write!(f, "Left"),
+            Source::Right => write!(f, "Right"),
+            Source::Center => write!(f, "Center"),
+        }
+    }
+}
+
+impl FromStr for Source {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Left" => Ok(Self::Left),
+            "Right" => Ok(Self::Right),
+            "Center" => Ok(Self::Center),
             _ => Err(()),
         }
     }
