@@ -913,6 +913,8 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
             },
         },
+        Capability::Gyroscope(_) => vec![],
+        Capability::Accelerometer(_) => vec![],
     }
 }
 

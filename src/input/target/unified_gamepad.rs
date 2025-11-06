@@ -21,7 +21,7 @@ use crate::{
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadDial, GamepadTrigger, Keyboard,
-            Touch, Touchpad,
+            Source, Touch, Touchpad,
         },
         composite_device::client::CompositeDeviceClient,
         event::{native::NativeEvent, value::InputValue},
@@ -678,6 +678,36 @@ impl From<NativeEvent> for StateUpdate {
                     Self { capability, value }
                 }
             },
+            Capability::Gyroscope(_) => {
+                let value = match event.get_value() {
+                    InputValue::Vector3 { x, y, z } => Int16Vector3Update {
+                        x: x.map(|x| (x * GYRO_SCALE_FACTOR) as i16),
+                        y: y.map(|y| (y * GYRO_SCALE_FACTOR) as i16),
+                        z: z.map(|z| (z * GYRO_SCALE_FACTOR) as i16),
+                    },
+                    _ => {
+                        return Self::default();
+                    }
+                };
+                let value = ValueUpdate::Int16Vector3(value);
+
+                Self { capability, value }
+            }
+            Capability::Accelerometer(_) => {
+                let value = match event.get_value() {
+                    InputValue::Vector3 { x, y, z } => Int16Vector3Update {
+                        x: x.map(|x| (x * ACCEL_SCALE_FACTOR) as i16),
+                        y: y.map(|y| (y * ACCEL_SCALE_FACTOR) as i16),
+                        z: z.map(|z| (z * ACCEL_SCALE_FACTOR) as i16),
+                    },
+                    _ => {
+                        return Self::default();
+                    }
+                };
+                let value = ValueUpdate::Int16Vector3(value);
+
+                Self { capability, value }
+            }
         }
     }
 }
@@ -742,8 +772,8 @@ impl From<Capability> for InputCapability {
                     GamepadTrigger::RightTouchpadForce => Self::GamepadTriggerRightTouchpadForce,
                     GamepadTrigger::RightStickForce => Self::GamepadTriggerRightStickForce,
                 },
-                Gamepad::Accelerometer => Self::GamepadAccelerometerCenter,
-                Gamepad::Gyro => Self::GamepadGyroCenter,
+                Gamepad::Accelerometer => Self::AccelerometerCenter,
+                Gamepad::Gyro => Self::GyroscopeCenter,
                 Gamepad::Dial(dial) => match dial {
                     GamepadDial::LeftStickDial => Self::GamepadDialLeft,
                     GamepadDial::RightStickDial => Self::GamepadDialRight,
@@ -937,6 +967,16 @@ impl From<Capability> for InputCapability {
                 Touch::Motion => Self::TouchscreenMotion,
                 Touch::Button(_) => Self::default(),
             },
+            Capability::Gyroscope(source) => match source {
+                Source::Left => Self::GyroscopeLeft,
+                Source::Right => Self::GyroscopeRight,
+                Source::Center => Self::GyroscopeCenter,
+            },
+            Capability::Accelerometer(source) => match source {
+                Source::Left => Self::GyroscopeLeft,
+                Source::Right => Self::GyroscopeRight,
+                Source::Center => Self::GyroscopeCenter,
+            },
         }
     }
 }
@@ -979,6 +1019,8 @@ impl From<Capability> for InputCapabilityInfo {
                 Touch::Motion => Self::new(capability, ValueType::Touch),
                 Touch::Button(_) => Self::new(capability, ValueType::Bool),
             },
+            Capability::Gyroscope(_) => Self::new(capability, ValueType::Int16Vector3),
+            Capability::Accelerometer(_) => Self::new(capability, ValueType::Int16Vector3),
         }
     }
 }

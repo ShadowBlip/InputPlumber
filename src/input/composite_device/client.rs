@@ -534,6 +534,40 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
+    /// Returns a list of all currently filtered events
+    pub async fn get_filtered_events(
+        &self,
+    ) -> Result<HashMap<String, Vec<Capability>>, ClientError> {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetFilteredEvents(tx)).await?;
+        if let Some(result) = Self::recv(rx).await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Enable or disable events from being emitted
+    pub async fn set_filtered_events(
+        &self,
+        sources: HashMap<String, Vec<Capability>>,
+    ) -> Result<(), ClientError> {
+        self.send(CompositeCommand::SetFilteredEvents(sources))
+            .await?;
+        Ok(())
+    }
+
+    /// Returns a list of all filterable events
+    pub async fn get_filterable_events(
+        &self,
+    ) -> Result<HashMap<String, Vec<Capability>>, ClientError> {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetFilterableEvents(tx)).await?;
+        if let Some(result) = Self::recv(rx).await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
     /// Returns whether or not the device should emit force feedback events
     pub async fn get_ff_enabled(&self) -> Result<bool, ClientError> {
         let (tx, rx) = channel(1);
