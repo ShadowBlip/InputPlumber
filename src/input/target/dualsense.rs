@@ -622,6 +622,8 @@ impl DualSenseDevice {
             Capability::Keyboard(_) => (),
             Capability::DBus(_) => (),
             Capability::Touchscreen(_) => (),
+            Capability::Gyroscope(_) => (),
+            Capability::Accelerometer(_) => (),
         };
     }
 

@@ -691,15 +691,19 @@ pub enum InputCapability {
     /// Right dial/wheel, Zotac Zone right dial
     GamepadDialRight = 0x551,
 
-    /// Center or main gyro sensor
-    GamepadGyroCenter = 0x600,
-    /// Left side gamepad gyro
-    GamepadGyroLeft = 0x601,
-    /// Right side gamepad gyro
-    GamepadGyroRight = 0x602,
-    GamepadAccelerometerCenter = 0x603,
-    GamepadAccelerometerLeft = 0x604,
-    GamepadAccelerometerRight = 0x605,
+    /// Center or main gyro
+    GyroscopeCenter = 0x600,
+    /// Left side gyro
+    GyroscopeLeft = 0x601,
+    /// Right side gyro
+    GyroscopeRight = 0x602,
+
+    /// Center or main accelerometer
+    AccelerometerCenter = 0x610,
+    /// Left side accelerometer
+    AccelerometerLeft = 0x611,
+    /// Right side accelerometer
+    AccelerometerRight = 0x612,
 
     /// Left touchpad touch motion
     TouchpadLeftMotion = 0x700,

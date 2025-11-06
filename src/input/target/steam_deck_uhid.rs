@@ -360,6 +360,8 @@ impl SteamDeckUhidDevice {
                 Touchpad::CenterPad(_) => (),
             },
             Capability::Touchscreen(_) => (),
+            Capability::Gyroscope(_) => (),
+            Capability::Accelerometer(_) => (),
         };
     }
 

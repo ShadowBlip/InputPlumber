@@ -281,6 +281,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
 
 /// List of all capabilities that the Legion Go driver implements
 pub const CAPABILITIES: &[Capability] = &[
+    Capability::Gamepad(Gamepad::Accelerometer),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -306,6 +307,7 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
+    Capability::Gamepad(Gamepad::Gyro),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
 ];
