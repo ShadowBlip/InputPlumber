@@ -1,8 +1,16 @@
-use std::{collections::HashMap, error::Error};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fs::File,
+    io::{self, BufRead, BufReader},
+};
 
 use industrial_io::{Channel, ChannelType, Device, Direction};
 
-use crate::drivers::iio_imu::info::MountMatrix;
+use crate::{
+    drivers::iio_imu::info::MountMatrix,
+    input::capability::{Capability, Source},
+};
 
 use super::{
     event::{AxisData, Event},
@@ -16,6 +24,8 @@ pub struct Driver {
     accel_info: HashMap<String, AxisInfo>,
     gyro: HashMap<String, Channel>,
     gyro_info: HashMap<String, AxisInfo>,
+    /// List of events that should not be generated
+    filtered_events: HashSet<Capability>,
 }
 
 impl Driver {
@@ -85,7 +95,38 @@ impl Driver {
             accel_info,
             gyro,
             gyro_info,
+            filtered_events: Default::default(),
         })
+    }
+
+    //TODO: Using InputPlumber Capability enum prevents this driver from having the ability to be
+    //a standalone crate. When this driver is eventually separated, refactor the Event type to
+    //follow the pattern DeviceEvent(Event, Value) and create a match table for
+    //Capability->Event/Event->Capability in the SourceDriver implementation.
+    pub fn update_filtered_events(&mut self, events: HashSet<Capability>) {
+        self.filtered_events = events;
+    }
+
+    pub fn get_default_event_filter(
+        &self,
+    ) -> Result<HashSet<Capability>, Box<dyn Error + Send + Sync>> {
+        let filtered_events = match is_driver_loaded("hid_lenovo_go") {
+            Ok(true) => {
+                log::debug!("Found hid-lenovo-go driver. Disabling internal gyroscope.");
+                HashSet::from([
+                    Capability::Accelerometer(Source::Center),
+                    Capability::Gyroscope(Source::Center),
+                ])
+            }
+            Ok(false) => {
+                log::debug!("Did not find hid-lenovo-go driver. Enabling internal gyroscope.");
+                HashSet::new()
+            }
+            Err(e) => {
+                return Err(format!("Failed to read '/proc/modules': {e:?}").into());
+            }
+        };
+        Ok(filtered_events)
     }
 
     /// Poll the device for data
@@ -93,13 +134,23 @@ impl Driver {
         let mut events = vec![];
 
         // Read from the accelerometer
-        if let Some(event) = self.poll_accel()? {
-            events.push(event);
+        if !self
+            .filtered_events
+            .contains(&Capability::Accelerometer(Source::Center))
+        {
+            if let Some(event) = self.poll_accel()? {
+                events.push(event);
+            }
         }
 
         // Read from the gyro
-        if let Some(event) = self.poll_gyro()? {
-            events.push(event);
+        if !self
+            .filtered_events
+            .contains(&Capability::Gyroscope(Source::Center))
+        {
+            if let Some(event) = self.poll_gyro()? {
+                events.push(event);
+            }
         }
 
         Ok(events)
@@ -119,13 +170,13 @@ impl Driver {
             // processed_value = (raw + offset) * scale
             let value = (data + info.offset) as f64 * info.scale;
             if id.ends_with('x') {
-                accel_input.x = value;
+                accel_input.roll = value;
             }
             if id.ends_with('y') {
-                accel_input.y = value;
+                accel_input.pitch = value;
             }
             if id.ends_with('z') {
-                accel_input.z = value;
+                accel_input.yaw = value;
             }
         }
         self.rotate_value(&mut accel_input);
@@ -148,13 +199,13 @@ impl Driver {
             let value = (data + info.offset) as f64 * info.scale;
 
             if id.ends_with('x') {
-                gyro_input.x = value;
+                gyro_input.roll = value;
             }
             if id.ends_with('y') {
-                gyro_input.y = value;
+                gyro_input.pitch = value;
             }
             if id.ends_with('z') {
-                gyro_input.z = value;
+                gyro_input.yaw = value;
             }
         }
         self.rotate_value(&mut gyro_input);
@@ -169,9 +220,9 @@ impl Driver {
     //   y' = mxy * x + myy * y + mzy * z
     //   z' = mxz * x + myz * y + mzz * z
     fn rotate_value(&self, value: &mut AxisData) {
-        let x = value.x;
-        let y = value.y;
-        let z = value.z;
+        let x = value.roll;
+        let y = value.pitch;
+        let z = value.yaw;
         let mxx = self.mount_matrix.x.0;
         let myx = self.mount_matrix.x.1;
         let mzx = self.mount_matrix.x.2;
@@ -181,9 +232,9 @@ impl Driver {
         let mxz = self.mount_matrix.z.0;
         let myz = self.mount_matrix.z.1;
         let mzz = self.mount_matrix.z.2;
-        value.x = mxx * x + myx * y + mzx * z;
-        value.y = mxy * x + myy * y + mzy * z;
-        value.z = mxz * x + myz * y + mzz * z;
+        value.roll = mxx * x + myx * y + mzx * z;
+        value.pitch = mxy * x + myy * y + mzy * z;
+        value.yaw = mxz * x + myz * y + mzz * z;
     }
 }
 
@@ -278,4 +329,17 @@ fn get_channels_with_type(
         });
 
     (channels, channel_info)
+}
+
+fn is_driver_loaded(driver_name: &str) -> io::Result<bool> {
+    let file = File::open("/proc/modules")?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = line?;
+        if line.starts_with(driver_name) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

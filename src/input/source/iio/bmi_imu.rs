@@ -1,4 +1,4 @@
-use std::{error::Error, f64::consts::PI, fmt::Debug};
+use std::{collections::HashSet, error::Error, f64::consts::PI, fmt::Debug};
 
 use crate::{
     config,
@@ -59,6 +59,22 @@ impl SourceInputDevice for BmiImu {
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(CAPABILITIES.into())
     }
+
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        self.driver.update_filtered_events(events);
+        Ok(())
+    }
+
+    fn get_default_event_filter(&self) -> Result<HashSet<Capability>, InputError> {
+        let filtered_events = self.driver.get_default_event_filter();
+        let filtered_events = match filtered_events {
+            Ok(events) => events,
+            Err(e) => {
+                return Err(format!("Failed to get default event filter: {:?}", e).into());
+            }
+        };
+        Ok(filtered_events)
+    }
 }
 
 impl SourceOutputDevice for BmiImu {}
@@ -84,9 +100,9 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
         iio_imu::event::Event::Accelerometer(data) => {
             let cap = Capability::Gamepad(Gamepad::Accelerometer);
             let value = InputValue::Vector3 {
-                x: Some(data.x),
-                y: Some(data.y),
-                z: Some(data.z),
+                x: Some(data.roll),
+                y: Some(data.pitch),
+                z: Some(data.yaw),
             };
             NativeEvent::new(cap, value)
         }
@@ -98,9 +114,9 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
             // apply before noise is amplified to the point the gyro cannot calibrate.
             let cap = Capability::Gamepad(Gamepad::Gyro);
             let value = InputValue::Vector3 {
-                x: Some(data.x * (180.0 / PI) * 12.0),
-                y: Some(data.y * (180.0 / PI) * 12.0),
-                z: Some(data.z * (180.0 / PI) * 12.0),
+                x: Some(data.roll * (180.0 / PI) * 12.0),
+                y: Some(data.pitch * (180.0 / PI) * 12.0),
+                z: Some(data.yaw * (180.0 / PI) * 12.0),
             };
             NativeEvent::new(cap, value)
         }
