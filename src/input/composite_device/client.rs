@@ -585,4 +585,24 @@ impl CompositeDeviceClient {
             .await?;
         Ok(())
     }
+
+    /// Returns the intensity scale of force feedback where 1.0 is maximum intensity
+    /// and 0.0 is minimum intensity.
+    pub async fn get_ff_scale(&self) -> Result<f64, ClientError> {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetForceFeedbackScale(tx))
+            .await?;
+        if let Some(result) = Self::recv(rx).await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Sets the force feedback intensity to the given value where 1.0 is maximum
+    /// intensity and 0.0 is minimum intensity.
+    pub async fn set_ff_scale(&self, scale: f64) -> Result<(), ClientError> {
+        self.send(CompositeCommand::SetForceFeedbackScale(scale))
+            .await?;
+        Ok(())
+    }
 }

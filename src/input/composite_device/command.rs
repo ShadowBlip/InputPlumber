@@ -48,6 +48,8 @@ pub enum CompositeCommand {
     GetFilterableEvents(mpsc::Sender<HashMap<String, Vec<Capability>>>),
     GetForceFeedbackEnabled(mpsc::Sender<bool>),
     SetForceFeedbackEnabled(bool),
+    GetForceFeedbackScale(mpsc::Sender<f64>),
+    SetForceFeedbackScale(f64),
     SourceDeviceAdded(DeviceInfo),
     SourceDeviceRemoved(DeviceInfo),
     SourceDeviceStopped(DeviceInfo),
