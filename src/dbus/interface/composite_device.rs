@@ -362,6 +362,7 @@ impl CompositeDeviceInterface {
                 Capability::Mouse(mouse) => match mouse {
                     Mouse::Motion => "Mouse:Motion".to_string(),
                     Mouse::Button(button) => format!("Mouse:Button:{}", button),
+                    Mouse::Wheel(wheel) => format!("Mouse:Wheel:{}", wheel),
                 },
                 Capability::Keyboard(key) => format!("Keyboard:{}", key),
                 _ => cap.to_string(),
@@ -426,6 +427,7 @@ impl CompositeDeviceInterface {
                 Capability::Mouse(mouse) => match mouse {
                     Mouse::Motion => "Mouse:Motion".to_string(),
                     Mouse::Button(button) => format!("Mouse:Button:{}", button),
+                    Mouse::Wheel(wheel) => format!("Mouse:Wheel:{}", wheel),
                 },
                 Capability::Keyboard(key) => format!("Keyboard:{}", key),
                 Capability::DBus(action) => format!("DBus:{}", action.as_str()),

@@ -6,7 +6,7 @@ use evdev::{AbsInfo, AbsoluteAxisCode, EventType, InputEvent, KeyCode, RelativeA
 
 use crate::input::capability::{
     Capability, Gamepad, GamepadAxis, GamepadButton, GamepadDial, GamepadTrigger, Keyboard, Mouse,
-    MouseButton, Touch, TouchButton, Touchpad,
+    MouseButton, MouseWheel, Touch, TouchButton, Touchpad,
 };
 
 use super::{native::NativeEvent, value::InputValue};
@@ -465,6 +465,12 @@ impl EvdevEvent {
             EventType::RELATIVE => match RelativeAxisCode(code) {
                 RelativeAxisCode::REL_X => Capability::Mouse(Mouse::Motion),
                 RelativeAxisCode::REL_Y => Capability::Mouse(Mouse::Motion),
+                RelativeAxisCode::REL_WHEEL => {
+                    Capability::Mouse(Mouse::Wheel(MouseWheel::Vertical))
+                }
+                RelativeAxisCode::REL_HWHEEL => {
+                    Capability::Mouse(Mouse::Wheel(MouseWheel::Horizontal))
+                }
                 _ => Capability::NotImplemented,
             },
             EventType::MISC => Capability::NotImplemented,
@@ -561,6 +567,7 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
         Capability::Mouse(mouse) => match mouse {
             Mouse::Motion => Some(EventType::RELATIVE),
             Mouse::Button(_) => Some(EventType::KEY),
+            Mouse::Wheel(_) => Some(EventType::RELATIVE),
         },
         Capability::Gamepad(gamepad) => match gamepad {
             Gamepad::Button(button) => match button {
@@ -700,6 +707,11 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 MouseButton::WheelRight => vec![],
                 MouseButton::Extra => vec![KeyCode::BTN_EXTRA.0],
                 MouseButton::Side => vec![KeyCode::BTN_SIDE.0],
+            },
+
+            Mouse::Wheel(wheel) => match wheel {
+                MouseWheel::Vertical => vec![RelativeAxisCode::REL_WHEEL.0],
+                MouseWheel::Horizontal => vec![RelativeAxisCode::REL_HWHEEL.0],
             },
         },
         Capability::Keyboard(key) => match key {

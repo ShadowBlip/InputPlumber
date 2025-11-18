@@ -177,7 +177,13 @@ mapping:
         button: RightBumper
     target_events:
       - mouse:
-          button: WheelUp
+          wheel:
+            name: Vertical
+            direction: up
+      #- mouse:
+      #    wheel:
+      #      name: Horizontal
+      #      direction: right
 
   - name: LB
     source_event:
@@ -185,4 +191,10 @@ mapping:
         button: LeftBumper
     target_events:
       - mouse:
-          button: WheelDown
+          wheel:
+            name: Vertical
+            direction: down
+      #- mouse:
+      #    wheel:
+      #      name: Horizontal
+      #      direction: left
