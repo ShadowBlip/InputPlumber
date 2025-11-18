@@ -678,7 +678,7 @@ impl CompositeDevice {
 
             self.source_device_tasks.spawn(async move {
                 if let Err(e) = source_device.run().await {
-                    log::error!("Failed running device: {:?}", e);
+                    log::error!("Failed running device {}: {:?}", device_id, e);
                 }
                 log::debug!("Source device closed");
                 if let Err(e) = tx.send(CompositeCommand::SourceDeviceStopped(device)).await {
