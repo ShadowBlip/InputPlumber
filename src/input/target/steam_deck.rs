@@ -58,6 +58,7 @@ pub enum ProductId {
     AsusRogAlly = 0x12fd,
     LenovoLegionGo = 0x12fe,
     LenovoLegionGoS = 0x12ff,
+    //LenovoLegionGo2 = 0x13__,
 }
 
 impl ProductId {
@@ -816,6 +817,11 @@ impl TargetInputDevice for SteamDeckDevice {
 
             match cd_config.name.as_str() {
                 "Lenovo Legion Go" => {
+                    device_config.vendor = "Lenovo".to_string();
+                    device_config.name = "Legion Go Controller".to_string();
+                    device_config.product_id = ProductId::LenovoLegionGo;
+                }
+                "Lenovo Legion Go 2" => {
                     device_config.vendor = "Lenovo".to_string();
                     device_config.name = "Legion Go Controller".to_string();
                     device_config.product_id = ProductId::LenovoLegionGo;

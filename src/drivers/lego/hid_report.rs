@@ -65,9 +65,9 @@ pub enum GamepadMode {
 impl From<u8> for GamepadMode {
     fn from(value: u8) -> Self {
         match value {
-            0 => Self::XInput,
-            1 => Self::DInput,
-            2 => Self::Fps,
+            0x00 => Self::XInput,
+            0x01 => Self::DInput,
+            0x02 => Self::Fps,
             _ => Self::Unknown,
         }
     }
@@ -80,6 +80,37 @@ impl Display for GamepadMode {
             GamepadMode::DInput => "dinput".to_string(),
             GamepadMode::Fps => "fps".to_string(),
             GamepadMode::Unknown => "unknown".to_string(),
+        };
+        write!(f, "{}", str)
+    }
+}
+
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
+pub enum ConnectedState {
+    #[default]
+    Unknown,
+    Connecting,
+    Attached,
+    Detached,
+}
+
+impl From<u8> for ConnectedState {
+    fn from(value: u8) -> Self {
+        match value {
+            0x02 => Self::Attached,
+            0x03 => Self::Detached,
+            _ => Self::Connecting,
+        }
+    }
+}
+
+impl Display for ConnectedState {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let str = match *self {
+            ConnectedState::Unknown => "unknown".to_string(),
+            ConnectedState::Connecting => "connecting".to_string(),
+            ConnectedState::Attached => "attached".to_string(),
+            ConnectedState::Detached => "detached".to_string(),
         };
         write!(f, "{}", str)
     }
@@ -153,28 +184,8 @@ impl Display for GamepadMode {
 // ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    2 ,   -1 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -109 ,  125 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000017.760114 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 80 80 80 00 00 00 00 00 00 02 ff 00 00 00 00 80 80 93 7d 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 //
-// Mose X/Y fro mFPS mode only available on Report ID 2
-//
-// TODO:Accelerometer
-// Somehow this has pitch, roll, and yaw in two 8 bit numbers. Perhaps it is incomplete (only two), or each
-// number is 5 bits? Reslution of 31 is really low. bytes 29 and 30 are left controller, 31 and 32
-// are right controller.
-// Also note bytes 6, 8, 11, and 12. These change when the controller is synced either docked
-// or wireless and indicate the mode for each side. 6 and 11 correspond to if the left
-// controller is docked 6:4, 11:2 or wireless 6:1, 11:3. 7 and 12 are for the right controller,
-// same numbers.
-//
 // Battery Indicators
 // 5 and 7 are left/right controller battery level, 0-100
-//
-// Left Accel
-// Not sure what the different numbers mean yet
-// # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,   99 ,    1 ,   99 ,    1 ,    1 ,    1 ,    1 ,    3 ,    3 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 ,  -16 ,  -67 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
-// E: 000005.807918 64 04 3c 74 01 00 63 01 63 01 01 01 01 03 03 80 80 80 80 00 00 00 00 00 00 02 80 00 00 00 00 f0 bd 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-// Right Accel
-// Not sure what the different numbers mean yet
-// # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,   99 ,    1 ,   99 ,    1 ,    1 ,    1 ,    1 ,    3 ,    3 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 ,   38 ,   38 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
-// E: 000004.681945 64 04 3c 74 01 00 63 01 63 01 01 01 01 03 03 80 80 80 80 00 00 00 00 00 00 02 80 00 00 00 00 80 80 26 26 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 //
 // Buttons
 //
@@ -235,7 +246,7 @@ impl Display for GamepadMode {
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,  100 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 ,  126 , -128 , -128 ,    0 ,    4 ,    0 ,    0 ,   -1 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000008.231988 64 04 3c 74 01 00 64 04 64 04 01 01 01 02 02 80 7e 80 80 00 04 00 00 ff 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 //
-// M1/RB
+// RB
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,   99 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    2 ,    0 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000018.817796 64 04 3c 74 01 00 64 04 63 04 01 01 01 02 02 80 80 80 80 00 02 00 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 //
@@ -254,6 +265,10 @@ impl Display for GamepadMode {
 // Y3
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,   99 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,   32 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
 // E: 000002.496009 64 04 3c 74 01 00 64 04 63 04 01 01 01 02 02 80 80 80 80 00 00 20 00 00 00 02 80 00 00 00 00 80 80 80 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+//
+// M1
+// # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,   99 ,    4 ,   99 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,   16 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,   43 ,    0 , -113 ,    1 ,  123 ,  -16 ,   55 ,    0 ,    0 ,    0 ,    0 ,    0 ,    4 ,  -94 ,   -2 ,   46 ,    2 ,   -8 ,  -16 ,  105 ,    0 ,    2 ,    0 ,    1 ,    0 ,    5 ,    0 ,    0 ,    0 ,    0
+// E: 000003.703990 64 04 3c 74 01 00 63 04 63 04 01 01 01 02 02 80 80 80 80 00 00 10 00 00 00 02 80 00 00 00 00 80 80 80 80 2b 00 8f 01 7b f0 37 00 00 00 00 00 04 a2 fe 2e 02 f8 f0 69 00 02 00 01 00 05 00 00 00 00
 //
 // M2
 // # ReportID: 4 / 0xffa00003:   60 ,  116 ,    1 ,    0 ,  100 ,    4 ,   99 ,    4 ,    1 ,    1 ,    1 ,    2 ,    2 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    8 ,    0 ,    0 ,    0 ,    2 , -128 ,    0 ,    0 ,    0 ,    0 , -128 , -128 , -128 , -128 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0 ,    0
@@ -289,41 +304,48 @@ pub struct XInputDataReport {
     pub report_id: u8,
     #[packed_field(bytes = "1")]
     pub report_size: u8,
-
-    //#[packed_field(bytes = "2")]
-    //pub unk_2: u8,
-    //#[packed_field(bytes = "3")]
-    //pub unk_3: u8,
-    //#[packed_field(bytes = "4")]
-    //pub unk_4: u8,
+    #[packed_field(bytes = "2")]
+    pub hid_cmd: u8,
+    #[packed_field(bytes = "3")]
+    pub unk_3: u8,
+    #[packed_field(bytes = "4")]
+    pub unk_4: u8,
     #[packed_field(bytes = "5")]
-    pub l_controller_battery: u8,
+    pub l_con_battery: u8,
 
     // BYTE 6
-    #[packed_field(bytes = "6")] //48 - 55
-    pub l_controller_mode0: u8,
+    //#[packed_field(bytes = "6")]
+    //pub l_con_state_alt: u8,
+
+    // BYTE 7
     #[packed_field(bytes = "7")]
-    pub r_controller_battery: u8,
+    pub r_con_battery: u8,
 
     // BYTE 8
-    #[packed_field(bytes = "8")]
-    pub r_controller_mode0: u8, // 64 - 71
+    //#[packed_field(bytes = "8")]
+    //pub r_con_state_alt: u8,
 
+    // BYTE 9
     #[packed_field(bytes = "9", ty = "enum")]
     pub gamepad_mode: GamepadMode,
-    //#[packed_field(bytes = "10")]
-    //pub unk_10: u8,
-    //#[packed_field(bytes = "11")]
-    //pub unk_11: u8,
+
+    // BYTE 10
+    #[packed_field(bytes = "10")]
+    pub unk_10: u8,
+
+    // BYTE 11
+    #[packed_field(bytes = "11")]
+    pub unk_11: u8,
 
     // BYTE 12
-    #[packed_field(bytes = "12")] // 96 - 103
-    pub l_controller_mode1: u8,
+    #[packed_field(bytes = "12", ty = "enum")] // 96 - 103
+    pub l_con_state: ConnectedState,
 
     // BYTE 13
-    #[packed_field(bytes = "13")] // 104 - 11
-    pub r_controller_mode1: u8,
+    #[packed_field(bytes = "13", ty = "enum")] // 104 - 11
+    pub r_con_state: ConnectedState,
 
+    // BYTE 14
     #[packed_field(byte = "14", endian = "lsb")]
     pub l_stick_x: u8,
     #[packed_field(byte = "15", endian = "lsb")]
@@ -376,8 +398,8 @@ pub struct XInputDataReport {
     pub y2: bool,
     #[packed_field(bits = "162")]
     pub y3: bool,
-    //#[packed_field(bits = "163")]
-    //pub unk_20_4: bool,
+    #[packed_field(bits = "163")]
+    pub m1: bool,
     #[packed_field(bits = "164")]
     pub m2: bool,
     #[packed_field(bits = "165")]
@@ -394,16 +416,16 @@ pub struct XInputDataReport {
     pub show_desktop: bool,
     #[packed_field(bits = "170")]
     pub alt_tab: bool,
-    //#[packed_field(bits = "171")]
-    //pub unk_21_3: bool,
-    //#[packed_field(bits = "172")]
-    //pub unk_21_4: bool,
-    //#[packed_field(bits = "173")]
-    //pub unk_21_5: bool,
-    //#[packed_field(bits = "174")]
-    //pub unk_21_6: bool,
-    //#[packed_field(bits = "175")]
-    //pub unk_21_7: bool,
+    #[packed_field(bits = "171")]
+    pub unk_21_3: bool,
+    #[packed_field(bits = "172")]
+    pub unk_21_4: bool,
+    #[packed_field(bits = "173")]
+    pub unk_21_5: bool,
+    #[packed_field(bits = "174")]
+    pub unk_21_6: bool,
+    #[packed_field(bits = "175")]
+    pub unk_21_7: bool,
     #[packed_field(bytes = "22")]
     pub a_trigger_l: u8,
     #[packed_field(bytes = "23")]
@@ -416,186 +438,44 @@ pub struct XInputDataReport {
     pub mouse_z: i8,
 
     #[packed_field(bytes = "26..=27", endian = "msb")]
-    pub touch_x_0: u16,
+    pub touch_x: u16,
     #[packed_field(bytes = "28..=29", endian = "msb")]
-    pub touch_y_0: u16,
+    pub touch_y: u16,
 
     #[packed_field(bytes = "30")]
-    pub left_gyro_x: u8,
+    pub left_gyro_lq_x: u8,
     #[packed_field(bytes = "31")]
-    pub left_gyro_y: u8,
+    pub left_gyro_lq_y: u8,
     #[packed_field(bytes = "32")]
-    pub right_gyro_x: u8,
+    pub right_gyro_lq_x: u8,
     #[packed_field(bytes = "33")]
-    pub right_gyro_y: u8,
-    //#[packed_field(bytes = "34")]
-    //pub unk_34: u8,
-    //#[packed_field(bytes = "35")]
-    //pub unk_35: u8,
-    //#[packed_field(bytes = "36")]
-    //pub unk_36: u8,
-    //#[packed_field(bytes = "37")]
-    //pub unk_37: u8,
-    //#[packed_field(bytes = "38")]
-    //pub unk_38: u8,
-    //#[packed_field(bytes = "39")]
-    //pub unk_39: u8,
-    //#[packed_field(bytes = "40")]
-    //pub unk_40: u8,
-    //#[packed_field(bytes = "41")]
-    //pub unk_41: u8,
-    //#[packed_field(bytes = "42")]
-    //pub unk_42: u8,
-    //#[packed_field(bytes = "43")]
-    //pub unk_43: u8,
-    //#[packed_field(bytes = "44")]
-    //pub unk_44: u8,
-    //#[packed_field(bytes = "45")]
-    //pub unk_45: u8,
-    //#[packed_field(bytes = "46")]
-    //pub unk_46: u8,
-    //#[packed_field(bytes = "47")]
-    //pub unk_47: u8,
-    //#[packed_field(bytes = "48")]
-    //pub unk_48: u8,
-    //#[packed_field(bytes = "49")]
-    //pub unk_49: u8,
-    //#[packed_field(bytes = "50")]
-    //pub unk_50: u8,
-    //#[packed_field(bytes = "51")]
-    //pub unk_51: u8,
-    //#[packed_field(bytes = "52")]
-    //pub unk_52: u8,
-    //#[packed_field(bytes = "53")]
-    //pub unk_53: u8,
-    //#[packed_field(bytes = "54")]
-    //pub unk_54: u8,
-    //#[packed_field(bytes = "55")]
-    //pub unk_55: u8,
-    //#[packed_field(bytes = "56")]
-    //pub unk_56: u8,
-    //#[packed_field(bytes = "57")]
-    //pub unk_57: u8,
-    //#[packed_field(bytes = "58")]
-    //pub unk_58: u8,
-    //#[packed_field(bytes = "59")]
-    //pub unk_59: u8,
-}
-
-// TouchpadData
-//
-// X Axis
-// # ReportID: 1 / Confidence: 1 | Tip Switch: 0 | Contact Id:  0 | # | X:    588 | Y:      0
-// #             | Confidence: 0 | Tip Switch: 0 | Contact Id:  0 | # | X:      0 | Y:      0
-// #             | Confidence: 0 | Tip Switch: 0 | Contact Id:  0 | # | X:      0 | Y:      0 | Scan Time:  22108 | Contact Count:    1 | Button: 0 | #
-// E: 000034.423207 20 01 01 4c 02 00 00 00 00 00 00 00 00 00 00 00 00 5c 56 01 00
-//
-// Y Axis
-// # ReportID: 1 / Confidence: 1 | Tip Switch: 0 | Contact Id:  0 | # | X:      0 | Y:    968
-// #             | Confidence: 0 | Tip Switch: 0 | Contact Id:  0 | # | X:      0 | Y:      0
-// #             | Confidence: 0 | Tip Switch: 0 | Contact Id:  0 | # | X:      0 | Y:      0 | Scan Time:  60708 | Contact Count:    1 | Button: 0 | #
-// E: 000115.698022 20 01 01 00 00 c8 03 00 00 00 00 00 00 00 00 00 00 24 ed 01 00
-//
-// Hold to Click
-// # ReportID: 1 / Confidence: 1 | Tip Switch: 0 | Contact Id:  0 | # | X:    341 | Y:    512
-// #             | Confidence: 1 | Tip Switch: 0 | Contact Id:  1 | # | X:    682 | Y:    512
-// #             | Confidence: 0 | Tip Switch: 0 | Contact Id:  0 | # | X:      0 | Y:      0 | Scan Time:  34964 | Contact Count:    2 | Button: 0 | #
-// E: 000143.247707 20 01 01 55 01 00 02 05 aa 02 00 02 00 00 00 00 00 94 88 02 00
-#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "20")]
-pub struct TouchpadDataReport {
-    #[packed_field(bytes = "0")]
-    pub report_id: u8,
-
-    // BYTE 1
-    #[packed_field(bits = "8")]
-    pub unk_1_8: bool,
-    #[packed_field(bits = "9")]
-    pub unk_1_9: bool,
-    #[packed_field(bits = "10")]
-    pub unk_1_10: bool,
-    #[packed_field(bits = "11")]
-    pub unk_1_11: bool,
-    #[packed_field(bits = "12")]
-    pub unk_1_12: bool,
-    #[packed_field(bits = "13")]
-    pub contact_id_0: bool,
-    #[packed_field(bits = "14")]
-    pub tip_switch_0: bool,
-    #[packed_field(bits = "15")]
-    pub confidence_0: bool,
-
-    #[packed_field(bytes = "2..=3", endian = "lsb")]
-    pub touch_x_0: u16,
-    #[packed_field(bytes = "4..=5", endian = "lsb")]
-    pub touch_y_0: u16,
-
-    // BYTE 6
-    #[packed_field(bits = "48")]
-    pub unk_6_0: bool,
-    #[packed_field(bits = "49")]
-    pub unk_6_1: bool,
-    #[packed_field(bits = "50")]
-    pub unk_6_2: bool,
-    #[packed_field(bits = "51")]
-    pub unk_6_3: bool,
-    #[packed_field(bits = "52")]
-    pub unk_6_4: bool,
-    #[packed_field(bits = "53")]
-    pub contact_id_1: bool,
-    #[packed_field(bits = "54")]
-    pub tip_switch_1: bool,
-    #[packed_field(bits = "55")]
-    pub confidence_1: bool,
-
-    #[packed_field(bytes = "7..=8", endian = "lsb")]
-    pub touch_x_1: u16,
-    #[packed_field(bytes = "9..=10", endian = "lsb")]
-    pub touch_y_1: u16,
-
-    // BYTE 11
-    #[packed_field(bits = "88")]
-    pub unk_11_0: bool,
-    #[packed_field(bits = "89")]
-    pub unk_11_1: bool,
-    #[packed_field(bits = "90")]
-    pub unk_11_2: bool,
-    #[packed_field(bits = "91")]
-    pub unk_11_3: bool,
-    #[packed_field(bits = "92")]
-    pub unk_11_4: bool,
-    #[packed_field(bits = "93")]
-    pub contact_id_2: bool,
-    #[packed_field(bits = "94")]
-    pub tip_switch_2: bool,
-    #[packed_field(bits = "95")]
-    pub confidence_2: bool,
-
-    #[packed_field(bytes = "12..=13", endian = "lsb")]
-    pub touch_x_2: u16,
-    #[packed_field(bytes = "14..=15", endian = "lsb")]
-    pub touch_y_2: u16,
-
-    #[packed_field(bytes = "16..=17", endian = "lsb")]
-    pub scan_time: u16,
-    #[packed_field(bytes = "18")]
-    pub contact_count: u8,
-
-    // BYTE 19
-    #[packed_field(bits = "152")]
-    pub unk_19_0: bool,
-    #[packed_field(bits = "153")]
-    pub unk_19_1: bool,
-    #[packed_field(bits = "154")]
-    pub unk_19_2: bool,
-    #[packed_field(bits = "155")]
-    pub unk_19_3: bool,
-    #[packed_field(bits = "156")]
-    pub unk_19_4: bool,
-    #[packed_field(bits = "157")]
-    pub unk_19_5: bool,
-    #[packed_field(bits = "158")]
-    pub unk_19_6: bool,
-    #[packed_field(bits = "159")]
-    pub unk_19_7: bool,
+    pub right_gyro_lq_y: u8,
+    #[packed_field(bytes = "34")]
+    pub left_imu_timestamp: u8,
+    #[packed_field(bytes = "35..=36", endian = "msb")]
+    pub left_accel_x: i16,
+    #[packed_field(bytes = "37..=38", endian = "msb")]
+    pub left_accel_y: i16,
+    #[packed_field(bytes = "39..=40", endian = "msb")]
+    pub left_accel_z: i16,
+    #[packed_field(bytes = "41..=42", endian = "msb")]
+    pub left_gyro_x: i16,
+    #[packed_field(bytes = "43..=44", endian = "msb")]
+    pub left_gyro_y: i16,
+    #[packed_field(bytes = "45..=46", endian = "msb")]
+    pub left_gyro_z: i16,
+    #[packed_field(bytes = "47")]
+    pub right_imu_timestamp: u8,
+    #[packed_field(bytes = "50..=51", endian = "msb")]
+    pub right_accel_x: i16,
+    #[packed_field(bytes = "48..=49", endian = "msb")]
+    pub right_accel_y: i16,
+    #[packed_field(bytes = "52..=53", endian = "msb")]
+    pub right_accel_z: i16,
+    #[packed_field(bytes = "56..=57", endian = "msb")]
+    pub right_gyro_x: i16,
+    #[packed_field(bytes = "54..=55", endian = "msb")]
+    pub right_gyro_y: i16,
+    #[packed_field(bytes = "58..=59", endian = "msb")]
+    pub right_gyro_z: i16,
 }

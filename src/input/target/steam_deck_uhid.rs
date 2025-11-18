@@ -596,6 +596,11 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                     device_config.name = "Legion Go Controller".to_string();
                     device_config.product_id = ProductId::LenovoLegionGo;
                 }
+                "Lenovo Legion Go 2" => {
+                    device_config.vendor = "Lenovo".to_string();
+                    device_config.name = "Legion Go Controller".to_string();
+                    device_config.product_id = ProductId::LenovoLegionGo;
+                }
                 "Lenovo Legion Go S" => {
                     device_config.vendor = "Lenovo".to_string();
                     device_config.name = "Legion Go S Controller".to_string();

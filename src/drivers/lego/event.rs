@@ -5,8 +5,6 @@ pub enum Event {
     TouchButton(TouchButtonEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
-    #[allow(dead_code)]
-    Status(StatusEvent),
 }
 
 /// Binary input contain either pressed or unpressed
@@ -30,12 +28,12 @@ pub struct JoyAxisInput {
     pub x: u8,
     pub y: u8,
 }
-
-// Status inputs contain some value that corresponds to the current status of a device.
+/// IMU Axis input contain (x, y, z) coordinates
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
-pub struct StatusInput {
-    pub value: u8,
+pub struct ImuAxisInput {
+    pub pitch: i16,
+    pub roll: i16,
+    pub yaw: i16,
 }
 
 /// Mouse Wheel contains negative integars
@@ -95,6 +93,8 @@ pub enum GamepadButtonEvent {
     DTriggerR(BinaryInput),
     /// Z-axis button on the right stick
     ThumbR(BinaryInput),
+    /// M1 on the side of the right controller
+    M1(BinaryInput),
     /// M2 on the side of the right controller
     M2(BinaryInput),
     /// M3 on the back of the right controller
@@ -121,6 +121,12 @@ pub enum AxisEvent {
     Touchpad(TouchAxisInput),
     LStick(JoyAxisInput),
     RStick(JoyAxisInput),
+    LeftAccel(ImuAxisInput),
+    LeftGyro(ImuAxisInput),
+    RightAccel(ImuAxisInput),
+    RightGyro(ImuAxisInput),
+    MultiAccel(ImuAxisInput),
+    MultiGyro(ImuAxisInput),
 }
 
 /// Trigger events contain values indicating how far a trigger is pulled
@@ -129,16 +135,5 @@ pub enum TriggerEvent {
     ATriggerL(TriggerInput),
     ATriggerR(TriggerInput),
     MouseWheel(MouseWheelInput),
-}
-
-/// StatusEvent has data on if controllers are in FPS mode, connected, and the battery state.
-#[derive(Clone, Debug)]
-#[allow(dead_code)]
-pub enum StatusEvent {
-    LeftControllerBattery(StatusInput),
-    LeftControllerMode0(StatusInput),
-    LeftControllerMode1(StatusInput),
-    RightControllerBattery(StatusInput),
-    RightControllerMode0(StatusInput),
-    RightControllerMode1(StatusInput),
+    RpadForce(TriggerInput),
 }
