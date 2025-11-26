@@ -3,12 +3,122 @@
   "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
   "https://specifications.freedesktop.org/PolicyKit/1.0/policyconfig.dtd">
 <policyconfig>
+  <action id="org.shadowblip.Input.CompositeDevice.Name">
+    <description>Name of the composite device</description>
+    <message>Authorization required to read name of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.PersistentId">
+    <description>Unique persistent identifier of the device based on source device(s)</description>
+    <message>Authorization required to read persistent id of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.ProfileName">
+    <description>Name of the currently loaded profile</description>
+    <message>Authorization required to read current profile of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.ProfilePath">
+    <description>Optional path to the currently loaded profile</description>
+    <message>Authorization required to read profile path of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.GetProfileYaml">
+    <description>Returns the currently loaded profile encoded in YAML format</description>
+    <message>Authorization required to read profile of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.Capabilities">
+    <description>List of capabilities that all source devices implement</description>
+    <message>Authorization required to read capabilities of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.OutputCapabilities">
+    <description>List of output capabilities that all source devices implement</description>
+    <message>Authorization required to read output capabilities of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.InterceptMode">
+    <description>The intercept mode of the composite device</description>
+    <message>Authorization required to read intercept mode of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.SetInterceptMode">
+    <description>Set the intercept mode of the composite device</description>
+    <message>Authorization required to write intercept mode to the composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.TargetCapabilities">
+    <description>List of capabilities that all target devices implement</description>
+    <message>Authorization required to read target device capabilities of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.TargetDevices">
+    <description>Target devices that this CompositeDevice is managing</description>
+    <message>Authorization required to read target devices of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
   <action id="org.shadowblip.Input.CompositeDevice.LoadProfilePath">
     <description>Load the device profile from the given path</description>
     <message>Authorization required to load device profile from a specified path.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -18,8 +128,19 @@
     <message>Authorization required to load device profile from a given YAML/JSON string.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/opengamepadui/opengamepad-ui.x86_64</annotate>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.SourceDevicePaths">
+    <description>List of source devices that this composite device is processing inputs for</description>
+    <message>Authorization required to read source devices paths of the composite device.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
     </defaults>
   </action>
 
@@ -28,7 +149,7 @@
     <message>Authorization required to stop the composite device and target devices.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -38,7 +159,7 @@
     <message>Authorization required to send an event to the composite device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -48,7 +169,7 @@
     <message>Authorization required to send a button chord to the composite device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -58,7 +179,7 @@
     <message>Authorization required to set intercept activation for the composite device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -68,7 +189,7 @@
     <message>Authorization required to modify the intercept mode of the composite device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -78,7 +199,7 @@
     <message>Authorization required to modify target devices managed by the composite device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -88,7 +209,7 @@
     <message>Authorization required to read target D-Bus devices managed by the composite device.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -98,7 +219,7 @@
     <message>Authorization required to emit an input event from the DBus device.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -108,7 +229,7 @@
     <message>Authorization required to emit a touch event from the DBus device.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -118,7 +239,7 @@
     <message>Authorization required to read the name of the DBus device.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -128,7 +249,7 @@
     <message>Authorization required to read the name of the Gamepad DBus device.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -138,7 +259,7 @@
     <message>Authorization required to send a key to the virtual keyboard.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -148,7 +269,7 @@
     <message>Authorization required to read the name of the Keyboard DBus device.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -158,7 +279,7 @@
     <message>Authorization required to read the InputPlumber Manager version.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -168,7 +289,7 @@
     <message>Authorization required to read supported target devices.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -178,7 +299,17 @@
     <message>Authorization required to read supported target device IDs.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.GamepadOrder">
+    <description>Read GamepadOrder</description>
+    <message>Authorization required to read the Gamepad order.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -188,8 +319,18 @@
     <message>Authorization required to change the Gamepad order.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.InputPlumber.ManageAllDevices">
+    <description>Read ManageAllDevices</description>
+    <message>Authorization required to read manage all devices flag.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
     </defaults>
   </action>
 
@@ -198,7 +339,7 @@
     <message>Authorization required to toggle managing all devices.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -208,7 +349,7 @@
     <message>Authorization required to create a composite device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -218,7 +359,7 @@
     <message>Authorization required to create a target device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -228,7 +369,7 @@
     <message>Authorization required to stop a target device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -238,7 +379,7 @@
     <message>Authorization required to attach a target device.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -248,7 +389,7 @@
     <message>Authorization required to hook into system suspend.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -258,7 +399,7 @@
     <message>Authorization required to hook into system resume.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -268,7 +409,7 @@
     <message>Authorization required to move the virtual mouse cursor.</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -278,7 +419,7 @@
     <message>Authorization required to read the name of the Mouse DBus device.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -288,7 +429,7 @@
     <message>Authorization required to read the device class.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -298,7 +439,7 @@
     <message>Authorization required to read the device path.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -308,7 +449,7 @@
     <message>Authorization required to read the bus type ID.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -318,7 +459,7 @@
     <message>Authorization required to read the product ID.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -328,7 +469,7 @@
     <message>Authorization required to read the vendor ID.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -338,7 +479,7 @@
     <message>Authorization required to read the version ID.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -348,7 +489,7 @@
     <message>Authorization required to read the device name.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -358,7 +499,7 @@
     <message>Authorization required to read the physical path.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -368,7 +509,7 @@
     <message>Authorization required to read the sysfs path.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -378,7 +519,7 @@
     <message>Authorization required to read the unique ID.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -388,7 +529,7 @@
     <message>Authorization required to read supported key codes.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -398,7 +539,7 @@
     <message>Authorization required to read supported relative axes.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -408,7 +549,7 @@
     <message>Authorization required to read supported absolute axes.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -418,7 +559,7 @@
     <message>Authorization required to read supported switches.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -428,7 +569,7 @@
     <message>Authorization required to read supported LEDs.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -438,7 +579,7 @@
     <message>Authorization required to read supported sounds.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -448,7 +589,7 @@
     <message>Authorization required to read supported force-feedback effects.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -458,7 +599,7 @@
     <message>Authorization required to read the HID raw device name.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -468,7 +609,7 @@
     <message>Authorization required to read the HID raw device path.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -478,7 +619,7 @@
     <message>Authorization required to read the HID raw device product ID.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -488,7 +629,7 @@
     <message>Authorization required to read the HID raw device vendor ID.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -498,7 +639,7 @@
     <message>Authorization required to read the HID raw device interface number.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -508,7 +649,7 @@
     <message>Authorization required to read the HID raw device manufacturer.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -518,7 +659,7 @@
     <message>Authorization required to read the HID raw device product string.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -528,7 +669,7 @@
     <message>Authorization required to read the HID raw device serial number.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -538,7 +679,7 @@
     <message>Authorization required to read the HID raw device sysfs path.</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -548,7 +689,7 @@
     <message>Authentication is required to get IIO IMU device ID</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -558,7 +699,7 @@
     <message>Authentication is required to get IIO IMU device name</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -568,7 +709,7 @@
     <message>Authentication is required to read accelerometer sample rate</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -578,7 +719,7 @@
     <message>Authentication is required to read available accelerometer sample rates</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -588,7 +729,7 @@
     <message>Authentication is required to read angular velocity sample rate</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -598,7 +739,7 @@
     <message>Authentication is required to read available angular velocity sample rates</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -608,7 +749,7 @@
     <message>Authentication is required to read accelerometer scale</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -618,7 +759,7 @@
     <message>Authentication is required to read available accelerometer scales</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -628,7 +769,7 @@
     <message>Authentication is required to read angular velocity scale</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -638,7 +779,7 @@
     <message>Authentication is required to read available angular velocity scales</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -648,7 +789,7 @@
     <message>Authentication is required to set accelerometer sample rate</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -658,7 +799,7 @@
     <message>Authentication is required to set angular velocity sample rate</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -668,7 +809,7 @@
     <message>Authentication is required to set accelerometer scale</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -678,7 +819,7 @@
     <message>Authentication is required to set angular velocity scale</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -688,7 +829,7 @@
     <message>Authentication is required to get LED device ID</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -698,7 +839,7 @@
     <message>Authentication required to get device node path</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -708,7 +849,7 @@
     <message>Authentication required to get device bus type</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -718,7 +859,7 @@
     <message>Authentication required to get device product ID</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -728,7 +869,7 @@
     <message>Authentication required to get device vendor ID</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -738,7 +879,7 @@
     <message>Authentication required to get device version</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -748,7 +889,7 @@
     <message>Authentication required to get device name</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -758,7 +899,7 @@
     <message>Authentication required to get physical device path</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -768,7 +909,7 @@
     <message>Authentication required to get device subsystem</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -778,7 +919,7 @@
     <message>Authentication required to get device sysfs path</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -788,7 +929,7 @@
     <message>Authentication required to get device unique ID</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -798,7 +939,7 @@
     <message>Authentication required to get device properties</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -808,7 +949,7 @@
     <message>Authentication required to get input capability report data</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -818,7 +959,7 @@
     <message>Authentication required to get the touchscreen device name</message>
     <defaults>
       <allow_any>yes</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>yes</allow_inactive>
       <allow_active>yes</allow_active>
     </defaults>
   </action>
@@ -828,7 +969,7 @@
     <message>Authentication is required to toggle rumble support</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -838,7 +979,7 @@
     <message>Authentication is required to send rumble events</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -848,7 +989,7 @@
     <message>Authentication is required to stop force feedback</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -858,7 +999,7 @@
     <message>Authentication is required to query performance metrics enabled state</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
@@ -868,7 +1009,7 @@
     <message>Authentication is required to change performance metrics enabled state</message>
     <defaults>
       <allow_any>no</allow_any>
-      <allow_inactive>no</allow_inactive>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
   </action>
