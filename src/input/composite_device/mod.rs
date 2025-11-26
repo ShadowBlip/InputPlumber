@@ -19,7 +19,7 @@ use zbus::Connection;
 use crate::{
     config::{
         capability_map::CapabilityMapConfig, path::get_profiles_path, CompositeDeviceConfig,
-        DeviceProfile, ProfileMapping,
+        DeviceProfile, LoadError, ProfileMapping,
     },
     dbus::interface::{composite_device::CompositeDeviceInterface, DBusInterfaceManager},
     input::{
@@ -429,7 +429,14 @@ impl CompositeDevice {
                         let profile = match DeviceProfile::from_yaml_file(path.clone()) {
                             Ok(p) => p,
                             Err(e) => {
-                                if let Err(er) = sender.send(Err(e.to_string())).await {
+                                let err = match e {
+                                    LoadError::IoError(_) => e.to_string(),
+                                    LoadError::MaximumSizeReached(_) => e.to_string(),
+                                    LoadError::DeserializeError(_) => {
+                                        "Failed to parse file".to_string()
+                                    }
+                                };
+                                if let Err(er) = sender.send(Err(err)).await {
                                     log::error!("Failed to send failed to load profile: {er:?}");
                                 }
                                 continue;
