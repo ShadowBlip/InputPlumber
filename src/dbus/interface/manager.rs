@@ -37,8 +37,12 @@ impl ManagerInterface {
 )]
 impl ManagerInterface {
     #[zbus(property)]
-    async fn version(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.InputPlumber.Version").await?;
+    async fn version(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(conn, hdr, "org.shadowblip.InputPlumber.Version").await?;
         const VERSION: &str = env!("CARGO_PKG_VERSION");
         Ok(VERSION.to_string())
     }
@@ -46,9 +50,10 @@ impl ManagerInterface {
     #[zbus(property)]
     async fn gamepad_order(
         &self,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<String>> {
-        check_polkit(hdr, "org.shadowblip.InputPlumber.GamepadOrder").await?;
+        check_polkit(conn, hdr, "org.shadowblip.InputPlumber.GamepadOrder").await?;
         Ok(self.gamepad_order.clone())
     }
 
@@ -56,9 +61,10 @@ impl ManagerInterface {
     async fn set_gamepad_order(
         &mut self,
         order: Vec<String>,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<()> {
-        check_polkit(hdr, "org.shadowblip.InputPlumber.SetGamepadOrder").await?;
+        check_polkit(conn, hdr, "org.shadowblip.InputPlumber.SetGamepadOrder").await?;
         self.tx
             .send_timeout(
                 ManagerCommand::SetGamepadOrder {
@@ -78,9 +84,10 @@ impl ManagerInterface {
     #[zbus(property)]
     async fn manage_all_devices(
         &self,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<bool> {
-        check_polkit(hdr, "org.shadowblip.InputPlumber.ManageAllDevices").await?;
+        check_polkit(conn, hdr, "org.shadowblip.InputPlumber.ManageAllDevices").await?;
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(
@@ -100,9 +107,10 @@ impl ManagerInterface {
     async fn set_manage_all_devices(
         &self,
         value: bool,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> zbus::Result<()> {
-        check_polkit(hdr, "org.shadowblip.InputPlumber.SetManageAllDevices").await?;
+        check_polkit(conn, hdr, "org.shadowblip.InputPlumber.SetManageAllDevices").await?;
         self.tx
             .send_timeout(
                 ManagerCommand::SetManageAllDevices(value),
@@ -118,9 +126,15 @@ impl ManagerInterface {
     #[zbus(property)]
     async fn supported_target_devices(
         &self,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<String>> {
-        check_polkit(hdr, "org.shadowblip.InputPlumber.SupportedTargetDevices").await?;
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.InputPlumber.SupportedTargetDevices",
+        )
+        .await?;
         let supported = TargetDeviceTypeId::supported_types();
         Ok(supported.iter().map(|id| id.name().to_string()).collect())
     }
@@ -129,9 +143,15 @@ impl ManagerInterface {
     #[zbus(property)]
     async fn supported_target_device_ids(
         &self,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<String>> {
-        check_polkit(hdr, "org.shadowblip.InputPlumber.SupportedTargetDeviceIds").await?;
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.InputPlumber.SupportedTargetDeviceIds",
+        )
+        .await?;
         let supported = TargetDeviceTypeId::supported_types();
         Ok(supported.iter().map(|id| id.to_string()).collect())
     }
@@ -141,9 +161,11 @@ impl ManagerInterface {
     async fn create_composite_device(
         &self,
         config_path: String,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<String> {
         check_polkit(
+            conn,
             Some(hdr),
             "org.shadowblip.InputPlumber.CreateCompositeDevice",
         )
@@ -165,9 +187,15 @@ impl ManagerInterface {
     async fn create_target_device(
         &self,
         kind: String,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<String> {
-        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.CreateTargetDevice").await?;
+        check_polkit(
+            conn,
+            Some(hdr),
+            "org.shadowblip.InputPlumber.CreateTargetDevice",
+        )
+        .await?;
         let Ok(kind) = TargetDeviceTypeId::try_from(kind.as_str()) else {
             return Err(fdo::Error::InvalidArgs(format!(
                 "Invalid target device type: {kind}."
@@ -201,9 +229,15 @@ impl ManagerInterface {
     async fn stop_target_device(
         &self,
         path: String,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<()> {
-        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.StopTargetDevice").await?;
+        check_polkit(
+            conn,
+            Some(hdr),
+            "org.shadowblip.InputPlumber.StopTargetDevice",
+        )
+        .await?;
         self.tx
             .send_timeout(
                 ManagerCommand::StopTargetDevice { path },
@@ -219,9 +253,15 @@ impl ManagerInterface {
         &self,
         target_path: String,
         composite_path: String,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<()> {
-        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.AttachTargetDevice").await?;
+        check_polkit(
+            conn,
+            Some(hdr),
+            "org.shadowblip.InputPlumber.AttachTargetDevice",
+        )
+        .await?;
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(
@@ -248,8 +288,12 @@ impl ManagerInterface {
     }
 
     /// Used to prepare InputPlumber for system suspend
-    async fn hook_sleep(&self, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
-        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.HookSleep").await?;
+    async fn hook_sleep(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(conn, Some(hdr), "org.shadowblip.InputPlumber.HookSleep").await?;
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(
@@ -268,8 +312,12 @@ impl ManagerInterface {
     }
 
     /// Used to prepare InputPlumber for resume from system suspend
-    async fn hook_wake(&self, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
-        check_polkit(Some(hdr), "org.shadowblip.InputPlumber.HookWake").await?;
+    async fn hook_wake(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(conn, Some(hdr), "org.shadowblip.InputPlumber.HookWake").await?;
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(

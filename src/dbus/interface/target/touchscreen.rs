@@ -1,5 +1,5 @@
 use crate::dbus::polkit::check_polkit;
-use zbus::{fdo, message::Header};
+use zbus::{fdo, message::Header, Connection};
 use zbus_macros::interface;
 
 /// The [TargetTouchscreenInterface] provides a DBus interface that can be exposed for managing
@@ -23,8 +23,12 @@ impl Default for TargetTouchscreenInterface {
 impl TargetTouchscreenInterface {
     /// Name of the target device
     #[zbus(property)]
-    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Touchscreen.Name").await?;
+    async fn name(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(conn, hdr, "org.shadowblip.Input.Touchscreen.Name").await?;
         Ok("Touchscreen".into())
     }
 }

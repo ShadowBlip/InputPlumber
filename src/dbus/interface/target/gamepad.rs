@@ -1,3 +1,4 @@
+use zbus::Connection;
 use zbus::{fdo, message::Header};
 use zbus_macros::interface;
 
@@ -26,8 +27,12 @@ impl Default for TargetGamepadInterface {
 impl TargetGamepadInterface {
     /// Name of the DBus device
     #[zbus(property)]
-    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Gamepad.Name").await?;
+    async fn name(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(conn, hdr, "org.shadowblip.Input.Gamepad.Name").await?;
         Ok(self.dev_name.clone())
     }
 }

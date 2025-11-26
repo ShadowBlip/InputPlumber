@@ -1,7 +1,7 @@
 use std::{error::Error, future::Future};
 
 use packed_struct::types::{Integer, SizedInteger};
-use zbus::{fdo, message::Header};
+use zbus::{fdo, message::Header, Connection};
 use zbus_macros::interface;
 
 use crate::{
@@ -92,9 +92,10 @@ where
     async fn set_enabled(
         &mut self,
         enabled: bool,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<()> {
-        check_polkit(hdr, "org.shadowblip.Output.ForceFeedback.Enable").await?;
+        check_polkit(conn, hdr, "org.shadowblip.Output.ForceFeedback.Enable").await?;
         self.device
             .set_enabled(enabled)
             .await
@@ -103,8 +104,18 @@ where
     }
 
     /// Send a simple rumble event
-    async fn rumble(&mut self, value: f64, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
-        check_polkit(Some(hdr), "org.shadowblip.Output.ForceFeedback.Rumble").await?;
+    async fn rumble(
+        &mut self,
+        value: f64,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(
+            conn,
+            Some(hdr),
+            "org.shadowblip.Output.ForceFeedback.Rumble",
+        )
+        .await?;
         self.device
             .rumble(value)
             .await
@@ -113,8 +124,12 @@ where
     }
 
     /// Stop all currently playing force feedback effects
-    async fn stop(&mut self, #[zbus(header)] hdr: Header<'_>) -> fdo::Result<()> {
-        check_polkit(Some(hdr), "org.shadowblip.Output.ForceFeedback.Stop").await?;
+    async fn stop(
+        &mut self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(conn, Some(hdr), "org.shadowblip.Output.ForceFeedback.Stop").await?;
         self.device
             .stop()
             .await

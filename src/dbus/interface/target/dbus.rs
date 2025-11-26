@@ -1,3 +1,4 @@
+use zbus::Connection;
 use zbus::{fdo, message::Header, object_server::SignalEmitter};
 use zbus_macros::interface;
 
@@ -25,8 +26,12 @@ impl Default for TargetDBusInterface {
 impl TargetDBusInterface {
     /// Name of the DBus device
     #[zbus(property)]
-    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.DBusDevice.Name").await?;
+    async fn name(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(conn, hdr, "org.shadowblip.Input.DBusDevice.Name").await?;
         Ok("DBusDevice".into())
     }
 

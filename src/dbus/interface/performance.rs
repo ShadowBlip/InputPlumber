@@ -34,8 +34,12 @@ impl PerformanceInterface {
 )]
 impl PerformanceInterface {
     #[zbus(property)]
-    async fn enabled(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<bool> {
-        check_polkit(hdr, "org.shadowblip.Input.Metrics.Enabled").await?;
+    async fn enabled(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<bool> {
+        check_polkit(conn, hdr, "org.shadowblip.Input.Metrics.Enabled").await?;
         Ok(self.enabled)
     }
 
@@ -43,9 +47,10 @@ impl PerformanceInterface {
     async fn set_enabled(
         &mut self,
         value: bool,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<()> {
-        check_polkit(hdr, "org.shadowblip.Input.Metrics.SetEnabled").await?;
+        check_polkit(conn, hdr, "org.shadowblip.Input.Metrics.SetEnabled").await?;
         self.enabled = value;
         Ok(())
     }
@@ -71,7 +76,7 @@ impl PerformanceInterface {
             .object_server()
             .interface::<_, PerformanceInterface>(path)
             .await?;
-        let enabled = iface_ref.get().await.enabled(None).await?;
+        let enabled = iface_ref.get().await.enabled(conn, None).await?;
         if !enabled {
             return Ok(());
         }

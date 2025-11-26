@@ -1,4 +1,4 @@
-use zbus::{fdo, message::Header};
+use zbus::{fdo, message::Header, Connection};
 use zbus_macros::interface;
 
 use crate::{
@@ -27,8 +27,12 @@ impl TargetKeyboardInterface {
 impl TargetKeyboardInterface {
     /// Name of the composite device
     #[zbus(property)]
-    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Keyboard.Name").await?;
+    async fn name(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(conn, hdr, "org.shadowblip.Input.Keyboard.Name").await?;
         Ok("Keyboard".into())
     }
 
@@ -37,9 +41,10 @@ impl TargetKeyboardInterface {
         &self,
         key: String,
         value: bool,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<()> {
-        check_polkit(Some(hdr), "org.shadowblip.Input.Keyboard.SendKey").await?;
+        check_polkit(conn, Some(hdr), "org.shadowblip.Input.Keyboard.SendKey").await?;
         // Create a NativeEvent to send to the keyboard
         let capability = capability_from_key_string(key.as_str());
         if matches!(capability, Capability::NotImplemented) {

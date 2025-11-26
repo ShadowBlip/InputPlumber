@@ -1,4 +1,4 @@
-use zbus::{fdo, message::Header, object_server::SignalEmitter};
+use zbus::{fdo, message::Header, object_server::SignalEmitter, Connection};
 use zbus_macros::interface;
 
 use crate::{
@@ -37,9 +37,15 @@ impl TargetDebugInterface {
     #[zbus(property)]
     pub async fn input_capability_report(
         &self,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<u8>> {
-        check_polkit(hdr, "org.shadowblip.Input.Debug.InputCapabilityReport").await?;
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Debug.InputCapabilityReport",
+        )
+        .await?;
         let data = self
             .capability_report
             .pack_to_vec()
