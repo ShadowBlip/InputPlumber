@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use evdev::EventType;
-use zbus::{fdo, message::Header};
+use zbus::{fdo, message::Header, Connection};
 use zbus_macros::interface;
 
 use crate::{
@@ -45,8 +45,17 @@ impl SourceEventDeviceInterface {
 impl SourceEventDeviceInterface {
     /// Returns the detected device class of the device (e.g. "joystick", "touchscreen", etc.)
     #[zbus(property)]
-    async fn device_class(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.DeviceClass").await?;
+    async fn device_class(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.DeviceClass",
+        )
+        .await?;
         let properties = self.device.get_properties();
         if properties.contains_key("ID_INPUT_KEYBOARD") {
             return Ok("keyboard".to_string());
@@ -80,64 +89,140 @@ impl SourceEventDeviceInterface {
 
     /// Returns the full device node path to the device (e.g. /dev/input/event3)
     #[zbus(property)]
-    async fn device_path(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.DevicePath").await?;
+    async fn device_path(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.DevicePath",
+        )
+        .await?;
         Ok(self.device.devnode())
     }
 
     /// Returns the bus type of the device
     #[zbus(property)]
-    async fn id_bustype(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.IdBustype").await?;
+    async fn id_bustype(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.IdBustype",
+        )
+        .await?;
         Ok(format!("{}", self.device.id_bustype()))
     }
 
     /// Returns the product id of the device
     #[zbus(property)]
-    async fn id_product(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.IdProduct").await?;
+    async fn id_product(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.IdProduct",
+        )
+        .await?;
         Ok(format!("{:04x}", self.device.id_product()))
     }
 
     /// Returns the vendor id of the device
     #[zbus(property)]
-    async fn id_vendor(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.IdVendor").await?;
+    async fn id_vendor(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.IdVendor",
+        )
+        .await?;
         Ok(format!("{:04x}", self.device.id_vendor()))
     }
 
     /// Returns the version id of the device
     #[zbus(property)]
-    async fn id_version(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.IdVersion").await?;
+    async fn id_version(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.IdVersion",
+        )
+        .await?;
         Ok(format!("{}", self.device.id_version()))
     }
 
     /// Returns the human readable name of the device (e.g. XBox 360 Pad)
     #[zbus(property)]
-    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.Name").await?;
+    async fn name(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(conn, hdr, "org.shadowblip.Input.Source.EventDevice.Name").await?;
         Ok(self.device.name())
     }
 
     /// Returns the phys_path of the device (e.g usb-0000:07:00.3-2/input0)
     #[zbus(property)]
-    async fn phys_path(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.PhysPath").await?;
+    async fn phys_path(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.PhysPath",
+        )
+        .await?;
         Ok(self.device.phys())
     }
 
     /// Returns the full sysfs path of the device (e.g. /sys/devices/pci0000:00)
     #[zbus(property)]
-    async fn sysfs_path(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.SysfsPath").await?;
+    async fn sysfs_path(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.SysfsPath",
+        )
+        .await?;
         Ok(self.device.devpath())
     }
 
     /// Returns the uniq of the device
     #[zbus(property)]
-    async fn unique_id(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.UniqueId").await?;
+    async fn unique_id(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.UniqueId",
+        )
+        .await?;
         Ok(self.device.uniq())
     }
 
@@ -148,9 +233,16 @@ impl SourceEventDeviceInterface {
     #[zbus(property)]
     async fn supported_keys(
         &self,
+
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<u16>> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.SupportedKeys").await?;
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.SupportedKeys",
+        )
+        .await?;
         Ok(self.supported_events(&EventType::KEY))
     }
 
@@ -160,9 +252,12 @@ impl SourceEventDeviceInterface {
     #[zbus(property)]
     async fn supported_relative_axes(
         &self,
+
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<u16>> {
         check_polkit(
+            conn,
             hdr,
             "org.shadowblip.Input.Source.EventDevice.SupportedRelativeAxes",
         )
@@ -176,9 +271,12 @@ impl SourceEventDeviceInterface {
     #[zbus(property)]
     async fn supported_absolute_axes(
         &self,
+
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<u16>> {
         check_polkit(
+            conn,
             hdr,
             "org.shadowblip.Input.Source.EventDevice.SupportedAbsoluteAxes",
         )
@@ -194,9 +292,12 @@ impl SourceEventDeviceInterface {
     #[zbus(property)]
     async fn supported_switches(
         &self,
+
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<u16>> {
         check_polkit(
+            conn,
             hdr,
             "org.shadowblip.Input.Source.EventDevice.SupportedSwitches",
         )
@@ -211,9 +312,16 @@ impl SourceEventDeviceInterface {
     #[zbus(property)]
     async fn supported_leds(
         &self,
+
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<u16>> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.SupportedLeds").await?;
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.SupportedLeds",
+        )
+        .await?;
         Ok(self.supported_events(&EventType::LED))
     }
 
@@ -224,9 +332,12 @@ impl SourceEventDeviceInterface {
     #[zbus(property)]
     async fn supported_sounds(
         &self,
+
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Option<Header<'_>>,
     ) -> fdo::Result<Vec<u16>> {
         check_polkit(
+            conn,
             hdr,
             "org.shadowblip.Input.Source.EventDevice.SupportedSounds",
         )
@@ -236,8 +347,17 @@ impl SourceEventDeviceInterface {
 
     /// Returns the set of supported force feedback effects supported by a device.
     #[zbus(property)]
-    async fn supported_ff(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<Vec<u16>> {
-        check_polkit(hdr, "org.shadowblip.Input.Source.EventDevice.SupportedFf").await?;
+    async fn supported_ff(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<Vec<u16>> {
+        check_polkit(
+            conn,
+            hdr,
+            "org.shadowblip.Input.Source.EventDevice.SupportedFf",
+        )
+        .await?;
         Ok(self.supported_events(&EventType::FORCEFEEDBACK))
     }
 }
