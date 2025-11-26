@@ -7,43 +7,21 @@ pub async fn check_polkit(
     hdr: Option<Header<'_>>,
     action_id: &str,
 ) -> fdo::Result<()> {
-    let hdr = hdr.ok_or_else(|| {
-        fdo::Error::InteractiveAuthorizationRequired(format!(
-            "Authentication required for {}",
-            action_id
-        ))
-    })?;
+    let Some(hdr) = hdr else {
+        return Ok(());
+    };
 
     let sender = hdr
         .sender()
         .ok_or_else(|| fdo::Error::Failed("Missing sender".into()))?;
 
-    let pid: u32 = connection
-        .call_method(
-            Some("org.freedesktop.DBus"),
-            "/org/freedesktop/DBus",
-            Some("org.freedesktop.DBus"),
-            "GetConnectionUnixProcessID",
-            &(sender.as_str()),
-        )
-        .await
-        .map_err(|e| fdo::Error::Failed(format!("Failed to get process ID: {}", e)))?
-        .body()
-        .deserialize()?;
-
     let mut subj_details: HashMap<String, OwnedValue> = HashMap::new();
     subj_details.insert(
-        "pid".into(),
-        OwnedValue::try_from(Value::U32(pid))
-            .map_err(|e| fdo::Error::Failed(format!("Failed to get OwnedValue for pid: {}", e)))?,
+        "name".into(),
+        OwnedValue::try_from(Value::Str(sender.as_str().into()))
+            .map_err(|e| fdo::Error::Failed(format!("Failed to get OwnedValue for name: {e}")))?,
     );
-    subj_details.insert(
-        "start-time".into(),
-        OwnedValue::try_from(Value::U64(0)).map_err(|e| {
-            fdo::Error::Failed(format!("Failed to get OwnedValue for start: {}", e))
-        })?,
-    );
-    let subject = ("unix-process".to_string(), subj_details);
+    let subject = ("system-bus-name".to_string(), subj_details);
 
     let proxy = Proxy::new(
         connection,
