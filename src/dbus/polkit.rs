@@ -2,20 +2,10 @@ use std::collections::HashMap;
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::{fdo, message::Header, Connection, Proxy};
 
-pub async fn check_polkit(hdr: Option<Header<'_>>, action_id: &str) -> fdo::Result<()> {
-    if !cfg!(feature = "polkit") {
-        return Ok(());
-    }
-    let connection = Connection::system()
-        .await
-        .map_err(|e| fdo::Error::Failed(format!("Failed to acquire dbus connection: {e}")))?;
-    check_polkit_with_connection(hdr, action_id, connection).await
-}
-
-pub async fn check_polkit_with_connection(
+pub async fn check_polkit(
+    connection: &Connection,
     hdr: Option<Header<'_>>,
     action_id: &str,
-    connection: Connection,
 ) -> fdo::Result<()> {
     let hdr = hdr.ok_or_else(|| {
         fdo::Error::InteractiveAuthorizationRequired(format!(
@@ -56,7 +46,7 @@ pub async fn check_polkit_with_connection(
     let subject = ("unix-process".to_string(), subj_details);
 
     let proxy = Proxy::new(
-        &connection,
+        connection,
         "org.freedesktop.PolicyKit1",
         "/org/freedesktop/PolicyKit1/Authority",
         "org.freedesktop.PolicyKit1.Authority",
