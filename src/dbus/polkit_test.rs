@@ -128,10 +128,18 @@ async fn get_polkit_usages_in_file(path: PathBuf) -> Result<Vec<PolKitUsage>, Bo
     let mut usages = Vec::new();
     let source = fs::read_to_string(&path).await?;
     let lines: Vec<&str> = source.split('\n').collect();
+    let mut found_check_polkit = false;
     for (line_no, line) in lines.iter().enumerate() {
-        if !line.contains("check_polkit(") {
+        if !found_check_polkit && !line.contains("check_polkit(") {
             continue;
         }
+        if line.contains("check_polkit(") {
+            found_check_polkit = true;
+        }
+        if !line.contains("\"org.shadowblip") {
+            continue;
+        }
+        found_check_polkit = false;
         let parts: Vec<&str> = line.split('"').collect();
         if parts.len() < 2 {
             continue;
