@@ -5,7 +5,7 @@ use zbus::{fdo, message::Header, Connection};
 use zbus_macros::interface;
 
 use crate::{
-    config::CompositeDeviceConfig,
+    config::{CompositeDeviceConfig, LoadError},
     constants::BUS_PREFIX,
     dbus::{interface::Unregisterable, polkit::check_polkit},
     input::{manager::ManagerCommand, target::TargetDeviceTypeId},
@@ -148,8 +148,13 @@ impl ManagerInterface {
             "org.shadowblip.InputPlumber.CreateCompositeDevice",
         )
         .await?;
-        let device = CompositeDeviceConfig::from_yaml_file(config_path)
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        let device = CompositeDeviceConfig::from_yaml_file(config_path).map_err(|e| match e {
+            LoadError::IoError(error) => fdo::Error::Failed(error.to_string()),
+            LoadError::MaximumSizeReached(error) => fdo::Error::Failed(error.to_string()),
+            LoadError::DeserializeError(_) => {
+                fdo::Error::InvalidFileContent("Failed to parse file".to_string())
+            }
+        })?;
         self.tx
             .send_timeout(
                 ManagerCommand::CreateCompositeDevice { config: device },
