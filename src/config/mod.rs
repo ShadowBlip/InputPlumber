@@ -3,7 +3,7 @@ pub mod capability_map;
 pub mod config_test;
 pub mod path;
 
-use std::io;
+use std::io::{self, Read};
 
 use ::procfs::CpuInfo;
 use capability_map::CapabilityConfig;
@@ -28,6 +28,8 @@ pub enum LoadError {
     IoError(#[from] io::Error),
     #[error("Unable to deserialize: {0}")]
     DeserializeError(#[from] serde_yaml::Error),
+    #[error("Config too large, reached maximum size of {0} bytes")]
+    MaximumSizeReached(usize),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -51,8 +53,16 @@ impl DeviceProfile {
     /// Load a [CapabilityProfile] from the given YAML file
     pub fn from_yaml_file(path: String) -> Result<DeviceProfile, LoadError> {
         let file = std::fs::File::open(path)?;
-        let device: DeviceProfile = serde_yaml::from_reader(file)?;
-        Ok(device)
+
+        // Read up to a defined maximum size to prevent denial of service
+        const MAX_SIZE: usize = 512 * 1024;
+        let mut reader = file.take(MAX_SIZE as u64);
+        let mut content = String::default();
+        let bytes_read = reader.read_to_string(&mut content)?;
+        if bytes_read == MAX_SIZE {
+            return Err(LoadError::MaximumSizeReached(MAX_SIZE));
+        }
+        Self::from_yaml(content)
     }
 }
 
@@ -372,7 +382,7 @@ pub struct CompositeDeviceConfig {
 
 impl CompositeDeviceConfig {
     /// Load a [CompositeDevice] from the given YAML string
-    pub fn _from_yaml(content: String) -> Result<CompositeDeviceConfig, LoadError> {
+    pub fn from_yaml(content: String) -> Result<CompositeDeviceConfig, LoadError> {
         let device: CompositeDeviceConfig = serde_yaml::from_str(content.as_str())?;
         Ok(device)
     }
@@ -380,8 +390,16 @@ impl CompositeDeviceConfig {
     /// Load a [CompositeDevice] from the given YAML file
     pub fn from_yaml_file(path: String) -> Result<CompositeDeviceConfig, LoadError> {
         let file = std::fs::File::open(path)?;
-        let device: CompositeDeviceConfig = serde_yaml::from_reader(file)?;
-        Ok(device)
+
+        // Read up to a defined maximum size to prevent denial of service
+        const MAX_SIZE: usize = 512 * 1024;
+        let mut reader = file.take(MAX_SIZE as u64);
+        let mut content = String::default();
+        let bytes_read = reader.read_to_string(&mut content)?;
+        if bytes_read == MAX_SIZE {
+            return Err(LoadError::MaximumSizeReached(MAX_SIZE));
+        }
+        Self::from_yaml(content)
     }
 
     /// Returns an array of all defined hidraw source devices

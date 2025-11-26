@@ -67,9 +67,16 @@ impl CapabilityMapConfig {
     where
         P: AsRef<Path>,
     {
-        let mut file = std::fs::File::open(path)?;
+        let file = std::fs::File::open(path)?;
+
+        // Read up to a defined maximum size to prevent denial of service
+        const MAX_SIZE: usize = 512 * 1024;
+        let mut reader = file.take(MAX_SIZE as u64);
         let mut content = String::default();
-        file.read_to_string(&mut content)?;
+        let bytes_read = reader.read_to_string(&mut content)?;
+        if bytes_read == MAX_SIZE {
+            return Err(LoadError::MaximumSizeReached(MAX_SIZE));
+        }
         Self::from_yaml(content)
     }
 
