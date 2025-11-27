@@ -11,6 +11,19 @@
   <br>
 </p>
 
+Table of Contents:
+- [About](#about)
+    - [Features](#features)
+- [Install](#install)
+- [Documentation](#documentation)
+- [Usage](#usage)
+    - [Input Profiles](#input-profiles)
+    - [Intercept Mode](#intercept-mode)
+    - [Virtual Keyboard](#virtual-keyboard)
+    - [Device Compositing & Capability Maps](#device-compositing--capability-maps)
+    - [Troubleshooting](#troubleshooting)
+- [License](#license)
+
 ## About
 
 InputPlumber is an open source input routing and control daemon for Linux. It can
@@ -282,6 +295,176 @@ mapping:
         button: West
 ```
 
+### Troubleshooting
+
+Find the InputPlumber version:
+
+```bash
+inputplumber --version
+```
+```
+inputplumber 0.58.7
+```
+
+Start InputPlumber with debug logs enabled.
+
+Temporarily:
+
+```bash
+sudo systemctl stop inputplumber
+sudo LOG_LEVEL=debug inputplumber
+```
+
+Permanently:
+
+```bash
+sudo cp /usr/lib/systemd/system/inputplumber.service /etc/systemd/system/
+sudo sed -i 's/LOG_LEVEL=info/LOG_LEVEL=debug/g' /etc/systemd/system/inputplumber.service
+sudo systemctl daemon-reload
+sudo systemctl restart inputplumber
+```
+
+View debug logs:
+
+```bash
+sudo journalctl --unit inputplumber.service
+```
+
+List managed devices:
+
+```bash
+inputplumber devices list
+```
+```
+╭────┬───────────────╮
+│ Composite Devices  │
+├────┼───────────────┤
+│ Id │ Name          │
+├────┼───────────────┤
+│ 0  │ ASUS ROG Ally │
+╰────┴───────────────╯
+Found 1 composite device(s)
+```
+
+View the current intercept mode for the first managed device:
+
+```bash
+inputplumber device 0 intercept get
+```
+```
+Current intercept mode: none
+```
+
+Change the intercept mode of the first device:
+
+```bash
+inputplumber device 0 intercept set --help
+inputplumber device 0 intercept set $MODE
+```
+
+View what InputPlumber profiles are loaded and what event interfaces are being used:
+
+```bash
+inputplumber device 0 info
+```
+```
+╭────┬───────────────┬──────────────┬─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Composite Device                                                                                                                            │
+├────┼───────────────┼──────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Id │ Name          │ Profile Name │ Source Devices                                                                                          │
+├────┼───────────────┼──────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 0  │ ASUS ROG Ally │ Default      │ ["/dev/hidraw2", "/dev/input/event3", "/dev/input/event4", "/dev/input/event5", "/dev/iio:device0", ""] │
+╰────┴───────────────┴──────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+Find the related configuration file (replace "ASUS ROG Ally" with the "Name" from the previous output):
+
+```bash
+grep --recursive --files-with-matches --basic-regexp "name: ASUS ROG Ally$" /usr/share/inputplumber/devices/
+```
+```
+/usr/share/inputplumber/devices/50-rog_ally.yaml
+```
+
+Start the built-in test tool (recommended to run in a separate window):
+
+```bash
+inputplumber device 0 test
+```
+
+View what input devices are being emulated for the first device:
+
+```bash
+inputplumber device 0 targets list
+```
+```
+╭────────────┬───────────────────────────────╮
+│ Target Devices                             │
+├────────────┼───────────────────────────────┤
+│ Id         │ Name                          │
+├────────────┼───────────────────────────────┤
+│ mouse      │ InputPlumber Mouse            │
+├────────────┼───────────────────────────────┤
+│ keyboard   │ InputPlumber Keyboard         │
+├────────────┼───────────────────────────────┤
+│ xbox-elite │ Microsoft X-Box One Elite pad │
+╰────────────┴───────────────────────────────╯
+```
+
+View what events are being captured by InputPlumber:
+
+```bash
+sudo evtest
+```
+```
+No device specified, trying to scan all of /dev/input/event*
+Available devices:
+/dev/input/event0:	Power Button
+/dev/input/event1:	Sleep Button
+/dev/input/event10:	HD-Audio Generic HDMI/DP,pcm=3
+/dev/input/event11:	HD-Audio Generic Mic
+/dev/input/event12:	HD-Audio Generic Mic
+/dev/input/event13:	HD-Audio Generic Headphone
+/dev/input/event14:	Microsoft X-Box One Elite 2 pad
+/dev/input/event15:	InputPlumber Mouse
+/dev/input/event16:	InputPlumber Keyboard
+/dev/input/event2:	AT Translated Set 2 keyboard
+/dev/input/event3:	Microsoft X-Box 360 pad
+/dev/input/event4:	ROG Ally Keyboard
+/dev/input/event5:	ROG Ally Mouse
+/dev/input/event6:	NVTK0603:00 0603:F200
+/dev/input/event7:	Video Bus
+/dev/input/event8:	PC Speaker
+/dev/input/event9:	Asus WMI hotkeys
+Select the device event number [0-16]: 14
+```
+
+Stop InputPlumber and then view what events are being captured by the physical device:
+
+```bash
+sudo systemctl stop inputplumber
+sudo evtest
+```
+```
+No device specified, trying to scan all of /dev/input/event*
+Available devices:
+/dev/input/event0:	Power Button
+/dev/input/event1:	Sleep Button
+/dev/input/event10:	HD-Audio Generic HDMI/DP,pcm=3
+/dev/input/event11:	HD-Audio Generic Mic
+/dev/input/event12:	HD-Audio Generic Mic
+/dev/input/event13:	HD-Audio Generic Headphone
+/dev/input/event2:	AT Translated Set 2 keyboard
+/dev/input/event3:	Microsoft X-Box 360 pad
+/dev/input/event4:	ROG Ally Keyboard
+/dev/input/event5:	ROG Ally Mouse
+/dev/input/event6:	NVTK0603:00 0603:F200
+/dev/input/event7:	Video Bus
+/dev/input/event8:	PC Speaker
+/dev/input/event9:	Asus WMI hotkeys
+Select the device event number [0-13]: 3
+```
+
 ## License
 
-InputPlumber is licensed under THE GNU GPLv3+. See LICENSE for details.
+InputPlumber is licensed under THE GNU GPLv3+. See [LICENSE](LICENSE) for details.
