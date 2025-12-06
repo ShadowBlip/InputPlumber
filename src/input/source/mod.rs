@@ -17,7 +17,7 @@ use crate::config;
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,
-    iio::IioDevice,
+    iio::IioDevice, tty::TtyDevice,
 };
 
 use super::{
@@ -35,6 +35,7 @@ pub mod evdev;
 pub mod hidraw;
 pub mod iio;
 pub mod led;
+pub mod tty;
 
 /// Size of the [SourceCommand] buffer for receiving output events
 const BUFFER_SIZE: usize = 2048;
@@ -617,6 +618,7 @@ pub enum SourceDevice {
     HidRaw(HidRawDevice),
     Iio(IioDevice),
     Led(LedDevice),
+    Tty(TtyDevice),
 }
 
 impl SourceDevice {
@@ -627,6 +629,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_device_ref(),
             SourceDevice::Iio(device) => device.get_device_ref(),
             SourceDevice::Led(device) => device.get_device_ref(),
+            SourceDevice::Tty(device) => device.get_device_ref(),
         }
     }
 
@@ -637,6 +640,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_id(),
             SourceDevice::Iio(device) => device.get_id(),
             SourceDevice::Led(device) => device.get_id(),
+            SourceDevice::Tty(device) => device.get_id(),
         }
     }
 
@@ -647,6 +651,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_serial(),
             SourceDevice::Iio(_) => None,
             SourceDevice::Led(_) => None,
+            SourceDevice::Tty(_) => None,
         }
     }
 
@@ -657,6 +662,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.client(),
             SourceDevice::Iio(device) => device.client(),
             SourceDevice::Led(device) => device.client(),
+            SourceDevice::Tty(device) => device.client(),
         }
     }
 
@@ -667,6 +673,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.run().await,
             SourceDevice::Iio(device) => device.run().await,
             SourceDevice::Led(device) => device.run().await,
+            SourceDevice::Tty(device) => device.run().await,
         }
     }
 
@@ -677,6 +684,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_capabilities(),
             SourceDevice::Iio(device) => device.get_capabilities(),
             SourceDevice::Led(device) => device.get_capabilities(),
+            SourceDevice::Tty(device) => device.get_capabilities(),
         }
     }
 
@@ -687,6 +695,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_output_capabilities(),
             SourceDevice::Iio(device) => device.get_output_capabilities(),
             SourceDevice::Led(device) => device.get_output_capabilities(),
+            SourceDevice::Tty(device) => device.get_output_capabilities(),
         }
     }
 
@@ -697,6 +706,7 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_device_path(),
             SourceDevice::Iio(device) => device.get_device_path(),
             SourceDevice::Led(device) => device.get_device_path(),
+            SourceDevice::Tty(device) => device.get_device_path(),
         }
     }
 }
