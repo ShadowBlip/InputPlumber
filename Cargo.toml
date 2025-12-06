@@ -134,6 +134,7 @@ schemars = "0.8.22"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.140"
 serde_yaml = "0.9.34"
+serialport = "4.8.1"
 tabled = { version = "0.18.0", features = ["ansi"] }
 thiserror = "1.0.69"
 tokio = { version = "1.43.0", features = ["full"] }

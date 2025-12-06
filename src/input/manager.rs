@@ -30,6 +30,7 @@ use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
 use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
 use crate::dbus::interface::source::iio_imu::SourceIioImuInterface;
 use crate::dbus::interface::source::led::SourceLedInterface;
+use crate::dbus::interface::source::tty::SourceTtyInterface;
 use crate::dbus::interface::source::udev::SourceUdevDeviceInterface;
 use crate::dbus::interface::DBusInterfaceManager;
 use crate::dmi::data::DMIData;
@@ -40,6 +41,7 @@ use crate::input::source::evdev;
 use crate::input::source::hidraw;
 use crate::input::source::iio;
 use crate::input::source::led;
+use crate::input::source::tty;
 use crate::input::target::TargetDevice;
 use crate::input::target::TargetDeviceTypeId;
 use crate::udev;
@@ -1174,6 +1176,7 @@ impl Manager {
                 "hidraw" => hidraw::get_dbus_path(sys_name),
                 "iio" => iio::get_dbus_path(sys_name),
                 "leds" => led::get_dbus_path(sys_name),
+                "tty" => tty::get_dbus_path(sys_name),
                 _ => return Err(format!("Device subsystem not supported: {subsystem:?}").into()),
             };
             let conn = self.dbus.connection().clone();
@@ -1196,6 +1199,10 @@ impl Manager {
                 "leds" => {
                     let led_iface = SourceLedInterface::new(dev);
                     dbus.register(led_iface);
+                }
+                "tty" => {
+                    let tty_iface = SourceTtyInterface::new(dev);
+                    dbus.register(tty_iface);
                 }
                 _ => (),
             }
@@ -1355,6 +1362,18 @@ impl Manager {
 
             "leds" => {
                 log::debug!("LED device added: {} ({})", device.name(), device.sysname());
+
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
+                    notify_device_added = false;
+                } else {
+                    log::trace!("Device {dev_name} ({dev_sysname}) is real - {dev_path}");
+                }
+            }
+
+            "tty" => {
+                log::debug!("TTY device added: {} ({})", device.name(), device.sysname());
 
                 // Check to see if the device is virtual
                 if device.is_virtual() {
@@ -1601,6 +1620,9 @@ impl Manager {
         let led_devices = udev::discover_devices("leds")?;
         let led_devices = led_devices.into_iter().map(|dev| dev.into()).collect();
         Manager::discover_devices(cmd_tx, led_devices).await?;
+        let tty_devices = udev::discover_devices("tty")?;
+        let tty_devices = tty_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(cmd_tx, tty_devices).await?;
 
         Ok(())
     }
