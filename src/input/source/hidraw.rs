@@ -85,7 +85,7 @@ pub enum HidRawDevice {
 }
 
 impl SourceDeviceCompatible for HidRawDevice {
-    fn get_device_ref(&self) -> DeviceInfoRef {
+    fn get_device_ref(&self) -> DeviceInfoRef<'_> {
         match self {
             HidRawDevice::Blocked(source_driver) => source_driver.info_ref(),
             HidRawDevice::DualSense(source_driver) => source_driver.info_ref(),

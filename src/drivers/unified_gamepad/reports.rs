@@ -60,6 +60,7 @@ impl From<u8> for ReportType {
 
 /// Feature report types
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+#[allow(dead_code)]
 pub enum FeatureReportType {
     /// Instruct the driver to return a feature report with the available capabilities
     GetInputCapabilities = 0x01,

@@ -27,14 +27,13 @@ pub fn load_capability_mappings() -> HashMap<String, CapabilityMapConfig> {
         // Try to load the capability map
         log::trace!("Found file: {}", file.display());
         let mapping = CapabilityMapConfig::from_yaml_file(file.display().to_string());
-        if mapping.is_err() {
-            log::warn!(
-                "Failed to parse capability mapping: {}",
-                mapping.unwrap_err()
-            );
-            continue;
-        }
-        let map = mapping.unwrap();
+        let map = match mapping {
+            Ok(map) => map,
+            Err(e) => {
+                log::warn!("Failed to parse capability mapping: {e}",);
+                continue;
+            }
+        };
         mappings.insert(map.id(), map);
     }
 
