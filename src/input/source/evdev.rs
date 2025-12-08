@@ -44,7 +44,7 @@ pub enum EventDevice {
 }
 
 impl SourceDeviceCompatible for EventDevice {
-    fn get_device_ref(&self) -> DeviceInfoRef {
+    fn get_device_ref(&self) -> DeviceInfoRef<'_> {
         match self {
             EventDevice::Blocked(source_driver) => source_driver.info_ref(),
             EventDevice::Gamepad(source_driver) => source_driver.info_ref(),

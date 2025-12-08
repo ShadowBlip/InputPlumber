@@ -297,7 +297,7 @@ impl Manager {
                     let path = device.keys().next().cloned();
                     let response = match path {
                         Some(path) => Ok(path),
-                        None => Err(ManagerError::CreateTargetDeviceFailed(
+                        _ => Err(ManagerError::CreateTargetDeviceFailed(
                             "Unable to find device path".to_string(),
                         )),
                     };
@@ -858,7 +858,7 @@ impl Manager {
         let tx = self.tx.clone();
         let task = tokio::spawn(async move {
             if let Err(e) = device.run().await {
-                log::error!("Error running {composite_path}: {}", e.to_string());
+                log::error!("Error running {composite_path}: {e}");
             }
             log::debug!("Composite device stopped running: {composite_path}");
             if let Err(e) = tx
@@ -868,8 +868,7 @@ impl Manager {
                 .await
             {
                 log::error!(
-                    "Error sending to composite device {composite_path} the stopped signal: {}",
-                    e.to_string()
+                    "Error sending to composite device {composite_path} the stopped signal: {e}"
                 );
             }
         });
