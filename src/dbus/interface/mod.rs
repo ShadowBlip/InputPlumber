@@ -252,4 +252,4 @@ pub trait Unregisterable {
     }
 }
 
-type UnregisterFn = (dyn std::ops::Fn(Connection, String) + 'static + Send + Sync);
+type UnregisterFn = dyn std::ops::Fn(Connection, String) + 'static + Send + Sync;

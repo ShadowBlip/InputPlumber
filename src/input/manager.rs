@@ -299,7 +299,7 @@ impl Manager {
                     let path = device.keys().next().cloned();
                     let response = match path {
                         Some(path) => Ok(path),
-                        None => Err(ManagerError::CreateTargetDeviceFailed(
+                        _ => Err(ManagerError::CreateTargetDeviceFailed(
                             "Unable to find device path".to_string(),
                         )),
                     };
@@ -860,7 +860,7 @@ impl Manager {
         let tx = self.tx.clone();
         let task = tokio::spawn(async move {
             if let Err(e) = device.run().await {
-                log::error!("Error running {composite_path}: {}", e.to_string());
+                log::error!("Error running {composite_path}: {e}");
             }
             log::debug!("Composite device stopped running: {composite_path}");
             if let Err(e) = tx
@@ -870,8 +870,7 @@ impl Manager {
                 .await
             {
                 log::error!(
-                    "Error sending to composite device {composite_path} the stopped signal: {}",
-                    e.to_string()
+                    "Error sending to composite device {composite_path} the stopped signal: {e}"
                 );
             }
         });
@@ -1009,7 +1008,7 @@ impl Manager {
                     }
 
                     // Check if the composite device has to be unique (default to being unique)
-                    if source_device.unique.map_or_else(|| true, |unique| unique) {
+                    if source_device.unique.unwrap_or(true) {
                         log::trace!(
                             "Found unique device {:?}, not adding to composite device {composite_device}",
                             source_device
@@ -1659,15 +1658,16 @@ impl Manager {
                 // Try to load the composite device profile
                 log::trace!("Found file: {}", file.display());
                 let device = CompositeDeviceConfig::from_yaml_file(file.display().to_string());
-                if device.is_err() {
-                    log::warn!(
-                        "Failed to parse composite device config '{}': {}",
-                        file.display(),
-                        device.unwrap_err()
-                    );
-                    continue;
-                }
-                let device = device.unwrap();
+                let device = match device {
+                    Ok(dev) => dev,
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to parse composite device config '{}': {e}",
+                            file.display()
+                        );
+                        continue;
+                    }
+                };
                 devices.push((file, device));
             }
 
