@@ -167,7 +167,7 @@ dist-archive: dist/$(NAME)-$(ARCH).tar.gz ## Build a redistributable archive of 
 dist/$(NAME)-$(ARCH).tar.gz: build $(ALL_ROOTFS)
 	rm -rf $(CACHE_DIR)/$(NAME)
 	mkdir -p $(CACHE_DIR)/$(NAME)
-	$(MAKE) install PREFIX=$(CACHE_DIR)/$(NAME)/usr NO_RELOAD=true
+	$(MAKE) install BUILD_TYPE=$(BUILD_TYPE) PREFIX=$(CACHE_DIR)/$(NAME)/usr NO_RELOAD=true
 	mkdir -p dist
 	tar cvfz $@ -C $(CACHE_DIR) $(NAME)
 	cd dist && sha256sum $(NAME)-$(ARCH).tar.gz > $(NAME)-$(ARCH).tar.gz.sha256.txt
@@ -317,7 +317,7 @@ in-docker:
 		-e PKG_CONFIG_SYSROOT_DIR="/usr/$(ARCH)-linux-gnu" \
 		--user $(shell id -u):$(shell id -g) \
 		$(IMAGE_NAME):$(IMAGE_TAG) \
-		make $(TARGET)
+		make BUILD_TYPE=$(BUILD_TYPE) $(TARGET)
 
 ##@ Deployment
 
