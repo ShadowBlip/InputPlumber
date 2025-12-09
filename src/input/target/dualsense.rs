@@ -19,8 +19,7 @@ use crate::{
             STICK_Y_MAX, STICK_Y_MIN, TRIGGER_MAX,
         },
         hid_report::{
-            BluetoothPackedInputDataReport, BluetoothPackedOutputReport, Direction,
-            PackedInputDataReport, USBPackedInputDataReport, UsbPackedOutputReport,
+            BluetoothPackedOutputReport, Direction, PackedInputDataReport, UsbPackedOutputReport,
             UsbPackedOutputReportShort,
         },
         report_descriptor::{
