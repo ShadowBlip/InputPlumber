@@ -175,9 +175,9 @@ impl DualSenseDevice {
         let device = DualSenseDevice::create_virtual_device(&hardware)?;
         Ok(Self {
             device,
-            state: match &hardware.bus_type {
-                &BusType::Usb => PackedInputDataReport::new_usb(),
-                &BusType::Bluetooth => PackedInputDataReport::new_bt(),
+            state: match hardware.bus_type {
+                BusType::Usb => PackedInputDataReport::new_usb(),
+                BusType::Bluetooth => PackedInputDataReport::new_bt(),
             },
             timestamp: 0,
             hardware,
@@ -243,19 +243,16 @@ impl DualSenseDevice {
             PackedInputDataReport::Bluetooth(state) => Vec::<u8>::from(state.pack()?),
         };
 
-        match &self.hardware.bus_type {
-            BusType::Bluetooth => {
-                let len = data.len();
-                assert_eq!(len, 78);
+        if self.hardware.bus_type == BusType::Bluetooth {
+            let len = data.len();
+            assert_eq!(len, 78);
 
-                let crc = crc32_calc(PS_INPUT_CRC32_SEED, &data[..(len - 4)]);
+            let crc = crc32_calc(PS_INPUT_CRC32_SEED, &data[..(len - 4)]);
 
-                data[len - 4] = ((crc >> 0u32) & 0xFFu32) as u8;
-                data[len - 3] = ((crc >> 8u32) & 0xFFu32) as u8;
-                data[len - 2] = ((crc >> 16u32) & 0xFFu32) as u8;
-                data[len - 1] = ((crc >> 24u32) & 0xFFu32) as u8;
-            }
-            _ => {}
+            data[len - 4] = (crc & 0xFFu32) as u8;
+            data[len - 3] = ((crc >> 8u32) & 0xFFu32) as u8;
+            data[len - 2] = ((crc >> 16u32) & 0xFFu32) as u8;
+            data[len - 1] = ((crc >> 24u32) & 0xFFu32) as u8;
         };
 
         // Write the state to the virtual HID
@@ -758,7 +755,7 @@ impl DualSenseDevice {
         // Send the output report to the composite device so it can
         // be processed by source devices.
         let event = OutputEvent::DualSense(state);
-        return Ok(vec![event]);
+        Ok(vec![event])
     }
 
     /// Handle [OutputEvent::GetReport] events from the HIDRAW device
@@ -1100,7 +1097,7 @@ impl TargetOutputDevice for DualSenseDevice {
                         let report_crc: u32 = ((data[len - 1] as u32) << 24u32)
                             | ((data[len - 2] as u32) << 16u32)
                             | ((data[len - 3] as u32) << 8u32)
-                            | ((data[len - 4] as u32) << 0u32);
+                            | (data[len - 4] as u32);
 
                         // if crc does not match ignore the event
                         if crc != report_crc {
@@ -1153,17 +1150,14 @@ impl TargetOutputDevice for DualSenseDevice {
                 };
 
                 // If this is a bluetooth gamepad, include the crc
-                match &self.hardware.bus_type {
-                    BusType::Bluetooth => {
-                        let len = data.len();
-                        let crc = crc32_calc(PS_FEATURE_CRC32_SEED, &data[..(len - 4)]);
+                if self.hardware.bus_type == BusType::Bluetooth {
+                    let len = data.len();
+                    let crc = crc32_calc(PS_FEATURE_CRC32_SEED, &data[..(len - 4)]);
 
-                        data[len - 4] = ((crc >> 0u32) & 0xFFu32) as u8;
-                        data[len - 3] = ((crc >> 8u32) & 0xFFu32) as u8;
-                        data[len - 2] = ((crc >> 16u32) & 0xFFu32) as u8;
-                        data[len - 1] = ((crc >> 24u32) & 0xFFu32) as u8;
-                    }
-                    _ => {}
+                    data[len - 4] = (crc & 0xFFu32) as u8;
+                    data[len - 3] = ((crc >> 8u32) & 0xFFu32) as u8;
+                    data[len - 2] = ((crc >> 16u32) & 0xFFu32) as u8;
+                    data[len - 1] = ((crc >> 24u32) & 0xFFu32) as u8;
                 };
 
                 // Write the report reply to the HIDRAW device
