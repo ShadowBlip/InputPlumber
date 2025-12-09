@@ -10,10 +10,7 @@ const FALLBACK_BASE_PATH: &str = "/usr/share/inputplumber";
 
 /// Returns the base path for configuration data
 pub fn get_base_path() -> PathBuf {
-    let Ok(base_dirs) = xdg::BaseDirectories::with_prefix("inputplumber") else {
-        log::warn!("Unable to determine config base path. Using fallback path.");
-        return PathBuf::from(FALLBACK_BASE_PATH);
-    };
+    let base_dirs = xdg::BaseDirectories::with_prefix("inputplumber");
 
     // Get the data directories in preference order
     let data_dirs = base_dirs.get_data_dirs();
