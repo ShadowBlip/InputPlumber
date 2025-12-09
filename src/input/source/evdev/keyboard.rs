@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::os::fd::AsRawFd;
+use std::os::fd::AsFd;
 use std::{collections::HashMap, error::Error};
 
 use evdev::{Device, EventType, InputEvent};
@@ -45,8 +45,8 @@ impl KeyboardEventDevice {
         // Set the device to do non-blocking reads
         // TODO: use epoll to wake up when data is available
         // https://github.com/emberian/evdev/blob/main/examples/evtest_nonblocking.rs
-        let raw_fd = device.as_raw_fd();
-        nix::fcntl::fcntl(raw_fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
+        let fd = device.as_fd();
+        nix::fcntl::fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
 
         // Create an event translator if a capability map was given
         let translator = capability_map.map(|map| EventTranslator::new(&map, HashMap::new()));
