@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - v0.x
+      - v0.61.x
       - v1.x
     paths-ignore:
       - README.md
