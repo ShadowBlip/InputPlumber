@@ -6,9 +6,9 @@ on:
   push:
     branches:
       - main
-      - 0.x
-      - 0.61.x
-      - 1.x
+      - v0.x
+      - v0.61.x
+      - v1.x
     paths-ignore:
       - README.md
       - "docs/**"
@@ -53,3 +53,36 @@ jobs:
           # for tag signing.
           EDITOR: "echo 'Created-by: semantic-release' > $1"
         run: make sem-release
+<<<<<<< HEAD
+=======
+
+      # In ".releaserc.yaml" a step is defined to write the release version to
+      # ".version.txt" upon successful release. This step checks to see if that
+      # exists to determine if the other jobs need to run.
+      - id: status
+        name: Set release status
+        shell: bash
+        run: |
+          if [ -f .version.txt ]; then
+            echo "was_released=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "was_released=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Upload the package build for the AUR publish step
+      - name: Upload PKGBUILD
+        uses: actions/upload-artifact@v4
+        if: steps.status.outputs.was_released == 'yes'
+        with:
+          name: PKGBUILD
+          path: ./pkg/archlinux/PKGBUILD
+          if-no-files-found: error
+      - name: Upload Release Version
+        uses: actions/upload-artifact@v4
+        if: steps.status.outputs.was_released == 'yes'
+        with:
+          name: version.txt
+          path: .version.txt
+          if-no-files-found: error
+          include-hidden-files: true
+>>>>>>> 55d9a3e (chore(SteamOS): Add v0.61.x branch to release workflow as maintenance branch)
