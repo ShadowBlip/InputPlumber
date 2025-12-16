@@ -37,6 +37,7 @@ mkdir -p %{buildroot}/usr/share/inputplumber/devices
 mkdir -p %{buildroot}/usr/share/inputplumber/profiles
 mkdir -p %{buildroot}/usr/share/inputplumber/schema
 mkdir -p %{buildroot}/usr/share/polkit-1/actions
+mkdir -p %{buildroot}/usr/share/polkit-1/rules.d
 
 install -D -m 755 %{_builddir}/InputPlumber/target/%{_arch}-unknown-linux-gnu/release/inputplumber %{buildroot}/usr/bin/inputplumber
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf %{buildroot}/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf
@@ -48,6 +49,7 @@ install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/device
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/profiles/* %{buildroot}/usr/share/inputplumber/profiles/
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/inputplumber/schema/* %{buildroot}/usr/share/inputplumber/schema/
 install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy %{buildroot}/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy
+install -D -m 644 %{_builddir}/InputPlumber/rootfs/usr/share/polkit-1/rules.d/org.shadowblip.InputPlumber.rules %{buildroot}/usr/share/polkit-1/rules.d/org.shadowblip.InputPlumber.rules
 
 %post
 udevadm control --reload-rules
@@ -73,6 +75,7 @@ systemctl disable inputplumber.service
 /usr/share/inputplumber/profiles/*.yaml
 /usr/share/inputplumber/schema/*.json
 /usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy
+/usr/share/polkit-1/rules.d/org.shadowblip.InputPlumber.rules
 
 %changelog
 * Tue Aug 6 2024 William Edwards [0.33.1-0]
