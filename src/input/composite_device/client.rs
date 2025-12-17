@@ -24,7 +24,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("failed to send command to device: {0}")]
-    SendError(SendError<CompositeCommand>),
+    SendError(String),
     #[error("service encountered an error processing the request: {0}")]
     ServiceError(Box<dyn std::error::Error>),
     #[error("device no longer exists")]
@@ -33,7 +33,7 @@ pub enum ClientError {
 
 impl From<SendError<CompositeCommand>> for ClientError {
     fn from(err: SendError<CompositeCommand>) -> Self {
-        Self::SendError(err)
+        Self::SendError(err.to_string())
     }
 }
 
