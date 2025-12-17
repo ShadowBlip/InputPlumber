@@ -45,13 +45,9 @@ source_devices:
       handler: event*
   - group: gamepad
     udev:
-      attributes:
-        - name: idVendor
-          value: "1a86"
-        - name: idProduct
-          value: "7523"
-        - name: bInterfaceNumber
-          value: "00"
+      id_vendor: "1a86"
+      id_product: "7523"
+      interface_number: "00"
       sys_name: "ttyUSB*"
       subsystem: tty
   - group: imu
