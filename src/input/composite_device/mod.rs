@@ -35,7 +35,8 @@ use crate::{
         output_capability::OutputCapability,
         output_event::UinputOutputEvent,
         source::{
-            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice, SourceDevice,
+            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice,
+            tty::TtyDevice, SourceDevice,
         },
         target::TargetDeviceTypeId,
     },
@@ -1716,7 +1717,8 @@ impl CompositeDevice {
                     .as_ref()
                     .and_then(|c| c.passthrough)
                     .unwrap_or(false);
-                let should_hide = !should_passthru && subsystem.as_str() != "iio";
+                let should_hide =
+                    !should_passthru && subsystem.as_str() != "iio" && subsystem.as_str() != "tty";
                 if should_hide {
                     let source_path = device.devnode();
                     self.source_devices_to_hide.push(source_path);
@@ -1747,6 +1749,11 @@ impl CompositeDevice {
                         log::debug!("Adding LED source device: {:?}", device.sysname());
                         let device = LedDevice::new(device, self.client(), source_config.clone())?;
                         SourceDevice::Led(device)
+                    }
+                    "tty" => {
+                        log::debug!("Adding TTY source device: {:?}", device.sysname());
+                        let device = TtyDevice::new(device, self.client(), source_config.clone())?;
+                        SourceDevice::Tty(device)
                     }
                     _ => {
                         return Err(format!(

@@ -834,6 +834,16 @@
     </defaults>
   </action>
 
+  <action id="org.shadowblip.Input.Source.TTYDevice.Id">
+    <description>Get the TTY device ID</description>
+    <message>Authentication is required to get TTY device ID</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
   <action id="org.shadowblip.Input.Source.UdevDevice.DevicePath">
     <description>Access device node path</description>
     <message>Authentication required to get device node path</message>
