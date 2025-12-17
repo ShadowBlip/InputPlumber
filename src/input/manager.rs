@@ -984,7 +984,7 @@ impl Manager {
             // Check if this device matches any source udev configs of the running
             // CompositeDevice.
             let Some(source_device) = config.get_matching_device(&device) else {
-                log::trace!(
+                log::debug!(
                     "Device {id} does not match existing device: {:?}",
                     config.name
                 );
