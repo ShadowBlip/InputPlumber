@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use zbus::{fdo, message::Header, Connection};
+use zbus::{fdo, message::Header, zvariant::OwnedFd, Connection};
 use zbus_macros::interface;
 
 use crate::{
@@ -156,11 +156,10 @@ impl ManagerInterface {
         Ok(supported.iter().map(|id| id.to_string()).collect())
     }
 
-    /// Create a composite device using the given composite device config. The
-    /// path should be the absolute path to a composite device configuration file.
+    /// Create a composite device using the given composite device config.
     async fn create_composite_device(
         &self,
-        config_path: String,
+        config: OwnedFd,
         #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<String> {
@@ -170,7 +169,7 @@ impl ManagerInterface {
             "org.shadowblip.InputPlumber.CreateCompositeDevice",
         )
         .await?;
-        let device = CompositeDeviceConfig::from_yaml_file(config_path).map_err(|e| match e {
+        let device = CompositeDeviceConfig::from_yaml_fd(config.into()).map_err(|e| match e {
             LoadError::IoError(error) => fdo::Error::Failed(error.to_string()),
             LoadError::MaximumSizeReached(error) => fdo::Error::Failed(error.to_string()),
             LoadError::DeserializeError(_) => {

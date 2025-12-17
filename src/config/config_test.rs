@@ -32,7 +32,7 @@ async fn check_autostart_rules() -> Result<(), Box<dyn Error>> {
 
         // Load the config file
         let path = entry.path();
-        let Ok(config) = CompositeDeviceConfig::from_yaml_file(path.display().to_string()) else {
+        let Ok(config) = CompositeDeviceConfig::from_yaml_path(&path) else {
             continue;
         };
 
