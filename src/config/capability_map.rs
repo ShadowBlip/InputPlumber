@@ -1,7 +1,7 @@
 pub mod evdev;
 pub mod hidraw;
 
-use std::{collections::HashMap, io::Read, path::Path};
+use std::{collections::HashMap, fs::File, io::Read, path::Path};
 
 use evdev::EvdevConfig;
 use hidraw::HidrawConfig;
@@ -26,9 +26,8 @@ pub fn load_capability_mappings() -> HashMap<String, CapabilityMapConfig> {
     for file in files {
         // Try to load the capability map
         log::trace!("Found file: {}", file.display());
-        let mapping = CapabilityMapConfig::from_yaml_file(file.display().to_string());
-        let map = match mapping {
-            Ok(map) => map,
+        let map = match CapabilityMapConfig::from_yaml_path(&file) {
+            Ok(mapping) => mapping,
             Err(e) => {
                 log::warn!("Failed to parse capability mapping: {e}",);
                 continue;
@@ -61,13 +60,17 @@ impl CapabilityMapConfig {
         Ok(config)
     }
 
-    /// Load a [CapabilityMapConfig] from the given YAML file
-    pub fn from_yaml_file<P>(path: P) -> Result<Self, LoadError>
+    /// Load a [CapabilityMapConfig] from the given YAML file path
+    pub fn from_yaml_path<P>(path: P) -> Result<Self, LoadError>
     where
         P: AsRef<Path>,
     {
         let file = std::fs::File::open(path)?;
+        Self::from_yaml_file(file)
+    }
 
+    /// Load a [CapabilityMapConfig] from the given YAML file
+    pub fn from_yaml_file(file: File) -> Result<Self, LoadError> {
         // Read up to a defined maximum size to prevent denial of service
         const MAX_SIZE: usize = 512 * 1024;
         let mut reader = file.take(MAX_SIZE as u64);
