@@ -1636,7 +1636,7 @@ impl Manager {
             for file in files {
                 // Try to load the composite device profile
                 log::trace!("Found file: {}", file.display());
-                let device = CompositeDeviceConfig::from_yaml_file(file.display().to_string());
+                let device = CompositeDeviceConfig::from_yaml_path(&file);
                 if device.is_err() {
                     log::warn!(
                         "Failed to parse composite device config '{}': {}",

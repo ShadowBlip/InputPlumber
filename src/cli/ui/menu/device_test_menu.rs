@@ -1,4 +1,4 @@
-use std::{error::Error, time::Duration};
+use std::{error::Error, fs::File, os::fd::OwnedFd, time::Duration};
 
 use futures::StreamExt;
 use packed_struct::PackedStruct;
@@ -120,7 +120,9 @@ impl DeviceTestMenu {
             let profile_dir = get_profiles_path();
             let profile_path = profile_dir.join("debug.yaml");
             let profile_path = profile_path.to_string_lossy().to_string();
-            device.load_profile_path(profile_path).await?;
+            let profile = File::open(profile_path)?;
+            let profile_fd = OwnedFd::from(profile);
+            device.load_profile(profile_fd.into()).await?;
         }
 
         // Create channels to listen for input reports
@@ -181,7 +183,9 @@ impl DeviceTestMenu {
 
             // Restore the profile
             if let Some(profile_path) = profile_path {
-                let _ = device.load_profile_path(profile_path).await;
+                let profile = File::open(profile_path).unwrap();
+                let profile_fd = OwnedFd::from(profile);
+                let _ = device.load_profile(profile_fd.into()).await;
             } else if let Some(profile) = profile {
                 let _ = device.load_profile_from_yaml(profile).await;
             }

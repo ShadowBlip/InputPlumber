@@ -1,9 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use tokio::sync::mpsc;
 
 use crate::{
-    config::CompositeDeviceConfig,
+    config::{CompositeDeviceConfig, DeviceProfile},
     input::{
         capability::Capability,
         event::{native::NativeEvent, Event},
@@ -36,7 +39,11 @@ pub enum CompositeCommand {
     GetTargetDevicePaths(mpsc::Sender<Vec<String>>),
     HandleEvent(NativeEvent),
     LoadProfileFromYaml(String, mpsc::Sender<Result<(), String>>),
-    LoadProfilePath(String, mpsc::Sender<Result<(), String>>),
+    LoadProfile(
+        DeviceProfile,
+        Option<PathBuf>,
+        mpsc::Sender<Result<(), String>>,
+    ),
     ProcessEvent(String, Event),
     ProcessOutputEvent(OutputEvent),
     RemoveRecentEvent(Capability),
