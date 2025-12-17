@@ -49,4 +49,4 @@ target_devices:
 capability_map_id: flydigi-vader-4-pro
 
 options:
-  auto_manage: true
+  auto_manage: false
