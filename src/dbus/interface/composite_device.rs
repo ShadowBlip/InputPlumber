@@ -1,6 +1,9 @@
 use std::collections::HashMap;
-use std::{collections::HashSet, str::FromStr};
+use std::os::fd::AsRawFd;
+use std::str::FromStr;
 
+use tokio::fs;
+use zbus::zvariant::OwnedFd;
 use zbus::{
     fdo,
     message::Header,
@@ -13,7 +16,7 @@ use crate::{
     config::DeviceProfile,
     dbus::polkit::check_polkit,
     input::{
-        capability::{Capability, Gamepad, Mouse},
+        capability::Capability,
         composite_device::{client::CompositeDeviceClient, InterceptMode},
         event::{native::NativeEvent, value::InputValue},
     },
@@ -149,21 +152,33 @@ impl CompositeDeviceInterface {
         Ok(data)
     }
 
-    /// Load the device profile from the given path
-    async fn load_profile_path(
+    /// Load the device profile
+    async fn load_profile(
         &self,
-        path: String,
+        profile: OwnedFd,
         #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<()> {
         check_polkit(
             conn,
             Some(hdr),
-            "org.shadowblip.Input.CompositeDevice.LoadProfilePath",
+            "org.shadowblip.Input.CompositeDevice.LoadProfile",
         )
         .await?;
+
+        // Try to lookup the path from the file descriptor
+        let fd = std::os::fd::OwnedFd::from(profile);
+        let raw_fd = fd.as_raw_fd();
+        let proc_path = format!("/proc/self/fd/{raw_fd}");
+        let path = fs::read_link(proc_path).await.ok();
+        log::debug!("Loading profile: {path:?}");
+
+        // Load the profile
+        let profile =
+            DeviceProfile::from_yaml_fd(fd).map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
         self.composite_device
-            .load_profile_path(path)
+            .load_profile(profile, path)
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))
     }
@@ -462,30 +477,12 @@ impl CompositeDeviceInterface {
             .get_target_capabilities()
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+        let capability_strings = capabilities
+            .into_iter()
+            .map(|cap| cap.to_capability_string())
+            .collect();
 
-        let mut capability_strings = HashSet::new();
-        for cap in capabilities {
-            let str = match cap {
-                Capability::Gamepad(gamepad) => match gamepad {
-                    Gamepad::Button(button) => format!("Gamepad:Button:{}", button),
-                    Gamepad::Axis(axis) => format!("Gamepad:Axis:{}", axis),
-                    Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{}", trigger),
-                    Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
-                    Gamepad::Gyro => "Gamepad:Gyro".to_string(),
-                    Gamepad::Dial(dial) => format!("Gamepad:Dial:{dial}"),
-                },
-                Capability::Mouse(mouse) => match mouse {
-                    Mouse::Motion => "Mouse:Motion".to_string(),
-                    Mouse::Button(button) => format!("Mouse:Button:{}", button),
-                },
-                Capability::Keyboard(key) => format!("Keyboard:{}", key),
-                Capability::DBus(action) => format!("DBus:{}", action.as_str()),
-                _ => cap.to_string(),
-            };
-            capability_strings.insert(str);
-        }
-
-        Ok(capability_strings.into_iter().collect())
+        Ok(capability_strings)
     }
 
     /// List of source devices that this composite device is processing inputs for
