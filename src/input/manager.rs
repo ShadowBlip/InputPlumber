@@ -1246,15 +1246,60 @@ impl Manager {
                         }
                     };
 
+                    // If the device is a bluetooth device, check that it's a REAL
+                    // bluetooth device or if it's an emulated bluetooth device.
+                    let mut is_physical_bluetooth = false;
+                    if is_bluetooth {
+                        let uniq = device.uniq();
+                        let object_manager =
+                            zbus::fdo::ObjectManagerProxy::builder(self.dbus.connection())
+                                .destination("org.bluez")?
+                                .path("/")?
+                                .build()
+                                .await?;
+                        let objects: ManagedObjects = object_manager.get_managed_objects().await?;
+
+                        // Check each dbus object for a connected device
+                        for (path, obj) in objects.iter() {
+                            // Only consider device objects
+                            if !obj.contains_key("org.bluez.Device1") {
+                                log::trace!("{path} does not have org.bluez.Device1 interface");
+                                continue;
+                            }
+
+                            // Get a reference to the device
+                            let bt_device = Device1Proxy::builder(self.dbus.connection())
+                                .destination("org.bluez")?
+                                .path(path)?
+                                .build()
+                                .await?;
+
+                            // Only consider connected bluetooth devices
+                            if !bt_device.connected().await? {
+                                continue;
+                            }
+
+                            // Check to see if the 'uniq' field matches the bluetooth addr
+                            let address = bt_device.address().await?;
+                            log::debug!(
+                                "Checking if virtual device {uniq} is bluetooth device: {address}"
+                            );
+                            if uniq.to_lowercase() == address.to_lowercase() {
+                                is_physical_bluetooth = true;
+                                break;
+                            }
+                        }
+                    }
+
                     // Some virtual gamepads we DO want to manage
                     let device_name = device.get_attribute_from_tree("name").unwrap_or_default();
                     let is_whitelisted = VIRT_DEVICE_WHITELIST.contains(&device_name.as_str());
 
-                    if !is_bluetooth && !is_whitelisted {
+                    if !is_physical_bluetooth && !is_whitelisted {
                         log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
                         notify_device_added = false;
                     }
-                    if is_bluetooth {
+                    if is_physical_bluetooth {
                         log::debug!("{dev_name} ({dev_sysname}) is a virtual device node for a bluetooth device. Treating as real - {dev_path}");
                     }
                     if is_whitelisted {
