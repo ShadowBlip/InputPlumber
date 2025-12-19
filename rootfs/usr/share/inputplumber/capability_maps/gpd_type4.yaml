@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
 # Schema version number
 version: 1
 
@@ -30,7 +30,7 @@ mapping:
       - keyboard: KeyF13
     target_event:
       gamepad:
-        button: Keyboard
+        button: QuickAccess
   - name: Home
     source_events:
       - keyboard: KeyLeftMeta
@@ -51,7 +51,7 @@ mapping:
       - keyboard: KeyO
     target_event:
       gamepad:
-        button: QuickAccess
+        button: Keyboard
   - name: Keyboard (Long Press)
     source_events:
       - keyboard: KeyDelete
