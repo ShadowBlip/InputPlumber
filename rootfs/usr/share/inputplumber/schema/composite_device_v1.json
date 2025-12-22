@@ -210,6 +210,10 @@
         "unique": {
           "description": "If false, any devices matching this description will be added to the existing composite device. Defaults to true.",
           "type": "boolean"
+        },
+        "capability_map_id": {
+          "description": "The ID of a device capability mapping in the 'capability_maps' folder",
+          "type": "string"
         }
       },
       "required": [
