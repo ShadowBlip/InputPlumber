@@ -27,6 +27,7 @@ source_devices:
       name: "Microsoft X-Box 360 pad"
       phys_path: usb-0000:66:00.0-5.1/input0
       handler: event*
+    capability_map_id: gpd_menu
   - group: keyboard
     evdev:
       name: "  Mouse for Windows"
