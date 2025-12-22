@@ -214,26 +214,30 @@ dbus-xml: ## Generate DBus XML spec from running InputPlumber
 	busctl introspect org.shadowblip.InputPlumber \
 		--xml-interface /org/shadowblip/InputPlumber/devices/source/hidraw0 > ./bindings/dbus-xml/org.shadowblip.Input.Source.HIDRawDevice.xml
 
-XSL_TEMPLATE := ./docs/dbus2markdown.xsl
+XSL_TEMPLATE := ./docs/dbus-interface/dbus2markdown.xsl
 .PHONY: docs
 docs: ## Generate markdown docs for DBus interfaces
 	mkdir -p docs
-	xsltproc --novalid -o docs/manager.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Manager.xml
-	sed -i 's/DBus Interface API/Manager DBus Interface API/g' ./docs/manager.md
-	xsltproc --novalid -o docs/composite_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.CompositeDevice.xml
-	sed -i 's/DBus Interface API/CompositeDevice DBus Interface API/g' ./docs/composite_device.md
-	xsltproc --novalid -o docs/target_dbus.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.DBusDevice.xml
-	sed -i 's/DBus Interface API/DBusDevice DBus Interface API/g' ./docs/target_dbus.md
-	xsltproc --novalid -o docs/target_keyboard.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Keyboard.xml
-	sed -i 's/DBus Interface API/Keyboard DBus Interface API/g' ./docs/target_keyboard.md
-	xsltproc --novalid -o docs/target_mouse.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Mouse.xml
-	sed -i 's/DBus Interface API/Mouse DBus Interface API/g' ./docs/target_mouse.md
-	xsltproc --novalid -o docs/target_gamepad.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Gamepad.xml
-	sed -i 's/DBus Interface API/Gamepad DBus Interface API/g' ./docs/target_gamepad.md
-	xsltproc --novalid -o docs/source_event_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Source.EventDevice.xml
-	sed -i 's/DBus Interface API/Source EventDevice DBus Interface API/g' ./docs/source_event_device.md
-	xsltproc --novalid -o docs/source_hidraw_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Source.HIDRawDevice.xml
-	sed -i 's/DBus Interface API/Source HIDRaw DBus Interface API/g' ./docs/source_hidraw_device.md
+	xsltproc --novalid -o docs/dbus-interface/manager.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Manager.xml
+	sed -i 's/DBus Interface API/Manager DBus Interface API/g' ./docs/dbus-interface/manager.md
+	xsltproc --novalid -o docs/dbus-interface/composite_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.CompositeDevice.xml
+	sed -i 's/DBus Interface API/CompositeDevice DBus Interface API/g' ./docs/dbus-interface/composite_device.md
+	xsltproc --novalid -o docs/dbus-interface/target_dbus.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.DBusDevice.xml
+	sed -i 's/DBus Interface API/DBusDevice DBus Interface API/g' ./docs/dbus-interface/target_dbus.md
+	xsltproc --novalid -o docs/dbus-interface/target_keyboard.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Keyboard.xml
+	sed -i 's/DBus Interface API/Keyboard DBus Interface API/g' ./docs/dbus-interface/target_keyboard.md
+	xsltproc --novalid -o docs/dbus-interface/target_mouse.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Mouse.xml
+	sed -i 's/DBus Interface API/Mouse DBus Interface API/g' ./docs/dbus-interface/target_mouse.md
+	xsltproc --novalid -o docs/dbus-interface/target_gamepad.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Gamepad.xml
+	sed -i 's/DBus Interface API/Gamepad DBus Interface API/g' ./docs/dbus-interface/target_gamepad.md
+	xsltproc --novalid -o docs/dbus-interface/source_event_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Source.EventDevice.xml
+	sed -i 's/DBus Interface API/Source EventDevice DBus Interface API/g' ./docs/dbus-interface/source_event_device.md
+	xsltproc --novalid -o docs/dbus-interface/source_hidraw_device.md $(XSL_TEMPLATE) ./bindings/dbus-xml/org.shadowblip.Input.Source.HIDRawDevice.xml
+	sed -i 's/DBus Interface API/Source HIDRaw DBus Interface API/g' ./docs/dbus-interface/source_hidraw_device.md
+
+.PHONY: docs-preview
+docs-preview: ## Run mkdocs to view documentation
+	mkdocs serve
 
 # Refer to .releaserc.yaml for release configuration
 .PHONY: sem-release
