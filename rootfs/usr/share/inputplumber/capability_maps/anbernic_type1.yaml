@@ -1,55 +1,118 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
 # Schema version number
-version: 1
+version: 2
 
 # The type of configuration schema
 kind: CapabilityMap
 
 # Name for the device event map
-name: Anbernic Type 1
+name: Anbernic Win600
 
 # Unique identifier of the capability mapping
 id: anb1
 
-# List of mapped events that are activated by a specific set of activation keys.
+# List of mapped events
 mapping:
-  - name: Home (Short Press)
+  - name: Home (Short)
+    mapping_type:
+      evdev: chord
     source_events:
-      - keyboard: KeyG
-      - keyboard: KeyLeftMeta
+      - evdev:
+          event_type: KEY
+          event_code: KEY_ESC
+          value_type: button
     target_event:
       gamepad:
         button: Guide
-# Workaround to enable Guide chording.
-  - name: Home (Long Press)
+
+  - name: Home (Long)
+    mapping_type:
+      evdev: chord
     source_events:
-      - keyboard: KeyEsc
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTMETA
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_G
+          value_type: button
     target_event:
       gamepad:
         button: Guide
+
   - name: Keyboard
+    mapping_type:
+      evdev: chord
     source_events:
-      - keyboard: KeyO
-      - keyboard: KeyLeftCtrl
-      - keyboard: KeyLeftMeta
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTCTRL
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTMETA
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_O
+          value_type: button
     target_event:
       gamepad:
         button: Keyboard
-# Windows short press seems to break things currently, so disabled for now.
-#  - name: Windows (Short Press)
-#    source_events:
-#      - keyboard: KeyLeftMeta
-#    target_event:
-#      gamepad:
-#        button: QuickAccess
-  - name: Windows (Long Press)
+
+  - name: Windows (short)
+    mapping_type:
+      evdev: chord
     source_events:
-      - keyboard: KeyEsc
-      - keyboard: KeyLeftShift
-      - keyboard: KeyLeftCtrl
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTCTRL
+          value_type: button
     target_event:
       gamepad:
         button: QuickAccess
 
-# List of events to filter from the source devices
-filtered_events: []
+  - name: Windows (long)
+    mapping_type:
+      evdev: chord
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTCTRL
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTSHIFT
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_ESC
+          value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess2
+
+  - name: Home + Keyboard
+    mapping_type:
+      evdev: chord
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTCTRL
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTMETA
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_O
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_G
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightPaddle1 # Placeholder, no matching function exists
