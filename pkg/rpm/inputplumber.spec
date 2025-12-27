@@ -32,7 +32,7 @@ InputPlumber is an open source input routing and control daemon for Linux. It ca
 make build
 
 %install
-PREFIX=%{buildroot}/usr make install
+make install PREFIX=%{buildroot}/usr NO_RELOAD=true
 
 %post
 %systemd_post inputplumber.service
