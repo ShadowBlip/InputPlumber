@@ -17,8 +17,8 @@ BuildRequires: clang-devel
 BuildRequires:  systemd-rpm-macros
 Requires:       libevdev
 Requires:       libiio
+Requires:       polkit
 Recommends:     linuxconsoletools
-Recommends:     polkit
 Provides:       inputplumber
 Conflicts:      hhd
 
