@@ -5,6 +5,7 @@ ACTION=="add|change", KERNEL=="oxp-platform", SUBSYSTEM=="platform", DRIVER=="ox
 # Lenovo
 # Legion Go S Controller Settings
 ACTION=="add|change", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e31[01]", SUBSYSTEM=="hid", DRIVER=="lenovo-legos-hid", ATTR{gamepad/auto_sleep_time}="0", ATTR{gamepad/dpad_mode}="8-way", ATTR{gamepad/mode}="xinput", ATTR{gamepad/poll_rate}="250", ATTR{os_mode}="linux", ATTR{touchpad/linux_mode}="absolute", GOTO="end"
+ACTION=="add|change", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e31[01]", SUBSYSTEM=="hid", DRIVER=="hid-lenovo-go-s", ATTR{gamepad/auto_sleep_time}="0", ATTR{gamepad/dpad_mode}="8-way", ATTR{gamepad/mode}="xinput", ATTR{gamepad/poll_rate}="250", ATTR{os_mode}="linux", ATTR{touchpad/linux_mode}="absolute", GOTO="end"
 
 # Legion Go/Go2 Controller Settings
 ACTION=="add|change", ATTRS{idVendor}=="17ef", ATTRS{idProduct}=="61e[bcde]", SUBSYSTEM=="hid", DRIVER=="hid-lenovo-go", ATTR{os_mode}="linux", ATTR{left_handle/imu_bypass_enable}="true", ATTR{right_handle/imu_bypass_enable}="true", ATTR{touchpad/vibration_enable}="false", GOTO="end"
