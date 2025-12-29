@@ -220,15 +220,16 @@ $(CACHE_DIR)/libiio:
 	rm -rf $(CACHE_DIR)/libiio*
 	mkdir -p $(CACHE_DIR)/libiio
 ifeq ($(ARCH),x86_64)
-	wget https://archlinux.org/packages/extra/x86_64/libiio/download/ \
-		-O $(CACHE_DIR)/libiio.tar.zst
+	VERSION=$$(curl -s https://archlinuxarm.org/packages/aarch64/libiio | grep '<h1>libiio ' | cut -d'>' -f2 | cut -d'<' -f1 | cut -d' ' -f2) && \
+	curl -L http://mirrors.mit.edu/archlinux/extra/os/x86_64/libiio-$${VERSION}-x86_64.pkg.tar.zst \
+		-o $(CACHE_DIR)/libiio.tar.zst
 	zstd -d $(CACHE_DIR)/libiio.tar.zst
 	tar xvf $(CACHE_DIR)/libiio.tar -C $(CACHE_DIR)/libiio
 endif
 ifeq ($(ARCH),aarch64)
 	VERSION=$$(curl -s https://archlinuxarm.org/packages/aarch64/libiio | grep '<h1>libiio ' | cut -d'>' -f2 | cut -d'<' -f1 | cut -d' ' -f2) && \
-	wget http://mirror.archlinuxarm.org/aarch64/extra/libiio-$${VERSION}-aarch64.pkg.tar.xz \
-		-O $(CACHE_DIR)/libiio.tar.xz
+	curl -L http://mirror.archlinuxarm.org/aarch64/extra/libiio-$${VERSION}-aarch64.pkg.tar.xz \
+		-o $(CACHE_DIR)/libiio.tar.xz
 	tar xvf $(CACHE_DIR)/libiio.tar.xz -C $(CACHE_DIR)/libiio
 endif
 
@@ -237,14 +238,14 @@ $(CACHE_DIR)/libserialport:
 	rm -rf $(CACHE_DIR)/libserialport*
 	mkdir -p $(CACHE_DIR)/libserialport
 ifeq ($(ARCH),x86_64)
-	wget https://archlinux.org/packages/extra/x86_64/libserialport/download/ \
-	  -O $(CACHE_DIR)/libserialport.tar.zst
+	curl -L http://mirrors.mit.edu/archlinux/extra/os/x86_64/libserialport-0.1.2-1-x86_64.pkg.tar.zst \
+	  -o $(CACHE_DIR)/libserialport.tar.zst
 	zstd -d $(CACHE_DIR)/libserialport.tar.zst
 	tar xvf $(CACHE_DIR)/libserialport.tar -C $(CACHE_DIR)/libserialport
 endif
 ifeq ($(ARCH),aarch64)
-	wget http://mirror.archlinuxarm.org/aarch64/extra/libserialport-0.1.2-1-aarch64.pkg.tar.xz \
-		-O $(CACHE_DIR)/libserialport.tar.xz
+	curl -L http://mirror.archlinuxarm.org/aarch64/extra/libserialport-0.1.2-1-aarch64.pkg.tar.xz \
+		-o $(CACHE_DIR)/libserialport.tar.xz
 	tar xvf $(CACHE_DIR)/libserialport.tar.xz -C $(CACHE_DIR)/libserialport
 endif
 
