@@ -32,7 +32,7 @@ use crate::{
             value::{InputValue, TranslationError},
             Event,
         },
-        output_capability::OutputCapability,
+        output_capability::{OutputCapability, LED},
         output_event::UinputOutputEvent,
         source::{
             evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice,
@@ -1800,6 +1800,11 @@ impl CompositeDevice {
                 let iface = ForceFeedbackInterface::new(self.client());
                 self.dbus.register(iface);
             }
+
+            // Determine if the LED dbus interface(s) should be created
+            let supports_leds = self
+                .output_capabilities
+                .contains(&OutputCapability::LED(LED::Color));
         }
 
         // Check if this device should be blocked from sending events to target devices.

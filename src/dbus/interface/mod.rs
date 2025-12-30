@@ -5,6 +5,7 @@ use zbus::{names::InterfaceName, object_server::Interface, zvariant::ObjectPath,
 
 pub mod composite_device;
 pub mod force_feedback;
+pub mod led;
 pub mod manager;
 pub mod performance;
 pub mod source;
@@ -19,13 +20,14 @@ pub enum InterfaceError {
 /// Manages dbus interface registration and deregistration. When the interface
 /// manager goes out of scope, all registered interfaces are automatically
 /// unregistered.
-pub struct DBusInterfaceManager {
+pub struct DBusInterfaceManager<'path> {
     dbus: Connection,
     dbus_path: String,
     dbus_ifaces: HashMap<InterfaceName<'static>, Box<UnregisterFn>>,
+    children: HashMap<ObjectPath<'path>, DBusInterfaceManager<'path>>,
 }
 
-impl DBusInterfaceManager {
+impl<'path> DBusInterfaceManager<'path> {
     /// Creates a new dbus interface manager to manage one or more dbus interfaces
     /// for the given dbus path.
     ///
@@ -71,6 +73,7 @@ impl DBusInterfaceManager {
             dbus: conn,
             dbus_path: dbus_path.to_string(),
             dbus_ifaces: Default::default(),
+            children: Default::default(),
         })
     }
 
@@ -135,6 +138,35 @@ impl DBusInterfaceManager {
         });
     }
 
+    /// Register and start the given dbus interface as a child object. The given
+    /// path should be relative to the parent path.
+    pub fn register_child<P, I>(&mut self, path: P, iface: I) -> Result<(), InterfaceError>
+    where
+        P: TryInto<ObjectPath<'path>>,
+        I: Interface + Unregisterable,
+    {
+        let parent_path = self.path();
+        let child_path: ObjectPath<'path> = match path.try_into() {
+            Ok(path) => path,
+            Err(_) => {
+                return Err(InterfaceError::PathError);
+            }
+        };
+
+        let path = format!("{parent_path}{}", child_path.to_string());
+        let path: ObjectPath<'path> = match path.try_into() {
+            Ok(path) => path,
+            Err(_) => {
+                return Err(InterfaceError::PathError);
+            }
+        };
+        let mut child_manager = Self::new(self.connection().clone(), path.clone())?;
+        child_manager.register(iface);
+        self.children.insert(path, child_manager);
+
+        Ok(())
+    }
+
     /// Returns true if the interface with the given name has been registered.
     pub fn has_interface(&self, iface_name: &InterfaceName<'static>) -> bool {
         self.dbus_ifaces.contains_key(iface_name)
@@ -190,7 +222,7 @@ impl DBusInterfaceManager {
     }
 }
 
-impl Debug for DBusInterfaceManager {
+impl Debug for DBusInterfaceManager<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut dbus_ifaces: HashMap<String, &str> = HashMap::with_capacity(self.dbus_ifaces.len());
         for (key, _value) in self.dbus_ifaces.iter() {
@@ -204,7 +236,7 @@ impl Debug for DBusInterfaceManager {
     }
 }
 
-impl Drop for DBusInterfaceManager {
+impl Drop for DBusInterfaceManager<'_> {
     /// Unregister all dbus interfaces when this goes out of scope
     fn drop(&mut self) {
         self.unregister_all();
