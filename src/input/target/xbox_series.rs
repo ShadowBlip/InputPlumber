@@ -1,4 +1,4 @@
-use std::os::fd::AsRawFd;
+use std::os::fd::AsFd;
 use std::time::Duration;
 use std::{collections::HashMap, error::Error};
 
@@ -134,8 +134,8 @@ impl XboxSeriesController {
         // Set the device to do non-blocking reads
         // TODO: use epoll to wake up when data is available
         // https://github.com/emberian/evdev/blob/main/examples/evtest_nonblocking.rs
-        let raw_fd = device.as_raw_fd();
-        nix::fcntl::fcntl(raw_fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
+        let fd = device.as_fd();
+        nix::fcntl::fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
 
         Ok(device)
     }
