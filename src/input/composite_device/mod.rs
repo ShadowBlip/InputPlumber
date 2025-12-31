@@ -1238,7 +1238,11 @@ impl CompositeDevice {
 
     /// Sets the intercept mode to the given value
     async fn set_intercept_mode(&mut self, mode: InterceptMode) {
-        log::debug!("Setting intercept mode to: {:?}", mode);
+        log::debug!("Setting intercept mode to: {mode:?}");
+        if self.intercept_mode == mode {
+            log::debug!("Intercept is already set to: {mode:?}");
+            return;
+        }
         self.intercept_mode = mode;
 
         // Nothing else is required when turning off input interception.
