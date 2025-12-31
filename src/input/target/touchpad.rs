@@ -10,7 +10,7 @@ use nix::fcntl::{FcntlArg, OFlag};
 use crate::input::{
     capability::{Capability, Touch, TouchButton, Touchpad},
     composite_device::client::CompositeDeviceClient,
-    event::{native::NativeEvent, value::InputValue},
+    event::{native::NativeEvent, value::denormalize_unsigned_value_u16, value::InputValue},
     output_event::OutputEvent,
 };
 
@@ -282,8 +282,8 @@ impl TouchpadDevice {
         }
 
         // Denormalize the x, y values based on the pad size
-        let x = x.map(|val| denormalize_unsigned_value(val, self.config.width as f64));
-        let y = y.map(|val| denormalize_unsigned_value(val, self.config.height as f64));
+        let x = x.map(|val| denormalize_unsigned_value_u16(val, self.config.width as f64));
+        let y = y.map(|val| denormalize_unsigned_value_u16(val, self.config.height as f64));
 
         // Send events for x values
         if let Some(x) = x {
@@ -394,10 +394,4 @@ impl TargetOutputDevice for TouchpadDevice {
 
         Ok(vec![])
     }
-}
-
-/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
-/// the maximum axis range.
-fn denormalize_unsigned_value(normal_value: f64, max: f64) -> u16 {
-    (normal_value * max).round() as u16
 }

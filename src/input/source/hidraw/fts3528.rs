@@ -9,7 +9,7 @@ use crate::{
     },
     input::{
         capability::{Capability, Touch},
-        event::{native::NativeEvent, value::InputValue},
+        event::{native::NativeEvent, value::normalize_unsigned_value, value::InputValue},
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
@@ -51,20 +51,14 @@ impl Debug for Fts3528Touchscreen {
     }
 }
 
-// Returns a value between 0.0 and 1.0 based on the given value with its
-// maximum.
-fn normalize_unsigned_value(raw_value: u16, max: u16) -> f64 {
-    raw_value as f64 / max as f64
-}
-
 /// Normalizes the given input into an input value
 fn normalize_axis_value(touch: TouchAxisInput) -> InputValue {
     // Normalize the x, y values if touching
     let (x, y) = match touch.is_touching {
         true => {
             // NOTE: X and Y are flipped due to panel rotation.
-            let x = normalize_unsigned_value(touch.y, TOUCHSCREEN_Y_MAX);
-            let y = 1.0 - normalize_unsigned_value(touch.x, TOUCHSCREEN_X_MAX);
+            let x = normalize_unsigned_value(touch.y as f64, TOUCHSCREEN_Y_MAX as f64);
+            let y = 1.0 - normalize_unsigned_value(touch.x as f64, TOUCHSCREEN_X_MAX as f64);
             (Some(x), Some(y))
         }
         false => (None, None),
