@@ -433,6 +433,10 @@ impl TargetOutputDevice for HoripadSteamDevice {
                 data,
             } => {
                 log::debug!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
+                if let Err(e) = self.device.write_set_report_reply(id, 0) {
+                    log::warn!("Failed to write set report reply: {:?}", e);
+                    return Err(e.to_string().into());
+                }
                 Ok(vec![])
             }
         };
