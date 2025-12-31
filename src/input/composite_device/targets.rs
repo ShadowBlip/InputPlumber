@@ -4,7 +4,10 @@ use std::{
     time::Duration,
 };
 
-use tokio::sync::mpsc::{self, Sender};
+use tokio::{
+    sync::mpsc::{self, Sender},
+    task::JoinSet,
+};
 use zbus::Connection;
 
 use crate::{
@@ -388,33 +391,41 @@ impl CompositeDeviceTargets {
         }
     }
 
-    // Get the capabilities of all target devices
-    pub async fn get_capabilities(&self) -> Result<HashSet<Capability>, Box<dyn Error>> {
-        let mut target_caps = HashSet::new();
+    /// Get the capabilities of all target devices and send the result to the
+    /// given channel.
+    pub fn send_capabilities(&self, sender: Sender<HashSet<Capability>>) {
+        // Use a JoinSet to query all targets simultaneously
+        let mut tasks = JoinSet::new();
         for target in self.target_devices.values() {
-            let caps = match target.get_capabilities().await {
-                Ok(caps) => caps,
-                Err(e) => {
-                    return Err(format!("Failed to get target capabilities: {e:?}").into());
-                }
-            };
-            for cap in caps {
-                target_caps.insert(cap);
-            }
+            let target = target.clone();
+            tasks.spawn(async move { target.get_capabilities().await });
         }
         for target in self.target_dbus_devices.values() {
-            let caps = match target.get_capabilities().await {
-                Ok(caps) => caps,
-                Err(e) => {
-                    return Err(format!("Failed to get target capabilities: {e:?}").into());
-                }
-            };
-            for cap in caps {
-                target_caps.insert(cap);
-            }
+            let target = target.clone();
+            tasks.spawn(async move { target.get_capabilities().await });
         }
 
-        Ok(target_caps)
+        // Collect the results in a task and send them to the given channel
+        tokio::task::spawn(async move {
+            let mut target_caps = HashSet::new();
+            let results = tasks.join_all().await;
+            for result in results {
+                let caps = match result {
+                    Ok(caps) => caps,
+                    Err(e) => {
+                        log::warn!("Failed to get target capabilities: {e}");
+                        continue;
+                    }
+                };
+                for cap in caps {
+                    target_caps.insert(cap);
+                }
+            }
+
+            if let Err(e) = sender.send(target_caps).await {
+                log::error!("Failed to send target capabilities: {e}");
+            }
+        });
     }
 
     /// Update the target capabilities of the given target device
