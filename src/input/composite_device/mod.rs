@@ -334,16 +334,7 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::GetTargetCapabilities(sender) => {
-                        let target_caps = match self.targets.get_capabilities().await {
-                            Ok(caps) => caps,
-                            Err(e) => {
-                                log::error!("Failed to get target capabilities: {e:?}");
-                                continue;
-                            }
-                        };
-                        if let Err(e) = sender.send(target_caps).await {
-                            log::error!("Failed to send target capabilities: {:?}", e);
-                        }
+                        self.targets.send_capabilities(sender);
                     }
                     CompositeCommand::SetInterceptMode(mode) => self.set_intercept_mode(mode).await,
                     CompositeCommand::GetInterceptMode(sender) => {

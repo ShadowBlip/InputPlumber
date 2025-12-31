@@ -29,7 +29,7 @@ pub enum ClientError {
     #[error("failed to try to send command to device: {0}")]
     TrySendError(TrySendError<TargetCommand>),
     #[error("service encountered an error processing the request: {0}")]
-    ServiceError(Box<dyn std::error::Error>),
+    ServiceError(Box<dyn std::error::Error + Send + Sync>),
     #[error("device no longer exists")]
     ChannelClosed,
 }
