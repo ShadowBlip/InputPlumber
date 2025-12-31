@@ -35,6 +35,7 @@ use crate::{
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
             value::InputValue,
+            value::{denormalize_signed_value_u8, denormalize_unsigned_value_u8},
         },
         output_capability::{OutputCapability, LED},
         output_event::OutputEvent,
@@ -439,11 +440,13 @@ impl DualSenseDevice {
                     GamepadAxis::LeftStick => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
+                                let value =
+                                    denormalize_signed_value_u8(x, STICK_X_MIN, STICK_X_MAX);
                                 state.joystick_l_x = value
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
+                                let value =
+                                    denormalize_signed_value_u8(y, STICK_Y_MIN, STICK_Y_MAX);
                                 state.joystick_l_y = value
                             }
                         }
@@ -451,11 +454,13 @@ impl DualSenseDevice {
                     GamepadAxis::RightStick => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
+                                let value =
+                                    denormalize_signed_value_u8(x, STICK_X_MIN, STICK_X_MAX);
                                 state.joystick_r_x = value
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
+                                let value =
+                                    denormalize_signed_value_u8(y, STICK_Y_MIN, STICK_Y_MAX);
                                 state.joystick_r_y = value
                             }
                         }
@@ -463,7 +468,7 @@ impl DualSenseDevice {
                     GamepadAxis::Hat0 => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, -1.0, 1.0);
+                                let value = denormalize_signed_value_u8(x, -1.0, 1.0);
                                 match value.cmp(&0) {
                                     Ordering::Less => match state.dpad {
                                         Direction::North => state.dpad = Direction::NorthWest,
@@ -487,7 +492,7 @@ impl DualSenseDevice {
                                 }
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, -1.0, 1.0);
+                                let value = denormalize_signed_value_u8(y, -1.0, 1.0);
                                 match value.cmp(&0) {
                                     Ordering::Less => match state.dpad {
                                         Direction::East => state.dpad = Direction::NorthEast,
@@ -519,7 +524,7 @@ impl DualSenseDevice {
                 Gamepad::Trigger(trigger) => match trigger {
                     GamepadTrigger::LeftTrigger => {
                         if let InputValue::Float(normal_value) = value {
-                            let value = denormalize_unsigned_value(normal_value, TRIGGER_MAX);
+                            let value = denormalize_unsigned_value_u8(normal_value, TRIGGER_MAX);
                             state.l2_trigger = value
                         }
                     }
@@ -527,7 +532,7 @@ impl DualSenseDevice {
                     GamepadTrigger::LeftStickForce => (),
                     GamepadTrigger::RightTrigger => {
                         if let InputValue::Float(normal_value) = value {
-                            let value = denormalize_unsigned_value(normal_value, TRIGGER_MAX);
+                            let value = denormalize_unsigned_value_u8(normal_value, TRIGGER_MAX);
                             state.r2_trigger = value
                         }
                     }
@@ -1129,29 +1134,6 @@ impl Debug for DualSenseDevice {
             .field("hardware", &self.hardware)
             .finish()
     }
-}
-
-/// Convert the given normalized value between -1.0 - 1.0 to the real value
-/// based on the given minimum and maximum axis range. Playstation gamepads
-/// use a range from 0-255, with 127 being the "nuetral" point.
-fn denormalize_signed_value(normal_value: f64, min: f64, max: f64) -> u8 {
-    let mid = (max + min) / 2.0;
-    let normal_value_abs = normal_value.abs();
-    if normal_value >= 0.0 {
-        let maximum = max - mid;
-        let value = normal_value * maximum + mid;
-        value as u8
-    } else {
-        let minimum = min - mid;
-        let value = normal_value_abs * minimum + mid;
-        value as u8
-    }
-}
-
-/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
-/// the maximum axis range.
-fn denormalize_unsigned_value(normal_value: f64, max: f64) -> u8 {
-    (normal_value * max).round() as u8
 }
 
 /// De-normalizes the given value from 0.0 - 1.0 into a real value based on
