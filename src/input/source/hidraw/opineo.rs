@@ -7,7 +7,7 @@ use crate::{
     },
     input::{
         capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
-        event::{native::NativeEvent, value::InputValue},
+        event::{native::NativeEvent, value::normalize_unsigned_value, value::InputValue},
         output_capability::OutputCapability,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -83,12 +83,6 @@ impl Debug for OrangePiNeoTouchpad {
             .field("side", &self.side)
             .finish()
     }
-}
-
-// Returns a value between 0.0 and 1.0 based on the given value with its
-// maximum.
-fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
-    raw_value / max
 }
 
 /// Normalize the value to something between -1.0 and 1.0 based on the Deck's

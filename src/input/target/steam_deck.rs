@@ -41,6 +41,7 @@ use crate::{
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
             value::InputValue,
+            value::{denormalize_signed_value_i16, denormalize_unsigned_value_u16},
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
@@ -593,11 +594,13 @@ impl SteamDeckDevice {
                     GamepadAxis::LeftStick => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
+                                let value =
+                                    denormalize_signed_value_i16(x, STICK_X_MIN, STICK_X_MAX);
                                 self.state.l_stick_x = Integer::from_primitive(value);
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
+                                let value =
+                                    denormalize_signed_value_i16(y, STICK_Y_MIN, STICK_Y_MAX);
                                 self.state.l_stick_y = Integer::from_primitive(value);
                             }
                         }
@@ -605,11 +608,13 @@ impl SteamDeckDevice {
                     GamepadAxis::RightStick => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
+                                let value =
+                                    denormalize_signed_value_i16(x, STICK_X_MIN, STICK_X_MAX);
                                 self.state.r_stick_x = Integer::from_primitive(value);
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
+                                let value =
+                                    denormalize_signed_value_i16(y, STICK_Y_MIN, STICK_Y_MAX);
                                 self.state.r_stick_y = Integer::from_primitive(value);
                             }
                         }
@@ -617,7 +622,7 @@ impl SteamDeckDevice {
                     GamepadAxis::Hat0 => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, -1.0, 1.0);
+                                let value = denormalize_signed_value_i16(x, -1.0, 1.0);
                                 match value.cmp(&0) {
                                     Ordering::Less => {
                                         self.state.left = true;
@@ -634,7 +639,7 @@ impl SteamDeckDevice {
                                 }
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, -1.0, 1.0);
+                                let value = denormalize_signed_value_i16(y, -1.0, 1.0);
                                 match value.cmp(&0) {
                                     Ordering::Less => {
                                         self.state.up = true;
@@ -660,38 +665,38 @@ impl SteamDeckDevice {
                     GamepadTrigger::LeftTrigger => {
                         if let InputValue::Float(value) = value {
                             self.state.l2 = value > 0.8;
-                            let value = denormalize_unsigned_value(value, TRIGG_MAX);
+                            let value = denormalize_unsigned_value_u16(value, TRIGG_MAX);
                             self.state.l_trigg = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::LeftTouchpadForce => {
                         if let InputValue::Float(value) = value {
-                            let value = denormalize_unsigned_value(value, PAD_FORCE_MAX);
+                            let value = denormalize_unsigned_value_u16(value, PAD_FORCE_MAX);
                             self.state.l_pad_force = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::LeftStickForce => {
                         if let InputValue::Float(value) = value {
-                            let value = denormalize_unsigned_value(value, STICK_FORCE_MAX);
+                            let value = denormalize_unsigned_value_u16(value, STICK_FORCE_MAX);
                             self.state.l_stick_force = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::RightTrigger => {
                         if let InputValue::Float(value) = value {
                             self.state.r2 = value > 0.8;
-                            let value = denormalize_unsigned_value(value, TRIGG_MAX);
+                            let value = denormalize_unsigned_value_u16(value, TRIGG_MAX);
                             self.state.r_trigg = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::RightTouchpadForce => {
                         if let InputValue::Float(value) = value {
-                            let value = denormalize_unsigned_value(value, PAD_FORCE_MAX);
+                            let value = denormalize_unsigned_value_u16(value, PAD_FORCE_MAX);
                             self.state.r_pad_force = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::RightStickForce => {
                         if let InputValue::Float(value) = value {
-                            let value = denormalize_unsigned_value(value, STICK_FORCE_MAX);
+                            let value = denormalize_unsigned_value_u16(value, STICK_FORCE_MAX);
                             self.state.r_stick_force = Integer::from_primitive(value);
                         }
                     }
@@ -1095,31 +1100,9 @@ impl Debug for SteamDeckDevice {
     }
 }
 
-/// Convert the given normalized signed value to the real value based on the given
-/// minimum and maximum axis range.
-pub fn denormalize_signed_value(normal_value: f64, min: f64, max: f64) -> i16 {
-    let mid = (max + min) / 2.0;
-    let normal_value_abs = normal_value.abs();
-    if normal_value >= 0.0 {
-        let maximum = max - mid;
-        let value = normal_value * maximum + mid;
-        value as i16
-    } else {
-        let minimum = min - mid;
-        let value = normal_value_abs * minimum + mid;
-        value as i16
-    }
-}
-
 /// Convert the given normalized unsigned value to the real value based on the given
 /// minimum and maximum axis range.
 pub fn denormalize_unsigned_to_signed_value(normal_value: f64, min: f64, max: f64) -> i16 {
     let normal_value = (normal_value * 2.0) - 1.0;
-    denormalize_signed_value(normal_value, min, max)
-}
-
-/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
-/// the maximum axis range.
-pub fn denormalize_unsigned_value(normal_value: f64, max: f64) -> u16 {
-    (normal_value * max).round() as u16
+    denormalize_signed_value_i16(normal_value, min, max)
 }

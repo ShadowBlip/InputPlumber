@@ -7,7 +7,11 @@ use crate::{
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
-        event::{native::NativeEvent, value::InputValue},
+        event::{
+            native::NativeEvent,
+            value::InputValue,
+            value::{normalize_signed_value, normalize_unsigned_value},
+        },
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
@@ -47,29 +51,6 @@ impl Debug for HoripadSteam {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HoripadSteam").finish()
     }
-}
-
-/// Returns a value between -1.0 and 1.0 based on the given value with its
-/// minimum and maximum values.
-fn normalize_signed_value(raw_value: f64, min: f64, max: f64) -> f64 {
-    let mid = (max + min) / 2.0;
-    let event_value = raw_value - mid;
-
-    // Normalize the value
-    if event_value >= 0.0 {
-        let maximum = max - mid;
-        event_value / maximum
-    } else {
-        let minimum = min - mid;
-        let value = event_value / minimum;
-        -value
-    }
-}
-
-// Returns a value between 0.0 and 1.0 based on the given value with its
-// maximum.
-fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
-    raw_value / max
 }
 
 /// Normalize the value to something between -1.0 and 1.0 based on the
