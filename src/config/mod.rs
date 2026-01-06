@@ -38,7 +38,9 @@ pub struct DeviceProfile {
     pub version: u32, //useful?
     pub kind: String, //useful?
     pub name: String, //useful?
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub target_devices: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub mapping: Vec<ProfileMapping>,
 }
@@ -179,7 +181,9 @@ pub struct CompositeDeviceConfigOptions {
     /// If true, InputPlumber will automatically try to manage the input device.
     /// If this is false, InputPlumber will not try to manage the device unless
     /// an external service enables management of all devices.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_manage: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub persist: Option<bool>,
 }
 
@@ -187,6 +191,7 @@ pub struct CompositeDeviceConfigOptions {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Match {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dmi_data: Option<DMIMatch>,
 }
 
@@ -194,14 +199,23 @@ pub struct Match {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct DMIMatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bios_release: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bios_vendor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bios_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub board_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_sku: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sys_vendor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_vendor: Option<String>,
 }
 
@@ -211,43 +225,59 @@ pub struct SourceDevice {
     /// Custom group identifier for the source device.
     pub group: String,
     /// Devices that match the given evdev properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub evdev: Option<Evdev>,
     /// Devices that match the given hidraw properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub hidraw: Option<Hidraw>,
     /// Devices that match the given iio properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub iio: Option<IIO>,
     /// Devices that match the given led properties will be capture by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub led: Option<Led>,
     /// Devices that match the given udev properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub udev: Option<Udev>,
     /// Devices that match the given tty propertied will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tty: Option<Tty>,
     /// Device configuration options are used to alter how the source device is managed
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<SourceDeviceConfig>,
     /// If false, any devices matching this description will be added to the
     /// existing composite device. Defaults to true.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub unique: Option<bool>,
     /// If true, device will be grabbed but no events from this device will
     /// reach target devices. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked: Option<bool>,
     /// If true, this source device will be ignored and not managed by
     /// InputPlumber. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<bool>,
     /// If true, events will be read from this device, but the source device
     /// will not be hidden or grabbed. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub passthrough: Option<bool>,
     /// Defines which events are included or excluded from input processing by
     /// the source device.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub events: Option<EventsConfig>,
     /// The ID of a device event mapping in the 'capability_maps' directory
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub capability_map_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct SourceDeviceConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub touchscreen: Option<TouchscreenConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub imu: Option<ImuConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub led: Option<LedConfig>,
 }
 
@@ -255,63 +285,90 @@ pub struct SourceDeviceConfig {
 #[serde(rename_all = "snake_case")]
 pub struct TouchscreenConfig {
     /// Orientation of the touchscreen. Can be one of: ["normal", "left", "right", "upsidedown"]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub orientation: Option<String>,
     /// Width of the touchscreen. If set, any virtual touchscreens will use this width
     /// instead of querying the source device for its size.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
     /// Height of the touchscreen. If set, any virtual touchscreens will use this height
     /// instead of querying the source device for its size.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<u32>,
     /// If true, the source device will use the width/height defined in this configuration
     /// instead of the size advertised by the device itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub override_source_size: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct ImuConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mount_matrix: Option<MountMatrix>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct LedConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fixed_color: Option<FixedRgbColor>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Evdev {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub phys_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub handler: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vendor_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Hidraw {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vendor_id: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_id: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub interface_num: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub handler: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Udev {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<UdevAttribute>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub driver: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<UdevAttribute>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub subsystem: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sys_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sys_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vendor_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub interface_number: Option<String>,
 }
 
@@ -319,6 +376,7 @@ pub struct Udev {
 #[serde(rename_all = "snake_case")]
 pub struct UdevAttribute {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
 }
 
@@ -326,12 +384,15 @@ pub struct UdevAttribute {
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
 pub struct IIO {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[deprecated(
         since = "0.43.0",
         note = "please use `<SourceDevice>.config.imu.mount_matrix` instead"
     )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mount_matrix: Option<MountMatrix>,
 }
 
@@ -339,7 +400,9 @@ pub struct IIO {
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
 pub struct Led {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
@@ -347,7 +410,9 @@ pub struct Led {
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
 pub struct Tty {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
@@ -372,8 +437,10 @@ pub struct MountMatrix {
 #[serde(rename_all = "snake_case")]
 pub struct EventsConfig {
     /// Events to exclude from being processed by a source device
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude: Option<Vec<String>>,
     /// Events to include and be processed by a source device
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub include: Option<Vec<String>>,
 }
 
@@ -385,11 +452,16 @@ pub struct CompositeDeviceConfig {
     pub kind: String,
     pub name: String,
     pub matches: Vec<Match>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub single_source: Option<bool>, // DEPRECATED; use 'maximum_sources' instead
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub maximum_sources: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub capability_map_id: Option<String>,
     pub source_devices: Vec<SourceDevice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub target_devices: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<CompositeDeviceConfigOptions>,
 }
 
