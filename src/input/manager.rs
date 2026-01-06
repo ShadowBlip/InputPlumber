@@ -299,7 +299,7 @@ impl Manager {
                     let path = device.keys().next().cloned();
                     let response = match path {
                         Some(path) => Ok(path),
-                        _ => Err(ManagerError::CreateTargetDeviceFailed(
+                        None => Err(ManagerError::CreateTargetDeviceFailed(
                             "Unable to find device path".to_string(),
                         )),
                     };
@@ -1657,7 +1657,7 @@ impl Manager {
             for file in files {
                 // Try to load the composite device profile
                 log::trace!("Found file: {}", file.display());
-                let device = CompositeDeviceConfig::from_yaml_file(file.display().to_string());
+                let device = CompositeDeviceConfig::from_yaml_path(&file);
                 let device = match device {
                     Ok(dev) => dev,
                     Err(e) => {

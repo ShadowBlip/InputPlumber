@@ -19,7 +19,7 @@ use zbus::{object_server::Interface, Connection};
 use crate::{
     config::{
         capability_map::CapabilityMapConfig, path::get_profiles_path, CompositeDeviceConfig,
-        DeviceProfile, LoadError, ProfileMapping,
+        DeviceProfile, ProfileMapping,
     },
     dbus::interface::{
         composite_device::CompositeDeviceInterface, force_feedback::ForceFeedbackInterface,
@@ -227,7 +227,7 @@ impl CompositeDevice {
         let profile_dir = get_profiles_path();
         let profile_path = profile_dir.join("default.yaml");
         let profile_path = profile_path.to_string_lossy().to_string();
-        let profile = DeviceProfile::from_yaml_file(profile_path.clone())?;
+        let profile = DeviceProfile::from_yaml_path(profile_path.clone())?;
         device.load_device_profile(Some(profile), Some(profile_path))?;
 
         // If a capability map is defined, add those target capabilities to
@@ -433,27 +433,11 @@ impl CompositeDevice {
                             log::error!("Failed to send load profile result: {:?}", e);
                         }
                     }
-                    CompositeCommand::LoadProfilePath(path, sender) => {
-                        log::debug!("Loading profile from path: {path}");
-                        let profile = match DeviceProfile::from_yaml_file(path.clone()) {
-                            Ok(p) => p,
-                            Err(e) => {
-                                let err = match e {
-                                    LoadError::IoError(_) => e.to_string(),
-                                    LoadError::MaximumSizeReached(_) => e.to_string(),
-                                    LoadError::DeserializeError(_) => {
-                                        "Failed to parse file".to_string()
-                                    }
-                                };
-                                if let Err(er) = sender.send(Err(err)).await {
-                                    log::error!("Failed to send failed to load profile: {er:?}");
-                                }
-                                continue;
-                            }
-                        };
-                        let result = match self
-                            .load_device_profile(Some(profile.clone()), Some(path.clone()))
-                        {
+                    CompositeCommand::LoadProfile(profile, path, sender) => {
+                        let result = match self.load_device_profile(
+                            Some(profile.clone()),
+                            path.clone().map(|p| p.display().to_string()),
+                        ) {
                             Ok(_) => Ok(()),
                             Err(e) => Err(e.to_string()),
                         };
@@ -461,7 +445,7 @@ impl CompositeDevice {
                             self.dbus.connection(),
                             self.dbus.path(),
                             Some(profile),
-                            Some(path),
+                            path.map(|p| p.display().to_string()),
                         );
                         if let Err(e) = sender.send(result).await {
                             log::error!("Failed to send load profile result: {:?}", e);
