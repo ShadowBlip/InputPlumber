@@ -1,6 +1,7 @@
 use std::sync::mpsc::Sender;
 
-use ::evdev::{FFEffectData, InputEvent};
+use ::evdev::{FFEffectData, FFEffectKind, InputEvent};
+use packed_struct::types::{Integer, SizedInteger};
 
 use crate::drivers::{
     dualsense::hid_report::SetStatePackedOutputData,
@@ -85,6 +86,68 @@ impl OutputEvent {
             OutputEvent::DualSense(report) => report.use_rumble_not_haptics,
             OutputEvent::SteamDeckHaptics(_) => true,
             OutputEvent::SteamDeckRumble(_) => true,
+        }
+    }
+
+    /// Scale the intensity value of the output event. A value of 0.0 is the
+    /// minimum intensity. A value of 1.0 is the maximum intensity.
+    pub fn scale(&mut self, scale: f64) {
+        let scale = scale.clamp(0.0, 1.0);
+        match self {
+            Self::Evdev(_) => (),
+            Self::Uinput(event) => match event {
+                UinputOutputEvent::FFUpload(_, data, _) => match data.kind {
+                    FFEffectKind::Damper => (),
+                    FFEffectKind::Inertia => (),
+                    FFEffectKind::Constant {
+                        level: _,
+                        envelope: _,
+                    } => (),
+                    FFEffectKind::Ramp {
+                        start_level: _,
+                        end_level: _,
+                        envelope: _,
+                    } => (),
+                    FFEffectKind::Periodic {
+                        waveform: _,
+                        period: _,
+                        magnitude: _,
+                        offset: _,
+                        phase: _,
+                        envelope: _,
+                    } => (),
+                    FFEffectKind::Spring { condition: _ } => (),
+                    FFEffectKind::Friction { condition: _ } => (),
+                    FFEffectKind::Rumble {
+                        ref mut strong_magnitude,
+                        ref mut weak_magnitude,
+                    } => {
+                        let scaled_strong = *strong_magnitude as f64 * scale;
+                        *strong_magnitude = scaled_strong as u16;
+                        let scaled_weak = *weak_magnitude as f64 * scale;
+                        *weak_magnitude = scaled_weak as u16;
+                    }
+                },
+                UinputOutputEvent::FFErase(_) => (),
+            },
+            Self::DualSense(report) => {
+                if report.use_rumble_not_haptics {
+                    let scaled_left = report.rumble_emulation_left as f64 * scale;
+                    report.rumble_emulation_left = scaled_left as u8;
+                    let scaled_right = report.rumble_emulation_right as f64 * scale;
+                    report.rumble_emulation_right = scaled_right as u8;
+                }
+            }
+            Self::SteamDeckHaptics(data) => {
+                data.gain = (data.gain as f64 * scale) as i8;
+            }
+            Self::SteamDeckRumble(data) => {
+                data.intensity = (data.intensity as f64 * scale) as u8;
+                let scaled_left_speed = data.left_speed.to_primitive() as f64 * scale;
+                data.left_speed = Integer::from_primitive(scaled_left_speed as u16);
+                let scaled_right_speed = data.right_speed.to_primitive() as f64 * scale;
+                data.right_speed = Integer::from_primitive(scaled_right_speed as u16);
+            }
         }
     }
 }
