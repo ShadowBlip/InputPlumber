@@ -57,7 +57,7 @@ source_devices:
     capability_map_id: zone1
   - group: imu
     iio:
-      name: i2c-BMI0160:00
+      name: "{i2c-BMI0160:00,bmi260}"
 
   #RGB
   - group: led
