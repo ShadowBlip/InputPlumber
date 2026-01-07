@@ -52,7 +52,7 @@ source_devices:
       subsystem: tty
   - group: imu
     iio:
-      name: i2c-BMI0260:00
+      name: "{i2c-BMI0260:00,bmi260}"
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
