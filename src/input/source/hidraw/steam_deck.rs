@@ -4,7 +4,7 @@ use std::{
     fmt::Debug,
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
@@ -47,7 +47,17 @@ pub struct DeckController {
     lizard_mode_started: bool,
     lizard_mode_running: Arc<Mutex<bool>>,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    left_click_until: Option<Instant>,
+    right_click_until: Option<Instant>,
+    rumble_last: (u16, u16),
+    leftpad_dpad: DpadState,
+    leftpad_pressed: bool,
+    leftpad_last_xy: Option<(f64, f64)>,
 }
+
+const CLICK_MS: u64 = 25;
+const CLICK_STRENGTH: u16 = u16::MAX;
+const HAPTIC_MAX: u16 = 32767;
 
 impl DeckController {
     /// Create a new Deck Controller source device with the given udev
@@ -61,6 +71,14 @@ impl DeckController {
             lizard_mode_started: false,
             lizard_mode_running: Arc::new(Mutex::new(false)),
             ff_evdev_effects: HashMap::new(),
+
+            left_click_until: None,
+            right_click_until: None,
+            rumble_last: (0, 0),
+
+            leftpad_dpad: DpadState::default(),
+            leftpad_pressed: false,
+            leftpad_last_xy: None,
         })
     }
 
@@ -190,6 +208,30 @@ impl DeckController {
 
         Ok(())
     }
+
+    fn arm_left_click(&mut self) {
+        self.left_click_until = Some(Instant::now() + Duration::from_millis(CLICK_MS));
+    }
+    fn arm_right_click(&mut self) {
+        self.right_click_until = Some(Instant::now() + Duration::from_millis(CLICK_MS));
+    }
+
+    fn update_click_rumble(&mut self) {
+        let now = Instant::now();
+        let left = self.left_click_until.map_or(0, |t| if now < t { CLICK_STRENGTH } else { 0 });
+        let right = self.right_click_until.map_or(0, |t| if now < t { CLICK_STRENGTH } else { 0 });
+
+        if (left, right) != self.rumble_last {
+            let left  = left.min(HAPTIC_MAX);
+            let right = right.min(HAPTIC_MAX);
+            let _ = self.driver.haptic_rumble(left, right);
+            self.rumble_last = (left, right);
+        }
+
+        // clear expired timers (optional hygiene)
+        if self.left_click_until.is_some_and(|t| now >= t) { self.left_click_until = None; }
+        if self.right_click_until.is_some_and(|t| now >= t) { self.right_click_until = None; }
+    }
 }
 
 impl SourceInputDevice for DeckController {
@@ -201,7 +243,32 @@ impl SourceInputDevice for DeckController {
         }
 
         let events = self.driver.poll()?;
-        let native_events = translate_events(events);
+
+        // Track whether finger is currently on the left pad
+        for e in &events {
+            if let steam_deck::event::Event::Button(btn) = e {
+                match btn {
+                    steam_deck::event::ButtonEvent::LPadPress(_) => self.arm_left_click(),
+                    steam_deck::event::ButtonEvent::RPadPress(_) => self.arm_right_click(),
+                    steam_deck::event::ButtonEvent::DPadUp(v)
+                    | steam_deck::event::ButtonEvent::DPadDown(v)
+                    | steam_deck::event::ButtonEvent::DPadLeft(v)
+                    | steam_deck::event::ButtonEvent::DPadRight(v) => {
+                        log::info!("Real DPad event: {:?} pressed={}", btn, v.pressed);
+                    },
+                    _ => {}
+                }
+            }
+        }
+
+        let native_events = translate_events(
+            events,
+            &mut self.leftpad_dpad,
+            &mut self.leftpad_pressed,
+            &mut self.leftpad_last_xy,
+        );
+        self.update_click_rumble();
+
         Ok(native_events)
     }
 
@@ -235,8 +302,16 @@ impl SourceOutputDevice for DeckController {
             }
             OutputEvent::Uinput(_) => (),
             OutputEvent::SteamDeckHaptics(packed_haptic_report) => {
-                let report = packed_haptic_report.pack().map_err(|e| e.to_string())?;
-                self.driver.write(&report)?;
+                match packed_haptic_report.pack() {
+                    Ok(report) => {
+                        if let Err(e) = self.driver.write(&report) {
+                            log::debug!("Ignoring invalid SteamDeckHaptics write: {:?}", e);
+                        }
+                    }
+                    Err(e) => {
+                        log::debug!("Ignoring invalid SteamDeckHaptics pack: {:?}", e);
+                    }
+                }
             }
             OutputEvent::SteamDeckRumble(packed_rumble_report) => {
                 let report = packed_rumble_report.pack().map_err(|e| e.to_string())?;
@@ -281,6 +356,7 @@ impl SourceOutputDevice for DeckController {
     /// Stop the source device and terminate the lizard mode task
     fn stop(&mut self) -> Result<(), OutputError> {
         *self.lizard_mode_running.lock().unwrap() = false;
+        let _ = self.driver.haptic_rumble(0, 0);
         Ok(())
     }
 }
@@ -402,11 +478,6 @@ fn normalize_trigger_value(event: steam_deck::event::TriggerEvent) -> InputValue
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
     }
-}
-
-/// Translate the given Steam Deck events into native events
-fn translate_events(events: Vec<steam_deck::event::Event>) -> Vec<NativeEvent> {
-    events.into_iter().map(translate_event).collect()
 }
 
 /// Translate the given Steam Deck event into a native event
@@ -586,6 +657,200 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
         },
     }
 }
+
+/// Represents the current state of a 4-way D-pad.
+///
+/// Why this exists:
+/// - We synthesize D-pad button events (Up/Down/Left/Right) from analog inputs (e.g. left touchpad
+///   position) and sometimes need to track what is currently "held".
+/// - Tracking state lets us emit *only* the transitions (press/release diffs) instead of spamming
+///   repeated button events every poll.
+///
+/// Expected behavior:
+/// - Each field indicates whether that D-pad direction is currently considered pressed.
+/// - Consumers should treat this as a *state snapshot* used for diffing (old -> new).
+/// - In 4-way mode, at most one of {up, down, left, right} should be true at a time (unless you
+///   intentionally allow diagonals elsewhere).
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+struct DpadState {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+}
+
+/// Converts a touch position (0..1, 0..1) into a 4-way D-pad state with hysteresis.
+///
+/// Why this exists:
+/// - Touchpads are noisy near the center; hysteresis prevents rapid toggling (sticky/laggy feel).
+///
+/// Expected behavior:
+/// - Returns `Default::default()` when within the dead-zone.
+/// - When already active, requires a smaller threshold to remain active than to activate.
+fn touch_to_dpad_hysteresis(x: f64, y: f64, old: DpadState) -> DpadState {
+    let sx = (x - 0.5) * 2.0;
+    let sy = (y - 0.5) * 2.0;
+
+    const PRESS: f64 = 0.22;
+    const RELEASE: f64 = 0.16;
+
+    let mag = (sx * sx + sy * sy).sqrt();
+    let was_active = old.up || old.down || old.left || old.right;
+
+    // If we were active, don't release until we cross RELEASE
+    if was_active && mag < RELEASE {
+        return DpadState::default();
+    }
+    // If we were inactive, don't activate until we cross PRESS
+    if !was_active && mag < PRESS {
+        return DpadState::default();
+    }
+
+    if sx.abs() >= sy.abs() {
+        if sx > 0.0 { DpadState { right: true, ..Default::default() } }
+        else        { DpadState { left:  true, ..Default::default() } }
+    } else {
+        if sy > 0.0 { DpadState { down:  true, ..Default::default() } }
+        else        { DpadState { up:    true, ..Default::default() } }
+    }
+}
+
+/// Emit only the D-pad button transitions between two states.
+///
+/// Why this exists:
+/// - When we synthesize D-pad buttons from an analog source (e.g. touchpad position),
+///   we track the previous `DpadState` and the newly computed `DpadState`.
+/// - Rather than emitting repeated button events every poll, we only emit events for
+///   directions whose pressed state changed.
+///
+/// Expected behavior:
+/// - Returns a list of `NativeEvent`s for each direction that changed.
+/// - For each changed direction, emits `InputValue::Bool(true)` on press and
+///   `InputValue::Bool(false)` on release.
+/// - If `old == new`, returns an empty vector.
+fn emit_dpad_diffs(old: DpadState, new: DpadState) -> Vec<NativeEvent> {
+    let mut out = Vec::new();
+
+    if old.up != new.up {
+        out.push(NativeEvent::new(
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+                                  InputValue::Bool(new.up),
+        ));
+    }
+    if old.down != new.down {
+        out.push(NativeEvent::new(
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+                                  InputValue::Bool(new.down),
+        ));
+    }
+    if old.left != new.left {
+        out.push(NativeEvent::new(
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+                                  InputValue::Bool(new.left),
+        ));
+    }
+    if old.right != new.right {
+        out.push(NativeEvent::new(
+            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+                                  InputValue::Bool(new.right),
+        ));
+    }
+
+    out
+}
+
+/// Translate raw Steam Deck driver events into `NativeEvent`s, with special handling for the left pad.
+///
+/// Why this exists:
+/// - We want normal apps to continue receiving left touchpad motion + press events.
+/// - Separately, we want the left pad to act like a virtual 4-way D-pad *only while the pad is
+///   physically pressed*, to avoid “phantom” D-pad presses just from touch contact.
+///
+/// Expected behavior:
+/// - Always passes through LeftPad motion as `Touchpad::LeftPad(Touch::Motion)` so cursor/motion
+///   bindings keep working.
+/// - Tracks the latest left pad position in `leftpad_last_xy`.
+/// - Tracks whether the left pad is pressed in `leftpad_pressed` (from `LPadPress`).
+/// - While pressed, converts the current touch position into a virtual D-pad state and emits only
+///   press/release diffs via `emit_dpad_diffs`.
+/// - On release, immediately forces the virtual D-pad state back to neutral (all false) and emits
+///   the corresponding releases.
+/// - All other events (including the physical D-pad) are passed through unchanged.
+fn translate_events(
+    events: Vec<steam_deck::event::Event>,
+    leftpad_dpad: &mut DpadState,
+    leftpad_pressed: &mut bool,
+    leftpad_last_xy: &mut Option<(f64, f64)>,
+) -> Vec<NativeEvent> {
+    let mut out = Vec::new();
+
+    for e in events {
+        match e {
+            // --- LEFT PAD PRESS: gate D-pad output, but still pass through press to apps ---
+            steam_deck::event::Event::Button(steam_deck::event::ButtonEvent::LPadPress(v)) => {
+                *leftpad_pressed = v.pressed;
+
+                // Pass through so apps still see press
+                out.push(translate_event(steam_deck::event::Event::Button(
+                    steam_deck::event::ButtonEvent::LPadPress(v.clone()),
+                )));
+
+                // On release: force virtual dpad neutral immediately
+                if !v.pressed {
+                    let old = *leftpad_dpad;
+                    let new_state = DpadState::default();
+                    if new_state != old {
+                        *leftpad_dpad = new_state;
+                        out.extend(emit_dpad_diffs(old, new_state));
+                    }
+                }
+
+                continue;
+            }
+
+            // --- LEFT PAD AXIS: always pass motion to apps; only emit dpad if pressed ---
+            steam_deck::event::Event::Axis(steam_deck::event::AxisEvent::LPad(axis)) => {
+                // 1) Motion passthrough (apps still see touchpad motion)
+                out.push(NativeEvent::new(
+                    Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
+                                          normalize_axis_value(steam_deck::event::AxisEvent::LPad(axis.clone())),
+                ));
+
+                // 2) Compute normalized x/y for dpad logic
+                let touch_val = normalize_axis_value(steam_deck::event::AxisEvent::LPad(axis));
+                let (x, y) = match touch_val {
+                    InputValue::Touch { x: Some(x), y: Some(y), .. } => (x, y),
+                    _ => continue,
+                };
+
+                *leftpad_last_xy = Some((x, y));
+
+                // 3) Update virtual dpad ONLY if pressed
+                let old = *leftpad_dpad;
+                let new_state = if *leftpad_pressed {
+                    touch_to_dpad_hysteresis(x, y, old)
+                } else {
+                    DpadState::default()
+                };
+
+                if new_state != old {
+                    *leftpad_dpad = new_state;
+                    out.extend(emit_dpad_diffs(old, new_state));
+                }
+
+                continue;
+            }
+
+            // Everything else passthrough (INCLUDING PHYSICAL DPAD)
+            other => out.push(translate_event(other)),
+        }
+    }
+
+    out
+}
+
+
+
 
 /// List of all capabilities that the Steam Deck driver implements
 pub const CAPABILITIES: &[Capability] = &[
