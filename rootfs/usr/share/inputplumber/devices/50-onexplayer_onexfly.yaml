@@ -53,10 +53,10 @@ source_devices:
           value: "0x3E8"
       sys_name: "ttyS*"
       subsystem: tty
-    
+
   - group: imu
     iio:
-      name: i2c-BMI0160:00
+      name: "{i2c-BMI0160:00,bmi260}"
 
 # Optional configuration for the composite device
 options:

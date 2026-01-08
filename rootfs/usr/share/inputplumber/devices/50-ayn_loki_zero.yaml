@@ -34,7 +34,7 @@ source_devices:
       handler: event*
   #- group: imu #TODO:reenable after we switch from polling
   #  iio:
-  #    name: i2c-BMI0160:00
+  #    name: "{i2c-BMI0160:00,bmi260}"
   #    mount_matrix:
   #      # TODO: Reverify on actual hardware
   #      x: [1, 0, 0]

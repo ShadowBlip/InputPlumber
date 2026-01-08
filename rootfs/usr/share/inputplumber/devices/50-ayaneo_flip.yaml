@@ -42,7 +42,7 @@ source_devices:
       handler: event*
   - group: imu
     iio:
-      name: i2c-BMI0160:00
+      name: "{i2c-BMI0160:00,bmi260}"
       mount_matrix:
         x: [0, -1, 0]
         y: [-1, 0, 0]

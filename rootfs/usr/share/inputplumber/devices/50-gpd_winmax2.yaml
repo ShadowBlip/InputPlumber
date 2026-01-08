@@ -64,13 +64,7 @@ source_devices:
       handler: event*
   - group: imu
     iio:
-      name: i2c-BMI0160:00
-  - group: imu
-    iio:
-      name: i2c-BMI0260:00
-  - group: imu
-    iio:
-      name: i2c-10EC5280:00
+      name: "{i2c-BMI0160:00,i2c-BMI0260:00,i2c-10EC5280:00,bmi260}"
 
 # Optional configuration for the composite device
 options:
