@@ -57,5 +57,3 @@ plugins:
         - path: dist/inputplumber-*.rpm.sha256.txt
         - path: dist/inputplumber-*.tar.gz
         - path: dist/inputplumber-*.tar.gz.sha256.txt
-        - path: dist/inputplumber-*.raw
-        - path: dist/inputplumber-*.raw.sha256.txt
