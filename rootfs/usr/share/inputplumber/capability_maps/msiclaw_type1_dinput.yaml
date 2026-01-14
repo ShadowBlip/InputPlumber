@@ -1,0 +1,236 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: MSI Claw 8 AI+ A2VM
+
+# Unique identifier of the capability mapping
+id: claw1-dinput
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Guide
+    source_events:
+      - evdev:    
+          event_type: KEY
+          event_code: KEY_F15
+          value_type: button
+    target_event:
+      gamepad:
+        button: Guide
+
+  # pre-10F
+  - name: QuickAccess
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_F16
+          value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+   # post-10F
+  - name: QuickAccess
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTMETA
+          value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+  # bios 10F emulates win+g on a short press of the quick access button, and
+  # win+tab on a long press. this disables these additional buttons.
+  - name: null
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_TAB
+          value_type: button
+    target_event:
+      gamepad:
+        button: null
+        
+  - name: null
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_G
+          value_type: button
+    target_event:
+      gamepad:
+        button: null
+
+  # dinput mappings
+  - name: Start
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TR2
+          value_type: button
+    target_event:
+      gamepad:
+        button: Start
+
+  - name: Select
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TL2
+          value_type: button
+    target_event:
+      gamepad:
+        button: Select
+
+  - name: A
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_EAST
+          value_type: button
+    target_event:
+      gamepad:
+        button: South
+
+  - name: B
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_C
+          value_type: button
+    target_event:
+      gamepad:
+        button: East
+        
+  - name: X
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_SOUTH
+          value_type: button
+    target_event:
+      gamepad:
+        button: North
+        
+  - name: Y
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_NORTH
+          value_type: button
+    target_event:
+      gamepad:
+        button: West
+
+  - name: L1
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_WEST
+          value_type: button
+    target_event:
+      gamepad:
+        button: LeftBumper
+
+  - name: L2
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_RX
+          value_type: trigger
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TL
+          value_type: button
+    target_event:
+      gamepad:
+        trigger:
+          name: LeftTrigger
+          
+  - name: L3
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_SELECT
+          value_type: button
+    target_event:
+      gamepad:
+        button: LeftStick
+
+  - name: R1
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_Z
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightBumper
+
+  - name: R2
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_RY
+          value_type: trigger
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TR
+          value_type: button
+    target_event:
+      gamepad:
+        trigger:
+          name: RightTrigger
+
+  - name: R3
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_START
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightStick
+
+  - name: Right Stick
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_Z
+          value_type: joystick_x
+      - evdev:
+          event_type: ABS
+          event_code: ABS_RZ
+          value_type: joystick_y
+    target_event:
+      gamepad:
+        axis:
+          name: RightStick
+
+  - name: Left Paddle
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TRIGGER_HAPPY1
+          value_type: button
+    target_event:
+      gamepad:
+        button: LeftPaddle1
+
+  # the right paddle uses scancode 90010, which coheres with nothing,
+  # remapped to 0x2c1 in the hwdb file
+  - name: Right Paddle
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TRIGGER_HAPPY2
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightPaddle1
