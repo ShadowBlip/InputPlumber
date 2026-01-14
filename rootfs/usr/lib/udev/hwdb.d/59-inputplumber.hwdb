@@ -13,3 +13,7 @@ evdev:name:AT Translated Set 2 keyboard:dmi:*:svnOrangePi:pnNEO-01:*
 # Unified Gamepad
 hid:b0003g0001v00001D50p0000616A
  ID_INPUT_UNIFIED=1
+
+# remapping the right paddle button of MSI Claw devices
+evdev:name:Љ:*:svnMicro-StarInternationalCo.,Ltd.:*
+ KEYBOARD_KEY_90010=0x2c1
