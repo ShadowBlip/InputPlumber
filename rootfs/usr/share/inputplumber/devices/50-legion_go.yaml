@@ -28,7 +28,7 @@ source_devices:
     blocked: true
     unique: false
     evdev:
-      name: "{  Legion Controller for Windows  Mouse,Legion-Controller [0-Z]-[0-Z][0-Z] Mouse}"
+      name: "{*Mouse}"
       vendor_id: "17ef"
       product_id: "{618[2-4],61e[b-d]}" # Don't grab 5/e, thats FPS mode Keyboard events
       handler: event*
@@ -38,7 +38,7 @@ source_devices:
     blocked: true
     unique: false
     evdev:
-      name: "{  Legion Controller for Windows  Touchpad,Legion-Controller [0-Z]-[0-Z][0-Z] Touchpad}"
+      name: "{*Touchpad}"
       vendor_id: "17ef"
       product_id: "{618[2-4],61e[b-d]}" # 5/e don't exist
       handler: event*
@@ -46,7 +46,7 @@ source_devices:
     blocked: true
     unique: false
     evdev:
-      name: "{  Legion Controller for Windows  Keyboard,Legion-Controller [0-Z]-[0-Z][0-Z] Keyboard}"
+      name: "{*Keyboard}"
       vendor_id: "17ef"
       product_id: "{618[2-4],61e[b-d]}" # Don't grab 5/e, thats FPS mode Keyboard events
       handler: event*
@@ -73,12 +73,6 @@ source_devices:
 
   ## HIDRAWs
   ## XInput - Connected 0x6182 (Go PID)
-  # Touchpad
-  - group: mouse # Gamepad Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6182
-      interface_num: 1
   # Gamepad
   - group: gamepad
     hidraw:
@@ -87,26 +81,14 @@ source_devices:
       interface_num: 2
 
   ## XInput - Connected 0x61eb (Go 2 PID)
-  # Touchpad
-  - group: mouse # Gamepad Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61eb
-      interface_num: 1
   # Gamepad
   - group: gamepad
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61eb
       interface_num: 2
-  
+
   ## DInput - Attached 0x6183 (Go PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6183
-      interface_num: 1
   # Gamepad
   - group: gamepad # Dinput report
     hidraw:
@@ -120,12 +102,6 @@ source_devices:
       interface_num: 2
 
   ## DInput - Attached 0x61ec (Go 2 PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61ec
-      interface_num: 1
   # Gamepad
   - group: gamepad # Dinput report
     hidraw:
@@ -139,12 +115,6 @@ source_devices:
       interface_num: 2
 
   ## DInput - Detached 0x6184 (Go PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6184
-      interface_num: 1
   # Gamepad
   - group: gamepad
     hidraw:
@@ -153,12 +123,6 @@ source_devices:
       interface_num: 2
 
   ## DInput - Detached 0x61ed (Go 2 PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61ed
-      interface_num: 1
   # Gamepad
   - group: gamepad
     hidraw:
