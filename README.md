@@ -8,7 +8,7 @@
   <a href="https://github.com/ShadowBlip/InputPlumber/stargazers"><img src="https://img.shields.io/github/stars/ShadowBlip/InputPlumber" /></a>
   <a href="https://github.com/ShadowBlip/InputPlumber/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ShadowBlip/InputPlumber" /></a>
   <a href="https://discord.gg/Ea9ABXhtkv"><img alt="Discord" src="https://img.shields.io/discord/721211671124770837?label=discord" /></a>
-  <a href="https://shadowblip.github.io/inputplumber"><img alt="Documentation" src="https://img.shields.io/badge/documentation-blue?logo=materialformkdocs&logoColor=white" /></a>
+  <a href="https://shadowblip.github.io/InputPlumber/"><img alt="Documentation" src="https://img.shields.io/badge/documentation-blue?logo=materialformkdocs&logoColor=white" /></a>
   <br>
 </p>
 
@@ -26,13 +26,35 @@ and translate their input to a variety of virtual device formats.
 - [x] Input mapping profiles to translate source input into the desired target input
 - [ ] Route input over the network
 
+## Install
+
+InputPlumber requires the following system dependencies:
+
+- `libevdev`
+- `libiio`
+
+To install from source, first visit the [release page](https://github.com/ShadowBlip/InputPlumber/releases) and download
+the `.tar.gz` package for your architecture.
+
+Once you have ensured your system dependencies are installed, you 
+can install InputPlumber from source with:
+
+```bash
+make build
+sudo make install
+```
+
+Then start the service with:
+
+```bash
+sudo systemctl enable inputplumber
+sudo systemctl start inputplumber
+```
+
 ## Documentation
 
 You can find more information about how to configure and use InputPlumber at
-the dedicated documentation here:
-
-https://shadowblip.github.io/inputplumber
-
+the dedicated [documentation page](https://shadowblip.github.io/InputPlumber/).
 
 ## License
 
