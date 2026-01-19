@@ -26,35 +26,15 @@ and translate their input to a variety of virtual device formats.
 - [x] Input mapping profiles to translate source input into the desired target input
 - [ ] Route input over the network
 
-## Install
-
-InputPlumber requires the following system dependencies:
-
-- `libevdev`
-- `libiio`
-
-To install from source, first visit the [release page](https://github.com/ShadowBlip/InputPlumber/releases) and download
-the `.tar.gz` package for your architecture.
-
-Once you have ensured your system dependencies are installed, you 
-can install InputPlumber from source with:
-
-```bash
-make build
-sudo make install
-```
-
-Then start the service with:
-
-```bash
-sudo systemctl enable inputplumber
-sudo systemctl start inputplumber
-```
-
 ## Documentation
 
-You can find more information about how to configure and use InputPlumber at
-the dedicated [documentation page](https://shadowblip.github.io/InputPlumber/).
+You can [read documentation](https://shadowblip.github.io/InputPlumber/) about how
+to configure and use InputPlumber here:
+
+- [Overview](https://shadowblip.github.io/InputPlumber/)
+- [Installation](https://shadowblip.github.io/InputPlumber/install/)
+- [Usage](https://shadowblip.github.io/InputPlumber/usage/)
+- [DBus API](https://shadowblip.github.io/InputPlumber/dbus-interface/composite_device/)
 
 ## License
 
