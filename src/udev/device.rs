@@ -427,6 +427,34 @@ impl UdevDevice {
         UdevDevice::from_devnode(base_path, name)
     }
 
+    /// Returns a UdevDevice object from the given syspath.
+    /// e.g. UdevDevice::from_syspath("/sys/firmware/devicetree/base");
+    pub fn from_syspath(path: &str) -> Self {
+        let path = PathBuf::from(path);
+        let device = match ::udev::Device::from_syspath(path.as_path()) {
+            Ok(dev) => dev,
+            Err(_) => return Default::default(),
+        };
+
+        Self {
+            devnode: device
+                .devnode()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            subsystem: device
+                .subsystem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            syspath: device.syspath().to_string_lossy().to_string(),
+            sysname: device.sysname().to_string_lossy().to_string(),
+            name: Some(device.name().to_string()),
+            vendor_id: None,
+            product_id: None,
+            bus_type: None,
+            properties: Default::default(),
+        }
+    }
+
     /// Returns a udev::Device from the stored syspath.
     pub fn get_device(&self) -> Result<::udev::Device, Box<dyn Error + Send + Sync>> {
         match ::udev::Device::from_syspath(Path::new(self.syspath.as_str())) {

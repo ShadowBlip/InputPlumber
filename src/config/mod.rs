@@ -193,6 +193,8 @@ pub struct CompositeDeviceConfigOptions {
 pub struct Match {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dmi_data: Option<DMIMatch>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub udev: Option<Udev>,
 }
 
 /// Match DMI data for loading a [CompositeDevice]
@@ -904,6 +906,138 @@ impl CompositeDeviceConfig {
         for match_config in self.matches.clone() {
             let conf = match_config.clone();
             let mut has_matches = false;
+
+            if let Some(udev) = match_config.udev {
+                let Some(sys_path) = udev.sys_path else {
+                    log::warn!("Match using udev MUST define 'sys_path'");
+                    return None;
+                };
+
+                let device = UdevDevice::from_syspath(sys_path.as_str());
+
+                if let Some(subsystem_pattern) = udev.subsystem {
+                    let subsystem = device.subsystem();
+                    if !glob_match(&subsystem_pattern, &subsystem) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(driver_pattern) = udev.driver {
+                    let drivers = device.drivers();
+                    let mut has_matching_driver = false;
+                    for driver in drivers {
+                        if !glob_match(&driver_pattern, &driver) {
+                            continue;
+                        }
+                        has_matching_driver = true;
+                        break;
+                    }
+                    has_matches = has_matching_driver;
+                }
+
+                if let Some(sys_name_pattern) = udev.sys_name {
+                    let sys_name = device.sysname();
+                    if !glob_match(&sys_name_pattern, &sys_name) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(dev_node_pattern) = udev.dev_node {
+                    let dev_node = device.devnode();
+                    if !glob_match(&dev_node_pattern, &dev_node) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(dev_path_pattern) = udev.dev_path {
+                    let dev_path = device.devpath();
+                    if !glob_match(&dev_path_pattern, &dev_path) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(vendor_id_pattern) = udev.vendor_id {
+                    let vendor_id = device.id_vendor().to_string();
+                    if !glob_match(&vendor_id_pattern, &vendor_id) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(product_id_pattern) = udev.product_id {
+                    let product_id = device.id_product().to_string();
+                    if !glob_match(&product_id_pattern, &product_id) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(iface_num_pattern) = udev.interface_number {
+                    let iface_num = device.interface_number().to_string();
+                    if !glob_match(&iface_num_pattern, &iface_num) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(attribute_patterns) = udev.attributes {
+                    let attributes = device.get_attributes();
+                    let mut all_attributes_match = true;
+
+                    // All attribute patterns in the config must match
+                    for attr_pattern in attribute_patterns {
+                        let attr_name = attr_pattern.name;
+                        let Some(attr_value) = attributes.get(&attr_name) else {
+                            // If the attribute was not found, this is not a match
+                            all_attributes_match = false;
+                            break;
+                        };
+
+                        let Some(value_pattern) = attr_pattern.value else {
+                            // If no value was given, then assume '**' pattern
+                            continue;
+                        };
+
+                        if !glob_match(&value_pattern, attr_value) {
+                            all_attributes_match = false;
+                            break;
+                        }
+                    }
+
+                    has_matches = all_attributes_match;
+                }
+
+                if let Some(property_patterns) = udev.properties {
+                    let properties = device.get_properties();
+                    let mut all_properties_match = true;
+
+                    // All property patterns in the config must match
+                    for prop_pattern in property_patterns {
+                        let prop_name = prop_pattern.name;
+                        let Some(prop_value) = properties.get(&prop_name) else {
+                            // If the attribute was not found, this is not a match
+                            all_properties_match = false;
+                            break;
+                        };
+
+                        let Some(value_pattern) = prop_pattern.value else {
+                            // If no value was given, then assume '**' pattern
+                            continue;
+                        };
+
+                        if !glob_match(&value_pattern, prop_value) {
+                            all_properties_match = false;
+                            break;
+                        }
+                    }
+
+                    has_matches = all_properties_match;
+                }
+            }
 
             if let Some(dmi_config) = match_config.dmi_data {
                 if let Some(cpu_vendor) = dmi_config.cpu_vendor {
