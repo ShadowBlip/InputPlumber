@@ -106,6 +106,9 @@
       "properties": {
         "dmi_data": {
           "$ref": "#/definitions/DMIMatch"
+        },
+        "udev": {
+          "$ref": "#/definitions/Udev"
         }
       },
       "title": "Match"
