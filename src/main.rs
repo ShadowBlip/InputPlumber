@@ -43,6 +43,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     log::info!("Starting InputPlumber v{}", VERSION);
 
+    // Unhide any devices previously hidden by InputPlumber. This can happen
+    // if InputPlumber is killed before it can restore the devices.
+    if let Err(e) = unhide_all().await {
+        log::debug!("Failed to unhide devices at startup: {e}");
+    }
+
     // Configure the DBus connection
     let connection = Connection::system().await?;
 
