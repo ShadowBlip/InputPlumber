@@ -1,11 +1,12 @@
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendTimeoutError;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::{channel, error::SendError, Sender};
 
-use crate::config::CompositeDeviceConfig;
+use crate::config::{CompositeDeviceConfig, DeviceProfile};
 use crate::input::event::native::NativeEvent;
 use crate::input::info::DeviceInfo;
 use crate::input::output_capability::OutputCapability;
@@ -340,11 +341,15 @@ impl CompositeDeviceClient {
         Err(ClientError::ChannelClosed)
     }
 
-    /// Load the device profile from the given path
-    pub async fn load_profile_path(&self, path: String) -> Result<(), ClientError> {
+    /// Load the device profile
+    pub async fn load_profile(
+        &self,
+        profile: DeviceProfile,
+        path: Option<PathBuf>,
+    ) -> Result<(), ClientError> {
         let (tx, rx) = channel(1);
         self.tx
-            .send(CompositeCommand::LoadProfilePath(path, tx))
+            .send(CompositeCommand::LoadProfile(profile, path, tx))
             .await?;
         if let Some(result) = Self::recv(rx).await {
             return match result {

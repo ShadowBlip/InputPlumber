@@ -113,9 +113,9 @@
     </defaults>
   </action>
 
-  <action id="org.shadowblip.Input.CompositeDevice.LoadProfilePath">
-    <description>Load the device profile from the given path</description>
-    <message>Authorization required to load device profile from a specified path.</message>
+  <action id="org.shadowblip.Input.CompositeDevice.LoadProfile">
+    <description>Load the device profile from the given file descriptor</description>
+    <message>Authorization required to load device profile.</message>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>auth_admin</allow_inactive>

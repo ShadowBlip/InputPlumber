@@ -3,11 +3,17 @@ pub mod capability_map;
 pub mod config_test;
 pub mod path;
 
-use std::io::{self, Read};
+use std::{
+    fs::File,
+    io::{self, Read},
+    os::fd::OwnedFd,
+    path::Path,
+};
 
 use ::procfs::CpuInfo;
 use capability_map::CapabilityConfig;
 use glob_match::glob_match;
+use nix::fcntl::{fcntl, FcntlArg, OFlag};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -30,6 +36,8 @@ pub enum LoadError {
     DeserializeError(#[from] serde_yaml::Error),
     #[error("Config too large, reached maximum size of {0} bytes")]
     MaximumSizeReached(usize),
+    #[error("Operation failed: {0}")]
+    Os(#[from] nix::errno::Errno),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -46,16 +54,30 @@ pub struct DeviceProfile {
 }
 
 impl DeviceProfile {
-    /// Load a [CapabilityProfile] from the given YAML string
+    /// Load a [DeviceProfile] from the given YAML string
     pub fn from_yaml(content: String) -> Result<DeviceProfile, LoadError> {
         let device: DeviceProfile = serde_yaml::from_str(content.as_str())?;
         Ok(device)
     }
 
-    /// Load a [CapabilityProfile] from the given YAML file
-    pub fn from_yaml_file(path: String) -> Result<DeviceProfile, LoadError> {
-        let file = std::fs::File::open(path)?;
+    /// Load a [DeviceProfile] from the given YAML file descriptor
+    pub fn from_yaml_fd(fd: OwnedFd) -> Result<Self, LoadError> {
+        validate_fd_flags(&fd)?;
+        let file = File::from(fd);
+        Self::from_yaml_file(file)
+    }
 
+    /// Load a [DeviceProfile] from the given YAML file path
+    pub fn from_yaml_path<P>(path: P) -> Result<Self, LoadError>
+    where
+        P: AsRef<Path>,
+    {
+        let file = File::open(path)?;
+        Self::from_yaml_file(file)
+    }
+
+    /// Load a [DeviceProfile] from the given YAML file
+    pub fn from_yaml_file(file: File) -> Result<DeviceProfile, LoadError> {
         // Read up to a defined maximum size to prevent denial of service
         const MAX_SIZE: usize = 512 * 1024;
         let mut reader = file.take(MAX_SIZE as u64);
@@ -466,16 +488,30 @@ pub struct CompositeDeviceConfig {
 }
 
 impl CompositeDeviceConfig {
-    /// Load a [CompositeDevice] from the given YAML string
-    pub fn from_yaml(content: String) -> Result<CompositeDeviceConfig, LoadError> {
+    /// Load a [CompositeDeviceConfig] from the given YAML string
+    pub fn from_yaml(content: String) -> Result<Self, LoadError> {
         let device: CompositeDeviceConfig = serde_yaml::from_str(content.as_str())?;
         Ok(device)
     }
 
-    /// Load a [CompositeDevice] from the given YAML file
-    pub fn from_yaml_file(path: String) -> Result<CompositeDeviceConfig, LoadError> {
-        let file = std::fs::File::open(path)?;
+    /// Load a [CompositeDeviceConfig] from the given YAML file descriptor
+    pub fn from_yaml_fd(fd: OwnedFd) -> Result<Self, LoadError> {
+        validate_fd_flags(&fd)?;
+        let file = File::from(fd);
+        Self::from_yaml_file(file)
+    }
 
+    /// Load a [CompositeDeviceConfig] from the given YAML file path
+    pub fn from_yaml_path<P>(path: P) -> Result<Self, LoadError>
+    where
+        P: AsRef<Path>,
+    {
+        let file = File::open(path)?;
+        Self::from_yaml_file(file)
+    }
+
+    /// Load a [CompositeDeviceConfig] from the given YAML file
+    pub fn from_yaml_file(file: File) -> Result<Self, LoadError> {
         // Read up to a defined maximum size to prevent denial of service
         const MAX_SIZE: usize = 512 * 1024;
         let mut reader = file.take(MAX_SIZE as u64);
@@ -986,4 +1022,18 @@ impl CompositeDeviceConfig {
 
         Some(matches)
     }
+}
+
+/// Ensures the given file descriptor has valid flags set
+fn validate_fd_flags(fd: &OwnedFd) -> Result<(), LoadError> {
+    // Validate the flags for the fd
+    let flags = fcntl(&fd, FcntlArg::F_GETFL)?;
+    let Some(flags) = OFlag::from_bits(flags) else {
+        return Err(LoadError::Os(nix::errno::Errno::EIO));
+    };
+    if flags.contains(OFlag::O_PATH) {
+        return Err(LoadError::Os(nix::errno::Errno::EIO));
+    }
+
+    Ok(())
 }

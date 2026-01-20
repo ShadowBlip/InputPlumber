@@ -1,5 +1,7 @@
 use std::error::Error;
 use std::fmt::Display;
+use std::fs::File;
+use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 
 use clap::builder::PossibleValuesParser;
@@ -232,7 +234,9 @@ pub async fn handle_device(
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string();
-                if let Err(e) = device.load_profile_path(abs_path).await {
+                let file = File::open(abs_path)?;
+                let fd = OwnedFd::from(file);
+                if let Err(e) = device.load_profile(fd.into()).await {
                     return Err(format!("Failed to load input profile {path}: {e:?}").into());
                 }
                 println!("Successfully loaded profile: {path}");
