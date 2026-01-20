@@ -17,6 +17,14 @@ any other supported input event. Input profiles are defined as YAML configuratio
 files that can be loaded on-demand for any device that InputPlumber manages. The
 format of an input profile config is defined by the [Device Profile Schema](https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/device_profile_v1.json) to make it easier to create profiles.
 
+```mermaid
+sequenceDiagram
+  autonumber
+  Composite Device->>Profile: Input Event
+  Profile->>Composite Device: Translated Event
+  Composite Device->>Target Device: Route to target device
+```
+
 Typically input profiles should be generated using an external tool, but you
 can manually create your own profiles using any text editor. If you use an editor
 that supports the [YAML Language Server](https://github.com/redhat-developer/yaml-language-server)
@@ -63,6 +71,15 @@ to stop input from reaching other running applications (like a game),
 allowing the overlay to process inputs without those inputs leaking into other
 running apps.
 
+```mermaid
+sequenceDiagram
+  autonumber
+  Composite Device->>Composite Device: Intercept Mode ALL
+  Composite Device->>Target Device: Input Event
+  Target Device-->Game: Input Blocked
+  Target Device->>Overlay App: DBus Event
+```
+
 You can set the intercept mode by setting the `InterceptMode` property on the
 input device you want to intercept input from. The intercept mode can be one
 of three values:
@@ -101,7 +118,18 @@ busctl call org.shadowblip.InputPlumber \
 One feature of InputPlumber is the ability to combine multiple input devices
 together into a single logical input device called a "Composite Device". This is
 often required for many handheld gaming PCs that have built-in gamepads with
-special non-standard buttons that show up as multiple independent input devices.
+special non-standard buttons that show up as multiple independent input devices,
+like a gamepad and a keyboard.
+
+```mermaid
+graph LR
+  A["Xbox Gamepad (event0)"] --> C{Composite Device};
+  B["Keyboard (event1)"] --> C{Composite Device};
+  C --> D["DualSense Gamepad"];
+  C --> F["Mouse"];
+  C --> G["Keyboard"];
+```
+
 
 Composite devices are defined as YAML configuration files that follow the
 [Composite Device Schema](https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json)
@@ -109,6 +137,15 @@ to combine the defined input devices together. When InputPlumber starts up, it
 looks at all the input devices on the system and checks to see if they match a
 composite device configuration. If they do, the input devices are combined into
 a single logical composite device.
+
+```mermaid
+graph LR
+  A["Device Added"] --> B["InputPlumber"];
+  B --> C["Read Config"];
+  C --> D{"Device matches config?"};
+  D -->|No| C;
+  D -->|Yes| F["Create Composite Device"];
+```
 
 A composite device configuration looks like this:
 
