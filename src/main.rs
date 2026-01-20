@@ -2,6 +2,7 @@ use clap::Parser;
 use std::env;
 use std::error::Error;
 use std::process;
+use tokio::signal::unix::SignalKind;
 use zbus::fdo::ObjectManager;
 use zbus::Connection;
 
@@ -60,57 +61,48 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .at(object_manager_path, object_manager)
         .await?;
 
+    // Request the named bus
+    if let Err(err) = connection.request_name(BUS_NAME).await {
+        log::error!("Error requesting dbus name: {err}");
+        process::exit(-1);
+    }
+
     // Create an InputManager instance
     let mut input_manager = Manager::new(connection.clone());
 
-    let (ctrl_c_result, input_man_result, request_name_result) = tokio::join!(
-        // Setup CTRL+C handler
-        tokio::spawn(async move {
-            tokio::signal::ctrl_c().await.unwrap();
-            log::info!("Un-hiding all devices");
-            if let Err(e) = unhide_all().await {
-                log::error!("Unable to un-hide devices: {:?}", e);
-            }
-            log::info!("Shutting down");
-            process::exit(0);
-        }),
-        // Start the input manager and listen on DBus
-        input_manager.run(),
-        // Request the named bus
-        connection.request_name(BUS_NAME)
-    );
+    // Setup signal handlers
+    let mut sig_term = tokio::signal::unix::signal(SignalKind::terminate())?;
+    let mut sig_int = tokio::signal::unix::signal(SignalKind::interrupt())?;
 
-    match ctrl_c_result {
-        Ok(_) => {
-            log::info!("The input manager task has exited");
-        }
-        Err(err) => {
-            log::error!("Error in joining ctrl+C watcher: {err}");
-            return Err(Box::new(err) as Box<dyn Error>);
+    // Start the main run loop
+    let mut exit_code = 0;
+    tokio::select! {
+        // Start the input manager and listen on DBus
+        result = input_manager.run() => {
+            if let Err(err) = result {
+                log::error!("Error running input manager: {err}");
+                exit_code = -1;
+            }
+        },
+        // Setup CTRL+C handler
+        _ = tokio::signal::ctrl_c() => {
+            log::info!("Received CTRL+C. Shutting down.");
+        },
+        // Setup SIGINT handler
+        _ = sig_int.recv() => {
+            log::info!("Received SIGINT. Shutting down.");
+        },
+        // Setup SIGTERM handler
+        _ = sig_term.recv() => {
+            log::info!("Received SIGTERM. Shutting down.");
         }
     }
 
-    match request_name_result {
-        Ok(_) => {
-            log::info!("The input manager task has exited");
-        }
-        Err(err) => {
-            log::error!("Error in joining dbus request name operation: {err}");
-            return Err(Box::new(err));
-        }
-    };
-
-    match input_man_result {
-        Ok(_) => {
-            log::info!("The input manager task has exited");
-        }
-        Err(err) => {
-            log::error!("Error in joining ctrl+C watcher: {err}");
-            return Err(err);
-        }
-    };
+    // Unhide all devices on shutdown
+    if let Err(e) = unhide_all().await {
+        log::error!("Unable to un-hide devices: {:?}", e);
+    }
 
     log::info!("InputPlumber stopped");
-
-    Ok(())
+    process::exit(exit_code);
 }
