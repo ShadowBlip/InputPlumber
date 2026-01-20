@@ -83,16 +83,6 @@
     </defaults>
   </action>
 
-  <action id="org.shadowblip.Input.CompositeDevice.SetInterceptMode">
-    <description>Set the intercept mode of the composite device</description>
-    <message>Authorization required to write intercept mode to the composite device.</message>
-    <defaults>
-      <allow_any>no</allow_any>
-      <allow_inactive>auth_admin</allow_inactive>
-      <allow_active>auth_admin</allow_active>
-    </defaults>
-  </action>
-
   <action id="org.shadowblip.Input.CompositeDevice.TargetCapabilities">
     <description>List of capabilities that all target devices implement</description>
     <message>Authorization required to read target device capabilities of the composite device.</message>
