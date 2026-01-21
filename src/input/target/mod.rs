@@ -802,7 +802,7 @@ impl TargetDevice {
                 };
                 let device = DualSenseDevice::new(hw)?;
                 let options = TargetDriverOptions {
-                    poll_rate: Duration::from_millis(1),
+                    poll_rate: Duration::from_millis(4),
                     buffer_size: 2048,
                 };
                 let driver = TargetDriver::new_with_options(id, device, dbus, options);

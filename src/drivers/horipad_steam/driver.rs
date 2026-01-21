@@ -295,9 +295,9 @@ impl Driver {
             },
         )));
         events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-            x: -state.gyro_x.to_primitive(),
-            y: state.gyro_y.to_primitive(),
-            z: -state.gyro_z.to_primitive(),
+            x: -state.pitch.to_primitive(),
+            y: state.yaw.to_primitive(),
+            z: -state.roll.to_primitive(),
         })));
 
         log::trace!("Got events: {events:?}");

@@ -34,8 +34,10 @@ use crate::{
         composite_device::client::CompositeDeviceClient,
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
-            value::InputValue,
-            value::{denormalize_signed_value_u8, denormalize_unsigned_value_u8},
+            value::{
+                denormalize_signed_value_u8, denormalize_unsigned_value_u16,
+                denormalize_unsigned_value_u8, InputValue,
+            },
         },
         output_capability::{OutputCapability, LED},
         output_event::OutputEvent,
@@ -118,6 +120,8 @@ pub struct DualSenseDevice {
     device: UHIDDevice<File>,
     state: PackedInputDataReport,
     timestamp: u8,
+    sensor_timestamp: u32,
+    context: u8,
     hardware: DualSenseHardware,
     queued_events: Vec<ScheduledNativeEvent>,
 }
@@ -128,7 +132,9 @@ impl DualSenseDevice {
         Ok(Self {
             device,
             state: PackedInputDataReport::Usb(USBPackedInputDataReport::new()),
-            timestamp: 0,
+            timestamp: Default::default(),
+            sensor_timestamp: Default::default(),
+            context: Default::default(),
             hardware,
             queued_events: Vec::new(),
         })
@@ -217,9 +223,6 @@ impl DualSenseDevice {
         let capability = event.as_capability();
         let state = self.state.state_mut();
         match capability {
-            Capability::None => (),
-            Capability::NotImplemented => (),
-            Capability::Sync => (),
             Capability::Gamepad(gamepad) => match gamepad {
                 Gamepad::Button(btn) => match btn {
                     GamepadButton::South => state.cross = event.pressed(),
@@ -229,7 +232,11 @@ impl DualSenseDevice {
                     GamepadButton::Start => state.options = event.pressed(),
                     GamepadButton::Select => state.create = event.pressed(),
                     GamepadButton::Guide => state.ps = event.pressed(),
-                    GamepadButton::QuickAccess => (),
+                    // TODO: Remove these once we add target device profiles
+                    GamepadButton::QuickAccess => {
+                        state.ps = event.pressed();
+                        state.cross = event.pressed();
+                    }
                     GamepadButton::DPadUp => match state.dpad {
                         Direction::North => {
                             if !event.pressed() {
@@ -517,9 +524,7 @@ impl DualSenseDevice {
                             }
                         }
                     }
-                    GamepadAxis::Hat1 => (),
-                    GamepadAxis::Hat2 => (),
-                    GamepadAxis::Hat3 => (),
+                    _ => (),
                 },
                 Gamepad::Trigger(trigger) => match trigger {
                     GamepadTrigger::LeftTrigger => {
@@ -555,80 +560,97 @@ impl DualSenseDevice {
                 Gamepad::Gyro => {
                     if let InputValue::Vector3 { x, y, z } = value {
                         if let Some(x) = x {
-                            state.gyro_x = Integer::from_primitive(denormalize_gyro_value(x));
+                            state.pitch = Integer::from_primitive(denormalize_gyro_value(x));
                         }
                         if let Some(y) = y {
-                            state.gyro_y = Integer::from_primitive(denormalize_gyro_value(y))
+                            state.yaw = Integer::from_primitive(denormalize_gyro_value(y))
                         }
                         if let Some(z) = z {
-                            state.gyro_z = Integer::from_primitive(denormalize_gyro_value(z))
+                            state.roll = Integer::from_primitive(denormalize_gyro_value(z))
                         }
                     }
                 }
-                Gamepad::Dial(_) => (),
+                _ => (),
             },
-            Capability::Touchpad(touch) => {
-                match touch {
-                    Touchpad::CenterPad(touch_event) => {
-                        match touch_event {
-                            Touch::Motion => {
-                                if let InputValue::Touch {
-                                    index,
-                                    is_touching,
-                                    pressure: _,
-                                    x,
-                                    y,
-                                } = value
-                                {
-                                    // Check to see if this is the start of any touch
-                                    let was_touching = state.touch_data.has_touches();
+            //TODO: Remove RightPad when we add target profiles
+            Capability::Touchpad(Touchpad::CenterPad(touch_event))
+            | Capability::Touchpad(Touchpad::RightPad(touch_event)) => {
+                match touch_event {
+                    Touch::Motion => {
+                        if let InputValue::Touch {
+                            index,
+                            is_touching,
+                            pressure: _,
+                            x,
+                            y,
+                        } = value
+                        {
+                            // Check to see if this is the start of any touch
+                            let was_touching = state.touch_data.has_touches();
 
-                                    let idx = index as usize;
-                                    // TouchData has an array size of 2, ignore more than 2 touch events.
-                                    if idx > 1 {
-                                        return;
-                                    }
-                                    if let Some(x) = x {
-                                        state.touch_data.touch_finger_data[idx]
-                                            .set_x(denormalize_touch_value(x, DS5_TOUCHPAD_WIDTH));
-                                    }
-                                    if let Some(y) = y {
-                                        state.touch_data.touch_finger_data[idx]
-                                            .set_y(denormalize_touch_value(y, DS5_TOUCHPAD_HEIGHT));
-                                    }
-
-                                    if is_touching {
-                                        state.touch_data.touch_finger_data[idx].context = 127;
-                                    } else {
-                                        state.touch_data.touch_finger_data[idx].context = 128;
-                                    }
-
-                                    // Reset the timestamp back to zero when all touches
-                                    // have completed
-                                    let now_touching = state.touch_data.has_touches();
-                                    if was_touching && !now_touching {
-                                        self.timestamp = 0;
-                                    }
-                                }
+                            let idx = index as usize;
+                            // TouchData has an array size of 2, ignore more than 2 touch events.
+                            if idx > 1 {
+                                return;
                             }
-                            Touch::Button(button) => match button {
-                                TouchButton::Touch => (),
-                                TouchButton::Press => state.touchpad = event.pressed(),
-                            },
+
+                            if let Some(x) = x {
+                                state.touch_data.touch_finger_data[idx]
+                                    .set_x(denormalize_unsigned_value_u16(x, DS5_TOUCHPAD_WIDTH));
+                            }
+                            if let Some(y) = y {
+                                state.touch_data.touch_finger_data[idx]
+                                    .set_y(denormalize_unsigned_value_u16(y, DS5_TOUCHPAD_HEIGHT));
+                            }
+
+                            if is_touching {
+                                state.touch_data.touch_finger_data[idx].context = self.context;
+                            }
+
+                            // Clean up the touch when all touches have completed
+                            if was_touching && !is_touching {
+                                self.context += 1;
+                                if self.context == 128 {
+                                    self.context = 0
+                                }
+                                state.touch_data.touch_finger_data[idx].context =
+                                    self.context + 128;
+                            }
                         }
                     }
-                    // Not supported
-                    Touchpad::RightPad(_) => {}
-
-                    Touchpad::LeftPad(_) => {}
+                    Touch::Button(button) => match button {
+                        TouchButton::Touch => (),
+                        TouchButton::Press => state.touchpad = event.pressed(),
+                    },
                 }
             }
-            Capability::Mouse(_) => (),
-            Capability::Keyboard(_) => (),
-            Capability::DBus(_) => (),
-            Capability::Touchscreen(_) => (),
-            Capability::Gyroscope(_) => (),
-            Capability::Accelerometer(_) => (),
+            Capability::Gyroscope(_) => {
+                if let InputValue::Vector3 { x, y, z } = value {
+                    if let Some(x) = x {
+                        state.pitch = Integer::from_primitive(x as i16);
+                    }
+                    if let Some(y) = y {
+                        state.yaw = Integer::from_primitive(y as i16);
+                    }
+                    if let Some(z) = z {
+                        state.roll = Integer::from_primitive(z as i16);
+                    }
+                }
+            }
+            Capability::Accelerometer(_) => {
+                if let InputValue::Vector3 { x, y, z } = value {
+                    if let Some(x) = x {
+                        state.accel_x = Integer::from_primitive(x as i16);
+                    }
+                    if let Some(y) = y {
+                        state.accel_y = Integer::from_primitive(y as i16);
+                    }
+                    if let Some(z) = z {
+                        state.accel_z = Integer::from_primitive(z as i16);
+                    }
+                }
+            }
+            _ => (),
         };
     }
 
@@ -931,9 +953,13 @@ impl TargetInputDevice for DualSenseDevice {
 
         // Check if the timestamp needs to be updated
         if self.state.state().touch_data.has_touches() {
-            self.timestamp = self.timestamp.wrapping_add(3); // TODO: num?
+            self.timestamp = self.timestamp.wrapping_add(3);
             self.state.state_mut().touch_data.timestamp = self.timestamp;
         }
+
+        // Update the gyro timestamp
+        self.sensor_timestamp = self.sensor_timestamp.wrapping_add(3);
+        self.state.state_mut().sensor_timestamp = self.sensor_timestamp.into();
 
         Ok(())
     }
@@ -972,6 +998,9 @@ impl TargetInputDevice for DualSenseDevice {
             Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Touch))),
             Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
+            Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
+            Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Touch))),
+            Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
         ])
     }
 
@@ -1134,12 +1163,6 @@ impl Debug for DualSenseDevice {
             .field("hardware", &self.hardware)
             .finish()
     }
-}
-
-/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
-/// the maximum axis range.
-fn denormalize_touch_value(normal_value: f64, max: f64) -> u16 {
-    (normal_value * max).round() as u16
 }
 
 /// De-normalizes the given value in meters per second into a real value that

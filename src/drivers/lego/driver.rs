@@ -517,8 +517,8 @@ impl Driver {
 
                 // If this is the first event of a new touch, log the time.
                 if !self.touch_started {
-                    log::debug!("START Touch");
-                    log::debug!("Last touch elapsed: {:?}", self.last_touch.elapsed());
+                    log::trace!("START Touch");
+                    log::trace!("Last touch elapsed: {:?}", self.last_touch.elapsed());
 
                     self.touch_started = true;
                     self.first_touch = Instant::now();
@@ -530,7 +530,7 @@ impl Driver {
             {
                 // Handle double click
                 if self.is_clicked && self.first_touch.elapsed() < RELEASE_DELAY {
-                    log::debug!("Double Click");
+                    log::trace!("Double Click");
                     let mut new_events = self.release_click();
                     events.append(&mut new_events);
                 }
@@ -547,7 +547,7 @@ impl Driver {
                 // Clear this touch sequence
                 if self.touch_started {
                     self.touch_started = false;
-                    log::debug!("END Touch");
+                    log::trace!("END Touch");
                 }
             }
 
@@ -565,12 +565,12 @@ impl Driver {
 
     fn start_click(&mut self) -> Vec<Event> {
         if self.is_clicked {
-            log::debug!("Rejecting extra click");
+            log::trace!("Rejecting extra click");
             return vec![];
         }
-        log::debug!("Started CLICK event.");
-        log::debug!("First touch elapsed: {:?}", self.first_touch.elapsed());
-        log::debug!("Last touch elapsed: {:?}", self.last_touch.elapsed());
+        log::trace!("Started CLICK event.");
+        log::trace!("First touch elapsed: {:?}", self.first_touch.elapsed());
+        log::trace!("Last touch elapsed: {:?}", self.last_touch.elapsed());
         self.is_clicked = true;
         let mut events = Vec::new();
 
@@ -587,9 +587,9 @@ impl Driver {
     }
 
     fn release_click(&mut self) -> Vec<Event> {
-        log::debug!("Released CLICK event.");
-        log::debug!("First touch elapsed: {:?}", self.first_touch.elapsed());
-        log::debug!("Last touch elapsed: {:?}", self.last_touch.elapsed());
+        log::trace!("Released CLICK event.");
+        log::trace!("First touch elapsed: {:?}", self.first_touch.elapsed());
+        log::trace!("Last touch elapsed: {:?}", self.last_touch.elapsed());
         self.is_clicked = false;
         self.touch_started = false;
         let mut events = Vec::new();

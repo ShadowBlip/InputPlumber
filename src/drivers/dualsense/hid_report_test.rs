@@ -18,7 +18,7 @@ async fn test_ds_hid() -> Result<(), Box<dyn Error>> {
         report.touch_data.touch_finger_data[0]
             .pack_to_vec()
             .unwrap(),
-        vec![0x80, 0x7F, 0xC7, 0x42]
+        vec![0xE4, 0x7F, 0xC7, 0x42]
     );
 
     Ok(())

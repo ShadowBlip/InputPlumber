@@ -377,14 +377,13 @@ fn translate_event(event: dualsense::event::Event) -> NativeEvent {
 fn normalize_axis_value(event: &dualsense::event::AxisEvent) -> InputValue {
     match event {
         dualsense::event::AxisEvent::Pad(value) => {
-            let min = 0.0;
             let max = dualsense::driver::DS5_TOUCHPAD_WIDTH;
-            let x = normalize_signed_value(value.x as f64, min, max);
+
+            let x = normalize_unsigned_value(value.x as f64, max);
             let x = Some(x);
 
-            let min = 0.0;
             let max = dualsense::driver::DS5_TOUCHPAD_HEIGHT;
-            let y = normalize_signed_value(value.y as f64, min, max);
+            let y = normalize_unsigned_value(value.y as f64, max);
             let y = Some(y);
 
             InputValue::Touch {

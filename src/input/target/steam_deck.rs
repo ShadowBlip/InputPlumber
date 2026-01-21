@@ -556,10 +556,6 @@ impl SteamDeckDevice {
         let value = event.get_value();
         let capability = event.as_capability();
         match capability {
-            Capability::None => (),
-            Capability::NotImplemented => (),
-            Capability::Sync => (),
-            Capability::DBus(_) => (),
             Capability::Gamepad(gamepad) => match gamepad {
                 Gamepad::Button(btn) => match btn {
                     GamepadButton::South => self.state.a = event.pressed(),
@@ -586,8 +582,34 @@ impl SteamDeckDevice {
                     GamepadButton::RightPaddle2 => self.state.r5 = event.pressed(),
                     GamepadButton::RightStick => self.state.r3 = event.pressed(),
                     GamepadButton::RightStickTouch => self.state.r_stick_touch = event.pressed(),
-                    GamepadButton::LeftPaddle3 => (),
-                    GamepadButton::RightPaddle3 => (),
+                    // TODO: Remove this once we add target device profiles
+                    GamepadButton::Screenshot => {
+                        let pressed = event.pressed();
+                        let guide = NativeEvent::new(
+                            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+                            event.get_value(),
+                        );
+                        let bumpr = NativeEvent::new(
+                            Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+                            event.get_value(),
+                        );
+
+                        let (guide, bumpr) = if pressed {
+                            let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
+                            let bumpr =
+                                ScheduledNativeEvent::new(bumpr, Duration::from_millis(160));
+                            (guide, bumpr)
+                        } else {
+                            let guide =
+                                ScheduledNativeEvent::new(guide, Duration::from_millis(240));
+                            let bumpr =
+                                ScheduledNativeEvent::new(bumpr, Duration::from_millis(160));
+                            (guide, bumpr)
+                        };
+
+                        self.queued_events.push(guide);
+                        self.queued_events.push(bumpr);
+                    }
                     _ => (),
                 },
                 Gamepad::Axis(axis) => match axis {
@@ -657,9 +679,7 @@ impl SteamDeckDevice {
                             }
                         }
                     }
-                    GamepadAxis::Hat1 => (),
-                    GamepadAxis::Hat2 => (),
-                    GamepadAxis::Hat3 => (),
+                    _ => (),
                 },
                 Gamepad::Trigger(trigger) => match trigger {
                     GamepadTrigger::LeftTrigger => {
@@ -727,10 +747,8 @@ impl SteamDeckDevice {
                         }
                     }
                 }
-                Gamepad::Dial(_) => (),
+                _ => (),
             },
-            Capability::Mouse(_) => (),
-            Capability::Keyboard(_) => (),
             Capability::Touchpad(touch) => match touch {
                 Touchpad::LeftPad(touch_event) => match touch_event {
                     Touch::Motion => {
@@ -760,40 +778,67 @@ impl SteamDeckDevice {
                         TouchButton::Press => self.state.l_pad_press = event.pressed(),
                     },
                 },
-                Touchpad::RightPad(touch_event) => match touch_event {
-                    Touch::Motion => {
-                        if let InputValue::Touch {
-                            index: _,
-                            is_touching,
-                            pressure: _,
-                            x,
-                            y,
-                        } = value
-                        {
-                            self.state.r_pad_touch = is_touching;
-                            if let Some(x) = x {
-                                let value =
-                                    denormalize_unsigned_to_signed_value(x, PAD_X_MIN, PAD_X_MAX);
-                                self.state.r_pad_x = Integer::from_primitive(value);
-                            };
-                            if let Some(y) = y {
-                                let value =
-                                    denormalize_unsigned_to_signed_value(y, PAD_Y_MIN, PAD_Y_MAX);
-                                self.state.r_pad_y = Integer::from_primitive(value);
-                            };
+                //TODO:: Remove CenterPad after we implement Target Profiles
+                Touchpad::RightPad(touch_event) | Touchpad::CenterPad(touch_event) => {
+                    match touch_event {
+                        Touch::Motion => {
+                            if let InputValue::Touch {
+                                index: _,
+                                is_touching,
+                                pressure: _,
+                                x,
+                                y,
+                            } = value
+                            {
+                                self.state.r_pad_touch = is_touching;
+                                if let Some(x) = x {
+                                    let value = denormalize_unsigned_to_signed_value(
+                                        x, PAD_X_MIN, PAD_X_MAX,
+                                    );
+                                    self.state.r_pad_x = Integer::from_primitive(value);
+                                };
+                                if let Some(y) = y {
+                                    let value = denormalize_unsigned_to_signed_value(
+                                        y, PAD_Y_MIN, PAD_Y_MAX,
+                                    );
+                                    self.state.r_pad_y = Integer::from_primitive(value);
+                                };
+                            }
                         }
+                        Touch::Button(button) => match button {
+                            TouchButton::Touch => self.state.r_pad_touch = event.pressed(),
+                            TouchButton::Press => self.state.r_pad_press = event.pressed(),
+                        },
                     }
-                    Touch::Button(button) => match button {
-                        TouchButton::Touch => self.state.r_pad_touch = event.pressed(),
-                        TouchButton::Press => self.state.r_pad_press = event.pressed(),
-                    },
-                },
-                // Treat center pad as a right pad
-                Touchpad::CenterPad(_) => (),
+                }
             },
-            Capability::Touchscreen(_) => (),
-            Capability::Gyroscope(_) => (),
-            Capability::Accelerometer(_) => (),
+            Capability::Gyroscope(_) => {
+                if let InputValue::Vector3 { x, y, z } = value {
+                    if let Some(x) = x {
+                        self.state.pitch = Integer::from_primitive(x as i16);
+                    }
+                    if let Some(y) = y {
+                        self.state.yaw = Integer::from_primitive(y as i16);
+                    }
+                    if let Some(z) = z {
+                        self.state.roll = Integer::from_primitive(z as i16);
+                    }
+                }
+            }
+            Capability::Accelerometer(_) => {
+                if let InputValue::Vector3 { x, y, z } = value {
+                    if let Some(x) = x {
+                        self.state.accel_x = Integer::from_primitive(x as i16);
+                    }
+                    if let Some(y) = y {
+                        self.state.accel_y = Integer::from_primitive(y as i16);
+                    }
+                    if let Some(z) = z {
+                        self.state.accel_z = Integer::from_primitive(z as i16);
+                    }
+                }
+            }
+            _ => (),
         };
     }
 }
@@ -954,6 +999,7 @@ impl TargetInputDevice for SteamDeckDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
