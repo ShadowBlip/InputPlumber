@@ -1,5 +1,5 @@
 //! Emulates a Horipad Steam Controller as a target input device.
-use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File};
+use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
 
 use packed_struct::prelude::*;
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
@@ -80,9 +80,6 @@ impl HoripadSteamDevice {
         let value = event.get_value();
         let capability = event.as_capability();
         match capability {
-            Capability::None => (),
-            Capability::NotImplemented => (),
-            Capability::Sync => (),
             Capability::Gamepad(gamepad) => match gamepad {
                 Gamepad::Button(btn) => match btn {
                     GamepadButton::South => self.state.a = event.pressed(),
@@ -117,9 +114,36 @@ impl HoripadSteamDevice {
                     GamepadButton::RightPaddle2 => self.state.m2 = event.pressed(),
                     GamepadButton::RightStick => self.state.rs_click = event.pressed(),
                     GamepadButton::RightStickTouch => self.state.rs_touch = event.pressed(),
-                    GamepadButton::LeftPaddle3 => (),
-                    GamepadButton::RightPaddle3 => (),
-                    GamepadButton::Screenshot => (),
+                    // TODO: Remove this once we add target device profiles
+                    GamepadButton::Screenshot => {
+                        let pressed = event.pressed();
+                        let guide = NativeEvent::new(
+                            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+                            event.get_value(),
+                        );
+                        // triggers at 128 exactly
+                        let trigv = if pressed { 0.5 } else { 0.0 };
+                        let trigr = NativeEvent::new(
+                            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+                            InputValue::Float(trigv),
+                        );
+
+                        let (guide, trigr) = if pressed {
+                            let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
+                            let trigr =
+                                ScheduledNativeEvent::new(trigr, Duration::from_millis(160));
+                            (guide, trigr)
+                        } else {
+                            let guide =
+                                ScheduledNativeEvent::new(guide, Duration::from_millis(240));
+                            let trigr =
+                                ScheduledNativeEvent::new(trigr, Duration::from_millis(160));
+                            (guide, trigr)
+                        };
+
+                        self.queued_events.push(guide);
+                        self.queued_events.push(trigr);
+                    }
                     _ => (),
                 },
                 Gamepad::Axis(axis) => match axis {
@@ -193,9 +217,7 @@ impl HoripadSteamDevice {
                             }
                         }
                     }
-                    GamepadAxis::Hat1 => (),
-                    GamepadAxis::Hat2 => (),
-                    GamepadAxis::Hat3 => (),
+                    _ => (),
                 },
                 Gamepad::Trigger(trigger) => match trigger {
                     GamepadTrigger::LeftTrigger => {
@@ -233,25 +255,45 @@ impl HoripadSteamDevice {
                 Gamepad::Gyro => {
                     if let InputValue::Vector3 { x, y, z } = value {
                         if let Some(x) = x {
-                            self.state.gyro_x = Integer::from_primitive(denormalize_gyro_value(x));
+                            self.state.pitch = Integer::from_primitive(denormalize_gyro_value(x));
                         }
                         if let Some(y) = y {
-                            self.state.gyro_y = Integer::from_primitive(denormalize_gyro_value(y))
+                            self.state.yaw = Integer::from_primitive(denormalize_gyro_value(y))
                         }
                         if let Some(z) = z {
-                            self.state.gyro_z = Integer::from_primitive(denormalize_gyro_value(z))
+                            self.state.roll = Integer::from_primitive(denormalize_gyro_value(z))
                         }
                     }
                 }
-                Gamepad::Dial(_) => (),
+                _ => (),
             },
-            Capability::DBus(_) => (),
-            Capability::Mouse(_) => (),
-            Capability::Keyboard(_) => (),
-            Capability::Touchpad(_) => (),
-            Capability::Touchscreen(_) => (),
-            Capability::Gyroscope(_) => (),
-            Capability::Accelerometer(_) => (),
+            Capability::Gyroscope(_) => {
+                if let InputValue::Vector3 { x, y, z } = value {
+                    if let Some(x) = x {
+                        self.state.pitch = Integer::from_primitive(x as i16);
+                    }
+                    if let Some(y) = y {
+                        self.state.yaw = Integer::from_primitive(y as i16);
+                    }
+                    if let Some(z) = z {
+                        self.state.roll = Integer::from_primitive(z as i16);
+                    }
+                }
+            }
+            Capability::Accelerometer(_) => {
+                if let InputValue::Vector3 { x, y, z } = value {
+                    if let Some(x) = x {
+                        self.state.accel_x = Integer::from_primitive(x as i16);
+                    }
+                    if let Some(y) = y {
+                        self.state.accel_y = Integer::from_primitive(y as i16);
+                    }
+                    if let Some(z) = z {
+                        self.state.accel_z = Integer::from_primitive(z as i16);
+                    }
+                }
+            }
+            _ => (),
         };
     }
 
@@ -305,7 +347,7 @@ impl TargetInputDevice for HoripadSteamDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
-            //           Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),

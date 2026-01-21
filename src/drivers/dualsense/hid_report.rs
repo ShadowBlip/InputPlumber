@@ -148,11 +148,12 @@ pub struct TouchFingerData {
 impl Default for TouchFingerData {
     fn default() -> Self {
         Self {
-            context: 128,
-            x_lo: Default::default(),
-            y_lo: Default::default(),
-            x_hi: Default::default(),
-            y_hi: Default::default(),
+            // Copied from actual hardware
+            context: 228,
+            x_lo: 100,
+            y_lo: Integer::from_primitive(0),
+            x_hi: Integer::from_primitive(6),
+            y_hi: 8,
         }
     }
 }
@@ -277,11 +278,11 @@ pub struct InputState {
 
     // byte 15-26
     #[packed_field(bytes = "15..=16", endian = "lsb")]
-    pub gyro_x: Integer<i16, packed_bits::Bits<16>>, // Gyro
+    pub pitch: Integer<i16, packed_bits::Bits<16>>, // Gyro
     #[packed_field(bytes = "17..=18", endian = "lsb")]
-    pub gyro_y: Integer<i16, packed_bits::Bits<16>>,
+    pub yaw: Integer<i16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "19..=20", endian = "lsb")]
-    pub gyro_z: Integer<i16, packed_bits::Bits<16>>,
+    pub roll: Integer<i16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "21..=22", endian = "lsb")]
     pub accel_x: Integer<i16, packed_bits::Bits<16>>, // Accelerometer
     #[packed_field(bytes = "23..=24", endian = "lsb")]
@@ -392,9 +393,9 @@ impl Default for InputState {
             ps: Default::default(),
             _unkn_1: Default::default(),
             _unkn_counter: Default::default(),
-            gyro_x: Default::default(),
-            gyro_y: Default::default(),
-            gyro_z: Default::default(),
+            pitch: Default::default(),
+            yaw: Default::default(),
+            roll: Default::default(),
             accel_x: Default::default(),
             accel_y: Default::default(),
             accel_z: Default::default(),

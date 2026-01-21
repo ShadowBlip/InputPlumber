@@ -10,7 +10,9 @@ use evdev::{
 use evdev::{EventSummary, FFStatusCode, InputEvent, UInputCode};
 use nix::fcntl::{FcntlArg, OFlag};
 
-use crate::input::capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger};
+use crate::input::capability::{
+    Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Keyboard,
+};
 use crate::input::composite_device::client::CompositeDeviceClient;
 use crate::input::event::evdev::EvdevEvent;
 use crate::input::event::native::{NativeEvent, ScheduledNativeEvent};
@@ -157,6 +159,7 @@ impl TargetInputDevice for XboxEliteController {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
 
+        //TODO: Remove these once we add target device profiles
         // Check for QuickAccess, create chord for event.
         let cap = event.as_capability();
         if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
@@ -182,7 +185,14 @@ impl TargetInputDevice for XboxEliteController {
 
             self.queued_events.push(guide);
             self.queued_events.push(south);
-            log::trace!("Added QAM Chord to queued events!");
+            return Ok(());
+        }
+        // Check for Screenshot
+        if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)) {
+            let record =
+                NativeEvent::new(Capability::Keyboard(Keyboard::KeyRecord), event.get_value());
+            let evdev_events = self.translate_event(record);
+            self.device.emit(evdev_events.as_slice())?;
             return Ok(());
         }
 
