@@ -1,0 +1,12 @@
+polkit.addRule(function(action, subject) {
+  // Users in the 'inputplumber' group have access to all endpoints
+  if (
+    (action.id.indexOf("org.shadowblip.Input") == 0 ||
+      action.id.indexOf("org.shadowblip.Output") == 0) &&
+    (subject.isInGroup("inputplumber") || subject.isInGroup("wheel"))
+  ) {
+    polkit.log("action=" + action);
+    polkit.log("subject=" + subject);
+    return polkit.Result.YES;
+  }
+});

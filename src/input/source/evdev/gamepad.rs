@@ -1,5 +1,6 @@
 use std::fmt::Debug;
-use std::{collections::HashMap, error::Error, os::fd::AsRawFd};
+use std::os::fd::AsFd;
+use std::{collections::HashMap, error::Error};
 
 use evdev::{
     AbsInfo, AbsoluteAxisCode, Device, EventType, FFEffect, FFEffectData, FFEffectKind, FFReplay,
@@ -14,7 +15,7 @@ use crate::drivers::steam_deck::hid_report::{
     CommandType, PackedHapticReport, PackedRumbleReport, PadSide,
 };
 use crate::input::event::evdev::translator::EventTranslator;
-use crate::input::output_capability::{OutputCapability, LED};
+use crate::input::output_capability::{Haptic, OutputCapability, LED};
 use crate::{
     drivers::dualsense::hid_report::SetStatePackedOutputData,
     input::{
@@ -51,8 +52,8 @@ impl GamepadEventDevice {
         // Set the device to do non-blocking reads
         // TODO: use epoll to wake up when data is available
         // https://github.com/emberian/evdev/blob/main/examples/evtest_nonblocking.rs
-        let raw_fd = device.as_raw_fd();
-        nix::fcntl::fcntl(raw_fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
+        let fd = device.as_fd();
+        nix::fcntl::fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
 
         // Query information about the device to get the absolute ranges
         let mut axes_info = HashMap::new();
@@ -524,6 +525,8 @@ impl SourceOutputDevice for GamepadEventDevice {
                     capabilities.push(OutputCapability::ForceFeedback);
                     capabilities.push(OutputCapability::ForceFeedbackUpload);
                     capabilities.push(OutputCapability::ForceFeedbackErase);
+                    capabilities.push(OutputCapability::Haptics(Haptic::TrackpadLeft));
+                    capabilities.push(OutputCapability::Haptics(Haptic::TrackpadRight));
                 }
                 EventType::LED => {
                     capabilities.push(OutputCapability::LED(LED::Color));
@@ -557,6 +560,7 @@ impl SourceOutputDevice for GamepadEventDevice {
 
         match event {
             OutputEvent::Evdev(input_event) => {
+                log::trace!("Received evdev output report");
                 if let Err(e) = self.device.send_events(&[input_event]) {
                     log::error!("Failed to write output event: {:?}", e);
                 }
@@ -571,7 +575,10 @@ impl SourceOutputDevice for GamepadEventDevice {
                 }
                 Ok(())
             }
-            OutputEvent::Uinput(_) => Ok(()),
+            OutputEvent::Uinput(_) => {
+                log::trace!("Received Uinput output report. Not implemented.");
+                Ok(())
+            }
             OutputEvent::SteamDeckHaptics(report) => {
                 log::trace!("Received Steam Deck Haptic Output Report");
                 if let Err(e) = self.process_haptic_ff(report) {

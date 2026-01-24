@@ -22,7 +22,6 @@ maximum_sources: 2
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
-    blocked: true
     udev:
       attributes:
         - name: name
@@ -33,6 +32,10 @@ source_devices:
       driver: microsoft
       sys_name: "event*"
       subsystem: input
+    events:
+      # Block input events, but use device for output events
+      exclude:
+        - "*"
   - group: gamepad
     udev:
       # NOTE: This might also capture other non-xbox microsoft devices :(

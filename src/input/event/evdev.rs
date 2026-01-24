@@ -913,6 +913,8 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
             },
         },
+        Capability::Gyroscope(_) => vec![],
+        Capability::Accelerometer(_) => vec![],
     }
 }
 
@@ -934,13 +936,15 @@ fn input_event_from_value(
             // the minimum and maximum values for that axis depending on the
             // axis direction. This is typically done for DPad button input that
             // needs to be translated to an ABS_HAT axis input.
-            if axis_info.is_some() && axis_direction.is_some() {
-                let info = axis_info.unwrap();
-                let direction = axis_direction.unwrap();
-                match direction {
-                    AxisDirection::None => Some(value),
-                    AxisDirection::Positive => Some(info.maximum() * value),
-                    AxisDirection::Negative => Some(info.minimum() * value),
+            if let Some(info) = axis_info {
+                if let Some(direction) = axis_direction {
+                    match direction {
+                        AxisDirection::None => Some(value),
+                        AxisDirection::Positive => Some(info.maximum() * value),
+                        AxisDirection::Negative => Some(info.minimum() * value),
+                    }
+                } else {
+                    Some(value)
                 }
             } else {
                 Some(value)
@@ -969,8 +973,8 @@ fn input_event_from_value(
                     // Cannot denormalize value without axis info
                     EventType::ABSOLUTE => None,
                     EventType::RELATIVE => match RelativeAxisCode(code) {
-                        RelativeAxisCode::REL_X => Some(x? as i32),
-                        RelativeAxisCode::REL_Y => Some(y? as i32),
+                        RelativeAxisCode::REL_X => x.map(|v| v as i32),
+                        RelativeAxisCode::REL_Y => y.map(|v| v as i32),
                         _ => None,
                     },
                     _ => None,

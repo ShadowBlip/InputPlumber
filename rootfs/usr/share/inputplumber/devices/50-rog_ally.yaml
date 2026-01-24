@@ -18,6 +18,9 @@ matches:
   - dmi_data:
       board_name: RC71L
       sys_vendor: ASUSTeK COMPUTER INC.
+  - dmi_data:
+      board_name: RC73YA
+      sys_vendor: ASUSTeK COMPUTER INC.
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -33,31 +36,9 @@ source_devices:
       vendor_id: 045e
       product_id: 028e
       handler: event*
-  - group: keyboard
-    evdev:
-      name: ASUS ROG Ally Config
-      vendor_id: 0b05
-      product_id: 1abe
-      handler: event*
-  - group: keyboard
+  - group: gamepad
     unique: false
     evdev:
-      name: Asus Keyboard
-      vendor_id: 0b05
-      product_id: 1abe
-      handler: event*
-  # New driver group name from `asus_ally_hid`
-  - group: mouse
-    evdev:
-      name: ROG Ally Mouse
-      vendor_id: 0b05
-      product_id: 1abe
-      handler: event*
-  # New driver group name from `asus_ally_hid`
-  - group: keyboard
-    unique: false
-    evdev:
-      name: ROG Ally Keyboard
       vendor_id: 0b05
       product_id: 1abe
       handler: event*
@@ -68,19 +49,10 @@ source_devices:
         x: [1, 0, 0]
         y: [0, -1, 0]
         z: [0, 0, -1]
-
-  #RGB
   - group: led
     udev:
       sys_name: ally:rgb:joystick_rings
       subsystem: leds
-  #- group: touchscreen
-  #  udev:
-  #    properties:
-  #      - name: ID_INPUT_TOUCHSCREEN
-  #        value: "1"
-  #    sys_name: "event*"
-  #    subsystem: input
 
 # Optional configuration for the composite device
 options:
@@ -94,7 +66,6 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
-  #- touchscreen
 
 # The ID of a device event mapping in the 'event_maps' folder
 capability_map_id: aly1

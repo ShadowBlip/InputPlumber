@@ -1,4 +1,4 @@
-use zbus::{fdo, message::Header};
+use zbus::{fdo, message::Header, Connection};
 use zbus_macros::interface;
 
 use crate::{
@@ -27,8 +27,12 @@ impl TargetMouseInterface {
 impl TargetMouseInterface {
     /// Name of the composite device
     #[zbus(property)]
-    async fn name(&self, #[zbus(header)] hdr: Option<Header<'_>>) -> fdo::Result<String> {
-        check_polkit(hdr, "org.shadowblip.Input.Mouse.Name").await?;
+    async fn name(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<String> {
+        check_polkit(conn, hdr, "org.shadowblip.Input.Mouse.Name").await?;
         Ok("Mouse".into())
     }
 
@@ -38,9 +42,10 @@ impl TargetMouseInterface {
         &self,
         x: i32,
         y: i32,
+        #[zbus(connection)] conn: &Connection,
         #[zbus(header)] hdr: Header<'_>,
     ) -> fdo::Result<()> {
-        check_polkit(Some(hdr), "org.shadowblip.Input.Mouse.MoveCursor").await?;
+        check_polkit(conn, Some(hdr), "org.shadowblip.Input.Mouse.MoveCursor").await?;
         // Create a mouse motion event
         let value = InputValue::Vector2 {
             x: Some(x as f64),

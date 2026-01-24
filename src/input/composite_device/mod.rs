@@ -19,7 +19,7 @@ use zbus::{object_server::Interface, Connection};
 use crate::{
     config::{
         capability_map::CapabilityMapConfig, path::get_profiles_path, CompositeDeviceConfig,
-        DeviceProfile, ProfileMapping,
+        DeviceProfile, LoadError, ProfileMapping,
     },
     dbus::interface::{
         composite_device::CompositeDeviceInterface, force_feedback::ForceFeedbackInterface,
@@ -35,7 +35,8 @@ use crate::{
         output_capability::OutputCapability,
         output_event::UinputOutputEvent,
         source::{
-            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice, SourceDevice,
+            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice,
+            tty::TtyDevice, SourceDevice,
         },
         target::TargetDeviceTypeId,
     },
@@ -333,16 +334,7 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::GetTargetCapabilities(sender) => {
-                        let target_caps = match self.targets.get_capabilities().await {
-                            Ok(caps) => caps,
-                            Err(e) => {
-                                log::error!("Failed to get target capabilities: {e:?}");
-                                continue;
-                            }
-                        };
-                        if let Err(e) = sender.send(target_caps).await {
-                            log::error!("Failed to send target capabilities: {:?}", e);
-                        }
+                        self.targets.send_capabilities(sender);
                     }
                     CompositeCommand::SetInterceptMode(mode) => self.set_intercept_mode(mode).await,
                     CompositeCommand::GetInterceptMode(sender) => {
@@ -446,7 +438,14 @@ impl CompositeDevice {
                         let profile = match DeviceProfile::from_yaml_file(path.clone()) {
                             Ok(p) => p,
                             Err(e) => {
-                                if let Err(er) = sender.send(Err(e.to_string())).await {
+                                let err = match e {
+                                    LoadError::IoError(_) => e.to_string(),
+                                    LoadError::MaximumSizeReached(_) => e.to_string(),
+                                    LoadError::DeserializeError(_) => {
+                                        "Failed to parse file".to_string()
+                                    }
+                                };
+                                if let Err(er) = sender.send(Err(err)).await {
                                     log::error!("Failed to send failed to load profile: {er:?}");
                                 }
                                 continue;
@@ -549,6 +548,26 @@ impl CompositeDevice {
                         if let Err(e) = sender.send(persist_id).await {
                             log::error!("Failed to send persistent id response: {e}");
                         }
+                    }
+                    CompositeCommand::GetFilteredEvents(sender) => {
+                        self.get_filtered_events(sender).await;
+                    }
+                    CompositeCommand::SetFilteredEvents(events) => {
+                        if let Err(e) = self.set_filtered_events(events).await {
+                            log::error!("Failed to set filtered events: {e}");
+                        }
+                    }
+                    CompositeCommand::GetFilterableEvents(sender) => {
+                        let mut capabilities_by_source = HashMap::new();
+
+                        for (source_id, capabilities) in self.capabilities_by_source.iter() {
+                            let capabilities = capabilities.clone().into_iter().collect();
+                            capabilities_by_source.insert(source_id.clone(), capabilities);
+                        }
+
+                        if let Err(e) = sender.send(capabilities_by_source).await {
+                            log::error!("Failed to get filterable events by source device: {e}");
+                        };
                     }
                 }
             }
@@ -658,7 +677,7 @@ impl CompositeDevice {
 
             self.source_device_tasks.spawn(async move {
                 if let Err(e) = source_device.run().await {
-                    log::error!("Failed running device: {:?}", e);
+                    log::error!("Failed running device {}: {:?}", device_id, e);
                 }
                 log::debug!("Source device closed");
                 if let Err(e) = tx.send(CompositeCommand::SourceDeviceStopped(device)).await {
@@ -702,10 +721,7 @@ impl CompositeDevice {
 
         // Only send valid events to the target device(s)
         if cap == Capability::NotImplemented {
-            log::trace!(
-                "Refusing to send '{}' event to target devices.",
-                cap.to_string()
-            );
+            log::trace!("Refusing to send '{cap}' event to target devices.");
             return Ok(());
         }
 
@@ -820,6 +836,7 @@ impl CompositeDevice {
         // If force feedback is disabled at the composite device level, don't
         // forward any other FF events to source devices.
         if !self.ff_enabled && event.is_force_feedback() {
+            log::trace!("Force feedback not enabled. Nothing to do.");
             return Ok(());
         }
 
@@ -835,6 +852,7 @@ impl CompositeDevice {
                 .iter()
                 .any(|cap| src_capabilities.contains(cap));
             if !supports_event {
+                log::trace!("Source device {source_id} contains no compatible output capabilities for event: {event_capabilities:?}");
                 continue;
             }
 
@@ -972,6 +990,8 @@ impl CompositeDevice {
                     }
                 },
                 Capability::Touchscreen(_) => (),
+                Capability::Gyroscope(_) => (),
+                Capability::Accelerometer(_) => (),
             }
 
             // if this is a chord with no matches to the intercept_active_inputs, add a keypress
@@ -1081,6 +1101,28 @@ impl CompositeDevice {
             return Ok(());
         }
 
+        //TODO: Temporary force of all Gyro and Accel events to legacy Gamepad:: format.
+        // Remove this after targets can handle translation profiles.
+        if matches!(cap, Capability::Accelerometer(_)) {
+            let event = NativeEvent::new_translated(
+                cap,
+                Capability::Gamepad(Gamepad::Accelerometer),
+                event.get_value(),
+            );
+            self.targets.write_event(event).await;
+            return Ok(());
+        }
+
+        if matches!(cap, Capability::Gyroscope(_)) {
+            let event = NativeEvent::new_translated(
+                cap,
+                Capability::Gamepad(Gamepad::Gyro),
+                event.get_value(),
+            );
+            self.targets.write_event(event).await;
+            return Ok(());
+        }
+
         // Write the event to all target devices capable of handling the event
         self.targets.write_event(event).await;
 
@@ -1187,7 +1229,11 @@ impl CompositeDevice {
 
     /// Sets the intercept mode to the given value
     async fn set_intercept_mode(&mut self, mode: InterceptMode) {
-        log::debug!("Setting intercept mode to: {:?}", mode);
+        log::debug!("Setting intercept mode to: {mode:?}");
+        if self.intercept_mode == mode {
+            log::debug!("Intercept is already set to: {mode:?}");
+            return;
+        }
         self.intercept_mode = mode;
 
         // Nothing else is required when turning off input interception.
@@ -1663,7 +1709,8 @@ impl CompositeDevice {
                     .as_ref()
                     .and_then(|c| c.passthrough)
                     .unwrap_or(false);
-                let should_hide = !should_passthru && subsystem.as_str() != "iio";
+                let should_hide =
+                    !should_passthru && subsystem.as_str() != "iio" && subsystem.as_str() != "tty";
                 if should_hide {
                     let source_path = device.devnode();
                     self.source_devices_to_hide.push(source_path);
@@ -1694,6 +1741,11 @@ impl CompositeDevice {
                         log::debug!("Adding LED source device: {:?}", device.sysname());
                         let device = LedDevice::new(device, self.client(), source_config.clone())?;
                         SourceDevice::Led(device)
+                    }
+                    "tty" => {
+                        log::debug!("Adding TTY source device: {:?}", device.sysname());
+                        let device = TtyDevice::new(device, self.client(), source_config.clone())?;
+                        SourceDevice::Tty(device)
                     }
                     _ => {
                         return Err(format!(
@@ -2095,5 +2147,60 @@ impl CompositeDevice {
         );
 
         None
+    }
+
+    /// Takes the provided [HashMap] and sets a filter for all matching source device ID's and
+    /// capabilties.
+    async fn set_filtered_events(
+        &mut self,
+        events: HashMap<String, Vec<Capability>>,
+    ) -> Result<(), Box<dyn Error>> {
+        let capabilities_by_source = self.capabilities_by_source.clone();
+        // Validate the requested filtered events are valid
+        for (source_id, capabilities) in events.iter() {
+            let Some(available_caps) = capabilities_by_source.get(source_id) else {
+                return Err(format!(
+                    "Source {source_id} is not a valid IMU source for this device."
+                )
+                .into());
+            };
+            for cap in capabilities {
+                if !available_caps.contains(cap) {
+                    return Err(format!(
+                        "Capability {cap} is not a valid capability for source device {source_id}"
+                    )
+                    .into());
+                };
+            }
+        }
+
+        // Submitt the event filter to each source device.
+        let mut events = events.clone();
+        for (source_id, client) in self.source_devices.iter() {
+            let capabilities = events.remove(source_id).unwrap_or_default();
+            client.set_filtered_events(capabilities).await?;
+        }
+        Ok(())
+    }
+
+    /// Probes all source devices for thier currently filtered events and returns a [HashMap] of
+    /// source device Id's to filtered capabilities.
+    async fn get_filtered_events(&self, sender: mpsc::Sender<HashMap<String, Vec<Capability>>>) {
+        let source_devices = self.source_devices.clone();
+
+        tokio::task::spawn(async move {
+            let mut filtered_events = HashMap::new();
+            for (source_id, client) in source_devices.into_iter() {
+                let capabilities = client.get_filtered_events().await.unwrap_or_default();
+
+                if capabilities.is_empty() {
+                    continue;
+                }
+                filtered_events.insert(source_id, capabilities);
+            }
+            if let Err(e) = sender.send(filtered_events).await {
+                log::error!("Failed to set filtered events on source devices: {e}");
+            };
+        });
     }
 }

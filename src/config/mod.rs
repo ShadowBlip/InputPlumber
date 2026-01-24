@@ -3,7 +3,7 @@ pub mod capability_map;
 pub mod config_test;
 pub mod path;
 
-use std::io;
+use std::io::{self, Read};
 
 use ::procfs::CpuInfo;
 use capability_map::CapabilityConfig;
@@ -28,6 +28,8 @@ pub enum LoadError {
     IoError(#[from] io::Error),
     #[error("Unable to deserialize: {0}")]
     DeserializeError(#[from] serde_yaml::Error),
+    #[error("Config too large, reached maximum size of {0} bytes")]
+    MaximumSizeReached(usize),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -36,7 +38,9 @@ pub struct DeviceProfile {
     pub version: u32, //useful?
     pub kind: String, //useful?
     pub name: String, //useful?
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub target_devices: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub mapping: Vec<ProfileMapping>,
 }
@@ -51,8 +55,16 @@ impl DeviceProfile {
     /// Load a [CapabilityProfile] from the given YAML file
     pub fn from_yaml_file(path: String) -> Result<DeviceProfile, LoadError> {
         let file = std::fs::File::open(path)?;
-        let device: DeviceProfile = serde_yaml::from_reader(file)?;
-        Ok(device)
+
+        // Read up to a defined maximum size to prevent denial of service
+        const MAX_SIZE: usize = 512 * 1024;
+        let mut reader = file.take(MAX_SIZE as u64);
+        let mut content = String::default();
+        let bytes_read = reader.read_to_string(&mut content)?;
+        if bytes_read == MAX_SIZE {
+            return Err(LoadError::MaximumSizeReached(MAX_SIZE));
+        }
+        Self::from_yaml(content)
     }
 }
 
@@ -169,7 +181,9 @@ pub struct CompositeDeviceConfigOptions {
     /// If true, InputPlumber will automatically try to manage the input device.
     /// If this is false, InputPlumber will not try to manage the device unless
     /// an external service enables management of all devices.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_manage: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub persist: Option<bool>,
 }
 
@@ -177,6 +191,7 @@ pub struct CompositeDeviceConfigOptions {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Match {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dmi_data: Option<DMIMatch>,
 }
 
@@ -184,14 +199,23 @@ pub struct Match {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct DMIMatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bios_release: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bios_vendor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bios_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub board_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_sku: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sys_vendor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_vendor: Option<String>,
 }
 
@@ -201,41 +225,59 @@ pub struct SourceDevice {
     /// Custom group identifier for the source device.
     pub group: String,
     /// Devices that match the given evdev properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub evdev: Option<Evdev>,
     /// Devices that match the given hidraw properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub hidraw: Option<Hidraw>,
     /// Devices that match the given iio properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub iio: Option<IIO>,
     /// Devices that match the given led properties will be capture by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub led: Option<Led>,
     /// Devices that match the given udev properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub udev: Option<Udev>,
+    /// Devices that match the given tty propertied will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tty: Option<Tty>,
     /// Device configuration options are used to alter how the source device is managed
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<SourceDeviceConfig>,
     /// If false, any devices matching this description will be added to the
     /// existing composite device. Defaults to true.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub unique: Option<bool>,
     /// If true, device will be grabbed but no events from this device will
     /// reach target devices. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked: Option<bool>,
     /// If true, this source device will be ignored and not managed by
     /// InputPlumber. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ignore: Option<bool>,
     /// If true, events will be read from this device, but the source device
     /// will not be hidden or grabbed. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub passthrough: Option<bool>,
     /// Defines which events are included or excluded from input processing by
     /// the source device.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub events: Option<EventsConfig>,
     /// The ID of a device event mapping in the 'capability_maps' directory
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub capability_map_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct SourceDeviceConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub touchscreen: Option<TouchscreenConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub imu: Option<ImuConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub led: Option<LedConfig>,
 }
 
@@ -243,67 +285,98 @@ pub struct SourceDeviceConfig {
 #[serde(rename_all = "snake_case")]
 pub struct TouchscreenConfig {
     /// Orientation of the touchscreen. Can be one of: ["normal", "left", "right", "upsidedown"]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub orientation: Option<String>,
     /// Width of the touchscreen. If set, any virtual touchscreens will use this width
     /// instead of querying the source device for its size.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
     /// Height of the touchscreen. If set, any virtual touchscreens will use this height
     /// instead of querying the source device for its size.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<u32>,
     /// If true, the source device will use the width/height defined in this configuration
     /// instead of the size advertised by the device itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub override_source_size: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct ImuConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mount_matrix: Option<MountMatrix>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct LedConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fixed_color: Option<FixedRgbColor>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Evdev {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub phys_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub handler: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vendor_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Hidraw {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vendor_id: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_id: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub interface_num: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub handler: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct Udev {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Vec<UdevAttribute>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub driver: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<UdevAttribute>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub subsystem: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sys_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sys_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendor_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub product_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface_number: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct UdevAttribute {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
 }
 
@@ -311,12 +384,15 @@ pub struct UdevAttribute {
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
 pub struct IIO {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[deprecated(
         since = "0.43.0",
         note = "please use `<SourceDevice>.config.imu.mount_matrix` instead"
     )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mount_matrix: Option<MountMatrix>,
 }
 
@@ -324,7 +400,19 @@ pub struct IIO {
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
 pub struct Led {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct Tty {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
@@ -349,8 +437,10 @@ pub struct MountMatrix {
 #[serde(rename_all = "snake_case")]
 pub struct EventsConfig {
     /// Events to exclude from being processed by a source device
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude: Option<Vec<String>>,
     /// Events to include and be processed by a source device
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub include: Option<Vec<String>>,
 }
 
@@ -362,17 +452,22 @@ pub struct CompositeDeviceConfig {
     pub kind: String,
     pub name: String,
     pub matches: Vec<Match>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub single_source: Option<bool>, // DEPRECATED; use 'maximum_sources' instead
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub maximum_sources: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub capability_map_id: Option<String>,
     pub source_devices: Vec<SourceDevice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub target_devices: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<CompositeDeviceConfigOptions>,
 }
 
 impl CompositeDeviceConfig {
     /// Load a [CompositeDevice] from the given YAML string
-    pub fn _from_yaml(content: String) -> Result<CompositeDeviceConfig, LoadError> {
+    pub fn from_yaml(content: String) -> Result<CompositeDeviceConfig, LoadError> {
         let device: CompositeDeviceConfig = serde_yaml::from_str(content.as_str())?;
         Ok(device)
     }
@@ -380,8 +475,16 @@ impl CompositeDeviceConfig {
     /// Load a [CompositeDevice] from the given YAML file
     pub fn from_yaml_file(path: String) -> Result<CompositeDeviceConfig, LoadError> {
         let file = std::fs::File::open(path)?;
-        let device: CompositeDeviceConfig = serde_yaml::from_reader(file)?;
-        Ok(device)
+
+        // Read up to a defined maximum size to prevent denial of service
+        const MAX_SIZE: usize = 512 * 1024;
+        let mut reader = file.take(MAX_SIZE as u64);
+        let mut content = String::default();
+        let bytes_read = reader.read_to_string(&mut content)?;
+        if bytes_read == MAX_SIZE {
+            return Err(LoadError::MaximumSizeReached(MAX_SIZE));
+        }
+        Self::from_yaml(content)
     }
 
     /// Returns an array of all defined hidraw source devices
@@ -463,6 +566,12 @@ impl CompositeDeviceConfig {
                     return Some(config.clone());
                 }
             }
+            "tty" => {
+                let tty_config = config.tty.as_ref()?;
+                if self.has_matching_tty(udevice, tty_config) {
+                    return Some(config.clone());
+                }
+            }
             _ => (),
         }
 
@@ -471,7 +580,7 @@ impl CompositeDeviceConfig {
 
     /// Returns true if a given device matches the given udev config
     pub fn has_matching_udev(&self, device: &UdevDevice, udev_config: &Udev) -> bool {
-        log::trace!("Checking udev config '{:?}'", udev_config);
+        log::debug!("Checking udev config '{:?}'", udev_config);
 
         if let Some(attributes) = udev_config.attributes.as_ref() {
             let device_attributes = device.get_attributes();
@@ -489,7 +598,7 @@ impl CompositeDeviceConfig {
                 };
 
                 // Glob match on the attribute value
-                log::trace!("Checking attribute: {attr_value} against {device_attr_value}");
+                log::debug!("Checking attribute: {attr_value} against {device_attr_value}");
                 if !glob_match(attr_value.as_str(), device_attr_value.as_str()) {
                     return false;
                 }
@@ -498,7 +607,7 @@ impl CompositeDeviceConfig {
 
         if let Some(dev_node) = udev_config.dev_node.as_ref() {
             let device_dev_node = device.devnode();
-            log::trace!("Checking dev_node: {dev_node} against {device_dev_node}");
+            log::debug!("Checking dev_node: {dev_node} against {device_dev_node}");
             if !glob_match(dev_node.as_str(), device_dev_node.as_str()) {
                 return false;
             }
@@ -506,7 +615,7 @@ impl CompositeDeviceConfig {
 
         if let Some(dev_path) = udev_config.dev_path.as_ref() {
             let device_dev_path = device.devpath();
-            log::trace!("Checking dev_path: {dev_path} against {device_dev_path}");
+            log::debug!("Checking dev_path: {dev_path} against {device_dev_path}");
             if !glob_match(dev_path.as_str(), device_dev_path.as_str()) {
                 return false;
             }
@@ -517,7 +626,7 @@ impl CompositeDeviceConfig {
             let mut has_matches = false;
 
             for device_driver in all_drivers {
-                log::trace!("Checking driver: {driver} against {device_driver}");
+                log::debug!("Checking driver: {driver} against {device_driver}");
                 if glob_match(driver.as_str(), device_driver.as_str()) {
                     has_matches = true;
                     break;
@@ -545,7 +654,7 @@ impl CompositeDeviceConfig {
                 };
 
                 // Glob match on the property value
-                log::trace!("Checking property: {prop_value} against {device_prop_value}");
+                log::debug!("Checking property: {prop_value} against {device_prop_value}");
                 if !glob_match(prop_value.as_str(), device_prop_value.as_str()) {
                     return false;
                 }
@@ -554,7 +663,7 @@ impl CompositeDeviceConfig {
 
         if let Some(subsystem) = udev_config.subsystem.as_ref() {
             let device_subsystem = device.subsystem();
-            log::trace!("Checking subsystem: {subsystem} against {device_subsystem}");
+            log::debug!("Checking subsystem: {subsystem} against {device_subsystem}");
             if !glob_match(subsystem.as_str(), device_subsystem.as_str()) {
                 return false;
             }
@@ -562,7 +671,7 @@ impl CompositeDeviceConfig {
 
         if let Some(sys_name) = udev_config.sys_name.as_ref() {
             let device_sys_name = device.sysname();
-            log::trace!("Checking sys_name: {sys_name} against {device_sys_name}");
+            log::debug!("Checking sys_name: {sys_name} against {device_sys_name}");
             if !glob_match(sys_name.as_str(), device_sys_name.as_str()) {
                 return false;
             }
@@ -570,8 +679,44 @@ impl CompositeDeviceConfig {
 
         if let Some(sys_path) = udev_config.sys_path.as_ref() {
             let device_sys_path = device.syspath();
-            log::trace!("Checking sys_path: {sys_path} against {device_sys_path}");
+            log::debug!("Checking sys_path: {sys_path} against {device_sys_path}");
             if !glob_match(sys_path.as_str(), device_sys_path.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(vendor_id) = udev_config.vendor_id.as_ref() {
+            let device_vendor_id = device.id_vendor();
+            let Ok(vendor_id) = vendor_id.parse::<u16>() else {
+                return false;
+            };
+            log::debug!("Checking vendor id: {vendor_id} against {device_vendor_id}");
+
+            if vendor_id != device_vendor_id {
+                return false;
+            }
+        }
+
+        if let Some(product_id) = udev_config.product_id.as_ref() {
+            let device_product_id = device.id_product();
+            let Ok(product_id) = product_id.parse::<u16>() else {
+                return false;
+            };
+            log::debug!("Checking product id: {product_id} against {device_product_id}");
+
+            if product_id != device_product_id {
+                return false;
+            }
+        }
+
+        if let Some(if_num) = udev_config.interface_number.as_ref() {
+            let device_if_num = device.interface_number();
+            let Ok(if_num) = if_num.parse::<i32>() else {
+                return false;
+            };
+            log::debug!("Checking interface number: {if_num} against {device_if_num}");
+
+            if if_num != device_if_num {
                 return false;
             }
         }
@@ -656,6 +801,29 @@ impl CompositeDeviceConfig {
         }
 
         if let Some(name) = led_config.name.as_ref() {
+            let dname = device.name();
+            log::trace!("Checking name: {name} against {dname}");
+            if !glob_match(name.as_str(), dname.as_str()) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Returns true if a given tty device is within a list of led configs.
+    pub fn has_matching_tty(&self, device: &UdevDevice, tty_config: &Tty) -> bool {
+        log::trace!("Checking tty config: {:?} against {:?}", tty_config, device);
+
+        if let Some(id) = tty_config.id.as_ref() {
+            let dsyspath = device.syspath();
+            log::trace!("Checking id: {id} against {dsyspath}");
+            if !glob_match(id.as_str(), dsyspath.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(name) = tty_config.name.as_ref() {
             let dname = device.name();
             log::trace!("Checking name: {name} against {dname}");
             if !glob_match(name.as_str(), dname.as_str()) {

@@ -24,7 +24,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("failed to send command to device: {0}")]
-    SendError(SendError<CompositeCommand>),
+    SendError(String),
     #[error("service encountered an error processing the request: {0}")]
     ServiceError(Box<dyn std::error::Error>),
     #[error("device no longer exists")]
@@ -33,7 +33,7 @@ pub enum ClientError {
 
 impl From<SendError<CompositeCommand>> for ClientError {
     fn from(err: SendError<CompositeCommand>) -> Self {
-        Self::SendError(err)
+        Self::SendError(err.to_string())
     }
 }
 
@@ -528,6 +528,40 @@ impl CompositeDeviceClient {
         let (tx, rx) = channel(1);
         self.send(CompositeCommand::IsSuspended(tx)).await?;
 
+        if let Some(result) = Self::recv(rx).await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Returns a list of all currently filtered events
+    pub async fn get_filtered_events(
+        &self,
+    ) -> Result<HashMap<String, Vec<Capability>>, ClientError> {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetFilteredEvents(tx)).await?;
+        if let Some(result) = Self::recv(rx).await {
+            return Ok(result);
+        }
+        Err(ClientError::ChannelClosed)
+    }
+
+    /// Enable or disable events from being emitted
+    pub async fn set_filtered_events(
+        &self,
+        sources: HashMap<String, Vec<Capability>>,
+    ) -> Result<(), ClientError> {
+        self.send(CompositeCommand::SetFilteredEvents(sources))
+            .await?;
+        Ok(())
+    }
+
+    /// Returns a list of all filterable events
+    pub async fn get_filterable_events(
+        &self,
+    ) -> Result<HashMap<String, Vec<Capability>>, ClientError> {
+        let (tx, rx) = channel(1);
+        self.send(CompositeCommand::GetFilterableEvents(tx)).await?;
         if let Some(result) = Self::recv(rx).await {
             return Ok(result);
         }

@@ -1,4 +1,4 @@
-use std::{error::Error, os::fd::AsRawFd, time::Duration};
+use std::{error::Error, os::fd::AsFd, time::Duration};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
@@ -12,7 +12,7 @@ use crate::{
     input::{
         capability::{Capability, Touch},
         composite_device::client::CompositeDeviceClient,
-        event::{native::NativeEvent, value::InputValue},
+        event::{native::NativeEvent, value::denormalize_unsigned_value_u16, value::InputValue},
         output_event::OutputEvent,
     },
     udev::device::UdevDevice,
@@ -195,8 +195,8 @@ impl TouchscreenDevice {
         // Set the device to do non-blocking reads
         // TODO: use epoll to wake up when data is available
         // https://github.com/emberian/evdev/blob/main/examples/evtest_nonblocking.rs
-        let raw_fd = device.as_raw_fd();
-        nix::fcntl::fcntl(raw_fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
+        let fd = device.as_fd();
+        nix::fcntl::fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
 
         Ok(device)
     }
@@ -299,8 +299,8 @@ impl TouchscreenDevice {
         }
 
         // Denormalize the x, y values based on the screen size
-        let x = x.map(|val| denormalize_unsigned_value(val, width as f64));
-        let y = y.map(|val| denormalize_unsigned_value(val, height as f64));
+        let x = x.map(|val| denormalize_unsigned_value_u16(val, width as f64));
+        let y = y.map(|val| denormalize_unsigned_value_u16(val, height as f64));
 
         // Send events for x values
         if let Some(x) = x {
@@ -590,10 +590,4 @@ impl TargetOutputDevice for TouchscreenDevice {
 
         Ok(vec![])
     }
-}
-
-/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
-/// the maximum axis range.
-fn denormalize_unsigned_value(normal_value: f64, max: f64) -> u16 {
-    (normal_value * max).round() as u16
 }

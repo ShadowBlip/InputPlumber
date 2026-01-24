@@ -27,14 +27,13 @@ pub fn load_capability_mappings() -> HashMap<String, CapabilityMapConfig> {
         // Try to load the capability map
         log::trace!("Found file: {}", file.display());
         let mapping = CapabilityMapConfig::from_yaml_file(file.display().to_string());
-        if mapping.is_err() {
-            log::warn!(
-                "Failed to parse capability mapping: {}",
-                mapping.unwrap_err()
-            );
-            continue;
-        }
-        let map = mapping.unwrap();
+        let map = match mapping {
+            Ok(map) => map,
+            Err(e) => {
+                log::warn!("Failed to parse capability mapping: {e}",);
+                continue;
+            }
+        };
         mappings.insert(map.id(), map);
     }
 
@@ -67,9 +66,16 @@ impl CapabilityMapConfig {
     where
         P: AsRef<Path>,
     {
-        let mut file = std::fs::File::open(path)?;
+        let file = std::fs::File::open(path)?;
+
+        // Read up to a defined maximum size to prevent denial of service
+        const MAX_SIZE: usize = 512 * 1024;
+        let mut reader = file.take(MAX_SIZE as u64);
         let mut content = String::default();
-        file.read_to_string(&mut content)?;
+        let bytes_read = reader.read_to_string(&mut content)?;
+        if bytes_read == MAX_SIZE {
+            return Err(LoadError::MaximumSizeReached(MAX_SIZE));
+        }
         Self::from_yaml(content)
     }
 
@@ -121,6 +127,7 @@ pub struct CapabilityMapConfigV2 {
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityMapping {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mapping_type: Option<MappingType>,
     pub source_events: Vec<SourceMapping>,
     pub target_event: CapabilityConfig,
@@ -130,6 +137,7 @@ pub struct CapabilityMapping {
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct MappingType {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub evdev: Option<EvdevMappingType>,
 }
 
@@ -154,8 +162,11 @@ pub enum EvdevMappingType {
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct SourceMapping {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub evdev: Option<EvdevConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub hidraw: Option<HidrawConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub capability: Option<CapabilityConfig>,
 }
 
@@ -172,22 +183,38 @@ pub struct NativeCapabilityMapping {
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub gamepad: Option<GamepadCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub keyboard: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mouse: Option<MouseCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dbus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub touchpad: Option<TouchpadCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub touchscreen: Option<TouchCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gyroscope: Option<SourceCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accelerometer: Option<SourceCapability>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct GamepadCapability {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub axis: Option<AxisCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub button: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub trigger: Option<TriggerCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub gyro: Option<GyroCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub accelerometer: Option<AccelerometerCapability>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dial: Option<DialCapability>,
 }
 
@@ -195,7 +222,9 @@ pub struct GamepadCapability {
 #[serde(rename_all = "snake_case")]
 pub struct AxisCapability {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub direction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deadzone: Option<f64>,
 }
 
@@ -203,6 +232,7 @@ pub struct AxisCapability {
 #[serde(rename_all = "snake_case")]
 pub struct TriggerCapability {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deadzone: Option<f64>,
 }
 
@@ -210,8 +240,11 @@ pub struct TriggerCapability {
 #[serde(rename_all = "snake_case")]
 pub struct GyroCapability {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub direction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deadzone: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub axis: Option<String>,
 }
 
@@ -219,8 +252,11 @@ pub struct GyroCapability {
 #[serde(rename_all = "snake_case")]
 pub struct AccelerometerCapability {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub direction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deadzone: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub axis: Option<String>,
 }
 
@@ -228,20 +264,25 @@ pub struct AccelerometerCapability {
 #[serde(rename_all = "snake_case")]
 pub struct DialCapability {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub direction: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct MouseCapability {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub button: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub motion: Option<MouseMotionCapability>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct MouseMotionCapability {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub direction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub speed_pps: Option<u64>,
 }
 
@@ -255,13 +296,28 @@ pub struct TouchpadCapability {
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct TouchCapability {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub button: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub motion: Option<TouchMotionCapability>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct TouchMotionCapability {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub speed_pps: Option<u64>,
+}
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct SourceCapability {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadzone: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis: Option<String>,
 }

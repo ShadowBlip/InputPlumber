@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: GPD Menu
+
+# Unique identifier of the capability mapping
+id: gpd_menu
+
+# List of mapped events that are activated by a specific set of activation keys.
+mapping:
+  - name: Menu Button
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_MODE
+          value_type: button
+    target_event:
+      gamepad:
+        button: Screenshot

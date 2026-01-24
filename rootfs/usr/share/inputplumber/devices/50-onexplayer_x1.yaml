@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: ONEXPLAYER ONEXFLY Pro
+name: ONEXPLAYER X1
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -16,7 +16,13 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: ONEXPLAYER F1Pro
+      product_name: ONEXPLAYER X1 A
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
+      product_name: ONEXPLAYER X1 i
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
+      product_name: ONEXPLAYER X1 mini
       sys_vendor: ONE-NETBOOK
 
 # One or more source devices to combine into a single virtual device. The events
@@ -25,29 +31,34 @@ source_devices:
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:c7:00.0-4/input0
+      phys_path: usb-0000:c4:00.3-4/input0
       handler: event*
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+  - group: keyboard
+    evdev:
+      name: HID 1a86:fe00
+      phys_path: usb-0000:c4:00.3-2.2/input0
+      handler: event*
+  - group: gamepad
+    udev:
+      id_vendor: "1a86"
+      id_product: "7523"
+      interface_number: "00"
+      sys_name: "ttyUSB*"
+      subsystem: tty
   - group: imu
     iio:
-      name: i2c-BMI0160:00
+      name: "{i2c-BMI0260:00,bmi260}"
 
-# Optional configuration for the composite device
-options:
-  # If true, InputPlumber will automatically try to manage the input device. If
-  # this is false, InputPlumber will not try to manage the device unless an
-  # external service enables management of the device. Defaults to 'false'
-  auto_manage: true
-
-# The target input device(s) to emulate by default
+# The target input device(s) that the virtual device profile can use
 target_devices:
-  - xbox-series
+  - xb360
   - mouse
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: oxp3
+capability_map_id: oxp5

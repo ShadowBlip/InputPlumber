@@ -14,7 +14,11 @@ use crate::{
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
-        event::{native::NativeEvent, value::InputValue},
+        event::{
+            native::NativeEvent,
+            value::InputValue,
+            value::{normalize_signed_value, normalize_unsigned_value},
+        },
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -193,29 +197,6 @@ impl Debug for LegionSXInputController {
     }
 }
 
-/// Returns a value between -1.0 and 1.0 based on the given value with its
-/// minimum and maximum values.
-fn normalize_signed_value(raw_value: f64, min: f64, max: f64) -> f64 {
-    let mid = (max + min) / 2.0;
-    let event_value = raw_value - mid;
-
-    // Normalize the value
-    if event_value >= 0.0 {
-        let maximum = max - mid;
-        event_value / maximum
-    } else {
-        let minimum = min - mid;
-        let value = event_value / minimum;
-        -value
-    }
-}
-
-// Returns a value between 0.0 and 1.0 based on the given value with its
-// maximum.
-fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
-    raw_value / max
-}
-
 /// Normalize the value to something between -1.0 and 1.0 based on the Deck's
 /// minimum and maximum axis ranges.
 fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
@@ -385,6 +366,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
 
 /// List of all capabilities that the Legion Go driver implements
 pub const CAPABILITIES: &[Capability] = &[
+    Capability::Gamepad(Gamepad::Accelerometer),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -407,6 +389,7 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
+    Capability::Gamepad(Gamepad::Gyro),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
 ];

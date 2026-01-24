@@ -2,7 +2,7 @@ use std::{error::Error, sync::mpsc::Sender};
 
 use evdev::FFEffectData;
 
-use crate::input::output_event::OutputEvent;
+use crate::input::{capability::Capability, output_event::OutputEvent};
 
 /// A [SourceCommand] is a message that can be sent to a [SourceDevice] over
 /// a channel.
@@ -15,5 +15,7 @@ pub enum SourceCommand {
     ),
     UpdateEffect(i16, FFEffectData),
     EraseEffect(i16, Sender<Result<(), Box<dyn Error + Send + Sync>>>),
+    GetEventFilter(Sender<Vec<Capability>>),
+    SetEventFilter(Vec<Capability>),
     Stop,
 }

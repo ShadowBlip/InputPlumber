@@ -30,6 +30,7 @@ use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
 use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
 use crate::dbus::interface::source::iio_imu::SourceIioImuInterface;
 use crate::dbus::interface::source::led::SourceLedInterface;
+use crate::dbus::interface::source::tty::SourceTtyInterface;
 use crate::dbus::interface::source::udev::SourceUdevDeviceInterface;
 use crate::dbus::interface::DBusInterfaceManager;
 use crate::dmi::data::DMIData;
@@ -40,6 +41,7 @@ use crate::input::source::evdev;
 use crate::input::source::hidraw;
 use crate::input::source::iio;
 use crate::input::source::led;
+use crate::input::source::tty;
 use crate::input::target::TargetDevice;
 use crate::input::target::TargetDeviceTypeId;
 use crate::udev;
@@ -297,7 +299,7 @@ impl Manager {
                     let path = device.keys().next().cloned();
                     let response = match path {
                         Some(path) => Ok(path),
-                        None => Err(ManagerError::CreateTargetDeviceFailed(
+                        _ => Err(ManagerError::CreateTargetDeviceFailed(
                             "Unable to find device path".to_string(),
                         )),
                     };
@@ -858,7 +860,7 @@ impl Manager {
         let tx = self.tx.clone();
         let task = tokio::spawn(async move {
             if let Err(e) = device.run().await {
-                log::error!("Error running {composite_path}: {}", e.to_string());
+                log::error!("Error running {composite_path}: {e}");
             }
             log::debug!("Composite device stopped running: {composite_path}");
             if let Err(e) = tx
@@ -868,8 +870,7 @@ impl Manager {
                 .await
             {
                 log::error!(
-                    "Error sending to composite device {composite_path} the stopped signal: {}",
-                    e.to_string()
+                    "Error sending to composite device {composite_path} the stopped signal: {e}"
                 );
             }
         });
@@ -982,7 +983,7 @@ impl Manager {
             // Check if this device matches any source udev configs of the running
             // CompositeDevice.
             let Some(source_device) = config.get_matching_device(&device) else {
-                log::trace!(
+                log::debug!(
                     "Device {id} does not match existing device: {:?}",
                     config.name
                 );
@@ -1007,7 +1008,7 @@ impl Manager {
                     }
 
                     // Check if the composite device has to be unique (default to being unique)
-                    if source_device.unique.map_or_else(|| true, |unique| unique) {
+                    if source_device.unique.unwrap_or(true) {
                         log::trace!(
                             "Found unique device {:?}, not adding to composite device {composite_device}",
                             source_device
@@ -1174,6 +1175,7 @@ impl Manager {
                 "hidraw" => hidraw::get_dbus_path(sys_name),
                 "iio" => iio::get_dbus_path(sys_name),
                 "leds" => led::get_dbus_path(sys_name),
+                "tty" => tty::get_dbus_path(sys_name),
                 _ => return Err(format!("Device subsystem not supported: {subsystem:?}").into()),
             };
             let conn = self.dbus.connection().clone();
@@ -1196,6 +1198,10 @@ impl Manager {
                 "leds" => {
                     let led_iface = SourceLedInterface::new(dev);
                     dbus.register(led_iface);
+                }
+                "tty" => {
+                    let tty_iface = SourceTtyInterface::new(dev);
+                    dbus.register(tty_iface);
                 }
                 _ => (),
             }
@@ -1355,6 +1361,18 @@ impl Manager {
 
             "leds" => {
                 log::debug!("LED device added: {} ({})", device.name(), device.sysname());
+
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
+                    notify_device_added = false;
+                } else {
+                    log::trace!("Device {dev_name} ({dev_sysname}) is real - {dev_path}");
+                }
+            }
+
+            "tty" => {
+                log::debug!("TTY device added: {} ({})", device.name(), device.sysname());
 
                 // Check to see if the device is virtual
                 if device.is_virtual() {
@@ -1601,6 +1619,9 @@ impl Manager {
         let led_devices = udev::discover_devices("leds")?;
         let led_devices = led_devices.into_iter().map(|dev| dev.into()).collect();
         Manager::discover_devices(cmd_tx, led_devices).await?;
+        let tty_devices = udev::discover_devices("tty")?;
+        let tty_devices = tty_devices.into_iter().map(|dev| dev.into()).collect();
+        Manager::discover_devices(cmd_tx, tty_devices).await?;
 
         Ok(())
     }
@@ -1637,15 +1658,16 @@ impl Manager {
                 // Try to load the composite device profile
                 log::trace!("Found file: {}", file.display());
                 let device = CompositeDeviceConfig::from_yaml_file(file.display().to_string());
-                if device.is_err() {
-                    log::warn!(
-                        "Failed to parse composite device config '{}': {}",
-                        file.display(),
-                        device.unwrap_err()
-                    );
-                    continue;
-                }
-                let device = device.unwrap();
+                let device = match device {
+                    Ok(dev) => dev,
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to parse composite device config '{}': {e}",
+                            file.display()
+                        );
+                        continue;
+                    }
+                };
                 devices.push((file, device));
             }
 

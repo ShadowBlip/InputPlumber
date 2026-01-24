@@ -16,7 +16,7 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: "{83E1,83N0,83N1}"
+      product_name: "83E1"
       sys_vendor: LENOVO
       cpu_vendor: AuthenticAMD
 
@@ -24,15 +24,31 @@ matches:
 # from these devices will be watched and translated according to the key map.
 source_devices:
   ## evdevs
-  # Block all evdev touchpads
-  # Note: Dinput mode device name increments alphanumerically. Real world examples include 1-D6, 1-15, 1-44.
-  - group: gamepad
+  - group: mouse
     blocked: true
     unique: false
     evdev:
-      name: "{  Legion Controller for Windows  Touchpad,Legion-Controller [0-Z]-[0-Z][0-Z] Touchpad}"
+      name: "{*Mouse}"
       vendor_id: "17ef"
-      product_id: "{618[2-5],61e[b-e]}"
+      product_id: "{618[2-4],61e[b-d]}" # Don't grab 5/e, thats FPS mode Keyboard events
+      handler: event*
+  # Block all evdev touchpads
+  # Note: Dinput mode device name increments alphanumerically. Real world examples include 1-D6, 1-15, 1-44.
+  - group: mouse
+    blocked: true
+    unique: false
+    evdev:
+      name: "{*Touchpad}"
+      vendor_id: "17ef"
+      product_id: "{618[2-4],61e[b-d]}" # 5/e don't exist
+      handler: event*
+  - group: keyboard # Blocks alt-tab and show desktop events
+    blocked: true
+    unique: false
+    evdev:
+      name: "{*Keyboard}"
+      vendor_id: "17ef"
+      product_id: "{618[2-4],61e[b-d]}" # Don't grab 5/e, thats FPS mode Keyboard events
       handler: event*
   - group: gamepad
     blocked: true
@@ -40,7 +56,7 @@ source_devices:
     evdev:
       name: "Legion-Controller [0-Z]-[0-Z][0-Z]"
       vendor_id: "17ef"
-      product_id: "{618[2-4],61e[b-d]}" # Don't grab 5/e, thats FPS mode mouse & KB
+      product_id: "{618[2-4],61e[b-d]}" # Don't grab 5/e, thats FPS mode Keyboard events
       handler: event*
   # Don't block evdev gamepad, used for rumble
   - group: gamepad
@@ -50,15 +66,13 @@ source_devices:
       vendor_id: "17ef"
       product_id: "{618[2-5],61e[b-e]}"
       handler: event*
+    events:
+      # Block input events, but use device for output events
+      exclude:
+        - "*"
 
   ## HIDRAWs
   ## XInput - Connected 0x6182 (Go PID)
-  # Touchpad
-  - group: mouse # Gamepad Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6182
-      interface_num: 1
   # Gamepad
   - group: gamepad
     hidraw:
@@ -67,26 +81,14 @@ source_devices:
       interface_num: 2
 
   ## XInput - Connected 0x61eb (Go 2 PID)
-  # Touchpad
-  - group: mouse # Gamepad Mode
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61eb
-      interface_num: 1
   # Gamepad
   - group: gamepad
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61eb
       interface_num: 2
-  
+
   ## DInput - Attached 0x6183 (Go PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6183
-      interface_num: 1
   # Gamepad
   - group: gamepad # Dinput report
     hidraw:
@@ -100,12 +102,6 @@ source_devices:
       interface_num: 2
 
   ## DInput - Attached 0x61ec (Go 2 PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61ec
-      interface_num: 1
   # Gamepad
   - group: gamepad # Dinput report
     hidraw:
@@ -119,12 +115,6 @@ source_devices:
       interface_num: 2
 
   ## DInput - Detached 0x6184 (Go PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x6184
-      interface_num: 1
   # Gamepad
   - group: gamepad
     hidraw:
@@ -133,12 +123,6 @@ source_devices:
       interface_num: 2
 
   ## DInput - Detached 0x61ed (Go 2 PID)
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x17ef
-      product_id: 0x61ed
-      interface_num: 1
   # Gamepad
   - group: gamepad
     hidraw:
@@ -167,23 +151,9 @@ source_devices:
     iio:
       name: gyro_3d
       mount_matrix:
-        # TODO: Reverify on actual hardware
         x: [0, 1, 0]
-        y: [-1, 0, 0]
-        z: [0, 0, -1]
-
-  # Touchscreen
-  #- group: touchscreen
-  #  udev:
-  #    properties:
-  #      - name: ID_INPUT_TOUCHSCREEN
-  #        value: "1"
-  #    sys_name: "event*"
-  #    subsystem: input
-  #  config:
-  #    touchscreen:
-  #      orientation: "left"
-
+        y: [1, 0, 0]
+        z: [0, 0, 1]
 
 # Optional configuration for the composite device
 options:

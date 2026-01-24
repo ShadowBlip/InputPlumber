@@ -60,6 +60,73 @@ pub enum InputValue {
     },
 }
 
+/// Returns a value between -1.0 and 1.0 based on the given value with its
+/// minimum and maximum values.
+pub fn normalize_signed_value(raw_value: f64, min: f64, max: f64) -> f64 {
+    let mid = (max + min) / 2.0;
+    let event_value = raw_value - mid;
+
+    // Normalize the value
+    if event_value >= 0.0 {
+        let maximum = max - mid;
+        event_value / maximum
+    } else {
+        let minimum = min - mid;
+        let value = event_value / minimum;
+        -value
+    }
+}
+
+/// Convert the given normalized signed value to the real value based on the given
+/// minimum and maximum axis range.
+pub fn denormalize_signed_value_i16(normal_value: f64, min: f64, max: f64) -> i16 {
+    let mid = (max + min) / 2.0;
+    let normal_value_abs = normal_value.abs();
+    if normal_value >= 0.0 {
+        let maximum = max - mid;
+        let value = normal_value * maximum + mid;
+        value as i16
+    } else {
+        let minimum = min - mid;
+        let value = normal_value_abs * minimum + mid;
+        value as i16
+    }
+}
+
+/// Convert the given normalized signed value to the real value based on the given
+/// minimum and maximum axis range.
+pub fn denormalize_signed_value_u8(normal_value: f64, min: f64, max: f64) -> u8 {
+    let mid = (max + min) / 2.0;
+    let normal_value_abs = normal_value.abs();
+    if normal_value >= 0.0 {
+        let maximum = max - mid;
+        let value = normal_value * maximum + mid;
+        value as u8
+    } else {
+        let minimum = min - mid;
+        let value = normal_value_abs * minimum + mid;
+        value as u8
+    }
+}
+
+// Returns a value between 0.0 and 1.0 based on the given value with its
+// maximum.
+pub fn normalize_unsigned_value(raw_value: f64, max: f64) -> f64 {
+    raw_value / max
+}
+
+/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
+/// the maximum axis range.
+pub fn denormalize_unsigned_value_u16(normal_value: f64, max: f64) -> u16 {
+    (normal_value * max).round() as u16
+}
+
+/// De-normalizes the given value from 0.0 - 1.0 into a real value based on
+/// the maximum axis range.
+pub fn denormalize_unsigned_value_u8(normal_value: f64, max: f64) -> u8 {
+    (normal_value * max).round() as u8
+}
+
 impl InputValue {
     /// Returns whether or not the value is "pressed"
     pub fn pressed(&self) -> bool {
@@ -154,6 +221,10 @@ impl InputValue {
                                 // Gamepad Button -> Touchscreen Button
                                 Touch::Button(_) => Err(TranslationError::NotImplemented),
                             },
+                            // Gamepad Button -> Gyroscope
+                            Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                            // Gamepad Button -> Accelerometer
+                            Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                         }
                     }
                     // Axis -> ...
@@ -208,6 +279,10 @@ impl InputValue {
                             },
                             // Axis -> Touchscreen
                             Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                            // Axis -> Gyroscope
+                            Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                            // Axis -> Accelerometer
+                            Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                         }
                     }
                     // Trigger -> ...
@@ -253,6 +328,10 @@ impl InputValue {
                         },
                         // Trigger -> Touchscreen
                         Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                        // Trigger -> Gyroscope
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        // Trigger -> Accelerometer
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                     // Accelerometer -> ...
                     Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
@@ -286,6 +365,8 @@ impl InputValue {
                             Touch::Motion => Err(TranslationError::NotImplemented),
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                 }
             }
@@ -323,6 +404,10 @@ impl InputValue {
                 Capability::Touchpad(_) => Err(TranslationError::NotImplemented),
                 // Keyboard Key -> Touchscreen
                 Capability::Touchscreen(_) => Err(TranslationError::NotImplemented),
+                // Keyboard Key -> Gyroscope
+                Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                // Keyboard Key -> Accelerometer
+                Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
             },
 
             // Touchpad -> ...
@@ -379,6 +464,10 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Gyroscope...
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Accelerometer ...
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
@@ -434,6 +523,10 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Gyroscope ...
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Accelerometer ...
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
@@ -489,6 +582,10 @@ impl InputValue {
                             // Touchpad Motion -> Touchscreen Button
                             Touch::Button(_) => Err(TranslationError::NotImplemented),
                         },
+                        // Touchpad Motion -> Gyroscope ...
+                        Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                        // Touchpad Motion -> Accelerometer ...
+                        Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => Err(TranslationError::NotImplemented),
                 },
@@ -549,10 +646,16 @@ impl InputValue {
                         // Touchscreen Motion -> Touchscreen Button
                         Touch::Button(_) => Err(TranslationError::NotImplemented),
                     },
+                    // Touchscreen Motion -> Gyroscope ...
+                    Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+                    // Touchscreen Motion -> Accelerometer ...
+                    Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                 },
                 // Touchscreen Button -> ...
                 Touch::Button(_) => Err(TranslationError::NotImplemented),
             },
+            Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+            Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
         }
     }
 

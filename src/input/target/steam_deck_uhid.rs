@@ -34,6 +34,7 @@ use crate::{
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
             value::InputValue,
+            value::{denormalize_signed_value_i16, denormalize_unsigned_value_u16},
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
@@ -42,10 +43,7 @@ use crate::{
 };
 
 use super::{
-    steam_deck::{
-        denormalize_signed_value, denormalize_unsigned_to_signed_value, denormalize_unsigned_value,
-        SteamDeckConfig,
-    },
+    steam_deck::{denormalize_unsigned_to_signed_value, SteamDeckConfig},
     InputError, OutputError, TargetInputDevice, TargetOutputDevice,
 };
 
@@ -166,11 +164,13 @@ impl SteamDeckUhidDevice {
                     GamepadAxis::LeftStick => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
+                                let value =
+                                    denormalize_signed_value_i16(x, STICK_X_MIN, STICK_X_MAX);
                                 self.state.l_stick_x = Integer::from_primitive(value);
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
+                                let value =
+                                    denormalize_signed_value_i16(y, STICK_Y_MIN, STICK_Y_MAX);
                                 self.state.l_stick_y = Integer::from_primitive(value);
                             }
                         }
@@ -178,11 +178,13 @@ impl SteamDeckUhidDevice {
                     GamepadAxis::RightStick => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, STICK_X_MIN, STICK_X_MAX);
+                                let value =
+                                    denormalize_signed_value_i16(x, STICK_X_MIN, STICK_X_MAX);
                                 self.state.r_stick_x = Integer::from_primitive(value);
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, STICK_Y_MIN, STICK_Y_MAX);
+                                let value =
+                                    denormalize_signed_value_i16(y, STICK_Y_MIN, STICK_Y_MAX);
                                 self.state.r_stick_y = Integer::from_primitive(value);
                             }
                         }
@@ -190,7 +192,7 @@ impl SteamDeckUhidDevice {
                     GamepadAxis::Hat0 => {
                         if let InputValue::Vector2 { x, y } = value {
                             if let Some(x) = x {
-                                let value = denormalize_signed_value(x, -1.0, 1.0);
+                                let value = denormalize_signed_value_i16(x, -1.0, 1.0);
                                 match value.cmp(&0) {
                                     Ordering::Less => {
                                         self.state.left = true;
@@ -207,7 +209,7 @@ impl SteamDeckUhidDevice {
                                 }
                             }
                             if let Some(y) = y {
-                                let value = denormalize_signed_value(y, -1.0, 1.0);
+                                let value = denormalize_signed_value_i16(y, -1.0, 1.0);
                                 match value.cmp(&0) {
                                     Ordering::Less => {
                                         self.state.up = true;
@@ -233,38 +235,38 @@ impl SteamDeckUhidDevice {
                     GamepadTrigger::LeftTrigger => {
                         if let InputValue::Float(value) = value {
                             self.state.l2 = value > 0.8;
-                            let value = denormalize_unsigned_value(value, TRIGG_MAX);
+                            let value = denormalize_unsigned_value_u16(value, TRIGG_MAX);
                             self.state.l_trigg = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::LeftTouchpadForce => {
                         if let InputValue::Float(value) = value {
-                            let value = denormalize_unsigned_value(value, PAD_FORCE_MAX);
+                            let value = denormalize_unsigned_value_u16(value, PAD_FORCE_MAX);
                             self.state.l_pad_force = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::LeftStickForce => {
                         if let InputValue::Float(value) = value {
-                            let value = denormalize_unsigned_value(value, STICK_FORCE_MAX);
+                            let value = denormalize_unsigned_value_u16(value, STICK_FORCE_MAX);
                             self.state.l_stick_force = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::RightTrigger => {
                         if let InputValue::Float(value) = value {
                             self.state.r2 = value > 0.8;
-                            let value = denormalize_unsigned_value(value, TRIGG_MAX);
+                            let value = denormalize_unsigned_value_u16(value, TRIGG_MAX);
                             self.state.r_trigg = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::RightTouchpadForce => {
                         if let InputValue::Float(value) = value {
-                            let value = denormalize_unsigned_value(value, PAD_FORCE_MAX);
+                            let value = denormalize_unsigned_value_u16(value, PAD_FORCE_MAX);
                             self.state.r_pad_force = Integer::from_primitive(value);
                         }
                     }
                     GamepadTrigger::RightStickForce => {
                         if let InputValue::Float(value) = value {
-                            let value = denormalize_unsigned_value(value, STICK_FORCE_MAX);
+                            let value = denormalize_unsigned_value_u16(value, STICK_FORCE_MAX);
                             self.state.r_stick_force = Integer::from_primitive(value);
                         }
                     }
@@ -360,6 +362,8 @@ impl SteamDeckUhidDevice {
                 Touchpad::CenterPad(_) => (),
             },
             Capability::Touchscreen(_) => (),
+            Capability::Gyroscope(_) => (),
+            Capability::Accelerometer(_) => (),
         };
     }
 
@@ -594,6 +598,11 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                     device_config.name = "Legion Go Controller".to_string();
                     device_config.product_id = ProductId::LenovoLegionGo;
                 }
+                "Lenovo Legion Go 2" => {
+                    device_config.vendor = "Lenovo".to_string();
+                    device_config.name = "Legion Go Controller".to_string();
+                    device_config.product_id = ProductId::LenovoLegionGo;
+                }
                 "Lenovo Legion Go S" => {
                     device_config.vendor = "Lenovo".to_string();
                     device_config.name = "Legion Go S Controller".to_string();
@@ -607,6 +616,16 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                 "ASUS ROG Ally X" => {
                     device_config.vendor = "ASUS".to_string();
                     device_config.name = "ROG Ally X Controller".to_string();
+                    device_config.product_id = ProductId::AsusRogAlly;
+                }
+                "ASUS ROG Xbox Ally" => {
+                    device_config.vendor = "ASUS".to_string();
+                    device_config.name = "ROG Xbox Ally Controller".to_string();
+                    device_config.product_id = ProductId::AsusRogAlly;
+                }
+                "ASUS ROG Xbox Ally X" => {
+                    device_config.vendor = "ASUS".to_string();
+                    device_config.name = "ROG Xbox Ally X Controller".to_string();
                     device_config.product_id = ProductId::AsusRogAlly;
                 }
                 "Zotac Zone" => {

@@ -4,9 +4,12 @@ dmi:*svnAnbernic:pnWin600:*
 dmi:*svnAOKZOE:pnAOKZOEA1AR07:*
 dmi:*svnAOKZOE:pnAOKZOEA1Pro:*
 dmi:*svnAOKZOE:pnAOKZOEA1X:*
-# ASUS Rog Ally/X
+# ASUS ROG Ally/X
 dmi:*svnASUSTeKCOMPUTERINC.:*rnRC71L:*
 dmi:*svnASUSTeKCOMPUTERINC.:*rnRC72LA:*
+# ASUS ROG Xbox Ally/X
+dmi:*svnASUSTeKCOMPUTERINC.:*rnRC73XA:*
+dmi:*svnASUSTeKCOMPUTERINC.:*rnRC73YA:*
 # ASUS ROG Flow Z13 (2025)
 dmi:*svnASUSTeKCOMPUTERINC.:*rnGZ302EA:*
 # AYANEO 2
@@ -35,6 +38,7 @@ dmi:*svnAYANEO:pnAIRPlus:*rnAB05-Mendocino:*
 dmi:*svnAYANEO:pnAIRPro:*
 # AYANEO Flip
 dmi:*svnAYANEO:pnFLIPDS:*
+dmi:*svnAYANEO:pnFLIP1SDS:*
 dmi:*svnAYANEO:pnFLIPKB:*
 # AYANEO Kun
 dmi:*svnAYANEO:pnAYANEOKUN:*
@@ -56,6 +60,8 @@ dmi:*svnayn:pnLokiZero:*
 dmi:*svnGPD:pnG1618-03:*
 # GPD Win 4
 dmi:*svnGPD:pnG1618-04:*
+# GPD Win 5
+dmi:*svnGPD:pnG1618-05:*
 # GPD Win Max 2
 dmi:*svnGPD:pnG1619-04:*
 # GPD Win Mini
@@ -88,6 +94,8 @@ dmi:*svnONE-NETBOOK:pnONEXPLAYERminiA07:*
 dmi:*svnONE-NETBOOK:pnONEXPLAYERMiniPro:*
 # OneXPlayer OneXFly
 dmi:*svnONE-NETBOOK:pnONEXPLAYERF1:*
+dmi:*svnONE-NETBOOK:pnONEXPLAYERF1EVA-01:*
+dmi:*svnONE-NETBOOK:pnONEXPLAYERF1OLED:*
 dmi:*svnONE-NETBOOK:pnONEXPLAYERF1Pro:*
 # OneXPlayer X1
 dmi:*svnONE-NETBOOK:pnONEXPLAYERX1A:*
