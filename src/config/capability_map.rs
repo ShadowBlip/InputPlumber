@@ -226,6 +226,8 @@ pub struct AxisCapability {
     pub direction: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deadzone: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quadratic_scaling: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]

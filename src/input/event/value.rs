@@ -247,13 +247,23 @@ impl InputValue {
                                 Gamepad::Button(_) => self.translate_axis_to_button(source_config),
                                 // Axis -> Axis
                                 Gamepad::Axis(_) => {
-                                    match self {
-                                        InputValue::Vector2 { x, y } => {
-                                            let scaled_x = x.map(|v| v * v.abs());
-                                            let scaled_y = y.map(|v| v * v.abs());
-                                            Ok(InputValue::Vector2 { x: scaled_x, y: scaled_y })
+                                    let use_scaling = target_config
+                                        .gamepad
+                                        .as_ref()
+                                        .and_then(|gamepad| gamepad.axis.as_ref())
+                                        .and_then(|axis| axis.quadratic_scaling)
+                                        .unwrap_or(false);
+
+                                    match use_scaling {
+                                        false => Ok(self.clone()),
+                                        true => match self {
+                                            InputValue::Vector2 { x, y } => {
+                                                let scaled_x = x.map(|v| v * v.abs());
+                                                let scaled_y = y.map(|v| v * v.abs());
+                                                Ok(InputValue::Vector2 { x: scaled_x, y: scaled_y })
+                                            },
+                                            _ => Ok(self.clone()),
                                         },
-                                        _ => Ok(self.clone()),
                                     }
                                 },
                                 // Axis -> Trigger
