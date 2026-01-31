@@ -1,6 +1,7 @@
 pub mod dualsense;
 pub mod flydigi_vader_4_pro;
 pub mod fts3528;
+pub mod gpd_win_mini;
 pub mod horipad_steam;
 pub mod iio_imu;
 pub mod lego;
