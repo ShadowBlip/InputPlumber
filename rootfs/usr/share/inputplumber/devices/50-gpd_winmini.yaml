@@ -32,6 +32,11 @@ source_devices:
       name: "  Mouse for Windows"
       phys_path: usb-0000:63:00.3-3/input1
       handler: event*
+  - group: mouse
+    hidraw:
+      vendor_id: 0x093A
+      product_id: 0x0255
+      interface_num: 0
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
@@ -52,6 +57,7 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
+  - touchpad
 
 # The ID of a device event mapping in the 'event_maps' folder
 capability_map_id: gpd3
