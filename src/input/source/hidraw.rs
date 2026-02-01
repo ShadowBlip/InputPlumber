@@ -11,6 +11,7 @@ pub mod legos_touchpad;
 pub mod legos_xinput;
 pub mod msi_claw;
 pub mod opineo;
+pub mod razer_tartarus_pro;
 pub mod rog_ally;
 pub mod steam_deck;
 pub mod xpad_uhid;
@@ -26,6 +27,7 @@ use horipad_steam::HoripadSteam;
 use legos_imu::LegionSImuController;
 use legos_touchpad::LegionSTouchpadController;
 use msi_claw::MsiClaw;
+use razer_tartarus_pro::RazerTartarusPro;
 use rog_ally::RogAlly;
 use xpad_uhid::XpadUhid;
 use zotac_zone::ZotacZone;
@@ -62,6 +64,7 @@ enum DriverType {
     LegionGoXInput,
     MsiClaw,
     OrangePiNeo,
+    RazerTartarusPro,
     RogAlly,
     SteamDeck,
     Unknown,
@@ -85,6 +88,7 @@ pub enum HidRawDevice {
     LegionGo(SourceDriver<LegionGoController>),
     MsiClaw(SourceDriver<MsiClaw>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
+    RazerTartarusPro(SourceDriver<RazerTartarusPro>),
     RogAlly(SourceDriver<RogAlly>),
     SteamDeck(SourceDriver<DeckController>),
     Vader4Pro(SourceDriver<Vader4Pro>),
@@ -107,6 +111,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGo(source_driver) => source_driver.info_ref(),
             HidRawDevice::MsiClaw(source_driver) => source_driver.info_ref(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.info_ref(),
+            HidRawDevice::RazerTartarusPro(source_driver) => source_driver.info_ref(),
             HidRawDevice::RogAlly(source_driver) => source_driver.info_ref(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.info_ref(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.info_ref(),
@@ -129,6 +134,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGo(source_driver) => source_driver.get_id(),
             HidRawDevice::MsiClaw(source_driver) => source_driver.get_id(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_id(),
+            HidRawDevice::RazerTartarusPro(source_driver) => source_driver.get_id(),
             HidRawDevice::RogAlly(source_driver) => source_driver.get_id(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_id(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_id(),
@@ -151,6 +157,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGo(source_driver) => source_driver.client(),
             HidRawDevice::MsiClaw(source_driver) => source_driver.client(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.client(),
+            HidRawDevice::RazerTartarusPro(source_driver) => source_driver.client(),
             HidRawDevice::RogAlly(source_driver) => source_driver.client(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.client(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.client(),
@@ -173,6 +180,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGo(source_driver) => source_driver.run().await,
             HidRawDevice::MsiClaw(source_driver) => source_driver.run().await,
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.run().await,
+            HidRawDevice::RazerTartarusPro(source_driver) => source_driver.run().await,
             HidRawDevice::RogAlly(source_driver) => source_driver.run().await,
             HidRawDevice::SteamDeck(source_driver) => source_driver.run().await,
             HidRawDevice::Vader4Pro(source_driver) => source_driver.run().await,
@@ -195,6 +203,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGo(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::MsiClaw(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::RazerTartarusPro(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::RogAlly(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_capabilities(),
@@ -225,6 +234,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGo(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::MsiClaw(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::RazerTartarusPro(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::RogAlly(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_output_capabilities(),
@@ -247,6 +257,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGo(source_driver) => source_driver.get_device_path(),
             HidRawDevice::MsiClaw(source_driver) => source_driver.get_device_path(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::RazerTartarusPro(source_driver) => source_driver.get_device_path(),
             HidRawDevice::RogAlly(source_driver) => source_driver.get_device_path(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_device_path(),
@@ -389,6 +400,12 @@ impl HidRawDevice {
                 let source_device =
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::XpadUhid(source_device))
+            }
+            DriverType::RazerTartarusPro => {
+                let device = RazerTartarusPro::new(device_info.clone())?;
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                Ok(Self::RazerTartarusPro(source_device))
             }
             DriverType::RogAlly => {
                 let device = RogAlly::new(device_info.clone())?;
@@ -534,6 +551,12 @@ impl HidRawDevice {
         if vid == drivers::fts3528::driver::VID && pid == drivers::fts3528::driver::PID {
             log::info!("Detected FTS3528 Touchscreen");
             return DriverType::Fts3528Touchscreen;
+        }
+
+        // Razer Tartarus Pro
+        if vid == drivers::razer_tartarus_pro::driver::VID && pid == drivers::razer_tartarus_pro::driver::PID {
+            log::info!("Detected Razer Tartarus Pro");
+            return DriverType::RazerTartarusPro;
         }
 
         // Rog Ally

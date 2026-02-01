@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Razer Tartarus Pro
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty,then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# Maximum number of source devices per CompositeDevice.
+maximum_sources: 7
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: keyboard
+    blocked: true
+    unique: false
+    evdev:
+      name: "Razer Razer Tartarus Pro*"
+      handler: event*
+  - group: keyboard
+    unique: false
+    udev:
+      attributes:
+        - name: idVendor
+          value: "1532"
+        - name: idProduct
+          value: "0244"
+        - name: bInterfaceNumber
+          value: "00"
+      subsystem: hidraw
+  - group: keyboard
+    unique: false
+    udev:
+      attributes:
+        - name: idVendor
+          value: "1532"
+        - name: idProduct
+          value: "0244"
+        - name: bInterfaceNumber
+          value: "01"
+      subsystem: hidraw
+  - group: mouse
+    unique: false
+    passthrough: true
+    udev:
+      attributes:
+        - name: idVendor
+          value: "1532"
+        - name: idProduct
+          value: "0244"
+        - name: bInterfaceNumber
+          value: "02"
+      subsystem: hidraw
+
+# The target input device(s) to emulate by default
+target_devices:
+    - mouse
+    - keyboard
+
+capability_map_id: razer-tartarus-pro
+
+options:
+  auto_manage: true
