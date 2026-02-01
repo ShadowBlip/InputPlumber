@@ -259,6 +259,17 @@ mapping:
         button: West
 ```
 
+### Environment Variables
+
+Some aspects of InputPlumber can be controlled with environment variables. This
+is the current list of environment variables that are used:
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `LOG_LEVEL` | info | Log level to use. Can be one of: 'error', 'warn', 'info', 'debug', 'trace' |
+| `HIDE_DEVICES_FROM_ROOT` | 0 | Try to hide the device from elevated processes by moving the device node to `/dev/inputplumber/sources`. |
+
+
 ### Troubleshooting
 
 Find the InputPlumber version:

@@ -40,7 +40,7 @@ use crate::{
         },
         target::TargetDeviceTypeId,
     },
-    udev::{hide_device, unhide_device},
+    udev::{hide_device, unhide_device, HideFlag},
 };
 
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
@@ -123,7 +123,7 @@ pub struct CompositeDevice {
     source_devices_discovered: Vec<SourceDevice>,
     /// Source devices that should be hidden before they are started. This
     /// is a list of devnode paths to hide (e.g. ["/dev/input/event10", "/dev/hidraw1"])
-    source_devices_to_hide: Vec<String>,
+    source_devices_to_hide: Vec<(String, &'static [HideFlag])>,
     /// HashSet of source devices that are blocked from passing their input events to target
     /// events.
     source_devices_blocked: HashSet<String>,
@@ -650,9 +650,9 @@ impl CompositeDevice {
     /// consume.
     async fn run_source_devices(&mut self) -> Result<(), Box<dyn Error>> {
         // Hide the device if specified
-        for source_path in self.source_devices_to_hide.drain(..) {
+        for (source_path, flags) in self.source_devices_to_hide.drain(..) {
             log::debug!("Hiding device: {}", source_path);
-            if let Err(e) = hide_device(source_path.as_str()).await {
+            if let Err(e) = hide_device(source_path.as_str(), flags).await {
                 log::warn!("Failed to hide device '{source_path}': {e:?}");
             }
             log::debug!("Finished hiding device: {source_path}");
@@ -1713,7 +1713,23 @@ impl CompositeDevice {
                     !should_passthru && subsystem.as_str() != "iio" && subsystem.as_str() != "tty";
                 if should_hide {
                     let source_path = device.devnode();
-                    self.source_devices_to_hide.push(source_path);
+                    // The device should be hidden if either the udev device has
+                    // the appropriate property set OR if inputplumber was run
+                    // with the appropriate environment variable.
+                    let hide_from_root = if let Ok(value) = std::env::var("HIDE_DEVICES_FROM_ROOT")
+                    {
+                        value.as_str() == "1" || value.as_str() == "true"
+                    } else if let Some(value) = device.get_property("HIDE_DEVICES_FROM_ROOT") {
+                        value.as_str() == "1" || value.as_str() == "true"
+                    } else {
+                        false
+                    };
+                    let flags: &[HideFlag] = if hide_from_root {
+                        &[HideFlag::ChangePermissions, HideFlag::MoveSourceDevice]
+                    } else {
+                        &[HideFlag::ChangePermissions]
+                    };
+                    self.source_devices_to_hide.push((source_path, flags));
                 }
 
                 match subsystem.as_str() {
