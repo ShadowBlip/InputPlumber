@@ -6,7 +6,11 @@ pub mod device_test;
 
 pub mod device;
 
-use std::{error::Error, fs, path::Path};
+use std::{
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use tokio::process::Command;
 use udev::Enumerator;
@@ -17,8 +21,15 @@ const RULE_HIDE_DEVICE_EARLY_PRIORITY: &str = "50";
 const RULE_HIDE_DEVICE_LATE_PRIORITY: &str = "96";
 const RULES_PREFIX: &str = "/run/udev/rules.d";
 
+/// HideFlags can be used to change the behavior of how devices are hidden.
+#[derive(Debug, PartialEq, Eq)]
+pub enum HideFlag {
+    ChangePermissions,
+    MoveSourceDevice,
+}
+
 /// Hide the given input device from regular users.
-pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
+pub async fn hide_device(path: &str, flags: &[HideFlag]) -> Result<(), Box<dyn Error>> {
     // Get the device to hide
     let device = get_device(path.to_string()).await?;
     let name = device.name.clone();
@@ -30,34 +41,64 @@ pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
         return Err("Unable to create match rule for device".into());
     };
 
-    // Create the directory to move devnodes to
-    tokio::fs::create_dir_all("/dev/inputplumber/sources").await?;
+    // Create the udev rule content to update permissions on the source node.
+    let mut chmod_early_rule = String::new();
+    let mut chmod_late_rule = String::new();
+    if flags.contains(&HideFlag::ChangePermissions) {
+        // Find the chmod command to use for hiding
+        let chmod_cmd = if Path::new("/bin/chmod").exists() {
+            "/bin/chmod".to_string()
+        } else if Path::new("/usr/bin/chmod").exists() {
+            "/usr/bin/chmod".to_string()
+        } else {
+            let output = Command::new("which").arg("chmod").output().await?;
+            if !output.status.success() {
+                return Err("Unable to determine chmod command location".into());
+            }
+            str::from_utf8(output.stdout.as_slice())?.trim().to_string()
+        };
 
-    // Find the chmod command to use for hiding
-    let chmod_cmd = if Path::new("/bin/chmod").exists() {
-        "/bin/chmod".to_string()
-    } else if Path::new("/usr/bin/chmod").exists() {
-        "/usr/bin/chmod".to_string()
-    } else {
-        let output = Command::new("which").arg("chmod").output().await?;
-        if !output.status.success() {
-            return Err("Unable to determine chmod command location".into());
-        }
-        str::from_utf8(output.stdout.as_slice())?.trim().to_string()
-    };
+        // Build the rule content
+        chmod_early_rule = format!(
+            r#"KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN+="{chmod_cmd} 000 /dev/input/%k", SYMLINK+="inputplumber/by-hidden/%k"
+KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN+="{chmod_cmd} 000 /dev/%k", SYMLINK+="inputplumber/by-hidden/%k"
+"#
+        );
+        chmod_late_rule = format!(
+            r#"KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/input/%k"
+KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/%k"
+"#
+        );
+    }
 
-    // Find the mv command to use for hiding
-    let mv_cmd = if Path::new("/bin/mv").exists() {
-        "/bin/mv".to_string()
-    } else if Path::new("/usr/bin/mv").exists() {
-        "/usr/bin/mv".to_string()
-    } else {
-        let output = Command::new("which").arg("mv").output().await?;
-        if !output.status.success() {
-            return Err("Unable to determine mv command location".into());
-        }
-        str::from_utf8(output.stdout.as_slice())?.trim().to_string()
-    };
+    // Create the udev rule content to move the device node
+    let mut mv_early_rule = String::new();
+    let mut mv_late_rule = String::new();
+    if flags.contains(&HideFlag::MoveSourceDevice) {
+        // Create the directory to move devnodes to
+        tokio::fs::create_dir_all("/dev/inputplumber/sources").await?;
+
+        // Find the mv command to use for hiding
+        let mv_cmd = if Path::new("/bin/mv").exists() {
+            "/bin/mv".to_string()
+        } else if Path::new("/usr/bin/mv").exists() {
+            "/usr/bin/mv".to_string()
+        } else {
+            let output = Command::new("which").arg("mv").output().await?;
+            if !output.status.success() {
+                return Err("Unable to determine mv command location".into());
+            }
+            str::from_utf8(output.stdout.as_slice())?.trim().to_string()
+        };
+
+        // Build the rule content
+        mv_early_rule = format!(
+            r#"KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", RUN+="{mv_cmd} /dev/input/%k /dev/inputplumber/sources/%k"
+KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", RUN+="{mv_cmd} /dev/%k /dev/inputplumber/sources/%k"
+"#
+        );
+        mv_late_rule = mv_early_rule.clone();
+    }
 
     // Create an early udev rule to hide the device
     let rule = format!(
@@ -66,10 +107,8 @@ pub async fn hide_device(path: &str) -> Result<(), Box<dyn Error>> {
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
-KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN+="{chmod_cmd} 000 /dev/input/%k", SYMLINK+="inputplumber/by-hidden/%k"
-KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN+="{chmod_cmd} 000 /dev/%k", SYMLINK+="inputplumber/by-hidden/%k"
-KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", RUN+="{mv_cmd} /dev/input/%k /dev/inputplumber/sources/%k"
-KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", RUN+="{mv_cmd} /dev/%k /dev/inputplumber/sources/%k"
+{chmod_early_rule}
+{mv_early_rule}
 LABEL="inputplumber_end"
 "#
     );
@@ -87,10 +126,8 @@ LABEL="inputplumber_end"
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
-KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/input/%k"
-KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/%k"
-KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", RUN+="{mv_cmd} /dev/input/%k /dev/inputplumber/sources/%k"
-KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", RUN+="{mv_cmd} /dev/%k /dev/inputplumber/sources/%k"
+{chmod_late_rule}
+{mv_late_rule}
 LABEL="inputplumber_end"
 "#
     );
@@ -126,14 +163,16 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
 
     // Move the device back
     let src_path = format!("/dev/inputplumber/sources/{name}");
-    let dst_path = if name.starts_with("event") || name.starts_with("js") {
-        format!("/dev/input/{name}")
-    } else {
-        format!("/dev/{name}")
-    };
-    log::debug!("Restoring device node path '{src_path}' to '{dst_path}'");
-    if let Err(e) = fs::rename(&src_path, &dst_path) {
-        log::warn!("Failed to move device node from {src_path} to {dst_path}: {e}");
+    if PathBuf::from(&src_path).exists() {
+        let dst_path = if name.starts_with("event") || name.starts_with("js") {
+            format!("/dev/input/{name}")
+        } else {
+            format!("/dev/{name}")
+        };
+        log::debug!("Restoring device node path '{src_path}' to '{dst_path}'");
+        if let Err(e) = fs::rename(&src_path, &dst_path) {
+            log::warn!("Failed to move device node from {src_path} to {dst_path}: {e}");
+        }
     }
 
     // Reload udev
