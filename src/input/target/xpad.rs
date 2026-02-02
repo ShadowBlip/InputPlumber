@@ -23,20 +23,23 @@ use crate::input::output_event::{OutputEvent, UinputOutputEvent};
 use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
 #[derive(Debug)]
-pub struct XboxSeriesController {
+pub struct XBoxController {
     device: VirtualDevice,
     axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
     queued_events: Vec<ScheduledNativeEvent>,
+    capabilities: Vec<Capability>,
 }
 
-impl XboxSeriesController {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
-        let axis_map = XboxSeriesController::get_abs_info();
-        let device = XboxSeriesController::create_virtual_device(&axis_map)?;
+impl XBoxController {
+    pub fn new(model: &str) -> Result<Self, Box<dyn Error>> {
+        let axis_map = XBoxController::get_abs_info();
+        let device = XBoxController::create_virtual_device(&axis_map, model)?;
+        let capabilities = get_model_capabilties(model);
         Ok(Self {
             device,
             axis_map,
             queued_events: Vec::new(),
+            capabilities,
         })
     }
 
@@ -65,10 +68,10 @@ impl XboxSeriesController {
     /// Create the virtual device to emulate
     fn create_virtual_device(
         axis_map: &HashMap<AbsoluteAxisCode, AbsInfo>,
+        model: &str,
     ) -> Result<VirtualDevice, Box<dyn Error>> {
         // Setup Key inputs
         let mut keys = AttributeSet::<KeyCode>::new();
-        keys.insert(KeyCode::KEY_RECORD);
         keys.insert(KeyCode::BTN_SOUTH);
         keys.insert(KeyCode::BTN_EAST);
         keys.insert(KeyCode::BTN_NORTH);
@@ -84,6 +87,31 @@ impl XboxSeriesController {
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY2);
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY3);
         keys.insert(KeyCode::BTN_TRIGGER_HAPPY4);
+
+        // Identify to the kernel as an Xbox One Elite
+        let (id, name) = match model {
+            "xbox-series" => {
+                keys.insert(KeyCode::KEY_RECORD);
+                let id = InputId::new(BusType(3), 0x045e, 0x0b12, 0x0001);
+                let name = "Microsoft Xbox Series S|X Controller";
+                (id, name)
+            }
+            "xbox-elite" => {
+                keys.insert(KeyCode::KEY_RECORD);
+                keys.insert(KeyCode::BTN_TRIGGER_HAPPY5);
+                keys.insert(KeyCode::BTN_TRIGGER_HAPPY6);
+                keys.insert(KeyCode::BTN_TRIGGER_HAPPY7);
+                keys.insert(KeyCode::BTN_TRIGGER_HAPPY8);
+                let id = InputId::new(BusType(3), 0x045e, 0x0b00, 0x0001);
+                let name = "Microsoft X-Box One Elite 2 pad";
+                (id, name)
+            }
+            _ => {
+                let id = InputId::new(BusType(3), 0x045e, 0x028e, 0x0001);
+                let name = "Microsoft X-Box 360 pad";
+                (id, name)
+            }
+        };
 
         // Setup ABS inputs
         let Some(joystick_setup) = axis_map.get(&AbsoluteAxisCode::ABS_X) else {
@@ -113,12 +141,9 @@ impl XboxSeriesController {
         ff.insert(FFEffectCode::FF_SINE);
         ff.insert(FFEffectCode::FF_GAIN);
 
-        // Identify to the kernel as an Xbox One Elite
-        let id = InputId::new(BusType(3), 0x045e, 0x0b12, 0x0001);
-
         // Build the device
         let device = VirtualDeviceBuilder::new()?
-            .name("Microsoft Xbox Series S|X Controller")
+            .name(name)
             .input_id(id)
             .with_keys(&keys)?
             .with_absolute_axis(&abs_x)?
@@ -151,12 +176,67 @@ impl XboxSeriesController {
     }
 }
 
-impl TargetInputDevice for XboxSeriesController {
+fn get_model_capabilties(model: &str) -> Vec<Capability> {
+    let mut capabilities = vec![
+        Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
+        Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
+        Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
+        Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
+        Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+    ];
+
+    match model {
+        "xbox-series" => {
+            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                GamepadButton::Screenshot,
+            )));
+        }
+        "xbox-elite" => {
+            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                GamepadButton::Screenshot,
+            )));
+            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                GamepadButton::LeftPaddle1,
+            )));
+            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                GamepadButton::LeftPaddle2,
+            )));
+            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                GamepadButton::RightPaddle1,
+            )));
+            capabilities.push(Capability::Gamepad(Gamepad::Button(
+                GamepadButton::RightPaddle2,
+            )));
+        }
+        _ => {}
+    };
+
+    capabilities
+}
+
+impl TargetInputDevice for XBoxController {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
 
         //TODO: Remove these once we add target device profiles
-        // Check for QuickAccess, create chord for event.
+        // Check for QuickAccess
         let cap = event.as_capability();
         if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
             let pressed = event.pressed();
@@ -198,31 +278,7 @@ impl TargetInputDevice for XboxSeriesController {
     }
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(vec![
-            Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
-            Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
-            Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
-            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-        ])
+        Ok(self.capabilities.clone())
     }
 
     /// Returns any events in the queue up to the [TargetDriver]
@@ -247,7 +303,7 @@ impl TargetInputDevice for XboxSeriesController {
     }
 }
 
-impl TargetOutputDevice for XboxSeriesController {
+impl TargetOutputDevice for XBoxController {
     /// Process force feedback events from the device
     fn poll(
         &mut self,
