@@ -473,7 +473,9 @@ impl HidRawDevice {
         }
 
         // Steam Deck
-        if vid == steam_deck::VID && pid == steam_deck::PID {
+        if vid == drivers::steam_deck::VID
+            && pid == drivers::steam_deck::ProductId::SteamDeck.to_u16()
+        {
             log::info!("Detected Steam Deck");
             return DriverType::SteamDeck;
         }
