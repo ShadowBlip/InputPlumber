@@ -36,11 +36,6 @@ use crate::{
     udev::device::UdevDevice,
 };
 
-/// Vendor ID
-pub const VID: u16 = 0x28de;
-/// Product ID
-pub const PID: u16 = 0x1205;
-
 pub struct DeckController {
     driver: Driver,
     device_info: UdevDevice,

@@ -17,13 +17,13 @@ use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 use crate::{
     config::CompositeDeviceConfig,
     drivers::steam_deck::{
-        driver::VID,
         hid_report::{
             PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
             PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX,
             STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
         report_descriptor::CONTROLLER_DESCRIPTOR,
+        ProductId, VID,
     },
     input::{
         capability::{
@@ -33,12 +33,10 @@ use crate::{
         composite_device::client::CompositeDeviceClient,
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
-            value::InputValue,
-            value::{denormalize_signed_value_i16, denormalize_unsigned_value_u16},
+            value::{denormalize_signed_value_i16, denormalize_unsigned_value_u16, InputValue},
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
-        target::steam_deck::ProductId,
     },
 };
 
@@ -645,8 +643,8 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                 }
                 "Lenovo Legion Go 2" => {
                     device_config.vendor = "Lenovo".to_string();
-                    device_config.name = "Legion Go Controller".to_string();
-                    device_config.product_id = ProductId::LenovoLegionGo;
+                    device_config.name = "Legion Go 2 Controller".to_string();
+                    device_config.product_id = ProductId::LenovoLegionGo2;
                 }
                 "Lenovo Legion Go S" => {
                     device_config.vendor = "Lenovo".to_string();
@@ -684,6 +682,26 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                     // True PID will only work with the VCHI target as Steam looks for a
                     // specific bInterfaceNumber when that PID is detected.
                     device_config.product_id = ProductId::Generic;
+                }
+                "MSI Claw" => {
+                    device_config.vendor = "MSI".to_string();
+                    device_config.name = "Claw Controller".to_string();
+                    device_config.product_id = ProductId::MsiClaw;
+                }
+                "MSI Claw 7 AI+ A2VM" => {
+                    device_config.vendor = "MSI".to_string();
+                    device_config.name = "Claw Controller".to_string();
+                    device_config.product_id = ProductId::MsiClaw;
+                }
+                "MSI Claw 8 AI+ A2VM" => {
+                    device_config.vendor = "MSI".to_string();
+                    device_config.name = "Claw Controller".to_string();
+                    device_config.product_id = ProductId::MsiClaw;
+                }
+                "MSI Claw A8 BZ2EM" => {
+                    device_config.vendor = "MSI".to_string();
+                    device_config.name = "Claw Controller".to_string();
+                    device_config.product_id = ProductId::MsiClaw;
                 }
                 _ => {}
             };

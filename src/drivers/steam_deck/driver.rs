@@ -1,6 +1,6 @@
 use std::{error::Error, ffi::CString};
 
-use crate::drivers::steam_deck::hid_report::PackedInputDataReport;
+use crate::drivers::steam_deck::{hid_report::PackedInputDataReport, ProductId, VID};
 use hidapi::HidDevice;
 use packed_struct::{
     types::{Integer, SizedInteger},
@@ -15,10 +15,6 @@ use super::{
     hid_report::{PackedMappingsReport, PackedRumbleReport, Register, ReportType, TrackpadMode},
 };
 
-/// Vendor ID
-pub const VID: u16 = 0x28de;
-/// Product ID
-pub const PID: u16 = 0x1205;
 /// Scale to multiply accelerometer values to get in units of meters per second
 pub const ACCEL_SCALE: f64 = 0.0006125;
 /// Scale to multiply gyro values to get in units of degrees per second
@@ -39,7 +35,7 @@ impl Driver {
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&path)?;
         let info = device.get_device_info()?;
-        if info.vendor_id() != VID || info.product_id() != PID {
+        if info.vendor_id() != VID || info.product_id() != ProductId::SteamDeck.to_u16() {
             return Err("Device '{path}' is not a Steam Deck Controller".into());
         }
 
