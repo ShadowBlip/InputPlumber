@@ -17,10 +17,13 @@ use tokio::{
 };
 use unified_gamepad::UnifiedGamepadDevice;
 
-use crate::dbus::interface::{
-    performance::PerformanceInterface,
-    target::{gamepad::TargetGamepadInterface, TargetInterface},
-    DBusInterfaceManager,
+use crate::{
+    dbus::interface::{
+        performance::PerformanceInterface,
+        target::{gamepad::TargetGamepadInterface, TargetInterface},
+        DBusInterfaceManager,
+    },
+    input::target::xpad::XBoxController,
 };
 
 use super::{
@@ -46,9 +49,6 @@ use self::mouse::MouseDevice;
 use self::steam_deck::SteamDeckDevice;
 use self::touchpad::TouchpadDevice;
 use self::touchscreen::TouchscreenDevice;
-use self::xb360::XBox360Controller;
-use self::xbox_elite::XboxEliteController;
-use self::xbox_series::XboxSeriesController;
 
 pub mod client;
 pub mod command;
@@ -63,9 +63,7 @@ pub mod steam_deck_uhid;
 pub mod touchpad;
 pub mod touchscreen;
 pub mod unified_gamepad;
-pub mod xb360;
-pub mod xbox_elite;
-pub mod xbox_series;
+pub mod xpad;
 
 /// Possible errors for a target device client
 #[derive(Error, Debug)]
@@ -794,9 +792,7 @@ pub enum TargetDevice {
     SteamDeckUhid(TargetDriver<SteamDeckUhidDevice>),
     Touchpad(TargetDriver<TouchpadDevice>),
     Touchscreen(TargetDriver<TouchscreenDevice>),
-    XBox360(TargetDriver<XBox360Controller>),
-    XBoxElite(TargetDriver<XboxEliteController>),
-    XBoxSeries(TargetDriver<XboxSeriesController>),
+    XBoxController(TargetDriver<XBoxController>),
     UnifiedGamepad(TargetDriver<UnifiedGamepadDevice>),
 }
 
@@ -903,20 +899,10 @@ impl TargetDevice {
                 let driver = TargetDriver::new_with_options(id, device, dbus, options);
                 Ok(Self::Touchscreen(driver))
             }
-            "xb360" | "gamepad" => {
-                let device = XBox360Controller::new()?;
+            "xb360" | "gamepad" | "xbox-elite" | "xbox-series" => {
+                let device = XBoxController::new(id.as_str())?;
                 let driver = TargetDriver::new(id, device, dbus);
-                Ok(Self::XBox360(driver))
-            }
-            "xbox-elite" => {
-                let device = XboxEliteController::new()?;
-                let driver = TargetDriver::new(id, device, dbus);
-                Ok(Self::XBoxElite(driver))
-            }
-            "xbox-series" => {
-                let device = XboxSeriesController::new()?;
-                let driver = TargetDriver::new(id, device, dbus);
-                Ok(Self::XBoxSeries(driver))
+                Ok(Self::XBoxController(driver))
             }
             "unified-gamepad" => {
                 let device = UnifiedGamepadDevice::new()?;
@@ -951,11 +937,14 @@ impl TargetDevice {
             TargetDevice::SteamDeckUhid(_) => vec!["deck-uhid".try_into().unwrap()],
             TargetDevice::Touchpad(_) => vec!["touchpad".try_into().unwrap()],
             TargetDevice::Touchscreen(_) => vec!["touchscreen".try_into().unwrap()],
-            TargetDevice::XBox360(_) => {
-                vec!["xb360".try_into().unwrap(), "gamepad".try_into().unwrap()]
+            TargetDevice::XBoxController(_) => {
+                vec![
+                    "xb360".try_into().unwrap(),
+                    "gamepad".try_into().unwrap(),
+                    "xbox-elite".try_into().unwrap(),
+                    "xbox-series".try_into().unwrap(),
+                ]
             }
-            TargetDevice::XBoxElite(_) => vec!["xbox-elite".try_into().unwrap()],
-            TargetDevice::XBoxSeries(_) => vec!["xbox-series".try_into().unwrap()],
             TargetDevice::UnifiedGamepad(_) => vec!["unified-gamepad".try_into().unwrap()],
         }
     }
@@ -974,9 +963,7 @@ impl TargetDevice {
             TargetDevice::SteamDeckUhid(device) => Some(device.client()),
             TargetDevice::Touchpad(device) => Some(device.client()),
             TargetDevice::Touchscreen(device) => Some(device.client()),
-            TargetDevice::XBox360(device) => Some(device.client()),
-            TargetDevice::XBoxElite(device) => Some(device.client()),
-            TargetDevice::XBoxSeries(device) => Some(device.client()),
+            TargetDevice::XBoxController(device) => Some(device.client()),
             TargetDevice::UnifiedGamepad(device) => Some(device.client()),
         }
     }
@@ -995,9 +982,7 @@ impl TargetDevice {
             TargetDevice::SteamDeckUhid(device) => device.run().await,
             TargetDevice::Touchpad(device) => device.run().await,
             TargetDevice::Touchscreen(device) => device.run().await,
-            TargetDevice::XBox360(device) => device.run().await,
-            TargetDevice::XBoxElite(device) => device.run().await,
-            TargetDevice::XBoxSeries(device) => device.run().await,
+            TargetDevice::XBoxController(device) => device.run().await,
             TargetDevice::UnifiedGamepad(device) => device.run().await,
         }
     }
