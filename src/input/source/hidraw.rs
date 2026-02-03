@@ -3,6 +3,7 @@ pub mod dualsense;
 pub mod flydigi_vader_4_pro;
 pub mod fts3528;
 pub mod gpd_win_mini_touchpad;
+pub mod gpd_win_mini_macro_keyboard;
 pub mod horipad_steam;
 pub mod legion_go;
 pub mod legos_imu;
@@ -20,6 +21,7 @@ use std::{error::Error, time::Duration};
 use blocked::BlockedHidrawDevice;
 use flydigi_vader_4_pro::Vader4Pro;
 use gpd_win_mini_touchpad::GpdWinMiniTouchpad;
+use gpd_win_mini_macro_keyboard::GpdWinMiniMacroKeyboard;
 use horipad_steam::HoripadSteam;
 use legos_imu::LegionSImuController;
 use legos_touchpad::LegionSTouchpadController;
@@ -52,6 +54,7 @@ enum DriverType {
     DualSense,
     Fts3528Touchscreen,
     GpdWinMiniTouchpad,
+    GpdWinMiniMacroKeyboard,
     HoripadSteam,
     LegionGoSImu,
     LegionGoSTouchpad,
@@ -74,6 +77,7 @@ pub enum HidRawDevice {
     DualSense(SourceDriver<DualSenseController>),
     Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
     GpdWinMiniTouchpad(SourceDriver<GpdWinMiniTouchpad>),
+    GpdWinMiniMacroKeyboard(SourceDriver<GpdWinMiniMacroKeyboard>),
     HoripadSteam(SourceDriver<HoripadSteam>),
     LegionGoSImu(SourceDriver<LegionSImuController>),
     LegionGoSTouchpad(SourceDriver<LegionSTouchpadController>),
@@ -95,6 +99,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::DualSense(source_driver) => source_driver.info_ref(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.info_ref(),
             HidRawDevice::GpdWinMiniTouchpad(source_driver) => source_driver.info_ref(),
+            HidRawDevice::GpdWinMiniMacroKeyboard(source_driver) => source_driver.info_ref(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.info_ref(),
@@ -116,6 +121,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::DualSense(source_driver) => source_driver.get_id(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_id(),
             HidRawDevice::GpdWinMiniTouchpad(source_driver) => source_driver.get_id(),
+            HidRawDevice::GpdWinMiniMacroKeyboard(source_driver) => source_driver.get_id(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_id(),
@@ -137,6 +143,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::DualSense(source_driver) => source_driver.client(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.client(),
             HidRawDevice::GpdWinMiniTouchpad(source_driver) => source_driver.client(),
+            HidRawDevice::GpdWinMiniMacroKeyboard(source_driver) => source_driver.client(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.client(),
@@ -158,6 +165,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::DualSense(source_driver) => source_driver.run().await,
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.run().await,
             HidRawDevice::GpdWinMiniTouchpad(source_driver) => source_driver.run().await,
+            HidRawDevice::GpdWinMiniMacroKeyboard(source_driver) => source_driver.run().await,
             HidRawDevice::HoripadSteam(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.run().await,
@@ -179,6 +187,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::DualSense(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::GpdWinMiniTouchpad(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::GpdWinMiniMacroKeyboard(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_capabilities(),
@@ -204,6 +213,9 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::GpdWinMiniTouchpad(source_driver) => {
                 source_driver.get_output_capabilities()
             }
+            HidRawDevice::GpdWinMiniMacroKeyboard(source_driver) => {
+                source_driver.get_output_capabilities()
+            }
             HidRawDevice::HoripadSteam(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => {
@@ -227,6 +239,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::DualSense(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_device_path(),
             HidRawDevice::GpdWinMiniTouchpad(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::GpdWinMiniMacroKeyboard(source_driver) => source_driver.get_device_path(),
             HidRawDevice::HoripadSteam(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_device_path(),
@@ -434,6 +447,12 @@ impl HidRawDevice {
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::GpdWinMiniTouchpad(source_device))
             }
+            DriverType::GpdWinMiniMacroKeyboard => {
+                let device = GpdWinMiniMacroKeyboard::new(device_info.clone())?;
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                Ok(Self::GpdWinMiniMacroKeyboard(source_device))
+            }
         }
     }
 
@@ -558,9 +577,18 @@ impl HidRawDevice {
         // GPD Win Mini
         if vid == drivers::gpd_win_mini::touchpad_driver::VID
             && pid == drivers::gpd_win_mini::touchpad_driver::PID
+            && iid == drivers::gpd_win_mini::touchpad_driver::IID
         {
             log::info!("Detected GPD Win Mini Touchpad");
             return DriverType::GpdWinMiniTouchpad;
+        }
+
+        if vid == drivers::gpd_win_mini::macro_keyboard_driver::VID
+            && pid == drivers::gpd_win_mini::macro_keyboard_driver::PID
+            && iid == drivers::gpd_win_mini::macro_keyboard_driver::IID
+        {
+            log::info!("Detected GPD Win Mini Macro keyboard");
+            return DriverType::GpdWinMiniMacroKeyboard;
         }
 
         // Unknown
