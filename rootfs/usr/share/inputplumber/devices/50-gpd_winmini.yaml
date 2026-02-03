@@ -28,6 +28,12 @@ source_devices:
       phys_path: usb-0000:63:00.3-5/input0
       handler: event*
   - group: keyboard
+    hidraw:
+      vendor_id: 0x2f24
+      product_id: 0x0135
+      interface_num: 1
+  - group: keyboard
+    blocked: true
     evdev:
       name: "  Mouse for Windows"
       phys_path: usb-0000:63:00.3-3/input1
@@ -37,6 +43,12 @@ source_devices:
       vendor_id: 0x093A
       product_id: 0x0255
       interface_num: 0
+  - group: mouse
+    unique: false
+    blocked: true
+    evdev:
+      name: "{HTIX5288:00 093A:0255 Mouse,HTIX5288:00 093A:0255 Touchpad}"
+      handler: event*
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"

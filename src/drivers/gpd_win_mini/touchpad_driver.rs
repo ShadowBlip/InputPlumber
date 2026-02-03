@@ -7,17 +7,18 @@ use crate::{udev::device::UdevDevice};
 
 use super::{
     event::{BinaryInput, Event, TouchAxisEvent, TouchButtonEvent, TriggerEvent, TriggerInput},
-    hid_report::{ReportType, TouchpadDataReport}
+    hid_report::TouchpadDataReport
 };
 
 pub const VID: u16 = 0x093A;
 pub const PID: u16 = 0x0255;
+pub const IID: i32 = 0x00;
 
 const CLICK_DELAY: Duration = Duration::from_millis(150);
 const RELEASE_DELAY: Duration = Duration::from_millis(30);
 
 // Report ID
-pub const TOUCH_DATA: u8 = ReportType::TouchpadData.to_u8();
+pub const TOUCH_DATA: u8 = 0x01;
 
 // Input report size
 const TOUCHPAD_PACKET_SIZE: usize = 30;
@@ -164,7 +165,7 @@ impl TouchpadDriver {
         {
             // Handle double click
             if self.is_clicked {
-                log::debug!("Double Click");
+                log::trace!("Double Click");
                 let mut new_events = self.release_click();
                 events.append(&mut new_events);
             }
@@ -181,7 +182,7 @@ impl TouchpadDriver {
             // Clear this touch sequence
             if self.touch_started {
                 self.touch_started = false;
-                log::debug!("END Touch");
+                log::trace!("END Touch");
             }
         }
 
@@ -196,6 +197,10 @@ impl TouchpadDriver {
     }
 
     fn start_click(&mut self) -> Vec<Event> {
+        if self.is_clicked {
+            log::debug!("Rejecting extra click");
+            return vec![];
+        }
         log::trace!("Started CLICK event.");
         log::trace!("First touch elapsed: {:?}", self.first_touch.elapsed());
         log::trace!("Last touch elapsed: {:?}", self.last_touch.elapsed());

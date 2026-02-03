@@ -4,12 +4,14 @@ use packed_struct::prelude::*;
 /// Different report types
 pub enum ReportType {
     TouchpadData = 0x01,
+    MacroKeyboardData,
 }
 
 impl ReportType {
     pub const fn to_u8(&self) -> u8 {
         match self {
             ReportType::TouchpadData => ReportType::TouchpadData as u8,
+            ReportType::MacroKeyboardData => ReportType::MacroKeyboardData as u8,
         }
     }
 }
@@ -129,3 +131,128 @@ pub struct TouchpadDataReport {
     pub scan_time: u16,
 }
 
+// MacroKeyboardData
+//
+// L4 only
+//
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000000.000000 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000000.295742 8 00 00 00 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000000.315681 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000000.611655 8 00 00 00 00 00 00 00 00
+//
+// R4 only
+//
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000009.024553 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000009.319799 8 00 00 00 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000009.339826 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000009.635850 8 00 00 00 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000009.656072 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000009.952133 8 00 00 00 00 00 00 00 00
+
+// L4, L4+R4, release
+
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000032.764316 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.061207 8 00 00 00 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.080626 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', 'Pause', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.292776 8 00 00 46 48 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.376570 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', 'PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.396706 8 00 00 48 46 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.588814 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', 'Pause', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.608325 8 00 00 46 48 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.692449 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', 'PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.713268 8 00 00 48 46 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.904337 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', 'Pause', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000033.924432 8 00 00 46 48 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000034.008374 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', 'PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000034.028301 8 00 00 48 46 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000034.220623 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', 'Pause', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000034.240262 8 00 00 46 48 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000034.324254 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', 'PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000034.344298 8 00 00 48 46 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000034.536343 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000034.640707 8 00 00 00 00 00 00 00 00
+
+// R4, L4+R4, release
+
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000042.388506 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000042.685124 8 00 00 00 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000042.704761 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', 'PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000042.992783 8 00 00 48 46 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.000912 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', 'Pause', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.020553 8 00 00 46 48 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.288683 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', 'PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.308784 8 00 00 48 46 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.316482 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', 'Pause', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.336461 8 00 00 46 48 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.604794 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', 'PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.624486 8 00 00 48 46 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.632943 8 00 00 46 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['PrintScreen', 'Pause', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.652791 8 00 00 46 48 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.920985 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.948797 8 00 00 00 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['Pause', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000043.968795 8 00 00 48 00 00 00 00 00
+// #  LeftControl: 0 | LeftShift: 0 | LeftAlt: 0 | Left GUI: 0 | RightControl: 0 | RightShift: 0 | RightAlt: 0 | Right GUI: 0 | # |Keyboard ['0x70000', '0x70000', '0x70000', '0x70000', '0x70000', '0x70000']
+// E: 000044.264845 8 00 00 00 00 00 00 00 00
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "8")]
+pub struct MacroKeyboardDataReport {
+    #[packed_field(bytes = "0")]
+    pub modifiers: u8,
+    #[packed_field(bytes = "1")]
+    pub reserved: u8,
+    #[packed_field(bytes = "2..=7")]
+    pub keys: [u8; 6],
+}
+
+impl MacroKeyboardDataReport {
+    pub fn has_key(&self, code: u8) -> bool {
+        self.keys.contains(&code)
+    }
+}
