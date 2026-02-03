@@ -434,8 +434,8 @@ pub struct XInputDataReport {
     #[packed_field(bytes = "24")]
     pub unk_23: u8,
 
-    #[packed_field(bytes = "25")]
-    pub mouse_z: i8,
+    #[packed_field(bytes = "25", endian = "msb")]
+    pub mouse_z: u8,
 
     #[packed_field(bytes = "26..=27", endian = "msb")]
     pub touch_x: u16,

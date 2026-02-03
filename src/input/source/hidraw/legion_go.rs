@@ -209,9 +209,10 @@ impl LegionGoController {
                     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
                     normalize_trigger_value(trigg),
                 ),
-                event::TriggerEvent::MouseWheel(_) => {
-                    NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
-                }
+                event::TriggerEvent::MouseWheel(_) => NativeEvent::new(
+                    Capability::Mouse(Mouse::Wheel),
+                    normalize_trigger_value(trigg),
+                ),
                 event::TriggerEvent::RpadForce(_) => NativeEvent::new(
                     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
                     normalize_trigger_value(trigg),
@@ -347,10 +348,10 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
             let max = TRIGG_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
         }
-        event::TriggerEvent::MouseWheel(value) => {
-            let max = MOUSE_WHEEL_MAX;
-            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
-        }
+        event::TriggerEvent::MouseWheel(value) => InputValue::Vector2 {
+            x: None,
+            y: Some(value.value as f64),
+        },
         event::TriggerEvent::RpadForce(value) => {
             let max = PAD_FORCE_MAX;
             InputValue::Float(normalize_unsigned_value(value.value as f64, max))
@@ -397,6 +398,7 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gyroscope(Source::Center),
     Capability::Gyroscope(Source::Left),
     Capability::Gyroscope(Source::Right),
+    Capability::Mouse(Mouse::Wheel),
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];
