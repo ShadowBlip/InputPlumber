@@ -162,9 +162,9 @@ impl Driver {
         let input_report = XInputDataReport::unpack(&buf)?;
 
         // Print input report for debugging
-        //log::trace!("--- Input report ---");
-        //log::trace!("{input_report}");
-        //log::trace!(" ---- End Report ----");
+        //log::debug!("--- Input report ---");
+        //log::debug!("{input_report}");
+        //log::debug!(" ---- End Report ----");
 
         // Update the state
         let old_dinput_state = self.update_xinput_state(input_report);
@@ -408,8 +408,16 @@ impl Driver {
                 })));
             }
             if state.mouse_z != old_state.mouse_z {
+                log::debug!("Raw mouse value: {:b}, {}", state.mouse_z, !state.mouse_z);
+                let value = state.mouse_z.wrapping_sub(128) as i8;
+                let value = match value {
+                    64..=127 => value - 127 - 1,
+                    v => v,
+                };
+
+                log::debug!("Normalized mouse value: {value}");
                 events.push(Event::Trigger(TriggerEvent::MouseWheel(MouseWheelInput {
-                    value: state.mouse_z,
+                    value,
                 })));
             }
 
