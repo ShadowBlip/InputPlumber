@@ -3,6 +3,7 @@
 pub enum Event {
     TouchAxis(TouchAxisEvent),
     TouchButton(TouchButtonEvent),
+    GamepadButton(GamepadButtonEvent),
     Trigger(TriggerEvent),
 }
 
@@ -27,7 +28,7 @@ pub struct TriggerInput {
     pub value: u8,
 }
 
-/// Button events represent binary inputs
+/// TouchButton events represent binary clicks
 #[derive(Clone, Debug)]
 pub enum TouchButtonEvent {
     /// Tap to click button
@@ -38,4 +39,12 @@ pub enum TouchButtonEvent {
 #[derive(Clone, Debug)]
 pub enum TriggerEvent {
     PadForce(TriggerInput),
+}
+
+/// GamepadButton events represent binary button presses
+#[derive(Clone, Debug)]
+pub enum GamepadButtonEvent {
+    /// Tap to click button
+    L4(BinaryInput),
+    R4(BinaryInput),
 }

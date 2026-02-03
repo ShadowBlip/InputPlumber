@@ -120,6 +120,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 )
             },
         },
+        _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
     }
 }
 
