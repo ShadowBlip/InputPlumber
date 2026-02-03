@@ -1934,16 +1934,16 @@ impl CompositeDevice {
     fn is_new_active_event(&mut self, cap: &Capability, is_pressed: bool) -> bool {
         let active = self.active_inputs.contains(cap);
         if is_pressed && !active {
-            log::debug!("New active capability: {cap:?}");
+            log::trace!("New active capability: {cap:?}");
             self.active_inputs.push(cap.clone());
         }
         // Ignore up events for actions we've already handled.
         if !is_pressed && !active {
-            log::debug!("Blocked up event for capability: {cap:?}");
+            log::trace!("Blocked up event for capability: {cap:?}");
             return false;
         }
         if !is_pressed && active {
-            log::debug!("Removed inactive capability: {cap:?}");
+            log::trace!("Removed inactive capability: {cap:?}");
             let index = self.active_inputs.iter().position(|r| r == cap).unwrap();
             self.active_inputs.remove(index);
         }
@@ -1957,12 +1957,12 @@ impl CompositeDevice {
         intercept: bool,
     ) -> Result<bool, Box<dyn Error>> {
         if self.intercept_activation_caps.len() == 1 {
-            log::debug!("Checking single intercept event.");
+            log::trace!("Checking single intercept event.");
             return self
                 .is_intercept_event_single(event, is_pressed, intercept)
                 .await;
         }
-        log::debug!("Checking multi intercept event.");
+        log::trace!("Checking multi intercept event.");
         self.is_intercept_event_multi(event, is_pressed, intercept)
             .await
     }
@@ -1977,7 +1977,6 @@ impl CompositeDevice {
         // Check if we have met the criteria for InterceptMode:Always
         if intercept && self.intercept_activation_caps.contains(&cap) && is_pressed {
             log::debug!("Found matching intercept event: {:?}", cap);
-            log::debug!("It is a DOWN event!");
             // Stop here if this is a repeat event.
             if self.intercept_active_inputs.contains(&cap) {
                 log::debug!("The event is already in the list. Skipping.");
@@ -2000,8 +1999,6 @@ impl CompositeDevice {
         {
             // Check if we already sent the intercept event. We might not be in the same intercept mode
             // so dont check intercept.
-            log::debug!("It is an UP event!");
-
             log::trace!("Remove from intercept active inputs: {cap:?}");
             let index = self
                 .intercept_active_inputs

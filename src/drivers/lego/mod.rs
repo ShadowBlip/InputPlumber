@@ -43,7 +43,6 @@ const HID_TIMEOUT: i32 = 10;
 const XINPUT_COMMAND_ID: u8 = 0x74;
 
 // Input report axis ranges
-pub const MOUSE_WHEEL_MAX: f64 = 120.0;
 pub const PAD_FORCE_MAX: f64 = 127.0;
 pub const PAD_FORCE_NORMAL: u8 = 32; /* Simulated average pressure */
 pub const PAD_X_MAX: f64 = 1024.0;
