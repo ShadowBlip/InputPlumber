@@ -65,7 +65,5 @@ target_devices:
     - mouse
     - keyboard
 
-capability_map_id: razer-tartarus-pro
-
 options:
   auto_manage: true
