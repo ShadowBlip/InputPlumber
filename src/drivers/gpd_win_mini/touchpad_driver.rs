@@ -15,7 +15,8 @@ pub const PID: u16 = 0x0255;
 pub const IID: i32 = 0x00;
 
 const CLICK_DELAY: Duration = Duration::from_millis(150);
-const RELEASE_DELAY: Duration = Duration::from_millis(30);
+const RELEASE_DELAY: Duration = Duration::from_millis(50);
+const MAX_TAP_DISTANCE_SQ: u32 = 10000;
 
 // Report ID
 pub const TOUCH_DATA: u8 = 0x01;
@@ -38,6 +39,10 @@ pub struct TouchpadDriver {
     device: HidDevice,
     /// Timestamp of the first touch event.
     first_touch: Instant,
+    /// X position of the first touch
+    first_touch_x: u16,
+    /// Y position of the first touch
+    first_touch_y: u16,
     /// Whether or not we are currently holding a tap-to-click.
     is_clicked: bool,
     /// Whether or not we are detecting a touch event currently.
@@ -64,6 +69,8 @@ impl TouchpadDriver {
         Ok(Self {
             device,
             first_touch: Instant::now(),
+            first_touch_x: 0,
+            first_touch_y: 0,
             is_clicked: false,
             is_touching: false,
             last_touch: Instant::now(),
@@ -156,12 +163,20 @@ impl TouchpadDriver {
             if !self.touch_started {
                 self.touch_started = true;
                 self.first_touch = Instant::now();
+                self.first_touch_x = state.touch_x0;
+                self.first_touch_y = state.touch_y0;
                 log::trace!("Started TOUCH event");
             }
         // Handle tap-to-click
         } else if !self.is_touching
             && self.touch_started
             && self.first_touch.elapsed() <= CLICK_DELAY
+            && self.distance_sq(
+                self.first_touch_x,
+                self.first_touch_y,
+                state.touch_x0,
+                state.touch_y0
+            ) < MAX_TAP_DISTANCE_SQ
         {
             // Handle double click
             if self.is_clicked {
@@ -194,6 +209,12 @@ impl TouchpadDriver {
         }));
 
         events
+    }
+
+    fn distance_sq(&mut self, x1: u16, y1: u16, x2: u16, y2: u16) -> u32 {
+        let dx: u32 = u32::from(x1.abs_diff(x2));
+        let dy: u32 = u32::from(y1.abs_diff(y2));
+        dx * dx + dy * dy
     }
 
     fn start_click(&mut self) -> Vec<Event> {
