@@ -49,6 +49,8 @@ pub struct TouchpadDriver {
     is_touching: bool,
     /// Timestamp of the last touch event.
     last_touch: Instant,
+    /// Timestamp of the last release event.
+    last_release: Instant,
     /// Whether or not a touch event was started that hasn't been cleared.
     touch_started: bool,
     /// State for the touchpad device
@@ -74,6 +76,7 @@ impl TouchpadDriver {
             is_clicked: false,
             is_touching: false,
             last_touch: Instant::now(),
+            last_release: Instant::now(),
             touch_started: false,
             touchpad_state: None,
         })
@@ -166,6 +169,13 @@ impl TouchpadDriver {
                 self.first_touch_x = state.touch_x0;
                 self.first_touch_y = state.touch_y0;
                 log::trace!("Started TOUCH event");
+
+                // If this happened soon after a click, drag
+                if self.last_release.elapsed() <= CLICK_DELAY {
+                    log::trace!("Started DRAG event");
+                    let mut click_events = self.start_click();
+                    events.append(&mut click_events);
+                }
             }
         // Handle tap-to-click
         } else if !self.is_touching
@@ -246,6 +256,7 @@ impl TouchpadDriver {
         log::trace!("Last touch elapsed: {:?}", self.last_touch.elapsed());
         self.is_clicked = false;
         self.touch_started = false;
+        self.last_release = Instant::now();
         let mut events = Vec::new();
         let event = Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false }));
         events.push(event);
