@@ -1,6 +1,7 @@
 use super::event::{Event, KeyCodes};
 use crate::udev::device::UdevDevice;
 use hidapi::HidDevice;
+use std::collections::VecDeque;
 use std::{error::Error, ffi::CString};
 
 pub const VID: u16 = 0x1532;
@@ -9,17 +10,34 @@ pub const PID: u16 = 0x0244;
 const RAZER_HID_ARRAY_SIZE: usize = 91;
 const MESSAGE_DATA_PAYLOAD: usize = 24;
 const RAZER_FEATURE_ENDPOINT: i32 = 2;
+const TREND_KEYDOWN: f64 = 1.0;
+const TREND_KEYUP: f64 = -1.0;
+const REGRESSION_WINDOW: usize = 5;
+const KEY_COUNT: usize = 20;
+const UNIT_TO_MM: f64 = 0.1 / 12.0;
 
 pub struct Driver {
     device: HidDevice,
     razer_message_id: u8,
-    analog_state: [u8; MESSAGE_DATA_PAYLOAD],
+    hysteresis: VecDeque<[u8; KEY_COUNT]>,
+    key_actions: [AnalogAction; KEY_COUNT],
     key_state: Vec<KeyCodes>,
 }
 
-/// This driver implementation is shared across all three HID handles on the
-/// Tartarus Pro. Certain code-paths will only execute on certain handles.
-/// Refer to handle_input_report()
+#[derive(Clone, Copy, Default, Debug)]
+pub struct AnalogAction {
+    actuation_point: (u8, u8),
+    retrigger_window: (f64, f64), // as mm
+    crt_en: bool,
+    actuated: (bool, bool),
+    retrigger_track: f64, // as mm
+    retrigger_go: bool,
+    keydown_up_n: bool, // Reflects the previous trend on a key
+}
+
+// This driver implementation is shared across all three HID handles on the
+// Tartarus Pro. Certain code-paths will only execute on certain handles.
+// Refer to handle_input_report()
 
 impl Driver {
     pub fn new(udevice: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -34,20 +52,34 @@ impl Driver {
         }
         if info.interface_number() == RAZER_FEATURE_ENDPOINT {
             // Check if we can get serial number
-            let packet = Self::razer_report(0x0, 0x82, 0x16, &[0x0], &mut razer_message_id);
+            let mut packet = Self::razer_report(0x0, 0x82, 0x16, &[0x0], &mut razer_message_id);
             let output = Self::transaction(packet, &device).unwrap();
             log::info!(
                 "Tartarus Serial Number: {:?}",
                 String::from_utf8(output).unwrap().trim_end_matches("\0")
             );
+            // Enable analog mode
+            packet = Self::razer_report(0x0, 0x4, 0x2, &[0x3, 0x0], &mut razer_message_id);
+            log::info!("Enabling Tartarus Pro analog mode");
+            let _ = Self::transaction(packet, &device).unwrap();
         }
 
-        Ok(Self {
+        let mut zeroes = VecDeque::with_capacity(REGRESSION_WINDOW);
+        for _ in 0..zeroes.capacity() {
+            zeroes.push_back([0; KEY_COUNT]);
+        }
+        let mut check = Self {
             device,
             razer_message_id,
-            analog_state: [0; MESSAGE_DATA_PAYLOAD],
+            hysteresis: zeroes,
+            key_actions: [AnalogAction::default(); KEY_COUNT],
             key_state: Vec::new(),
-        })
+        };
+        check.key_actions[0].actuation_point = (0x24, 0x78);
+        check.key_actions[0].retrigger_window = (0.0, 0.0);
+        check.key_actions[0].crt_en = false;
+
+        Ok(check)
     }
 
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
@@ -162,8 +194,7 @@ impl Driver {
                 match buf[0] {
                     0x1 => return self.handle_basic(buf, KeyCodes::Blank, true),
                     0x6 => {
-                        // Perform thresholding
-                        todo!()
+                        return self.handle_analog(&buf[1..21]);
                     }
                     _ => {
                         // Other report types exist but don't appear to be
@@ -217,5 +248,216 @@ impl Driver {
         // Save state for next time
         self.key_state = pad_state;
         Ok(events)
+    }
+
+    fn handle_analog(&mut self, keys: &[u8]) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
+        let key_arr: &[u8; KEY_COUNT];
+        if let Ok(value) = <&[u8] as TryInto<&[u8; KEY_COUNT]>>::try_into(keys) {
+            key_arr = value;
+        } else {
+            log::error!("Incorrect size array passed to handle_analog");
+            return Ok(Vec::new());
+        }
+
+        self.hysteresis.pop_front();
+        self.hysteresis.push_back(*key_arr);
+        let previous_state = self.hysteresis.get(self.hysteresis.len() - 2).unwrap();
+        let front_state = self.hysteresis.front().unwrap();
+        // Add Vector of events TBD
+
+        // Manage per-key functions as each report gives us a snapshot of the whole matrix
+        for (index, element) in keys.iter().enumerate() {
+            // Short-circuit as it is unlikely all 20 keys are pressed.
+            // If a key is not actuated and has a value of 0, ignore processing this round.
+            if !(self.key_actions[index].actuated.0 ^ self.key_actions[index].actuated.1)
+                && *element == 0
+            {
+                continue;
+            }
+
+            // Establish the direction of travel for the keys
+            let run: Vec<f64> = self
+                .hysteresis
+                .iter()
+                .map(|arr| arr[index] as f64)
+                .collect();
+            let trend = self.linear_regression(&run).unwrap_or_else(|| 0.0);
+
+            // If we are not actuated, establish whether we should
+            if !(self.key_actions[index].actuated.0 ^ self.key_actions[index].actuated.1) {
+                // Exception for 1.5mm as any depression will trigger it
+                if self.key_actions[index].actuation_point.0 == 0 && *element > 0 {
+                    self.key_actions[index].actuated.0 = true;
+                    // Do keydown stuff (1.5mm case)
+                    log::info!("A1 Key {} Keydown @ {}!", index, *element);
+                } else if trend >= TREND_KEYDOWN
+                    && self.key_actions[index].actuation_point.0 <= *element
+                {
+                    self.key_actions[index].actuated.0 = true;
+                    // Do keydown stuff (standard)
+                    log::info!("A1 Key {} Keydown @ {}!", index, *element);
+                }
+            } else {
+                // We are actuated, what happens now is based mainly on trends
+
+                // Picking a trend criteria of ± 1 is important as it allows us to initialize
+                // the retrigger distance given all numbers are in the same direction.
+                // Using the keydown_up_n flag we can determine whether to look at only the
+                // previous value or look at the start of the buffer.
+                if trend >= TREND_KEYDOWN {
+                    // Check if we need to perform dual function
+                    if self.key_actions[index].actuation_point.1
+                        > self.key_actions[index].actuation_point.0
+                        && !self.key_actions[index].actuated.1
+                        && self.key_actions[index].actuation_point.1 <= *element
+                    {
+                        self.key_actions[index].actuated.1 = true;
+                        self.key_actions[index].actuated.0 = false;
+                        // Do keydown stuff (second function)
+                        log::info!("A1 Key {} Keyup @ {}!", index, *element);
+                        log::info!("A2 Key {} Keydown @ {}!", index, *element);
+                    }
+
+                    // Manage retrigger
+                    // retrigger_track uses negative and positive values.
+                    // When negative we track reset, when positive we track triggering.
+                    if self.key_actions[index].retrigger_go {
+                        if self.key_actions[index].retrigger_track == 0.0 {
+                            self.key_actions[index].retrigger_track =
+                                *element as f64 - front_state[index] as f64;
+                            self.key_actions[index].retrigger_track *= UNIT_TO_MM;
+                        } else {
+                            let difference = *element as f64 - previous_state[index] as f64;
+                            self.key_actions[index].retrigger_track += difference * UNIT_TO_MM;
+                        }
+
+                        // Retrigger windows can be shared or separate.
+                        // Manage the case where keydown is separate from keyup
+                        if self.key_actions[index].retrigger_window.1 != 0.0
+                            && self.key_actions[index].retrigger_track
+                                >= self.key_actions[index].retrigger_window.1
+                        {
+                            self.key_actions[index].retrigger_go = false;
+                            self.key_actions[index].retrigger_track = 0.0;
+                            // Do keydown stuff
+                            // Then the shared case.
+                        } else if self.key_actions[index].retrigger_window.0 != 0.0
+                            && self.key_actions[index].retrigger_track
+                                >= self.key_actions[index].retrigger_window.0
+                        {
+                            self.key_actions[index].retrigger_go = false;
+                            self.key_actions[index].retrigger_track = 0.0;
+                            log::info!("Key {} retriggered!", index);
+                            // Do keydown stuff
+                        }
+                    // Cases for backing off retrigger, such as travelling back down.
+                    // We don't cancel, but we do effectively undo progress.
+                    } else if self.key_actions[index].retrigger_track != 0.0 {
+                        let difference: f64;
+                        if !self.key_actions[index].keydown_up_n {
+                            difference = *element as f64 - front_state[index] as f64;
+                        } else {
+                            difference = *element as f64 - previous_state[index] as f64;
+                        }
+                        self.key_actions[index].retrigger_track += difference * UNIT_TO_MM;
+
+                        // Regardless if we totally undo retrigger progress, zero it rather than
+                        // making it harder to perform next time.
+                        if self.key_actions[index].retrigger_track > 0.0 {
+                            self.key_actions[index].retrigger_track = 0.0;
+                        }
+                    }
+                    self.key_actions[index].keydown_up_n = true;
+                } else if trend <= TREND_KEYUP {
+                    // Manage actuation point
+                    if self.key_actions[index].actuation_point.0 >= *element {
+                        // If the key returns to the neutral position everything resets.
+                        if *element == 0 {
+                            self.key_actions[index].retrigger_go = false;
+                            self.key_actions[index].retrigger_track = 0.0;
+                            if self.key_actions[index].actuated.0 {
+                                self.key_actions[index].actuated = (false, false);
+                                // Do keyup stuff
+                                log::info!("Key {} Neutral! {:?}", index, run);
+                                continue;
+                            }
+                        // If crt_en isn't covering for retrigger then stop when our
+                        // actuation point has been met.
+                        } else if !self.key_actions[index].crt_en {
+                            self.key_actions[index].retrigger_go = false;
+                            self.key_actions[index].retrigger_track = 0.0;
+                            self.key_actions[index].actuated = (false, false);
+                            // Do keyup stuff
+                            log::info!("A1 Key {} Keyup @ {}!", index, *element);
+                            continue;
+                        }
+                    }
+
+                    if self.key_actions[index].actuation_point.1
+                        > self.key_actions[index].actuation_point.0
+                        && self.key_actions[index].actuation_point.1 >= *element
+                        && self.key_actions[index].actuated.1
+                    {
+                        if !self.key_actions[index].crt_en {
+                            self.key_actions[index].retrigger_go = false;
+                            self.key_actions[index].retrigger_track = 0.0;
+                            self.key_actions[index].actuated.1 = false;
+                            // Do keyup stuff
+                            log::info!("A2 Key {} Keyup @ {}!", index, *element);
+                            continue;
+                        }
+                    }
+                    // Manage retrigger
+                    // The tuple representing the retrigger window is conditionally set.
+                    // If the tracker is 0, then initialise the counter from where we are.
+                    if !self.key_actions[index].retrigger_go
+                        && self.key_actions[index].retrigger_window.0 != 0.0
+                    {
+                        let difference: f64;
+                        if self.key_actions[index].keydown_up_n {
+                            difference = front_state[index] as f64 - *element as f64;
+                        } else {
+                            difference = previous_state[index] as f64 - *element as f64;
+                        }
+                        self.key_actions[index].retrigger_track -= difference * UNIT_TO_MM;
+
+                        if self.key_actions[index].retrigger_window.0
+                            <= self.key_actions[index].retrigger_track.abs()
+                        {
+                            log::info!("Key {} retrigger armed!", index);
+                            self.key_actions[index].retrigger_track = 0.0;
+                            self.key_actions[index].retrigger_go = true;
+                            // Do keyup stuff
+                        }
+                    }
+                    self.key_actions[index].keydown_up_n = false;
+                }
+            }
+        }
+
+        Ok(Vec::new())
+    }
+
+    fn linear_regression(&self, data: &[f64]) -> Option<f64> {
+        // Implement simple linear regression equation
+        // m = (n*Σxy - ΣxΣy) / (n*Σx² - (Σx)²)
+        // where n >= 2 (defined by length of data)
+
+        let n = data.len() as f64;
+        if n < 2.0 {
+            return None;
+        }
+        let sum_x: f64 = (0..data.len()).map(|i| i as f64).sum();
+        let sum_y: f64 = data.iter().sum();
+        let sum_xy: f64 = data.iter().enumerate().map(|(i, &y)| i as f64 * y).sum();
+        let sum_xx: f64 = (0..data.len()).map(|i| (i as f64).powi(2)).sum();
+
+        let numerator = n * sum_xy - sum_x * sum_y;
+        let denominator = n * sum_xx - sum_x.powi(2);
+
+        if denominator == 0.0 {
+            return Some(0.0);
+        }
+        Some(numerator / denominator)
     }
 }
