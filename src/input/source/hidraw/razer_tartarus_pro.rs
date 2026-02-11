@@ -58,11 +58,13 @@ fn translate_event(event: razer_tartarus_pro::event::Event) -> NativeEvent {
         razer_tartarus_pro::event::KeyCodes::Blank => {
             NativeEvent::new(Capability::NotImplemented, InputValue::None)
         }
-        razer_tartarus_pro::event::KeyCodes::Sdown => //NativeEvent::new(
-            //Capability::Mouse(Mouse::Button(MouseButton::WheelDown)),
-            //InputValue::Bool(event.pressed),
-            NativeEvent::new(Capability::NotImplemented, InputValue::None
-        ),
+        razer_tartarus_pro::event::KeyCodes::Sdown =>
+        //NativeEvent::new(
+        //Capability::Mouse(Mouse::Button(MouseButton::WheelDown)),
+        //InputValue::Bool(event.pressed),
+        {
+            NativeEvent::new(Capability::NotImplemented, InputValue::None)
+        }
         razer_tartarus_pro::event::KeyCodes::KeySixteen => NativeEvent::new(
             Capability::Keyboard(Keyboard::KeyLeftShift),
             InputValue::Bool(event.pressed),
@@ -167,11 +169,13 @@ fn translate_event(event: razer_tartarus_pro::event::Event) -> NativeEvent {
             Capability::Mouse(Mouse::Button(MouseButton::Middle)),
             InputValue::Bool(event.pressed),
         ),
-        razer_tartarus_pro::event::KeyCodes::Sup => //NativeEvent::new(
-            //Capability::Mouse(Mouse::Button(MouseButton::WheelUp)),
-            //InputValue::Bool(event.pressed),
-            NativeEvent::new(Capability::NotImplemented, InputValue::None
-        ),
+        razer_tartarus_pro::event::KeyCodes::Sup =>
+        //NativeEvent::new(
+        //Capability::Mouse(Mouse::Button(MouseButton::WheelUp)),
+        //InputValue::Bool(event.pressed),
+        {
+            NativeEvent::new(Capability::NotImplemented, InputValue::None)
+        }
     }
 }
 

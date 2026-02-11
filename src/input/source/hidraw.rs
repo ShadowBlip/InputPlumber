@@ -234,7 +234,9 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGo(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::MsiClaw(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_output_capabilities(),
-            HidRawDevice::RazerTartarusPro(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::RazerTartarusPro(source_driver) => {
+                source_driver.get_output_capabilities()
+            }
             HidRawDevice::RogAlly(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_output_capabilities(),
@@ -563,7 +565,9 @@ impl HidRawDevice {
         }
 
         // Razer Tartarus Pro
-        if vid == drivers::razer_tartarus_pro::driver::VID && pid == drivers::razer_tartarus_pro::driver::PID {
+        if vid == drivers::razer_tartarus_pro::driver::VID
+            && pid == drivers::razer_tartarus_pro::driver::PID
+        {
             log::info!("Detected Razer Tartarus Pro");
             return DriverType::RazerTartarusPro;
         }
