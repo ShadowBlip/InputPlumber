@@ -16,7 +16,7 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: "Claw 8 AI+ A2VM"
+      product_name: "Claw 8 AI+ A2VM*"
       sys_vendor: "Micro-Star International Co., Ltd."
 
 # One or more source devices to combine into a single virtual device. The events
