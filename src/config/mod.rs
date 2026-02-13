@@ -985,13 +985,12 @@ impl CompositeDeviceConfig {
                 }
 
                 if let Some(attribute_patterns) = udev.attributes {
-                    let attributes = device.get_attributes();
                     let mut all_attributes_match = true;
 
                     // All attribute patterns in the config must match
                     for attr_pattern in attribute_patterns {
                         let attr_name = attr_pattern.name;
-                        let Some(attr_value) = attributes.get(&attr_name) else {
+                        let Some(attr_value) = device.get_attribute_from_tree(&attr_name) else {
                             // If the attribute was not found, this is not a match
                             all_attributes_match = false;
                             break;
@@ -1002,7 +1001,7 @@ impl CompositeDeviceConfig {
                             continue;
                         };
 
-                        if !glob_match(&value_pattern, attr_value) {
+                        if !glob_match(&value_pattern, &attr_value) {
                             all_attributes_match = false;
                             break;
                         }
