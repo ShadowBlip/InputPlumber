@@ -4,7 +4,6 @@ use std::{
     error::Error,
     io,
     sync::{Arc, Mutex, MutexGuard},
-    thread,
     time::Duration,
 };
 
@@ -12,7 +11,10 @@ use debug::DebugDevice;
 use horipad_steam::HoripadSteamDevice;
 use steam_deck_uhid::SteamDeckUhidDevice;
 use thiserror::Error;
-use tokio::sync::mpsc::{self, error::TryRecvError};
+use tokio::{
+    sync::mpsc::{self, error::TryRecvError},
+    task::JoinHandle,
+};
 use unified_gamepad::UnifiedGamepadDevice;
 
 use crate::dbus::interface::{
@@ -495,16 +497,17 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
         // be avoided in this task so cleanup tasks can run to remove the DBus
         // interface and stop the device if an error occurs.
         let client = self.client();
-        let task =
-            tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+        let task: JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> = tokio::task::spawn(
+            async move {
                 let mut composite_device = self.composite_device.take();
                 let rx = &mut self.rx;
-                let mut implementation = self.implementation.lock().unwrap();
 
                 // Start the DBus interface for the device
                 let target_iface = TargetInterface::new(&self.type_id);
                 self.dbus.register(target_iface);
-                implementation.start_dbus_interface(&mut self.dbus, client, self.type_id);
+                if let Ok(mut implementation) = self.implementation.lock() {
+                    implementation.start_dbus_interface(&mut self.dbus, client, self.type_id);
+                }
 
                 // Start the performance metrics DBus interface for the device
                 // if metrics are enabled.
@@ -515,6 +518,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                 };
 
                 log::debug!("Target device running: {}", self.dbus.path());
+                let mut interval = tokio::time::interval(self.options.poll_rate);
                 loop {
                     // Find any scheduled events that are ready to be sent
                     let mut ready_events = vec![];
@@ -528,6 +532,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                         i += 1;
                     }
                     for event in ready_events.drain(..) {
+                        let mut implementation = self.implementation.lock().unwrap();
                         if let Err(e) = implementation.write_event(event.into()) {
                             log::error!("Error writing event: {e:?}");
                             break;
@@ -535,29 +540,39 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                     }
 
                     // Receive commands/input events
-                    if let Err(e) = TargetDriver::receive_commands(
-                        &self.type_id,
-                        &mut composite_device,
-                        rx,
-                        &metrics_tx,
-                        &mut implementation,
-                    ) {
-                        log::debug!("Error receiving commands: {e:?}");
-                        break;
+                    {
+                        let mut implementation = self.implementation.lock().unwrap();
+                        if let Err(e) = TargetDriver::receive_commands(
+                            &self.type_id,
+                            &mut composite_device,
+                            rx,
+                            &metrics_tx,
+                            &mut implementation,
+                        ) {
+                            log::debug!("Error receiving commands: {e:?}");
+                            break;
+                        }
                     }
 
                     // Poll the implementation for scheduled input events
-                    if let Some(mut scheduled_events) = implementation.scheduled_events() {
-                        self.scheduled_events.append(&mut scheduled_events);
+                    {
+                        let mut implementation = self.implementation.lock().unwrap();
+                        if let Some(mut scheduled_events) = implementation.scheduled_events() {
+                            self.scheduled_events.append(&mut scheduled_events);
+                        }
                     }
 
                     // Poll the implementation for output events
-                    let events = match implementation.poll(&composite_device) {
-                        Ok(events) => events,
-                        Err(e) => {
-                            log::error!("Error polling target device: {e:?}");
-                            break;
-                        }
+                    let events = {
+                        let mut implementation = self.implementation.lock().unwrap();
+                        let events = match implementation.poll(&composite_device) {
+                            Ok(events) => events,
+                            Err(e) => {
+                                log::error!("Error polling target device: {e:?}");
+                                break;
+                            }
+                        };
+                        events
                     };
                     for event in events.into_iter() {
                         let Some(ref client) = composite_device else {
@@ -565,23 +580,34 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                         };
 
                         // Send the output event to source devices
-                        let result = client.blocking_process_output_event(event);
+                        let result = client.process_output_event(event).await;
                         if let Err(e) = result {
                             return Err(e.to_string().into());
                         }
                     }
 
-                    // Sleep for the configured duration
-                    thread::sleep(self.options.poll_rate);
+                    // Sleep for the configured duration or until a command is sent
+                    tokio::select! {
+                        _ = interval.tick() => (),
+                        Some(cmd) = rx.recv() => {
+                            let mut implementation = self.implementation.lock().unwrap();
+                            let result = Self::process_command(&self.type_id, &mut composite_device, &metrics_tx, &mut implementation, cmd);
+                            if let Err(e) = result {
+                                log::debug!("Error processing received command: {e}");
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 // Stop the device
                 log::debug!("Target device stopping: {}", self.dbus.path());
-                implementation.stop()?;
+                self.implementation.lock().unwrap().stop()?;
                 log::debug!("Target device stopped: {}", self.dbus.path());
 
                 Ok(())
-            });
+            },
+        );
 
         // Wait for the device to finish running.
         if let Err(e) = task.await? {
@@ -632,35 +658,13 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
         let mut commands_processed = 0;
         loop {
             match rx.try_recv() {
-                Ok(cmd) => match cmd {
-                    TargetCommand::WriteEvent(event) => {
-                        Self::write_event(metrics_tx, implementation, event)?;
-                    }
-                    TargetCommand::SetCompositeDevice(device) => {
-                        *composite_device = Some(device.clone());
-                        implementation.on_composite_device_attached(device)?;
-                    }
-                    TargetCommand::GetCapabilities(sender) => {
-                        let capabilities = implementation.get_capabilities().unwrap_or_default();
-                        sender.blocking_send(capabilities)?;
-                    }
-                    TargetCommand::NotifyCapabilitiesChanged(capabilities) => {
-                        implementation.on_capabilities_changed(capabilities)?;
-                    }
-                    TargetCommand::NotifyOutputCapabilitiesChanged(capabilities) => {
-                        implementation.on_output_capabilities_changed(capabilities)?;
-                    }
-                    TargetCommand::GetType(sender) => {
-                        sender.blocking_send(*type_id)?;
-                    }
-                    TargetCommand::ClearState => {
-                        implementation.clear_state();
-                    }
-                    TargetCommand::Stop => {
-                        implementation.stop()?;
-                        return Err("Target device stopped".into());
-                    }
-                },
+                Ok(cmd) => Self::process_command(
+                    type_id,
+                    composite_device,
+                    metrics_tx,
+                    implementation,
+                    cmd,
+                )?,
                 Err(e) => match e {
                     TryRecvError::Empty => return Ok(()),
                     TryRecvError::Disconnected => {
@@ -676,6 +680,56 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                 return Ok(());
             }
         }
+    }
+
+    /// Process the given [TargetCommand] received over a channel
+    fn process_command(
+        type_id: &TargetDeviceTypeId,
+        composite_device: &mut Option<CompositeDeviceClient>,
+        metrics_tx: &Option<mpsc::Sender<(Capability, EventContext)>>,
+        implementation: &mut MutexGuard<'_, T>,
+        cmd: TargetCommand,
+    ) -> Result<(), Box<dyn Error>> {
+        match cmd {
+            TargetCommand::WriteEvent(event) => {
+                Self::write_event(metrics_tx, implementation, event)?;
+            }
+            TargetCommand::SetCompositeDevice(device) => {
+                *composite_device = Some(device.clone());
+                implementation.on_composite_device_attached(device)?;
+            }
+            TargetCommand::GetCapabilities(sender) => {
+                let capabilities = implementation.get_capabilities().unwrap_or_default();
+                tokio::spawn(async move {
+                    if let Err(e) = sender.send(capabilities).await {
+                        log::warn!("Failed to send capabilities response: {e}");
+                    }
+                });
+            }
+            TargetCommand::NotifyCapabilitiesChanged(capabilities) => {
+                implementation.on_capabilities_changed(capabilities)?;
+            }
+            TargetCommand::NotifyOutputCapabilitiesChanged(capabilities) => {
+                implementation.on_output_capabilities_changed(capabilities)?;
+            }
+            TargetCommand::GetType(sender) => {
+                let type_id = *type_id;
+                tokio::spawn(async move {
+                    if let Err(e) = sender.send(type_id).await {
+                        log::warn!("Failed to send type response: {e}");
+                    }
+                });
+            }
+            TargetCommand::ClearState => {
+                implementation.clear_state();
+            }
+            TargetCommand::Stop => {
+                implementation.stop()?;
+                return Err("Target device stopped".into());
+            }
+        }
+
+        Ok(())
     }
 
     /// Write the event to the underlying target device implementation
