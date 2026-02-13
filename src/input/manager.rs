@@ -1,12 +1,15 @@
 use core::panic;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::error::Error;
+use std::future::Future;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use ::procfs::CpuInfo;
 use ::udev::MonitorBuilder;
+use futures::future::BoxFuture;
 use mio::{Events, Interest, Poll, Token};
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -79,6 +82,8 @@ pub enum ManagerError {
 /// dispatched as they come in.
 #[derive(Debug, Clone)]
 pub enum ManagerCommand {
+    ProcessTaskQueue,
+    TaskDone,
     DeviceAdded {
         device: DeviceInfo,
     },
@@ -87,6 +92,21 @@ pub enum ManagerCommand {
     },
     CreateCompositeDevice {
         config: CompositeDeviceConfig,
+    },
+    CreateAndStartCompositeDevice {
+        path: PathBuf,
+        config: CompositeDeviceConfig,
+        source_device: Box<SourceDevice>,
+        device: DeviceInfo,
+        completion: mpsc::Sender<()>,
+    },
+    AddDeviceToCompositeDevice {
+        id: String,
+        source_device: Box<SourceDevice>,
+        device: DeviceInfo,
+        client: CompositeDeviceClient,
+        composite_device: String,
+        completion: mpsc::Sender<()>,
     },
     CreateTargetDevice {
         kind: TargetDeviceTypeId,
@@ -121,6 +141,17 @@ pub enum ManagerCommand {
         dbus_paths: Vec<String>,
     },
     GamepadReorderingFinished,
+    GetCompositeDevices {
+        #[allow(clippy::type_complexity)]
+        sender: mpsc::Sender<(
+            // Composite Devices
+            HashMap<String, CompositeDeviceClient>,
+            // Composite Device Sources
+            HashMap<String, Vec<SourceDevice>>,
+            // Used configs
+            HashMap<String, CompositeDeviceConfig>,
+        )>,
+    },
 }
 
 /// Manages input devices
@@ -149,6 +180,11 @@ pub struct Manager {
     /// The receive side of the channel used to listen for [Command] messages
     /// from other objects.
     rx: mpsc::Receiver<ManagerCommand>,
+    /// Task queue is used to run sequential tasks without blocking the event
+    /// loop.
+    task_queue: VecDeque<(BoxFuture<'static, ()>, mpsc::Receiver<()>)>,
+    /// Whether or not a task from the task queue is currently executing.
+    task_running: bool,
     /// Mapping of source devices to their SourceDevice objects.
     /// E.g. {"evdev://event0": <SourceDevice>}
     source_devices: HashMap<String, SourceDevice>,
@@ -213,6 +249,8 @@ impl Manager {
             cpu_info,
             rx,
             tx,
+            task_queue: VecDeque::new(),
+            task_running: false,
             composite_devices: HashMap::new(),
             source_devices: HashMap::new(),
             source_device_dbus_paths: HashMap::new(),
@@ -271,10 +309,98 @@ impl Manager {
         while let Some(cmd) = self.rx.recv().await {
             log::debug!("Received command: {:?}", cmd);
             match cmd {
+                ManagerCommand::ProcessTaskQueue => {
+                    let Some((task, mut completion)) = self.task_queue.pop_front() else {
+                        continue;
+                    };
+                    let tx = self.tx.clone();
+                    self.task_running = true;
+                    tokio::spawn(async move {
+                        // Execute the task
+                        task.await;
+
+                        // Wait for a response
+                        completion.recv().await;
+
+                        // Process the next task in the queue
+                        let _ = tx.send(ManagerCommand::TaskDone).await;
+                    });
+                }
+                ManagerCommand::TaskDone => {
+                    self.task_running = false;
+                    if self.task_queue.is_empty() {
+                        continue;
+                    }
+                    let tx = self.tx.clone();
+                    tokio::spawn(async move { tx.send(ManagerCommand::ProcessTaskQueue).await });
+                }
                 ManagerCommand::CreateCompositeDevice { config } => {
                     if let Err(e) = self.create_composite_device(config).await {
                         log::error!("Error creating composite device: {:?}", e);
                     }
+                }
+                ManagerCommand::CreateAndStartCompositeDevice {
+                    path,
+                    config,
+                    source_device,
+                    device,
+                    completion,
+                } => {
+                    // Create the composite device
+                    let dev = match self
+                        .create_composite_device_from_config(path, &config, device)
+                        .await
+                    {
+                        Ok(dev) => dev,
+                        Err(e) => {
+                            log::error!("Failed to create composite device from config: {e}");
+                            continue;
+                        }
+                    };
+
+                    // Get the target input devices from the config
+                    let target_devices_config = config.target_devices.clone();
+
+                    // Create the composite deivce
+                    let result = self
+                        .start_composite_device(
+                            dev,
+                            config.clone(),
+                            target_devices_config,
+                            *source_device,
+                        )
+                        .await;
+                    if let Err(e) = result {
+                        log::error!("Failed to start composite device: {e}");
+                    }
+                    let _ = completion.send(()).await;
+                }
+                ManagerCommand::AddDeviceToCompositeDevice {
+                    id,
+                    source_device,
+                    device,
+                    client,
+                    composite_device,
+                    completion,
+                } => {
+                    if let Err(e) = self.add_device_to_composite_device(device, &client).await {
+                        log::error!("Failed to add device to composite device: {e}");
+                        continue;
+                    }
+                    self.source_devices_used
+                        .insert(id.clone(), composite_device.clone());
+                    let composite_id = composite_device.clone();
+                    if !self.composite_device_sources.contains_key(&composite_id) {
+                        self.composite_device_sources
+                            .insert(composite_id.clone(), Vec::new());
+                    }
+                    let sources = self
+                        .composite_device_sources
+                        .get_mut(&composite_id)
+                        .unwrap();
+                    sources.push(*source_device.clone());
+                    self.source_devices.insert(id, *source_device);
+                    let _ = completion.send(()).await;
                 }
                 ManagerCommand::CompositeDeviceStopped(path) => {
                     if let Err(e) = self.on_composite_device_stopped(path).await {
@@ -547,12 +673,36 @@ impl Manager {
                     log::info!("Finished reordering target devices");
                     self.target_gamepad_order_changing = false;
                 }
+                ManagerCommand::GetCompositeDevices { sender } => {
+                    let composite_devices = self.composite_devices.clone();
+                    let composite_device_sources = self.composite_device_sources.clone();
+                    let used_configs = self.used_configs.clone();
+                    let response = (composite_devices, composite_device_sources, used_configs);
+                    if let Err(e) = sender.send(response).await {
+                        log::warn!("Failed to send response to get composite devices: {e}");
+                    }
+                }
             }
         }
 
         log::info!("Stopped input manager");
 
         Ok(())
+    }
+
+    /// Add the given future to the task queue. Tasks will be executed in a
+    /// first in, first out way. Tasks should send or drop the given completion
+    /// channel when the task is done.
+    fn queue_task(
+        &mut self,
+        task: impl Future<Output = ()> + Send + 'static,
+        completion_rx: mpsc::Receiver<()>,
+    ) {
+        if !self.task_running {
+            let tx = self.tx.clone();
+            tokio::spawn(async move { tx.send(ManagerCommand::ProcessTaskQueue).await });
+        }
+        self.task_queue.push_back((Box::pin(task), completion_rx));
     }
 
     /// Create a new [CompositeDevice] from the given [CompositeDeviceConfig]
@@ -939,171 +1089,204 @@ impl Manager {
             return Ok(());
         }
 
-        // Check all existing composite devices to see if this device is part of
-        // their config
-        'start: for composite_device in self.composite_devices.keys() {
-            let Some(config) = self.used_configs.get(composite_device) else {
-                continue;
+        // NOTE: reading udev devices may be slow and blocking, so this is done
+        // in a task to allow the input manager to continue processing requests.
+        let configs = self.load_device_configs().await;
+        let dmi_data = self.dmi_data.clone();
+        let cpu_info = self.cpu_info.clone();
+        let tx = self.tx.clone();
+        let (complete_tx, complete_rx) = mpsc::channel(1);
+        let task = async move {
+            // Query the manager for the current state of composite devices
+            let (manage_devices_tx, mut manage_devices_rx) = mpsc::channel(1);
+            let cmd = ManagerCommand::GetManageAllDevices {
+                sender: manage_devices_tx,
             };
-            log::debug!("Checking if existing composite device {composite_device:?} with config {:?} is missing device: {id:?}", config.name);
-
-            log::trace!(
-                "Composite device has {} source devices defined",
-                config.source_devices.len()
-            );
-
-            let max_sources = config.maximum_sources.unwrap_or_else(|| {
-                if config.single_source.unwrap_or(false) {
-                    1
-                } else {
-                    0
-                }
-            });
-
-            // If the CompositeDevice only allows a maximum number of source devices,
-            // check to see if that limit has been reached. If that limit is reached,
-            // then a new CompositeDevice will be created for the source device.
-            // If maximum_sources is less than 1 (e.g. 0, -1) then consider
-            // the maximum to be 'unlimited'.
-            if max_sources > 0 {
-                // Check to see how many source devices this composite device is
-                // currently managing.
-                if self
-                    .composite_device_sources
-                    .get(composite_device)
-                    .is_some_and(|sources| (sources.len() as i32) >= max_sources)
-                {
-                    log::trace!(
-                        "{composite_device:?} maximum source devices reached: {max_sources}. Skipping."
-                    );
-                    continue;
-                }
+            if let Err(e) = tx.send(cmd).await {
+                log::error!("Failed to send get manage all devices command: {e}");
+                return;
             }
+            let Some(manage_all_devices) = manage_devices_rx.recv().await else {
+                log::error!("Failed to receive response for get manage all devices");
+                return;
+            };
+            let (composite_devices_tx, mut composite_devices_rx) = mpsc::channel(1);
+            let cmd = ManagerCommand::GetCompositeDevices {
+                sender: composite_devices_tx,
+            };
+            if let Err(e) = tx.send(cmd).await {
+                log::error!("Failed to send get composite devices command: {e}");
+                return;
+            }
+            let Some(response) = composite_devices_rx.recv().await else {
+                log::error!("Failed to receive response for get composite devices");
+                return;
+            };
+            let (composite_devices, composite_device_sources, used_configs) = response;
 
-            // Check if this device matches any source udev configs of the running
-            // CompositeDevice.
-            let Some(source_device) = config.get_matching_device(&device) else {
-                log::debug!(
-                    "Device {id} does not match existing device: {:?}",
-                    config.name
+            // Check all existing composite devices to see if this device is part of
+            // their config
+            'start: for composite_device in composite_devices.keys() {
+                let Some(config) = used_configs.get(composite_device) else {
+                    continue;
+                };
+                log::debug!("Checking if existing composite device {composite_device:?} with config {:?} is missing device: {id:?}", config.name);
+
+                log::trace!(
+                    "Composite device has {} source devices defined",
+                    config.source_devices.len()
                 );
 
-                continue;
-            };
+                let max_sources = config.maximum_sources.unwrap_or_else(|| {
+                    if config.single_source.unwrap_or(false) {
+                        1
+                    } else {
+                        0
+                    }
+                });
 
-            // Check if the device has already been used in this config or not,
-            // stop here if the device must be unique.
-            if let Some(sources) = self.composite_device_sources.get(composite_device) {
-                for source in sources {
-                    if *source != source_device {
+                // If the CompositeDevice only allows a maximum number of source devices,
+                // check to see if that limit has been reached. If that limit is reached,
+                // then a new CompositeDevice will be created for the source device.
+                // If maximum_sources is less than 1 (e.g. 0, -1) then consider
+                // the maximum to be 'unlimited'.
+                if max_sources > 0 {
+                    // Check to see how many source devices this composite device is
+                    // currently managing.
+                    if composite_device_sources
+                        .get(composite_device)
+                        .is_some_and(|sources| (sources.len() as i32) >= max_sources)
+                    {
+                        log::trace!(
+                        "{composite_device:?} maximum source devices reached: {max_sources}. Skipping."
+                    );
                         continue;
                     }
+                }
 
-                    if source_device.ignore.is_some_and(|ignored| ignored) {
-                        log::debug!(
+                // Check if this device matches any source udev configs of the running
+                // CompositeDevice.
+                let Some(source_device) = config.get_matching_device(&device) else {
+                    log::debug!(
+                        "Device {id} does not match existing device: {:?}",
+                        config.name
+                    );
+
+                    continue;
+                };
+
+                // Check if the device has already been used in this config or not,
+                // stop here if the device must be unique.
+                if let Some(sources) = composite_device_sources.get(composite_device) {
+                    for source in sources {
+                        if *source != source_device {
+                            continue;
+                        }
+
+                        if source_device.ignore.is_some_and(|ignored| ignored) {
+                            log::debug!(
                             "Ignoring device {:?}, not adding to composite device: {composite_device}",
                             source_device
                         );
-                        break 'start;
-                    }
+                            break 'start;
+                        }
 
-                    // Check if the composite device has to be unique (default to being unique)
-                    if source_device.unique.unwrap_or(true) {
-                        log::trace!(
+                        // Check if the composite device has to be unique (default to being unique)
+                        if source_device.unique.unwrap_or(true) {
+                            log::trace!(
                             "Found unique device {:?}, not adding to composite device {composite_device}",
                             source_device
                         );
-                        break 'start;
+                            break 'start;
+                        }
                     }
                 }
+
+                log::info!("Found missing {} device, adding source device {id} to existing composite device: {composite_device:?}", device.kind());
+                let Some(client) = composite_devices.get(composite_device.as_str()).cloned() else {
+                    log::error!("No existing composite device found for key {composite_device:?}");
+                    continue;
+                };
+
+                // Send the command to the input manager to add the device
+                let cmd = ManagerCommand::AddDeviceToCompositeDevice {
+                    id,
+                    source_device: Box::new(source_device),
+                    device,
+                    client,
+                    composite_device: composite_device.clone(),
+                    completion: complete_tx,
+                };
+                if let Err(e) = tx.send(cmd).await {
+                    log::error!(
+                        "Failed to send manager command to add device to composite device: {e}"
+                    );
+                }
+
+                return;
             }
 
-            log::info!("Found missing {} device, adding source device {id} to existing composite device: {composite_device:?}", device.kind());
-            let Some(client) = self.composite_devices.get(composite_device.as_str()) else {
-                log::error!("No existing composite device found for key {composite_device:?}");
-                continue;
-            };
+            log::debug!("No existing composite device matches device {id}.");
 
-            self.add_device_to_composite_device(device, client).await?;
-            self.source_devices_used
-                .insert(id.clone(), composite_device.clone());
-            let composite_id = composite_device.clone();
-            if !self.composite_device_sources.contains_key(&composite_id) {
-                self.composite_device_sources
-                    .insert(composite_id.clone(), Vec::new());
-            }
-            let sources = self
-                .composite_device_sources
-                .get_mut(&composite_id)
-                .unwrap();
-            sources.push(source_device.clone());
-            self.source_devices.insert(id, source_device.clone());
+            log::debug!("Checking unused configs");
 
-            return Ok(());
-        }
+            // Check all CompositeDevice configs to see if this device creates
+            // a match that will automatically create a CompositeDevice.
+            for (path, config) in configs {
+                log::trace!("Checking if config {path:?} matches device",);
 
-        log::debug!("No existing composite device matches device {id}.");
+                // Check to see if 'auto_manage' is enabled for this config.
+                let auto_manage = config
+                    .options
+                    .as_ref()
+                    .map(|options| options.auto_manage.unwrap_or(false))
+                    .unwrap_or(false);
+                if !manage_all_devices && !auto_manage {
+                    log::trace!(
+                        "Config {path:?} does not have 'auto_manage' option enabled. Skipping.",
+                    );
+                    continue;
+                }
 
-        // Check all CompositeDevice configs to see if this device creates
-        // a match that will automatically create a CompositeDevice.
-        let configs = self.load_device_configs().await;
-        log::debug!("Checking unused configs");
-        for (path, config) in configs {
-            log::trace!("Checking if config {path:?} matches device",);
+                // Check to see if this configuration matches the system
+                if !config.has_valid_matches(&dmi_data, &cpu_info) {
+                    log::trace!("Configuration {path:?} does not match system");
+                    continue;
+                }
 
-            // Check to see if 'auto_manage' is enabled for this config.
-            let auto_manage = config
-                .options
-                .as_ref()
-                .map(|options| options.auto_manage.unwrap_or(false))
-                .unwrap_or(false);
-            if !self.manage_all_devices && !auto_manage {
-                log::trace!(
-                    "Config {path:?} does not have 'auto_manage' option enabled. Skipping.",
-                );
-                continue;
-            }
-
-            // Check to see if this configuration matches the system
-            if !config.has_valid_matches(&self.dmi_data, &self.cpu_info) {
-                log::trace!("Configuration {path:?} does not match system");
-                continue;
-            }
-
-            // Check if this device matches any source configs
-            if let Some(source_device) = config.get_matching_device(&device) {
+                // Check if this device matches any source configs
+                let Some(source_device) = config.get_matching_device(&device) else {
+                    log::trace!("Device does not match config: {:?}", config.name);
+                    continue;
+                };
                 if let Some(ignored) = source_device.ignore {
                     if ignored {
                         log::trace!("Event device configured to ignore: {:?}", device);
-                        return Ok(());
+                        return;
                     }
                 }
                 log::info!(
                     "Found a matching {} device {id} in config {path:?}, creating CompositeDevice",
                     device.kind()
                 );
-                let dev = self
-                    .create_composite_device_from_config(path, &config, device)
-                    .await?;
 
-                // Get the target input devices from the config
-                let target_devices_config = config.target_devices.clone();
+                // Send request to manager to create and start composite device
+                let cmd = ManagerCommand::CreateAndStartCompositeDevice {
+                    path,
+                    config,
+                    source_device: Box::new(source_device),
+                    device,
+                    completion: complete_tx,
+                };
+                if let Err(e) = tx.send(cmd).await {
+                    log::warn!("Failed to send create and start device to manager: {e}");
+                }
 
-                // Create the composite deivce
-                self.start_composite_device(
-                    dev,
-                    config.clone(),
-                    target_devices_config,
-                    source_device.clone(),
-                )
-                .await?;
-
-                return Ok(());
+                return;
             }
-
-            log::trace!("Device does not match config: {:?}", config.name);
-        }
-        log::debug!("No unused configs found for device.");
+            log::debug!("No unused configs found for device.");
+        };
+        self.queue_task(task, complete_rx);
 
         Ok(())
     }
