@@ -7,9 +7,10 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::Debug,
+    sync::mpsc::{channel, Receiver, TryRecvError},
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::{channel, Receiver};
+
 use virtual_usb::{
     usb::{
         hid::{HidInterfaceBuilder, HidReportType, HidRequest, HidSubclass, InterfaceProtocol},
@@ -812,7 +813,7 @@ impl TargetInputDevice for SteamDeckDevice {
         &mut self,
         composite_device: CompositeDeviceClient,
     ) -> Result<(), InputError> {
-        let (tx, rx) = channel(1);
+        let (tx, rx) = channel();
         let mut device_config = self.config.clone();
 
         // Spawn a task to wait for the composite device config. This is done
@@ -904,7 +905,7 @@ impl TargetInputDevice for SteamDeckDevice {
                 device_config.product_id.to_u16(),
             );
 
-            if let Err(e) = tx.send(device_config).await {
+            if let Err(e) = tx.send(device_config) {
                 log::error!("Failed to send device config to target device. Got error: {e:?}");
             };
         });
@@ -1049,31 +1050,18 @@ impl TargetOutputDevice for SteamDeckDevice {
     /// USB transfers.
     fn poll(&mut self, _: &Option<CompositeDeviceClient>) -> Result<Vec<OutputEvent>, OutputError> {
         // Create and start the device if needed
-        if self.config_rx.is_some() {
-            if let Some(rx) = self.config_rx.as_ref() {
-                if rx.is_empty() {
-                    // If the queue is empty, we're still waiting for a response from
-                    // the composite device.
-                    return Ok(vec![]);
-                }
-            }
-            let Some(mut rx) = self.config_rx.take() else {
-                return Ok(vec![]);
+        if let Some(rx) = self.config_rx.as_ref() {
+            let config = match rx.try_recv() {
+                Ok(config) => config,
+                Err(e) => match e {
+                    TryRecvError::Empty => {
+                        // If the queue is empty, we're still waiting for a response from
+                        // the composite device.
+                        return Ok(vec![]);
+                    }
+                    TryRecvError::Disconnected => self.config.clone(),
+                },
             };
-
-            let (sync_tx, sync_rx) = std::sync::mpsc::channel();
-            let default_config = self.config.clone();
-            tokio::spawn(async move {
-                let config = match rx.recv().await {
-                    Some(config) => config,
-                    None => default_config,
-                };
-                if let Err(e) = sync_tx.send(config) {
-                    log::error!("Failed to send config to device thread: {e}");
-                }
-            });
-
-            let config = sync_rx.recv().unwrap_or(self.config.clone());
             let device = SteamDeckDevice::create_virtual_device(&config)?;
             self.device = Some(device);
             self.config = config;
