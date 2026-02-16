@@ -436,7 +436,7 @@ impl Driver {
                     || state.left_accel_z != old_state.left_accel_z)
             {
                 events.push(Event::Axis(AxisEvent::LeftAccel(ImuAxisInput {
-                    pitch: state.left_accel_x,
+                    pitch: -state.left_accel_x,
                     roll: state.left_accel_y,
                     yaw: state.left_accel_z,
                 })))
@@ -465,7 +465,7 @@ impl Driver {
                     || state.right_accel_z != old_state.right_accel_z)
             {
                 events.push(Event::Axis(AxisEvent::MultiAccel(ImuAxisInput {
-                    pitch: (state.left_accel_x + state.right_accel_x) / 2,
+                    pitch: -(state.left_accel_x + state.right_accel_x) / 2,
                     roll: (state.left_accel_y + state.right_accel_y) / 2,
                     yaw: (state.left_accel_z + state.right_accel_z) / 2,
                 })))
@@ -478,7 +478,7 @@ impl Driver {
                     || state.left_gyro_z != old_state.left_gyro_z)
             {
                 events.push(Event::Axis(AxisEvent::LeftGyro(ImuAxisInput {
-                    pitch: state.left_gyro_x,
+                    pitch: -state.left_gyro_x,
                     roll: state.left_gyro_y,
                     yaw: state.left_gyro_z,
                 })))
@@ -491,7 +491,7 @@ impl Driver {
                     || state.right_gyro_z != old_state.right_gyro_z)
             {
                 events.push(Event::Axis(AxisEvent::RightGyro(ImuAxisInput {
-                    pitch: state.right_gyro_x,
+                    pitch: -state.right_gyro_x,
                     roll: state.right_gyro_y,
                     yaw: state.right_gyro_z,
                 })))
@@ -508,7 +508,7 @@ impl Driver {
                     || state.right_gyro_z != old_state.right_gyro_z)
             {
                 events.push(Event::Axis(AxisEvent::MultiGyro(ImuAxisInput {
-                    pitch: (state.left_gyro_x + state.right_gyro_x) / 2,
+                    pitch: -(state.left_gyro_x + state.right_gyro_x) / 2,
                     roll: (state.left_gyro_y + state.right_gyro_y) / 2,
                     yaw: (state.left_gyro_z + state.right_gyro_z) / 2,
                 })))
