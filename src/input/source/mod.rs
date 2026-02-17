@@ -494,7 +494,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                     }
                     SourceCommand::EraseEffect(id, composite_dev) => {
                         let res = match implementation.erase_effect(id) {
-                            Ok(_) => Ok(()),
+                            Ok(_) => composite_dev.send(Ok(())),
                             Err(e) => {
                                 let err = format!("Failed to erase effect: {e:?}");
                                 composite_dev.send(Err(err.into()))
