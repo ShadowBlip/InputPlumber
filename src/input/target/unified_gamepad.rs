@@ -129,13 +129,17 @@ impl UnifiedGamepadDevice {
         log::debug!("Using capability report: {}", self.capability_report);
 
         // Inform the composite device that the capabilities have changed
-        if let Some(dbus_path) = self.dbus_path.as_ref() {
+        if let Some(dbus_path) = self.dbus_path.clone() {
             log::debug!("Updating composite device with new capabilities");
-            if let Err(e) = composite_device
-                .blocking_update_target_capabilities(dbus_path.clone(), capabilities)
-            {
-                log::warn!("Failed to update target capabilities: {e:?}");
-            }
+            let composite_device = composite_device.clone();
+            tokio::spawn(async move {
+                if let Err(e) = composite_device
+                    .update_target_capabilities(dbus_path.clone(), capabilities)
+                    .await
+                {
+                    log::warn!("Failed to update target capabilities: {e:?}");
+                }
+            });
         }
 
         log::debug!("Updated capabilities");

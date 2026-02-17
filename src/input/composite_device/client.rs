@@ -418,6 +418,7 @@ impl CompositeDeviceClient {
     }
 
     /// Update the input capabilities for the given target device (blocking)
+    #[allow(dead_code)]
     pub fn blocking_update_target_capabilities(
         &self,
         dbus_path: String,
