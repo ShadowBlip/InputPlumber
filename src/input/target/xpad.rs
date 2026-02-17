@@ -335,7 +335,7 @@ impl TargetOutputDevice for XBoxController {
                     let effect_id = event.effect_id();
 
                     log::debug!("Upload effect: {:?} with id {}", event.effect(), effect_id);
-                    let Some(composite_device) = composite_device else {
+                    let Some(composite_device) = composite_device.clone() else {
                         log::debug!("No composite device to upload effect to!");
                         event.set_retval(-1);
                         continue;
@@ -349,10 +349,11 @@ impl TargetOutputDevice for XBoxController {
                         event.effect(),
                         tx,
                     ));
-                    if let Err(e) = composite_device.blocking_process_output_event(upload) {
-                        event.set_retval(-1);
-                        return Err(e.to_string().into());
-                    }
+                    tokio::task::spawn_blocking(move || {
+                        if let Err(e) = composite_device.blocking_process_output_event(upload) {
+                            log::error!("Failed to send ff upload to composite device: {e}");
+                        }
+                    });
                     let effect_id = match rx.recv_timeout(Duration::from_secs(1)) {
                         Ok(id) => id,
                         Err(e) => {
