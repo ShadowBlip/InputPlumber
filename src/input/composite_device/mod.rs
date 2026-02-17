@@ -813,7 +813,7 @@ impl CompositeDevice {
                             let Some(source) = self.source_devices.get(source_id) else {
                                 continue;
                             };
-                            log::debug!("Erasing effect from {source_id}");
+                            log::debug!("Erasing effect {effect_id} from {source_id}");
                             if let Err(e) = source.erase_effect(*source_effect_id).await {
                                 log::warn!("Failed to erase FF effect from {source_id}: {:?}", e);
                             }
