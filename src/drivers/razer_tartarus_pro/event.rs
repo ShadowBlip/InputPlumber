@@ -18,7 +18,7 @@ pub struct Event {
 pub enum KeyCodes {
     #[num_enum(default)]
     Blank,
-    Sdown,
+    ScrollUp,
     KeyTwelve = 0x04,    // A / Aux / Middle Mouse click
     KeyNineteen = 0x06,  // C
     KeyFourteen,         // D
@@ -45,7 +45,7 @@ pub enum KeyCodes {
     KeySixteen = 0xE1, // LShift
     Aux = 0xFD,        // Internal label to account for overload. Never sent by HW
     MClick,            // Internal label to account for overload. Never sent by HW
-    Sup,
+    ScrollDown,
 }
 
 // Analog mode is positional - key 1 is array index 1 so translating a report
