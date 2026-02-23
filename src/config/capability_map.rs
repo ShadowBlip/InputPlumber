@@ -222,12 +222,20 @@ pub struct GamepadCapability {
 #[serde(rename_all = "snake_case")]
 pub struct AxisCapability {
     pub name: String,
+    /// Direction of the axis to translate. Can be one of ["vertical", "horizontal", "left",
+    /// "right", "up", "down"].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub direction: Option<String>,
+    /// A value from 0.0-1.0 of how far an axis should be pressed in a particular direction
+    /// in order for it to be considered "pressed"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deadzone: Option<f64>,
+    /// Use quadratic scaling for more precise control with small stick movements
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quadratic_scaling: Option<bool>,
+    /// Invert all values of this axis with the matching direction
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invert: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]

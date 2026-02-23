@@ -253,19 +253,32 @@ impl InputValue {
                                         .and_then(|gamepad| gamepad.axis.as_ref())
                                         .and_then(|axis| axis.quadratic_scaling)
                                         .unwrap_or(false);
+                                    let use_inverse_value = target_config
+                                        .gamepad
+                                        .as_ref()
+                                        .and_then(|gamepad| gamepad.axis.as_ref())
+                                        .and_then(|axis| axis.invert)
+                                        .unwrap_or(false);
 
-                                    match use_scaling {
-                                        false => Ok(self.clone()),
-                                        true => match self {
-                                            InputValue::Vector2 { x, y } => {
-                                                let scaled_x = x.map(|v| v * v.abs());
-                                                let scaled_y = y.map(|v| v * v.abs());
-                                                Ok(InputValue::Vector2 { x: scaled_x, y: scaled_y })
-                                            },
-                                            _ => Ok(self.clone()),
-                                        },
+                                    match self {
+                                        InputValue::Vector2 { x, y } => {
+                                            let (mut value_x, mut value_y) = (*x, *y);
+                                            if use_inverse_value {
+                                                value_x = value_x.map(|v| -v);
+                                                value_y = value_y.map(|v| -v);
+                                            }
+                                            if use_scaling {
+                                                value_x = value_x.map(|v| v * v.abs());
+                                                value_y = value_y.map(|v| v * v.abs());
+                                            }
+                                            Ok(InputValue::Vector2 {
+                                                x: value_x,
+                                                y: value_y,
+                                            })
+                                        }
+                                        _ => Ok(self.clone()),
                                     }
-                                },
+                                }
                                 // Axis -> Trigger
                                 Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
                                 // Axis -> Accelerometer
