@@ -67,6 +67,7 @@
       "type": "object",
       "properties": {
         "deadzone": {
+          "description": "A value from 0.0-1.0 of how far an axis should be pressed in a particular direction\nin order for it to be considered \"pressed\"",
           "type": [
             "number",
             "null"
@@ -74,13 +75,28 @@
           "format": "double"
         },
         "direction": {
+          "description": "Direction of the axis to translate. Can be one of [\"vertical\", \"horizontal\", \"left\",\n\"right\", \"up\", \"down\"].",
           "type": [
             "string",
             "null"
           ]
         },
+        "invert": {
+          "description": "Invert all values of this axis with the matching direction",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "name": {
           "type": "string"
+        },
+        "quadratic_scaling": {
+          "description": "Use quadratic scaling for more precise control with small stick movements",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [
