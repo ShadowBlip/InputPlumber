@@ -1062,7 +1062,8 @@ impl TargetOutputDevice for SteamDeckDevice {
                     TryRecvError::Disconnected => self.config.clone(),
                 },
             };
-            let device = SteamDeckDevice::create_virtual_device(&config)?;
+            let mut device = SteamDeckDevice::create_virtual_device(&config)?;
+            device.start()?;
             self.device = Some(device);
             self.config = config;
             self.config_rx = None;
