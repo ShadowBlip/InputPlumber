@@ -270,13 +270,13 @@ impl HoripadSteamDevice {
             Capability::Gyroscope(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        self.state.pitch = Integer::from_primitive(x as i16);
+                        self.state.pitch = Integer::from_primitive(-(x as i16));
                     }
                     if let Some(y) = y {
-                        self.state.yaw = Integer::from_primitive(y as i16);
+                        self.state.yaw = Integer::from_primitive(-(y as i16));
                     }
                     if let Some(z) = z {
-                        self.state.roll = Integer::from_primitive(z as i16);
+                        self.state.roll = Integer::from_primitive(-(z as i16));
                     }
                 }
             }
@@ -522,9 +522,9 @@ fn denormalize_accel_value(value_meters_sec: f64) -> i16 {
     value as i16
 }
 
-/// Horipad gyro values are measured in units of degrees per second.
-/// InputPlumber gyro values are also measured in degrees per second.
+/// Horipad gyro values use the opposite sign convention from InputPlumber's
+/// internal representation, so the value must be negated.
 fn denormalize_gyro_value(value_degrees_sec: f64) -> i16 {
-    let value = value_degrees_sec;
+    let value = -value_degrees_sec;
     value as i16
 }
