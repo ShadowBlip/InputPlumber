@@ -531,9 +531,11 @@ fn denormalize_accel_value(value_meters_sec: f64) -> i16 {
     value as i16
 }
 
-/// Horipad gyro values are measured in units of degrees per second.
-/// InputPlumber gyro values are also measured in degrees per second.
+/// SDL negates all gyro axes when reading from this device (SDL_hidapi_steam_hori.c L329-331):
+///   imu_data[N] = -1.0f * LOAD16(data[...])
+/// We invert here so that SDL produces the correct sign after its negation.
+/// https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_steam_hori.c#L329-L331
 fn denormalize_gyro_value(value_degrees_sec: f64) -> i16 {
-    let value = value_degrees_sec;
+    let value = -value_degrees_sec;
     value as i16
 }
