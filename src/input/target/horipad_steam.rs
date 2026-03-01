@@ -270,13 +270,13 @@ impl HoripadSteamDevice {
             Capability::Gyroscope(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        self.state.pitch = Integer::from_primitive(x as i16);
+                        self.state.pitch = Integer::from_primitive(-(x as i16));
                     }
                     if let Some(y) = y {
-                        self.state.yaw = Integer::from_primitive(y as i16);
+                        self.state.yaw = Integer::from_primitive(-(y as i16));
                     }
                     if let Some(z) = z {
-                        self.state.roll = Integer::from_primitive(z as i16);
+                        self.state.roll = Integer::from_primitive(-(z as i16));
                     }
                 }
             }
@@ -304,13 +304,22 @@ impl HoripadSteamDevice {
         Ok(vec![])
     }
 
-    /// Handle [OutputEvent::GetReport] events from the HIDRAW device
+    /// Handle [OutputEvent::GetReport] events from the HIDRAW device.
+    /// Reply immediately to prevent UHID GET_REPORT timeout (~5s per request)
+    /// which would cause long delays when consumers like Steam probe the device.
     fn handle_get_report(
         &mut self,
-        _id: u32,
-        _report_number: u8,
+        id: u32,
+        report_number: u8,
         _report_type: uhid_virt::ReportType,
     ) -> Result<(), Box<dyn Error>> {
+        log::debug!(
+            "Received GetReport request: id: {id}, report_number: {report_number}"
+        );
+        if let Err(e) = self.device.write_get_report_reply(id, 1, vec![]) {
+            log::warn!("Failed to write get report reply: {:?}", e);
+            return Err(e.to_string().into());
+        }
         Ok(())
     }
 }
@@ -522,9 +531,9 @@ fn denormalize_accel_value(value_meters_sec: f64) -> i16 {
     value as i16
 }
 
-/// Horipad gyro values are measured in units of degrees per second.
-/// InputPlumber gyro values are also measured in degrees per second.
+/// Horipad gyro values use the opposite sign convention from InputPlumber's
+/// internal representation, so the value must be negated.
 fn denormalize_gyro_value(value_degrees_sec: f64) -> i16 {
-    let value = value_degrees_sec;
+    let value = -value_degrees_sec;
     value as i16
 }
