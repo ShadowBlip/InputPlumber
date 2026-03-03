@@ -18,9 +18,6 @@ matches:
   - dmi_data:
       board_name: RC72LA
       sys_vendor: ASUSTeK COMPUTER INC.
-  - dmi_data:
-      board_name: RC73XA
-      sys_vendor: ASUSTeK COMPUTER INC.
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
