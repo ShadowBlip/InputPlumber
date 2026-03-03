@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: ASUS ROG Ally
+name: ASUS ROG Xbox Ally
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -16,7 +16,10 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      board_name: RC71L
+      board_name: RC73XA
+      sys_vendor: ASUSTeK COMPUTER INC.
+  - dmi_data:
+      board_name: RC73YA
       sys_vendor: ASUSTeK COMPUTER INC.
 
 # One or more source devices to combine into a single virtual device. The events
@@ -25,19 +28,18 @@ source_devices:
   - group: gamepad # Used for setting attributes on load
     hidraw:
       vendor_id: 0x0b05
-      product_id: 0x1abe
+      product_id: 0x1b4c
       interface_num: 2
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      vendor_id: 045e
-      product_id: 028e
-      handler: event*
+  - group: gamepad # Used for setting attributes on load
+    hidraw:
+      vendor_id: 0x0b05
+      product_id: 0x1b4c
+      interface_num: 5
   - group: gamepad
     unique: false
     evdev:
       vendor_id: 0b05
-      product_id: 1abe
+      product_id: 1b4c
       handler: event*
   - group: imu
     iio:
