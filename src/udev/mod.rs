@@ -50,8 +50,14 @@ pub async fn hide_device(path: &str, flags: &[HideFlag]) -> Result<(), Box<dyn E
             "/bin/chmod".to_string()
         } else if Path::new("/usr/bin/chmod").exists() {
             "/usr/bin/chmod".to_string()
+        } else if Path::new("/run/current-system/sw/bin/chmod").exists() {
+            "/run/current-system/sw/bin/chmod".to_string()
         } else {
-            let output = Command::new("which").arg("chmod").output().await?;
+            let output = Command::new("sh")
+                .arg("-c")
+                .arg("which chmod")
+                .output()
+                .await?;
             if !output.status.success() {
                 return Err("Unable to determine chmod command location".into());
             }
@@ -83,8 +89,14 @@ KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-
             "/bin/mv".to_string()
         } else if Path::new("/usr/bin/mv").exists() {
             "/usr/bin/mv".to_string()
+        } else if Path::new("/run/current-system/sw/bin/mv").exists() {
+            "/run/current-system/sw/bin/mv".to_string()
         } else {
-            let output = Command::new("which").arg("mv").output().await?;
+            let output = Command::new("sh")
+                .arg("-c")
+                .arg("which mv")
+                .output()
+                .await?;
             if !output.status.success() {
                 return Err("Unable to determine mv command location".into());
             }
