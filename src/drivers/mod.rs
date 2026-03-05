@@ -11,6 +11,7 @@ pub mod opineo;
 pub mod oxp_tty;
 pub mod rog_ally;
 pub mod steam_deck;
+pub mod ultimate2_wireless;
 pub mod unified_gamepad;
 pub mod xpad_uhid;
 pub mod zotac_zone;

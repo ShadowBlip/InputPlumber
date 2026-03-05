@@ -35,6 +35,7 @@ pub struct GamepadEventDevice {
     ff_effects: HashMap<i16, FFEffect>,
     ff_effects_dualsense: Option<i16>,
     ff_effects_deck: Option<i16>,
+    ff_effects_rumble: Option<i16>,
     hat_state: HashMap<AbsoluteAxisCode, i32>,
 }
 
@@ -73,6 +74,7 @@ impl GamepadEventDevice {
             ff_effects: HashMap::new(),
             ff_effects_dualsense: None,
             ff_effects_deck: None,
+            ff_effects_rumble: None,
             hat_state: HashMap::new(),
         })
     }
@@ -270,6 +272,63 @@ impl GamepadEventDevice {
         log::trace!("Playing effect with data: {:?}", effect_data);
         effect.play(1)?;
 
+        Ok(())
+    }
+
+    fn process_rumble(
+        &mut self,
+        strong_magnitude: u16,
+        weak_magnitude: u16,
+    ) -> Result<(), Box<dyn Error>> {
+        if self.ff_effects_rumble.is_none() {
+            let effect_data = FFEffectData {
+                direction: 0,
+                trigger: FFTrigger {
+                    button: 0,
+                    interval: 0,
+                },
+                replay: FFReplay {
+                    length: 50,
+                    delay: 0,
+                },
+                kind: FFEffectKind::Rumble {
+                    strong_magnitude: 0,
+                    weak_magnitude: 0,
+                },
+            };
+            log::trace!("Uploading generic rumble FF effect");
+            let effect = self.device.upload_ff_effect(effect_data)?;
+            let id = effect.id() as i16;
+            self.ff_effects.insert(id, effect);
+            self.ff_effects_rumble = Some(id);
+        }
+
+        let effect_id = self.ff_effects_rumble.unwrap();
+        let effect = self.ff_effects.get_mut(&effect_id).unwrap();
+
+        if strong_magnitude == 0 && weak_magnitude == 0 {
+            log::trace!("Stopping rumble FF effect");
+            effect.stop()?;
+            return Ok(());
+        }
+
+        let effect_data = FFEffectData {
+            direction: 0,
+            trigger: FFTrigger {
+                button: 0,
+                interval: 0,
+            },
+            replay: FFReplay {
+                length: 60000,
+                delay: 0,
+            },
+            kind: FFEffectKind::Rumble {
+                strong_magnitude,
+                weak_magnitude,
+            },
+        };
+        effect.update(effect_data)?;
+        effect.play(1)?;
         Ok(())
     }
 
@@ -590,6 +649,18 @@ impl SourceOutputDevice for GamepadEventDevice {
                 log::trace!("Received Steam Deck Force Feedback Report");
                 if let Err(e) = self.process_deck_ff(report) {
                     log::error!("Failed to process Steam Deck Force Feedback Report: {e:?}")
+                }
+                Ok(())
+            }
+            OutputEvent::Rumble {
+                weak_magnitude,
+                strong_magnitude,
+            } => {
+                log::trace!(
+                    "Received Rumble event: strong={strong_magnitude} weak={weak_magnitude}"
+                );
+                if let Err(e) = self.process_rumble(strong_magnitude, weak_magnitude) {
+                    log::error!("Failed to process Rumble event: {e:?}")
                 }
                 Ok(())
             }
