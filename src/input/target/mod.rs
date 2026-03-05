@@ -10,6 +10,7 @@ use std::{
 use debug::DebugDevice;
 use horipad_steam::HoripadSteamDevice;
 use steam_deck_uhid::SteamDeckUhidDevice;
+use ultimate2_wireless::Ultimate2WirelessDevice;
 use thiserror::Error;
 use tokio::{
     sync::mpsc::{self, error::TryRecvError},
@@ -62,6 +63,7 @@ pub mod steam_deck;
 pub mod steam_deck_uhid;
 pub mod touchpad;
 pub mod touchscreen;
+pub mod ultimate2_wireless;
 pub mod unified_gamepad;
 pub mod xpad;
 
@@ -195,6 +197,11 @@ impl TargetDeviceTypeId {
             TargetDeviceTypeId {
                 id: "hori-steam",
                 name: "HORI CO.,LTD. HORIPAD STEAM",
+                device_class: TargetDeviceClass::Gamepad,
+            },
+            TargetDeviceTypeId {
+                id: "8bitdo-u2",
+                name: "8BitDo Ultimate 2 Wireless Controller",
                 device_class: TargetDeviceClass::Gamepad,
             },
             TargetDeviceTypeId {
@@ -792,6 +799,7 @@ pub enum TargetDevice {
     SteamDeckUhid(TargetDriver<SteamDeckUhidDevice>),
     Touchpad(TargetDriver<TouchpadDevice>),
     Touchscreen(TargetDriver<TouchscreenDevice>),
+    Ultimate2Wireless(TargetDriver<Ultimate2WirelessDevice>),
     XBoxController(TargetDriver<XBoxController>),
     UnifiedGamepad(TargetDriver<UnifiedGamepadDevice>),
 }
@@ -867,6 +875,15 @@ impl TargetDevice {
                 let driver = TargetDriver::new_with_options(id, device, dbus, options);
                 Ok(Self::HoripadSteam(driver))
             }
+            "8bitdo-u2" => {
+                let device = Ultimate2WirelessDevice::new()?;
+                let options = TargetDriverOptions {
+                    poll_rate: Duration::from_millis(1),
+                    buffer_size: 2048,
+                };
+                let driver = TargetDriver::new_with_options(id, device, dbus, options);
+                Ok(Self::Ultimate2Wireless(driver))
+            }
             "keyboard" => {
                 let device = KeyboardDevice::new()?;
                 let driver = TargetDriver::new(id, device, dbus);
@@ -931,6 +948,7 @@ impl TargetDevice {
                 "ds5-edge-bt".try_into().unwrap(),
             ],
             TargetDevice::HoripadSteam(_) => vec!["hori-steam".try_into().unwrap()],
+            TargetDevice::Ultimate2Wireless(_) => vec!["8bitdo-u2".try_into().unwrap()],
             TargetDevice::Keyboard(_) => vec!["keyboard".try_into().unwrap()],
             TargetDevice::Mouse(_) => vec!["mouse".try_into().unwrap()],
             TargetDevice::SteamDeck(_) => vec!["deck".try_into().unwrap()],
@@ -957,6 +975,7 @@ impl TargetDevice {
             TargetDevice::Debug(device) => Some(device.client()),
             TargetDevice::DualSense(device) => Some(device.client()),
             TargetDevice::HoripadSteam(device) => Some(device.client()),
+            TargetDevice::Ultimate2Wireless(device) => Some(device.client()),
             TargetDevice::Keyboard(device) => Some(device.client()),
             TargetDevice::Mouse(device) => Some(device.client()),
             TargetDevice::SteamDeck(device) => Some(device.client()),
@@ -976,6 +995,7 @@ impl TargetDevice {
             TargetDevice::Debug(device) => device.run().await,
             TargetDevice::DualSense(device) => device.run().await,
             TargetDevice::HoripadSteam(device) => device.run().await,
+            TargetDevice::Ultimate2Wireless(device) => device.run().await,
             TargetDevice::Keyboard(device) => device.run().await,
             TargetDevice::Mouse(device) => device.run().await,
             TargetDevice::SteamDeck(device) => device.run().await,
