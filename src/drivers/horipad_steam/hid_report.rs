@@ -135,9 +135,9 @@ pub struct PackedInputDataReport {
 
     // bytes 12-17 // Gyro
     #[packed_field(bytes = "12..=13", endian = "lsb")]
-    pub roll: Integer<i16, packed_bits::Bits<16>>,
-    #[packed_field(bytes = "14..=15", endian = "lsb")]
     pub yaw: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "14..=15", endian = "lsb")]
+    pub roll: Integer<i16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "16..=17", endian = "lsb")]
     pub pitch: Integer<i16, packed_bits::Bits<16>>,
     // bytes 18-23 // Accelerometer
@@ -187,8 +187,8 @@ impl Default for PackedInputDataReport {
             rt_analog: 0,
             lt_analog: 0,
             tick: Integer::from_primitive(0),
-            roll: Integer::from_primitive(0),
             yaw: Integer::from_primitive(0),
+            roll: Integer::from_primitive(0),
             pitch: Integer::from_primitive(0),
             accel_z: Integer::from_primitive(0),
             accel_y: Integer::from_primitive(0),
