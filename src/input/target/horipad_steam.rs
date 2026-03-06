@@ -304,13 +304,22 @@ impl HoripadSteamDevice {
         Ok(vec![])
     }
 
-    /// Handle [OutputEvent::GetReport] events from the HIDRAW device
+    /// Handle [OutputEvent::GetReport] events from the HIDRAW device.
+    /// Reply immediately to prevent UHID GET_REPORT timeout (~5s per request)
+    /// which would cause long delays when consumers like Steam probe the device.
     fn handle_get_report(
         &mut self,
-        _id: u32,
-        _report_number: u8,
+        id: u32,
+        report_number: u8,
         _report_type: uhid_virt::ReportType,
     ) -> Result<(), Box<dyn Error>> {
+        log::debug!(
+            "Received GetReport request: id: {id}, report_number: {report_number}"
+        );
+        if let Err(e) = self.device.write_get_report_reply(id, 1, vec![]) {
+            log::warn!("Failed to write get report reply: {:?}", e);
+            return Err(e.to_string().into());
+        }
         Ok(())
     }
 }
@@ -522,9 +531,11 @@ fn denormalize_accel_value(value_meters_sec: f64) -> i16 {
     value as i16
 }
 
-/// Horipad gyro values are measured in units of degrees per second.
-/// InputPlumber gyro values are also measured in degrees per second.
+/// SDL negates all gyro axes when reading from this device (SDL_hidapi_steam_hori.c L329-331):
+///   imu_data[N] = -1.0f * LOAD16(data[...])
+/// We invert here so that SDL produces the correct sign after its negation.
+/// https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_steam_hori.c#L329-L331
 fn denormalize_gyro_value(value_degrees_sec: f64) -> i16 {
-    let value = value_degrees_sec;
+    let value = -value_degrees_sec;
     value as i16
 }
