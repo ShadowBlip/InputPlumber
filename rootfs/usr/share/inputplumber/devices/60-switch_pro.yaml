@@ -21,7 +21,8 @@ matches: []
 source_devices:
   - group: gamepad
     evdev:
-      name: Nintendo Co., Ltd. Pro Controller
+      vendor_id: "057e"
+      product_id: "2009"
       handler: event*
   #- group: imu
   #  evdev:
