@@ -186,7 +186,7 @@ impl SourceOutputDevice for DualSenseController {
                 }
                 Ok(())
             }
-            OutputEvent::LED { .. } => Ok(()),
+            OutputEvent::Led { .. } => Ok(()),
         }
     }
 

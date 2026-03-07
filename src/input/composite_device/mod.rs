@@ -927,7 +927,7 @@ impl CompositeDevice {
                 _ => 0,
             };
 
-            let event = OutputEvent::LED {
+            let event = OutputEvent::Led {
                 r: 0,
                 g: 0,
                 b: 0,

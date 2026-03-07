@@ -19,7 +19,7 @@ pub enum OutputEvent {
     SteamDeckRumble(PackedRumbleReport),
     /// Generic LED control event (not tied to any specific controller).
     /// Sets color (r, g, b) and brightness (0-255).
-    LED {
+    Led {
         /// Red channel (0-255).
         r: u8,
         /// Green channel (0-255).
@@ -83,7 +83,7 @@ impl OutputEvent {
                 }
             }
             OutputEvent::SteamDeckRumble(_) => vec![OutputCapability::ForceFeedback],
-            OutputEvent::LED { .. } => vec![
+            OutputEvent::Led { .. } => vec![
                 OutputCapability::LED(super::output_capability::LED::Color),
                 OutputCapability::LED(super::output_capability::LED::Brightness),
             ],
@@ -101,7 +101,7 @@ impl OutputEvent {
             OutputEvent::DualSense(report) => report.use_rumble_not_haptics,
             OutputEvent::SteamDeckHaptics(_) => true,
             OutputEvent::SteamDeckRumble(_) => true,
-            OutputEvent::LED { .. } => false,
+            OutputEvent::Led { .. } => false,
         }
     }
 }

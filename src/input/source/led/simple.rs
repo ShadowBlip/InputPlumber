@@ -97,11 +97,8 @@ impl SourceInputDevice for LedSimple {
 impl SourceOutputDevice for LedSimple {
     fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
         log::trace!("LedSimple received output event: {event:?}");
-        match event {
-            OutputEvent::LED { brightness, .. } => {
-                self.write_brightness(brightness)?;
-            }
-            _ => {}
+        if let OutputEvent::Led { brightness, .. } = event {
+            self.write_brightness(brightness)?;
         }
         Ok(())
     }
