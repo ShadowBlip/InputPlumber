@@ -593,6 +593,7 @@ impl SourceOutputDevice for GamepadEventDevice {
                 }
                 Ok(())
             }
+            OutputEvent::LED { .. } => Ok(()),
         }
     }
 

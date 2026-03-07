@@ -323,6 +323,11 @@ impl CompositeDevice {
                             log::error!("Failed to process output event: {:?}", e);
                         }
                     }
+                    CompositeCommand::SetPlayerLed(player) => {
+                        if let Err(e) = self.set_player_led(player).await {
+                            log::error!("Failed to set player LED: {:?}", e);
+                        }
+                    }
                     CompositeCommand::GetCapabilities(sender) => {
                         if let Err(e) = sender.send(self.capabilities.clone()).await {
                             log::error!("Failed to send capabilities: {:?}", e);
@@ -897,6 +902,43 @@ impl CompositeDevice {
         }
 
         //log::trace!("Finished processing output events.");
+
+        Ok(())
+    }
+
+    /// Set the active player LED on the composite device. Turns on the LED
+    /// source device whose ID contains `player-{player}` and turns off all
+    /// other LED source devices. Pass `0` to turn all LEDs off.
+    async fn set_player_led(&mut self, player: u8) -> Result<(), Box<dyn Error>> {
+        let target = if player > 0 {
+            Some(format!("player-{player}"))
+        } else {
+            None
+        };
+
+        for (source_id, source) in self.source_devices.iter() {
+            // Only target LED sources
+            if !source_id.starts_with("leds://") {
+                continue;
+            }
+
+            let brightness = match &target {
+                Some(t) if source_id.contains(t.as_str()) => 255,
+                _ => 0,
+            };
+
+            let event = OutputEvent::LED {
+                r: 0,
+                g: 0,
+                b: 0,
+                brightness,
+            };
+
+            log::debug!("Setting LED {source_id} brightness to {brightness}");
+            if let Err(e) = source.write_event(event).await {
+                log::error!("Failed to set LED on {source_id}: {e:?}");
+            }
+        }
 
         Ok(())
     }

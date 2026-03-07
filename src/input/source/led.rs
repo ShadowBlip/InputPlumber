@@ -1,5 +1,7 @@
 pub mod multicolor;
+pub mod simple;
 use self::multicolor::LedMultiColor;
+use self::simple::LedSimple;
 use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver};
 use crate::{
     config,
@@ -13,57 +15,71 @@ use crate::{
     udev::device::UdevDevice,
 };
 use std::error::Error;
+use std::path::PathBuf;
+
 /// List of available drivers
 enum DriverType {
     LedMultiColor,
+    LedSimple,
 }
+
 /// [LedDevice] represents an input device using the leds subsystem.
 #[derive(Debug)]
 pub enum LedDevice {
     MultiColor(SourceDriver<LedMultiColor>),
+    Simple(SourceDriver<LedSimple>),
 }
 
 impl SourceDeviceCompatible for LedDevice {
     fn get_device_ref(&self) -> DeviceInfoRef<'_> {
         match self {
             LedDevice::MultiColor(source_driver) => source_driver.info_ref(),
+            LedDevice::Simple(source_driver) => source_driver.info_ref(),
         }
     }
 
     fn get_id(&self) -> String {
         match self {
             LedDevice::MultiColor(source_driver) => source_driver.get_id(),
+            LedDevice::Simple(source_driver) => source_driver.get_id(),
         }
     }
 
     fn client(&self) -> super::client::SourceDeviceClient {
         match self {
             LedDevice::MultiColor(source_driver) => source_driver.client(),
+            LedDevice::Simple(source_driver) => source_driver.client(),
         }
     }
 
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
             LedDevice::MultiColor(source_driver) => source_driver.run().await,
+            LedDevice::Simple(source_driver) => source_driver.run().await,
         }
     }
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
             LedDevice::MultiColor(source_driver) => source_driver.get_capabilities(),
+            LedDevice::Simple(source_driver) => source_driver.get_capabilities(),
         }
     }
 
     fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
-        Ok(vec![
-            OutputCapability::LED(LED::Color),
-            OutputCapability::LED(LED::Brightness),
-        ])
+        match self {
+            LedDevice::MultiColor(_) => Ok(vec![
+                OutputCapability::LED(LED::Color),
+                OutputCapability::LED(LED::Brightness),
+            ]),
+            LedDevice::Simple(_) => Ok(vec![OutputCapability::LED(LED::Brightness)]),
+        }
     }
 
     fn get_device_path(&self) -> String {
         match self {
             LedDevice::MultiColor(source_driver) => source_driver.get_device_path(),
+            LedDevice::Simple(source_driver) => source_driver.get_device_path(),
         }
     }
 }
@@ -85,16 +101,29 @@ impl LedDevice {
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::MultiColor(source_device))
             }
+            DriverType::LedSimple => {
+                let device = LedSimple::new(device_info.clone())?;
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                Ok(Self::Simple(source_device))
+            }
         }
     }
 
-    /// Return the driver type for the given device info
+    /// Return the driver type for the given device info.
+    /// Uses `LedMultiColor` when `multi_intensity` sysfs exists,
+    /// otherwise falls back to the simple brightness-only driver.
     fn get_driver_type(device: &UdevDevice) -> DriverType {
         let device_name = device.sysname();
         let name = device_name.as_str();
         log::debug!("Finding driver for LED interface: {name}");
 
-        DriverType::LedMultiColor
+        let multi_intensity = PathBuf::from(device.syspath().as_str()).join("multi_intensity");
+        if multi_intensity.exists() {
+            DriverType::LedMultiColor
+        } else {
+            DriverType::LedSimple
+        }
     }
 }
 /// Returns the DBus path for an [LedDevice] from a device id (E.g. leds://input7__numlock)
