@@ -54,6 +54,7 @@ pub enum CompositeCommand {
     #[allow(dead_code)]
     UpdateSourceCapabilities(String, HashSet<Capability>),
     UpdateTargetCapabilities(String, HashSet<Capability>),
+    SetPlayerLed(u8),
     WriteChordEvent(Vec<NativeEvent>),
     WriteEvent(NativeEvent),
     WriteSendEvent(NativeEvent),

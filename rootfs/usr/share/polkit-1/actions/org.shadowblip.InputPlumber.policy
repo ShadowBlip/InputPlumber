@@ -164,6 +164,26 @@
     </defaults>
   </action>
 
+  <action id="org.shadowblip.Input.CompositeDevice.SetLedColor">
+    <description>Set LED color and brightness on the composite device</description>
+    <message>Authorization required to set LED color on the composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.CompositeDevice.SetPlayerLed">
+    <description>Set the active player LED on the composite device</description>
+    <message>Authorization required to set the player LED on the composite device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
   <action id="org.shadowblip.Input.CompositeDevice.SetInterceptActivation">
     <description>Set intercept activation for the composite device</description>
     <message>Authorization required to set intercept activation for the composite device.</message>

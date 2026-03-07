@@ -125,6 +125,13 @@ impl CompositeDeviceClient {
         Ok(())
     }
 
+    /// Set the active player LED. Turns on the LED matching `player-{N}` and
+    /// turns off all other LED source devices. Pass `0` to turn all LEDs off.
+    pub async fn set_player_led(&self, player: u8) -> Result<(), ClientError> {
+        self.send(CompositeCommand::SetPlayerLed(player)).await?;
+        Ok(())
+    }
+
     /// Process the given output event (blocking)
     pub fn blocking_process_output_event(&self, event: OutputEvent) -> Result<(), ClientError> {
         self.tx

@@ -279,6 +279,15 @@ impl SourceOutputDevice for LedMultiColor {
                 self.write_color(report.led_red, report.led_green, report.led_blue)?;
                 self.write_brightness(255)?; // Always set max brightness as DS uses only RGB.
             }
+            OutputEvent::Led {
+                r,
+                g,
+                b,
+                brightness,
+            } => {
+                self.write_color(r, g, b)?;
+                self.write_brightness(brightness)?;
+            }
             _ => {
                 return Ok(());
             }

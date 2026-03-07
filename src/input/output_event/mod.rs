@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use ::evdev::{FFEffectData, InputEvent};
+use evdev::{FFEffectData, InputEvent};
 
 use crate::drivers::{
     dualsense::hid_report::SetStatePackedOutputData,
@@ -17,6 +17,18 @@ pub enum OutputEvent {
     DualSense(SetStatePackedOutputData),
     SteamDeckHaptics(PackedHapticReport),
     SteamDeckRumble(PackedRumbleReport),
+    /// Generic LED control event (not tied to any specific controller).
+    /// Sets color (r, g, b) and brightness (0-255).
+    Led {
+        /// Red channel (0-255).
+        r: u8,
+        /// Green channel (0-255).
+        g: u8,
+        /// Blue channel (0-255).
+        b: u8,
+        /// Brightness (0-255).
+        brightness: u8,
+    },
 }
 
 impl OutputEvent {
@@ -71,6 +83,10 @@ impl OutputEvent {
                 }
             }
             OutputEvent::SteamDeckRumble(_) => vec![OutputCapability::ForceFeedback],
+            OutputEvent::Led { .. } => vec![
+                OutputCapability::LED(super::output_capability::LED::Color),
+                OutputCapability::LED(super::output_capability::LED::Brightness),
+            ],
         }
     }
 
@@ -85,6 +101,7 @@ impl OutputEvent {
             OutputEvent::DualSense(report) => report.use_rumble_not_haptics,
             OutputEvent::SteamDeckHaptics(_) => true,
             OutputEvent::SteamDeckRumble(_) => true,
+            OutputEvent::Led { .. } => false,
         }
     }
 }

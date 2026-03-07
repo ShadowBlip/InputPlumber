@@ -16,6 +16,7 @@ use crate::{
         capability::Capability,
         composite_device::{client::CompositeDeviceClient, InterceptMode},
         event::{native::NativeEvent, value::InputValue},
+        output_event::OutputEvent,
     },
 };
 
@@ -337,6 +338,59 @@ impl CompositeDeviceInterface {
 
         self.composite_device
             .write_chord(chord)
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Set the LED color and brightness on the composite device's source LED devices.
+    /// Values for r, g, b, and brightness are 0-255.
+    async fn set_led_color(
+        &self,
+        r: u8,
+        g: u8,
+        b: u8,
+        brightness: u8,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(
+            conn,
+            Some(hdr),
+            "org.shadowblip.Input.CompositeDevice.SetLedColor",
+        )
+        .await?;
+        let event = OutputEvent::Led {
+            r,
+            g,
+            b,
+            brightness,
+        };
+        self.composite_device
+            .process_output_event(event)
+            .await
+            .map_err(|e| fdo::Error::Failed(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Set the active player LED. Turns on the LED matching `player-{player}`
+    /// and turns off all other LED source devices. Pass `0` to turn all LEDs off.
+    async fn set_player_led(
+        &self,
+        player: u8,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Header<'_>,
+    ) -> fdo::Result<()> {
+        check_polkit(
+            conn,
+            Some(hdr),
+            "org.shadowblip.Input.CompositeDevice.SetPlayerLed",
+        )
+        .await?;
+        self.composite_device
+            .set_player_led(player)
             .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
