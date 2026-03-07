@@ -1361,14 +1361,6 @@ impl Manager {
 
             "leds" => {
                 log::debug!("LED device added: {} ({})", device.name(), device.sysname());
-
-                // Check to see if the device is virtual
-                if device.is_virtual() {
-                    log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
-                    notify_device_added = false;
-                } else {
-                    log::trace!("Device {dev_name} ({dev_sysname}) is real - {dev_path}");
-                }
             }
 
             "tty" => {
