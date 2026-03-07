@@ -23,6 +23,7 @@ source_devices:
     evdev:
       vendor_id: "057e"
       product_id: "2009"
+      name: "*Pro Controller"
       handler: event*
   #- group: imu
   #  evdev:
