@@ -192,6 +192,7 @@ impl EvdevEvent {
                 KeyCode::BTN_THUMBR => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick))
                 }
+                KeyCode::BTN_Z => Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
                 // Keyboard Buttons
                 KeyCode::KEY_0 => Capability::Keyboard(Keyboard::Key0),
                 KeyCode::KEY_1 => Capability::Keyboard(Keyboard::Key1),
