@@ -78,6 +78,8 @@ impl XBoxController {
         keys.insert(KeyCode::BTN_WEST);
         keys.insert(KeyCode::BTN_TL);
         keys.insert(KeyCode::BTN_TR);
+        keys.insert(KeyCode::BTN_TL2);
+        keys.insert(KeyCode::BTN_TR2);
         keys.insert(KeyCode::BTN_SELECT);
         keys.insert(KeyCode::BTN_START);
         keys.insert(KeyCode::BTN_MODE);
