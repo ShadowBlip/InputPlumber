@@ -361,7 +361,7 @@ impl CompositeDeviceInterface {
             "org.shadowblip.Input.CompositeDevice.SetLedColor",
         )
         .await?;
-        let event = OutputEvent::Led {
+        let event = OutputEvent::LedRgb {
             r,
             g,
             b,

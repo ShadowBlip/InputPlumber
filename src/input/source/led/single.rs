@@ -16,7 +16,7 @@ use std::{
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum LedSimpleError {
+pub enum LedSingleColorError {
     #[error("Error reading value: {0}")]
     Read(std::io::Error),
 
@@ -27,38 +27,39 @@ pub enum LedSimpleError {
     Path(PathBuf),
 }
 
-/// Simple brightness-only LED source device. Used for LEDs that only
-/// support on/off or variable brightness (e.g. player indicator LEDs
-/// on Nintendo Switch Pro Controller).
-pub struct LedSimple {
+/// Single-color brightness-only LED source device. Used for LEDs that
+/// only support on/off or variable brightness with a fixed hardware
+/// color (e.g. green player indicator LEDs on Nintendo Switch Pro
+/// Controller).
+pub struct LedSingleColor {
     brightness_path: PathBuf,
     #[allow(dead_code)]
     device_info: UdevDevice,
     max_brightness: u8,
 }
 
-impl Debug for LedSimple {
+impl Debug for LedSingleColor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LedSimple")
+        f.debug_struct("LedSingleColor")
             .field("brightness_path", &self.brightness_path)
             .field("max_brightness", &self.max_brightness)
             .finish()
     }
 }
 
-impl LedSimple {
-    /// Create a new simple LED source device with the given udev device
-    /// information.
+impl LedSingleColor {
+    /// Create a new single-color LED source device with the given udev
+    /// device information.
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let brightness_path = PathBuf::from(device_info.syspath().as_str()).join("brightness");
         if !brightness_path.exists() {
-            return Err(Box::new(LedSimpleError::Path(brightness_path)));
+            return Err(Box::new(LedSingleColorError::Path(brightness_path)));
         }
 
         let max_brightness_path =
             PathBuf::from(device_info.syspath().as_str()).join("max_brightness");
         if !max_brightness_path.exists() {
-            return Err(Box::new(LedSimpleError::Path(max_brightness_path)));
+            return Err(Box::new(LedSingleColorError::Path(max_brightness_path)));
         }
 
         let max_brightness = read_brightness(&max_brightness_path)?;
@@ -79,12 +80,12 @@ impl LedSimple {
     fn write_brightness(&self, brightness: u8) -> Result<(), Box<dyn Error + Send + Sync>> {
         let scaled: u8 = (brightness as u32 * self.max_brightness as u32 / 255) as u8;
         fs::write(&self.brightness_path, scaled.to_string())
-            .map_err(|err| Box::new(LedSimpleError::Write(err)))?;
+            .map_err(|err| Box::new(LedSingleColorError::Write(err)))?;
         Ok(())
     }
 }
 
-impl SourceInputDevice for LedSimple {
+impl SourceInputDevice for LedSingleColor {
     fn poll(&mut self) -> Result<Vec<crate::input::event::native::NativeEvent>, InputError> {
         Ok(Vec::new())
     }
@@ -94,11 +95,18 @@ impl SourceInputDevice for LedSimple {
     }
 }
 
-impl SourceOutputDevice for LedSimple {
+impl SourceOutputDevice for LedSingleColor {
     fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
-        log::trace!("LedSimple received output event: {event:?}");
-        if let OutputEvent::Led { brightness, .. } = event {
-            self.write_brightness(brightness)?;
+        log::trace!("LedSingleColor received output event: {event:?}");
+        match event {
+            OutputEvent::LedSingleColor { brightness } => {
+                self.write_brightness(brightness)?;
+            }
+            OutputEvent::LedRgb { brightness, .. }
+            | OutputEvent::LedMultiColor { brightness, .. } => {
+                self.write_brightness(brightness)?;
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -110,6 +118,6 @@ impl SourceOutputDevice for LedSimple {
 
 /// Read a brightness value from a sysfs path.
 fn read_brightness(path: &PathBuf) -> Result<u8, Box<dyn Error + Send + Sync>> {
-    let s = read_to_string(path).map_err(LedSimpleError::Read)?;
+    let s = read_to_string(path).map_err(LedSingleColorError::Read)?;
     Ok(s.trim().parse()?)
 }

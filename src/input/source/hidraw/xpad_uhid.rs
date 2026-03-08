@@ -159,7 +159,9 @@ impl SourceOutputDevice for XpadUhid {
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::SteamDeckHaptics(_packed_haptic_report) => Ok(()),
             OutputEvent::SteamDeckRumble(_packed_rumble_report) => Ok(()),
-            OutputEvent::Led { .. } => Ok(()),
+            OutputEvent::LedRgb { .. } => Ok(()),
+            OutputEvent::LedMultiColor { .. } => Ok(()),
+            OutputEvent::LedSingleColor { .. } => Ok(()),
         }
     }
 

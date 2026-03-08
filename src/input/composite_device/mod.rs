@@ -35,7 +35,8 @@ use crate::{
         output_capability::OutputCapability,
         output_event::UinputOutputEvent,
         source::{
-            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice,
+            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice,
+            led::{parse_led_color_tag, DriverType, LedDevice},
             tty::TtyDevice, SourceDevice,
         },
         target::TargetDeviceTypeId,
@@ -927,26 +928,39 @@ impl CompositeDevice {
                 _ => 0,
             };
 
-            // Parse the LED color from the kernel-tagged sysfs name and map to
-            // RGB values. Single-color LEDs (LedSimple) ignore r/g/b, but
-            // multicolor/RGB LEDs (LedMultiColor) need the correct color.
+            // Parse the LED color from the kernel-tagged sysfs name. Use the
+            // color tag to determine whether this is a single-color LED
+            // (brightness only) or a multicolor/RGB LED (color + brightness).
             let sysname = source_id.trim_start_matches("leds://");
-            let (r, g, b) = if brightness > 0 {
-                led_color_to_rgb(parse_led_color(sysname))
-            } else {
-                (0, 0, 0)
+            let color_tag = parse_led_color_tag(sysname);
+
+            let driver_type = DriverType::from_color_tag(color_tag);
+            let event = match driver_type {
+                DriverType::SingleColor => OutputEvent::LedSingleColor { brightness },
+                DriverType::Rgb | DriverType::MultiColor => {
+                    let (r, g, b) = if brightness > 0 {
+                        led_color_to_rgb(color_tag)
+                    } else {
+                        (0, 0, 0)
+                    };
+                    match driver_type {
+                        DriverType::Rgb => OutputEvent::LedRgb {
+                            r,
+                            g,
+                            b,
+                            brightness,
+                        },
+                        _ => OutputEvent::LedMultiColor {
+                            r,
+                            g,
+                            b,
+                            brightness,
+                        },
+                    }
+                }
             };
 
-            let event = OutputEvent::Led {
-                r,
-                g,
-                b,
-                brightness,
-            };
-
-            log::debug!(
-                "Setting LED {source_id} to color ({r}, {g}, {b}) brightness {brightness}"
-            );
+            log::debug!("Setting LED {source_id} brightness {brightness} (color tag: {color_tag})");
             if let Err(e) = source.write_event(event).await {
                 log::error!("Failed to set LED on {source_id}: {e:?}");
             }
@@ -2270,25 +2284,6 @@ impl CompositeDevice {
                 log::error!("Failed to set filtered events on source devices: {e}");
             };
         });
-    }
-}
-
-/// Parse the LED color tag from a kernel sysfs name.
-///
-/// Kernel LED naming convention is `devicename:colour:function`.
-/// The colour is the second-to-last colon-separated segment.
-///
-/// # Examples
-/// - `"0003:057E:2009.0001:green:player-1"` → `"green"`
-/// - `"multicolor:chassis"` → `"multicolor"`
-/// - `"ayaneo:rgb:joystick_rings"` → `"rgb"`
-/// - `"single_segment"` → `""`
-fn parse_led_color(sysname: &str) -> &str {
-    let parts: Vec<&str> = sysname.split(':').collect();
-    if parts.len() >= 2 {
-        parts[parts.len() - 2]
-    } else {
-        ""
     }
 }
 

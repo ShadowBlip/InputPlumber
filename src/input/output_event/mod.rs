@@ -17,15 +17,35 @@ pub enum OutputEvent {
     DualSense(SetStatePackedOutputData),
     SteamDeckHaptics(PackedHapticReport),
     SteamDeckRumble(PackedRumbleReport),
-    /// Generic LED control event (not tied to any specific controller).
-    /// Sets color (r, g, b) and brightness (0-255).
-    Led {
+    /// RGB LED control event. Used for LEDs identified by the kernel
+    /// `rgb` color tag. Sets color (r, g, b) and brightness (0-255).
+    LedRgb {
         /// Red channel (0-255).
         r: u8,
         /// Green channel (0-255).
         g: u8,
         /// Blue channel (0-255).
         b: u8,
+        /// Brightness (0-255).
+        brightness: u8,
+    },
+    /// Multicolor LED control event. Used for LEDs identified by the kernel
+    /// `multicolor` or `multi` color tag. Sets color (r, g, b) and
+    /// brightness (0-255).
+    LedMultiColor {
+        /// Red channel (0-255).
+        r: u8,
+        /// Green channel (0-255).
+        g: u8,
+        /// Blue channel (0-255).
+        b: u8,
+        /// Brightness (0-255).
+        brightness: u8,
+    },
+    /// Single-color LED control event for LEDs with a fixed hardware color
+    /// (e.g. green player indicator LEDs). Only brightness is controllable;
+    /// the color is determined by the physical LED.
+    LedSingleColor {
         /// Brightness (0-255).
         brightness: u8,
     },
@@ -83,10 +103,13 @@ impl OutputEvent {
                 }
             }
             OutputEvent::SteamDeckRumble(_) => vec![OutputCapability::ForceFeedback],
-            OutputEvent::Led { .. } => vec![
+            OutputEvent::LedRgb { .. } | OutputEvent::LedMultiColor { .. } => vec![
                 OutputCapability::LED(super::output_capability::LED::Color),
                 OutputCapability::LED(super::output_capability::LED::Brightness),
             ],
+            OutputEvent::LedSingleColor { .. } => vec![OutputCapability::LED(
+                super::output_capability::LED::Brightness,
+            )],
         }
     }
 
@@ -101,7 +124,9 @@ impl OutputEvent {
             OutputEvent::DualSense(report) => report.use_rumble_not_haptics,
             OutputEvent::SteamDeckHaptics(_) => true,
             OutputEvent::SteamDeckRumble(_) => true,
-            OutputEvent::Led { .. } => false,
+            OutputEvent::LedRgb { .. } => false,
+            OutputEvent::LedMultiColor { .. } => false,
+            OutputEvent::LedSingleColor { .. } => false,
         }
     }
 }
