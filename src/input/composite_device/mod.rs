@@ -927,14 +927,26 @@ impl CompositeDevice {
                 _ => 0,
             };
 
+            // Parse the LED color from the kernel-tagged sysfs name and map to
+            // RGB values. Single-color LEDs (LedSimple) ignore r/g/b, but
+            // multicolor/RGB LEDs (LedMultiColor) need the correct color.
+            let sysname = source_id.trim_start_matches("leds://");
+            let (r, g, b) = if brightness > 0 {
+                led_color_to_rgb(parse_led_color(sysname))
+            } else {
+                (0, 0, 0)
+            };
+
             let event = OutputEvent::Led {
-                r: 0,
-                g: 0,
-                b: 0,
+                r,
+                g,
+                b,
                 brightness,
             };
 
-            log::debug!("Setting LED {source_id} brightness to {brightness}");
+            log::debug!(
+                "Setting LED {source_id} to color ({r}, {g}, {b}) brightness {brightness}"
+            );
             if let Err(e) = source.write_event(event).await {
                 log::error!("Failed to set LED on {source_id}: {e:?}");
             }
@@ -2258,5 +2270,47 @@ impl CompositeDevice {
                 log::error!("Failed to set filtered events on source devices: {e}");
             };
         });
+    }
+}
+
+/// Parse the LED color tag from a kernel sysfs name.
+///
+/// Kernel LED naming convention is `devicename:colour:function`.
+/// The colour is the second-to-last colon-separated segment.
+///
+/// # Examples
+/// - `"0003:057E:2009.0001:green:player-1"` → `"green"`
+/// - `"multicolor:chassis"` → `"multicolor"`
+/// - `"ayaneo:rgb:joystick_rings"` → `"rgb"`
+/// - `"single_segment"` → `""`
+fn parse_led_color(sysname: &str) -> &str {
+    let parts: Vec<&str> = sysname.split(':').collect();
+    if parts.len() >= 2 {
+        parts[parts.len() - 2]
+    } else {
+        ""
+    }
+}
+
+/// Map a kernel LED color tag to RGB values.
+///
+/// Single-color LEDs have a fixed color determined by the hardware;
+/// the RGB values represent that color at full intensity. For RGB or
+/// multicolor LEDs, defaults to white so the LED is visible.
+fn led_color_to_rgb(color: &str) -> (u8, u8, u8) {
+    match color {
+        "red" => (255, 0, 0),
+        "green" => (0, 255, 0),
+        "blue" => (0, 0, 255),
+        "amber" | "orange" => (255, 191, 0),
+        "white" => (255, 255, 255),
+        "yellow" => (255, 255, 0),
+        "purple" | "violet" => (128, 0, 255),
+        "cyan" => (0, 255, 255),
+        "pink" => (255, 105, 180),
+        "lime" => (191, 255, 0),
+        "infrared" => (255, 0, 0), // Nearest visible approximation
+        "rgb" | "multicolor" | "multi" => (255, 255, 255),
+        _ => (255, 255, 255),
     }
 }
