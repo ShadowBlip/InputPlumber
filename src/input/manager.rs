@@ -1361,6 +1361,24 @@ impl Manager {
 
             "leds" => {
                 log::debug!("LED device added: {} ({})", device.name(), device.sysname());
+
+                // Check to see if the device is virtual
+                if device.is_virtual() {
+                    // Bluetooth controllers (e.g. Switch Pro Controller) expose
+                    // their LEDs as virtual devices under the uhid subsystem.
+                    // Allow these through, but filter out other virtual LEDs
+                    // (e.g. future InputPlumber virtual LED targets).
+                    if device.syspath().contains("/uhid/") {
+                        log::debug!(
+                            "{dev_name} ({dev_sysname}) is a virtual LED for a Bluetooth HID device. Treating as real - {dev_path}"
+                        );
+                    } else {
+                        log::debug!("{dev_name} ({dev_sysname}) is virtual, skipping consideration for {dev_path}");
+                        notify_device_added = false;
+                    }
+                } else {
+                    log::trace!("Device {dev_name} ({dev_sysname}) is real - {dev_path}");
+                }
             }
 
             "tty" => {
