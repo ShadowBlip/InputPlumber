@@ -27,24 +27,9 @@ source_devices:
   #  evdev:
   #    name: Nintendo Co., Ltd. Pro Controller (IMU)
   - group: led
+    unique: false
     udev:
-      sys_name: "*057E*2009*:green:player-1"
-      subsystem: leds
-  - group: led
-    udev:
-      sys_name: "*057E*2009*:green:player-2"
-      subsystem: leds
-  - group: led
-    udev:
-      sys_name: "*057E*2009*:green:player-3"
-      subsystem: leds
-  - group: led
-    udev:
-      sys_name: "*057E*2009*:green:player-4"
-      subsystem: leds
-  - group: led
-    udev:
-      sys_name: "*057E*2009*:blue:player-5"
+      sys_name: "*057E*2009*:*:player-*"
       subsystem: leds
 
 # The target input device(s) to emulate by default
