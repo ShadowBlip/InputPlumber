@@ -286,12 +286,6 @@ impl SourceOutputDevice for LedRgb {
                 g,
                 b,
                 brightness,
-            }
-            | OutputEvent::LedMultiColor {
-                r,
-                g,
-                b,
-                brightness,
             } => {
                 self.write_color(r, g, b)?;
                 self.write_brightness(brightness)?;

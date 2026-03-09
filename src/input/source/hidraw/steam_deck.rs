@@ -238,7 +238,6 @@ impl SourceOutputDevice for DeckController {
                 self.driver.write(&report)?;
             }
             OutputEvent::LedRgb { .. } => (),
-            OutputEvent::LedMultiColor { .. } => (),
             OutputEvent::LedSingleColor { .. } => (),
         }
 

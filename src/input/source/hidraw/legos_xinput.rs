@@ -186,7 +186,6 @@ impl SourceOutputDevice for LegionSXInputController {
                 self.driver.haptic_rumble(l_speed, r_speed)?;
             }
             OutputEvent::LedRgb { .. } => (),
-            OutputEvent::LedMultiColor { .. } => (),
             OutputEvent::LedSingleColor { .. } => (),
         }
 

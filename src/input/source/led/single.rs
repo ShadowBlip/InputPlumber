@@ -102,8 +102,7 @@ impl SourceOutputDevice for LedSingleColor {
             OutputEvent::LedSingleColor { brightness } => {
                 self.write_brightness(brightness)?;
             }
-            OutputEvent::LedRgb { brightness, .. }
-            | OutputEvent::LedMultiColor { brightness, .. } => {
+            OutputEvent::LedRgb { brightness, .. } => {
                 self.write_brightness(brightness)?;
             }
             _ => {}
