@@ -1,7 +1,5 @@
-pub mod multicolor;
 pub mod rgb;
 pub mod single;
-use self::multicolor::LedMultiColor;
 use self::rgb::LedRgb;
 use self::single::LedSingleColor;
 use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver};
@@ -22,20 +20,21 @@ use std::error::Error;
 pub enum DriverType {
     /// RGB LED (sysfs color tag `rgb`). Uses `multi_intensity` interface.
     Rgb,
-    /// Multicolor LED (sysfs color tag `multicolor` or `multi`). Uses
-    /// `multi_intensity` interface with separate color channels.
-    MultiColor,
     /// Single-color LED (any other color tag: `green`, `blue`, `red`, etc.).
     /// Brightness-only control; color is fixed in hardware.
     SingleColor,
 }
 
 impl DriverType {
-    pub fn from_color_tag(tag: &str) -> Self {
+    /// Returns the driver type for the given kernel LED color tag.
+    ///
+    /// Returns `None` for `multicolor`/`multi` tags, which are not yet
+    /// supported.
+    pub fn from_color_tag(tag: &str) -> Option<Self> {
         match tag {
-            "rgb" => Self::Rgb,
-            "multicolor" | "multi" => Self::MultiColor,
-            _ => Self::SingleColor,
+            "rgb" => Some(Self::Rgb),
+            "multicolor" | "multi" => None,
+            _ => Some(Self::SingleColor),
         }
     }
 }
@@ -44,7 +43,6 @@ impl DriverType {
 #[derive(Debug)]
 pub enum LedDevice {
     Rgb(SourceDriver<LedRgb>),
-    MultiColor(SourceDriver<LedMultiColor>),
     SingleColor(SourceDriver<LedSingleColor>),
 }
 
@@ -52,7 +50,6 @@ impl SourceDeviceCompatible for LedDevice {
     fn get_device_ref(&self) -> DeviceInfoRef<'_> {
         match self {
             LedDevice::Rgb(source_driver) => source_driver.info_ref(),
-            LedDevice::MultiColor(source_driver) => source_driver.info_ref(),
             LedDevice::SingleColor(source_driver) => source_driver.info_ref(),
         }
     }
@@ -60,7 +57,6 @@ impl SourceDeviceCompatible for LedDevice {
     fn get_id(&self) -> String {
         match self {
             LedDevice::Rgb(source_driver) => source_driver.get_id(),
-            LedDevice::MultiColor(source_driver) => source_driver.get_id(),
             LedDevice::SingleColor(source_driver) => source_driver.get_id(),
         }
     }
@@ -68,7 +64,6 @@ impl SourceDeviceCompatible for LedDevice {
     fn client(&self) -> super::client::SourceDeviceClient {
         match self {
             LedDevice::Rgb(source_driver) => source_driver.client(),
-            LedDevice::MultiColor(source_driver) => source_driver.client(),
             LedDevice::SingleColor(source_driver) => source_driver.client(),
         }
     }
@@ -76,7 +71,6 @@ impl SourceDeviceCompatible for LedDevice {
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
             LedDevice::Rgb(source_driver) => source_driver.run().await,
-            LedDevice::MultiColor(source_driver) => source_driver.run().await,
             LedDevice::SingleColor(source_driver) => source_driver.run().await,
         }
     }
@@ -84,14 +78,13 @@ impl SourceDeviceCompatible for LedDevice {
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
             LedDevice::Rgb(source_driver) => source_driver.get_capabilities(),
-            LedDevice::MultiColor(source_driver) => source_driver.get_capabilities(),
             LedDevice::SingleColor(source_driver) => source_driver.get_capabilities(),
         }
     }
 
     fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
         match self {
-            LedDevice::Rgb(_) | LedDevice::MultiColor(_) => Ok(vec![
+            LedDevice::Rgb(_) => Ok(vec![
                 OutputCapability::LED(LED::Color),
                 OutputCapability::LED(LED::Brightness),
             ]),
@@ -102,7 +95,6 @@ impl SourceDeviceCompatible for LedDevice {
     fn get_device_path(&self) -> String {
         match self {
             LedDevice::Rgb(source_driver) => source_driver.get_device_path(),
-            LedDevice::MultiColor(source_driver) => source_driver.get_device_path(),
             LedDevice::SingleColor(source_driver) => source_driver.get_device_path(),
         }
     }
@@ -117,19 +109,19 @@ impl LedDevice {
         composite_device: CompositeDeviceClient,
         conf: Option<config::SourceDevice>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver_type = LedDevice::get_driver_type(&device_info);
+        let Some(driver_type) = LedDevice::get_driver_type(&device_info) else {
+            return Err(format!(
+                "Unsupported LED type for device '{}'",
+                device_info.sysname()
+            )
+            .into());
+        };
         match driver_type {
             DriverType::Rgb => {
                 let device = LedRgb::new(device_info.clone())?;
                 let source_device =
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::Rgb(source_device))
-            }
-            DriverType::MultiColor => {
-                let device = LedMultiColor::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new(composite_device, device, device_info.into(), conf);
-                Ok(Self::MultiColor(source_device))
             }
             DriverType::SingleColor => {
                 let device = LedSingleColor::new(device_info.clone())?;
@@ -142,7 +134,7 @@ impl LedDevice {
 
     /// Return the driver type for the given device info by parsing the
     /// kernel LED color ID from the sysfs name.
-    fn get_driver_type(device: &UdevDevice) -> DriverType {
+    fn get_driver_type(device: &UdevDevice) -> Option<DriverType> {
         let sysname = device.sysname();
         log::debug!("Finding driver for LED interface: {sysname}");
 
@@ -150,7 +142,11 @@ impl LedDevice {
         let color_tag = parse_led_color_tag(&sysname);
         log::debug!("LED color ID: '{color_tag}'");
 
-        DriverType::from_color_tag(color_tag)
+        let driver_type = DriverType::from_color_tag(color_tag);
+        if driver_type.is_none() {
+            log::warn!("LED '{sysname}' is not yet supported, skipping");
+        }
+        driver_type
     }
 }
 

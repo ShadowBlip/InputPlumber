@@ -187,7 +187,6 @@ impl SourceOutputDevice for DualSenseController {
                 Ok(())
             }
             OutputEvent::LedRgb { .. } => Ok(()),
-            OutputEvent::LedMultiColor { .. } => Ok(()),
             OutputEvent::LedSingleColor { .. } => Ok(()),
         }
     }

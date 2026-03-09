@@ -935,27 +935,26 @@ impl CompositeDevice {
             let color_tag = parse_led_color_tag(sysname);
 
             let driver_type = DriverType::from_color_tag(color_tag);
+            let Some(driver_type) = driver_type else {
+                log::warn!(
+                    "Skipping unsupported multicolor LED {source_id} (color tag: {color_tag})"
+                );
+                continue;
+            };
+
             let event = match driver_type {
                 DriverType::SingleColor => OutputEvent::LedSingleColor { brightness },
-                DriverType::Rgb | DriverType::MultiColor => {
+                DriverType::Rgb => {
                     let (r, g, b) = if brightness > 0 {
                         led_color_to_rgb(color_tag)
                     } else {
                         (0, 0, 0)
                     };
-                    match driver_type {
-                        DriverType::Rgb => OutputEvent::LedRgb {
-                            r,
-                            g,
-                            b,
-                            brightness,
-                        },
-                        _ => OutputEvent::LedMultiColor {
-                            r,
-                            g,
-                            b,
-                            brightness,
-                        },
+                    OutputEvent::LedRgb {
+                        r,
+                        g,
+                        b,
+                        brightness,
                     }
                 }
             };
@@ -2305,7 +2304,7 @@ fn led_color_to_rgb(color: &str) -> (u8, u8, u8) {
         "pink" => (255, 105, 180),
         "lime" => (191, 255, 0),
         "infrared" => (255, 0, 0), // Nearest visible approximation
-        "rgb" | "multicolor" | "multi" => (255, 255, 255),
+        "rgb" => (255, 255, 255),
         _ => (255, 255, 255),
     }
 }
