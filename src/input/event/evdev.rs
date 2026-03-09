@@ -159,6 +159,12 @@ impl EvdevEvent {
                 KeyCode::BTN_EAST => Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
                 KeyCode::BTN_TL => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
                 KeyCode::BTN_TR => Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
+                KeyCode::BTN_TL2 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger))
+                }
+                KeyCode::BTN_TR2 => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger))
+                }
                 KeyCode::BTN_START => Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
                 KeyCode::BTN_SELECT => Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
                 KeyCode::BTN_MODE => Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
@@ -186,6 +192,7 @@ impl EvdevEvent {
                 KeyCode::BTN_THUMBR => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick))
                 }
+                KeyCode::BTN_Z => Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
                 // Keyboard Buttons
                 KeyCode::KEY_0 => Capability::Keyboard(Keyboard::Key0),
                 KeyCode::KEY_1 => Capability::Keyboard(Keyboard::Key1),
