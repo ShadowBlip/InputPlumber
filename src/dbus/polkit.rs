@@ -1,12 +1,28 @@
 use std::collections::HashMap;
+use std::env;
+use std::sync::LazyLock;
 use zbus::zvariant::{OwnedValue, Value};
 use zbus::{fdo, message::Header, Connection, Proxy};
+
+/// Whether or not polkit should be used for action authorization.
+static POLKIT_DISABLED: LazyLock<bool> = LazyLock::new(|| {
+    let is_disabled = env::var("INSECURE_DISABLE_POLKIT")
+        .map(|v| v.as_str() == "1" || v.as_str().to_lowercase() == "true")
+        .unwrap_or(false);
+    if is_disabled {
+        log::warn!("Running without polkit authorization");
+    }
+    is_disabled
+});
 
 pub async fn check_polkit(
     connection: &Connection,
     hdr: Option<Header<'_>>,
     action_id: &str,
 ) -> fdo::Result<()> {
+    if *POLKIT_DISABLED {
+        return Ok(());
+    }
     let Some(hdr) = hdr else {
         return Ok(());
     };
