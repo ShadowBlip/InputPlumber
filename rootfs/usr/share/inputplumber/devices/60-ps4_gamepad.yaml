@@ -18,34 +18,53 @@ matches: []
 
 source_devices:
   - group: gamepad
-    evdev:
-      name: "*Wireless Controller"
-      vendor_id: 054c
-      product_id: 09cc
-      handler: event*
+    udev:
+      attributes:
+        - name: name
+          value: "*Wireless Controller"
+        - name: id/vendor
+          value: "054c"
+        - name: id/product
+          value: "{09cc,05c4}"
+      sys_name: "event*"
+      subsystem: input
     capability_map_id: swap_west_north
 
   - group: gamepad
-    evdev:
-      name: "*Wireless Controller Touchpad"
-      vendor_id: 054c
-      product_id: 09cc
-      handler: event*
+    udev:
+      attributes:
+        - name: name
+          value: "*Wireless Controller Touchpad"
+        - name: id/vendor
+          value: "054c"
+        - name: id/product
+          value: "{09cc,05c4}"
+      sys_name: "event*"
+      subsystem: input
     capability_map_id: imu_generic
 
   - group: gamepad
-    evdev:
-      name: "*Wireless Controller Motion Sensors"
-      vendor_id: 054c
-      product_id: 09cc
-      handler: event*
+    udev:
+      attributes:
+        - name: name
+          value: "*Wireless Controller Motion Sensors"
+        - name: id/vendor
+          value: "054c"
+        - name: id/product
+          value: "{09cc,05c4}"
+      sys_name: "event*"
+      subsystem: input
 
   # Block the hidraw device to prevent SDL usage of the device
   - group: gamepad
     blocked: true
-    hidraw:
-      vendor_id: 0x054c
-      product_id: 0x09cc
+    udev:
+      attributes:
+        - name: idVendor
+          value: "054c"
+        - name: idProduct
+          value: "{09cc,05c4}"
+      subsystem: hidraw
 
 # The target input device(s) to emulate by default
 target_devices:
