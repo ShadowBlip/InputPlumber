@@ -17,6 +17,10 @@ pub enum OutputEvent {
     DualSense(SetStatePackedOutputData),
     SteamDeckHaptics(PackedHapticReport),
     SteamDeckRumble(PackedRumbleReport),
+    Rumble {
+        weak_magnitude: u16,
+        strong_magnitude: u16,
+    },
 }
 
 impl OutputEvent {
@@ -71,6 +75,7 @@ impl OutputEvent {
                 }
             }
             OutputEvent::SteamDeckRumble(_) => vec![OutputCapability::ForceFeedback],
+            OutputEvent::Rumble { .. } => vec![OutputCapability::ForceFeedback],
         }
     }
 
@@ -85,6 +90,7 @@ impl OutputEvent {
             OutputEvent::DualSense(report) => report.use_rumble_not_haptics,
             OutputEvent::SteamDeckHaptics(_) => true,
             OutputEvent::SteamDeckRumble(_) => true,
+            OutputEvent::Rumble { .. } => true,
         }
     }
 }

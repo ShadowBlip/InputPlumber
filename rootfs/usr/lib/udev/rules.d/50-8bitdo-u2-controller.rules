@@ -1,0 +1,3 @@
+# 8BitDo Ultimate 2 Wireless Controller (DInput mode, USB)
+KERNEL=="hidraw*", KERNELS=="*2DC8:6012*", MODE="0660", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", ATTRS{idProduct}=="6012", MODE="0660", TAG+="uaccess"

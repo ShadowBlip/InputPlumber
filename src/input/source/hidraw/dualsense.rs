@@ -186,6 +186,7 @@ impl SourceOutputDevice for DualSenseController {
                 }
                 Ok(())
             }
+            OutputEvent::Rumble { .. } => Ok(()),
         }
     }
 
