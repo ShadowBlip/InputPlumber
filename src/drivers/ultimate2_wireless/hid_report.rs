@@ -1,9 +1,7 @@
-// 8BitDo Ultimate 2 Wireless DInput input report structure.
-// Layout derived from SDL_hidapi_8bitdo.c (HIDAPI_Driver8BitDo_HandleStatePacket).
+// 8BitDo Ultimate 2 Wireless DInput HID report structures.
+// Layouts derived from SDL_hidapi_8bitdo.c.
 //
-// Total: 34 bytes including Report ID.
-//
-// Byte map:
+// Input report (0x04), 34 bytes:
 //   [0]     report_id       (always 0x04)
 //   [1]     dpad            (0-7 = direction, other = centered)
 //   [2]     joystick_l_x    (0x00-0xFF, center 0x7F)
@@ -21,10 +19,16 @@
 //   [21-26] gyro_x/y/z     (i16 little-endian each)
 //   [27-30] timestamp       (u32 little-endian, microseconds)
 //   [31-33] padding
+//
+// Rumble output report (0x05), 5 bytes:
+//   [0]     report_id       (always 0x05)
+//   [1]     strong_magnitude high byte (left motor)
+//   [2]     weak_magnitude high byte   (right motor)
+//   [3-4]   padding
 
 use packed_struct::prelude::*;
 
-use super::driver::REPORT_ID_INPUT;
+use super::driver::{REPORT_ID_INPUT, REPORT_ID_RUMBLE};
 
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum DpadDirection {
@@ -77,6 +81,34 @@ impl DpadDirection {
             old & !direction.as_bitflag()
         };
         DpadDirection::from_bitflag(new)
+    }
+}
+
+/// 8BitDo Ultimate 2 Wireless rumble output report (5 bytes).
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "5")]
+pub struct PackedRumbleOutputReport {
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+    #[packed_field(bytes = "1")]
+    pub strong_magnitude: u8,
+    #[packed_field(bytes = "2")]
+    pub weak_magnitude: u8,
+    #[packed_field(bytes = "3")]
+    pub _padding_3: u8,
+    #[packed_field(bytes = "4")]
+    pub _padding_4: u8,
+}
+
+impl Default for PackedRumbleOutputReport {
+    fn default() -> Self {
+        Self {
+            report_id: REPORT_ID_RUMBLE,
+            strong_magnitude: 0,
+            weak_magnitude: 0,
+            _padding_3: 0,
+            _padding_4: 0,
+        }
     }
 }
 
