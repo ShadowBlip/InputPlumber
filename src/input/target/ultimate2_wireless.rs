@@ -15,7 +15,7 @@ use crate::{
             ACCEL_SCALE, JOY_AXIS_MAX, JOY_AXIS_MIN, PID, REPORT_ID_RUMBLE,
             TRIGGER_AXIS_MAX, VID,
         },
-        hid_report::{DpadDirection, PackedInputDataReport},
+        hid_report::{DpadDirection, PackedInputDataReport, PackedRumbleOutputReport},
         report_descriptor::REPORT_DESCRIPTOR,
     },
     input::{
@@ -263,9 +263,11 @@ impl Ultimate2WirelessDevice {
             return Ok(vec![]);
         };
 
-        if report_id == REPORT_ID_RUMBLE && data.len() >= 3 {
-            let strong_magnitude = (data[1] as u16) << 8;
-            let weak_magnitude = (data[2] as u16) << 8;
+        if report_id == REPORT_ID_RUMBLE {
+            let buf: [u8; 5] = data.as_slice().try_into()?;
+            let report = PackedRumbleOutputReport::unpack(&buf)?;
+            let strong_magnitude = (report.strong_magnitude as u16) << 8;
+            let weak_magnitude = (report.weak_magnitude as u16) << 8;
             log::trace!("Rumble: strong={strong_magnitude} weak={weak_magnitude}");
             return Ok(vec![OutputEvent::Rumble {
                 weak_magnitude,
