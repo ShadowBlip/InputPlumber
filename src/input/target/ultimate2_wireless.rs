@@ -313,6 +313,37 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
             return Ok(());
         }
 
+        // Screenshot maps to Guide+RightTrigger combo (press: Guide@0ms RightTrigger@160ms,
+        // release: RightTrigger@160ms Guide@240ms), same timing as horipad target.
+        if event.as_capability()
+            == Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot))
+        {
+            let pressed = event.pressed();
+            let guide = NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
+                event.get_value(),
+            );
+            let trigv = if pressed { 0.5 } else { 0.0 };
+            let trigr = NativeEvent::new(
+                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+                InputValue::Float(trigv),
+            );
+            let (guide, trigr) = if pressed {
+                (
+                    ScheduledNativeEvent::new(guide, Duration::from_millis(0)),
+                    ScheduledNativeEvent::new(trigr, Duration::from_millis(160)),
+                )
+            } else {
+                (
+                    ScheduledNativeEvent::new(guide, Duration::from_millis(240)),
+                    ScheduledNativeEvent::new(trigr, Duration::from_millis(160)),
+                )
+            };
+            self.queued_events.push(guide);
+            self.queued_events.push(trigr);
+            return Ok(());
+        }
+
         self.update_state(event);
         Ok(())
     }
@@ -322,6 +353,7 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
             Capability::Gamepad(Gamepad::Accelerometer),
             Capability::Gamepad(Gamepad::Gyro),
             Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
+            Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
