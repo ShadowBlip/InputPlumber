@@ -25,7 +25,7 @@ source_devices:
   - group: gamepad
     evdev:
       name: "Microsoft X-Box 360 pad"
-      phys_path: usb-0000:63:00.3-5/input0
+      phys_path: "{usb-0000:63:00.3-5/input0,usb-0000:c3:00.3-5/input0}"
       handler: event*
   - group: keyboard
     hidraw:
