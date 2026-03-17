@@ -16,12 +16,8 @@ pub const IID: i32 = 0x01;
 
 const RELEASE_DELAY: Duration = Duration::from_millis(40);
 
-const L4_CODES: &[u8] = &[0x46, 0x6f];
-const R4_CODES: &[u8] = &[0x48, 0x70];
-
-fn report_has_any_key(report: &MacroKeyboardDataReport, codes: &[u8]) -> bool {
-    codes.iter().any(|code| report.has_key(*code))
-}
+pub const L4_CODE: u8 = 0x46;
+pub const R4_CODE: u8 = 0x48;
 
 // Input report size
 const KEYBOARD_PACKET_SIZE: usize = 8;
@@ -147,7 +143,7 @@ impl MacroKeyboardDriver {
             return events;
         };
 
-        if report_has_any_key(&state, L4_CODES) {
+        if state.has_key(L4_CODE) {
             self.l4_last_pressed = Instant::now();
             if !self.l4_pressed {
                 log::trace!("Started L4 event");
@@ -158,7 +154,7 @@ impl MacroKeyboardDriver {
             }
         }
 
-        if report_has_any_key(&state, R4_CODES) {
+        if state.has_key(R4_CODE) {
             self.r4_last_pressed = Instant::now();
             if !self.r4_pressed {
                 log::trace!("Started R4 event");
