@@ -11,49 +11,44 @@ name: GPD WinMini
 # Only allow a single source device per composite device of this type.
 single_source: false
 
-# Matches: We explicitly define both the 2023 (7840U) and 2024 (8840U) 
-# DMI product names so this profile universally applies to both generations.
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
       product_name: G1617-01
       sys_vendor: GPD
-  - dmi_data:
-      product_name: G1617-02
-      sys_vendor: GPD
 
-# Source Devices: The raw hardware inputs InputPlumber will grab and manage.
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
     evdev:
       name: "Microsoft X-Box 360 pad"
-      # We use an array {63,c3} to support the different internal USB PCI bus 
-      # routing used by the 2023 and 2024 AMD motherboards respectively.
-      phys_path: "{usb-0000:63:00.3-5/input0,usb-0000:c3:00.3-5/input0}"
+      phys_path: usb-0000:63:00.3-5/input0
       handler: event*
-      
-  # This hidraw node handles the physical L4 and R4 macro back-buttons. 
-  # (Requires Rust driver debounce logic for the 2024 0x6f/0x70 hex codes).
   - group: keyboard
     hidraw:
       vendor_id: 0x2f24
       product_id: 0x0135
       interface_num: 1
-      
-  # The macro keyboard generates phantom Windows mouse events. 
-  # We block them here so they don't interfere with the real mouse.
   - group: keyboard
     blocked: true
     evdev:
       name: "  Mouse for Windows"
-      phys_path: "{usb-0000:63:00.3-3/input1,usb-0000:c3:00.3-3/input1}"
+      phys_path: usb-0000:63:00.3-3/input1
       handler: event*
-      
-  # NOTE: The physical Touchpad (group: mouse) has been intentionally omitted!
-  # By hiding the touchpad from InputPlumber, Linux handles it natively. 
-  # This preserves multi-touch gestures and prevents Steam from hijacking 
-  # the touchpad and turning it into a joystick.
-      
-  # The internal Gyroscope for motion controls.
+  - group: mouse
+    hidraw:
+      vendor_id: 0x093A
+      product_id: 0x0255
+      interface_num: 0
+  - group: mouse
+    unique: false
+    blocked: true
+    evdev:
+      name: "{HTIX5288:00 093A:0255 Mouse,HTIX5288:00 093A:0255 Touchpad}"
+      handler: event*
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
@@ -64,19 +59,17 @@ source_devices:
 
 # Optional configuration for the composite device
 options:
-  # If true, InputPlumber will automatically try to manage the input device. 
+  # If true, InputPlumber will automatically try to manage the input device. If
+  # this is false, InputPlumber will not try to manage the device unless an
+  # external service enables management of the device. Defaults to 'false'
   auto_manage: true
 
-# The fallback target device to emulate. 
-# NOTE: If steamos-manager is running, it will dynamically override this 
-# to 'ds5-edge' (DualSense Edge) via ~/.config/steamos-manager/config.toml
+# The target input device(s) to emulate by default
 target_devices:
   - xbox-elite
   - mouse
   - keyboard
   - touchpad
 
-# The capability map that dictates how buttons are translated.
-# We edited this map locally to free R4 from 'QuickAccess' so it acts 
-# as a standard RightPaddle1 in Steam.
+# The ID of a device event mapping in the 'event_maps' folder
 capability_map_id: gpd3
