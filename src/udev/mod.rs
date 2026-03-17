@@ -6,11 +6,7 @@ pub mod device_test;
 
 pub mod device;
 
-use std::{
-    error::Error,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{error::Error, fs, path::PathBuf};
 
 use tokio::process::Command;
 use udev::Enumerator;
@@ -46,23 +42,10 @@ pub async fn hide_device(path: &str, flags: &[HideFlag]) -> Result<(), Box<dyn E
     let mut chmod_late_rule = String::new();
     if flags.contains(&HideFlag::ChangePermissions) {
         // Find the chmod command to use for hiding
-        let chmod_cmd = if Path::new("/bin/chmod").exists() {
-            "/bin/chmod".to_string()
-        } else if Path::new("/usr/bin/chmod").exists() {
-            "/usr/bin/chmod".to_string()
-        } else if Path::new("/run/current-system/sw/bin/chmod").exists() {
-            "/run/current-system/sw/bin/chmod".to_string()
-        } else {
-            let output = Command::new("sh")
-                .arg("-c")
-                .arg("which chmod")
-                .output()
-                .await?;
-            if !output.status.success() {
-                return Err("Unable to determine chmod command location".into());
-            }
-            str::from_utf8(output.stdout.as_slice())?.trim().to_string()
+        let Some(chmod_cmd) = find_executable("chmod") else {
+            return Err("Unable to determine chmod command location".into());
         };
+        let chmod_cmd = chmod_cmd.to_string_lossy().to_string();
 
         // Build the rule content
         chmod_early_rule = format!(
@@ -85,23 +68,10 @@ KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-
         tokio::fs::create_dir_all("/dev/inputplumber/sources").await?;
 
         // Find the mv command to use for hiding
-        let mv_cmd = if Path::new("/bin/mv").exists() {
-            "/bin/mv".to_string()
-        } else if Path::new("/usr/bin/mv").exists() {
-            "/usr/bin/mv".to_string()
-        } else if Path::new("/run/current-system/sw/bin/mv").exists() {
-            "/run/current-system/sw/bin/mv".to_string()
-        } else {
-            let output = Command::new("sh")
-                .arg("-c")
-                .arg("which mv")
-                .output()
-                .await?;
-            if !output.status.success() {
-                return Err("Unable to determine mv command location".into());
-            }
-            str::from_utf8(output.stdout.as_slice())?.trim().to_string()
+        let Some(mv_cmd) = find_executable("mv") else {
+            return Err("Unable to determine mv command location".into());
         };
+        let mv_cmd = mv_cmd.to_string_lossy().to_string();
 
         // Build the rule content
         mv_early_rule = format!(
@@ -381,4 +351,19 @@ pub fn discover_devices(subsystem: &str) -> Result<Vec<udev::Device>, Box<dyn Er
     }
 
     Ok(node_devices)
+}
+
+/// Look in the PATH directories for the given executable
+pub fn find_executable(executable: &str) -> Option<PathBuf> {
+    let path = std::env::var("PATH").ok()?;
+    let search_paths: Vec<PathBuf> = path.split(":").map(PathBuf::from).collect();
+
+    for search_path in search_paths {
+        let exec_path = search_path.join(executable);
+        if exec_path.exists() {
+            return Some(exec_path);
+        }
+    }
+
+    None
 }
