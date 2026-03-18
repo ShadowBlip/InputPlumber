@@ -7,15 +7,13 @@ use crate::udev::device::UdevDevice;
 
 use super::{
     event::{BinaryInput, Event, GamepadButtonEvent},
-    hid_report::{GpdWin5ButtonReport, REPORT_SIZE},
+    hid_report::{GpdWin5ButtonReport, PACKET_SIZE},
 };
 
-// TODO: Verify these values with actual hardware after firmware update.
-// VID/PID are assumed same as "Mouse for Windows" device.
-// IID is set to 0x02 as a placeholder to avoid conflict with GPD Win Mini (IID=0x01).
+// GPD Win 5 vendor HID device (Usage Page 0xFF00)
 pub const VID: u16 = 0x2f24;
-pub const PID: u16 = 0x0135;
-pub const IID: i32 = 0x02;
+pub const PID: u16 = 0x0137;
+pub const IID: i32 = 0x00;
 
 const HID_TIMEOUT: i32 = 10;
 
@@ -51,13 +49,13 @@ impl GpdWin5ButtonDriver {
 
     /// Poll the device and read input reports
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let mut buf = [0; REPORT_SIZE];
+        let mut buf = [0; PACKET_SIZE];
         let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
 
         let events = match bytes_read {
-            REPORT_SIZE => {
+            PACKET_SIZE => {
                 log::trace!("Got GPD Win 5 button event");
-                let sized_buf = buf[..REPORT_SIZE].try_into()?;
+                let sized_buf = buf[..PACKET_SIZE].try_into()?;
                 self.handle_input_report(sized_buf)?
             }
             0 => Vec::new(),
@@ -74,7 +72,7 @@ impl GpdWin5ButtonDriver {
 
     fn handle_input_report(
         &mut self,
-        buf: [u8; REPORT_SIZE],
+        buf: [u8; PACKET_SIZE],
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let report = GpdWin5ButtonReport::unpack(&buf)?;
         let old_state = self.state;

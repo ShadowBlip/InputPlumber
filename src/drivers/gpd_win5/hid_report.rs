@@ -1,54 +1,36 @@
 use packed_struct::prelude::*;
 
-// GPD Win 5 Extended Keyboard HID Report
+// GPD Win 5 Vendor HID Report (Usage Page 0xFF00, VID 0x2f24, PID 0x0137)
 //
-// The new firmware sends an extended HID report where the first 8 bytes
-// are the standard HID keyboard report, and bytes 8-11 contain the
-// hidden button states:
+// Idle report:  01 a5 00 5a ff 00 01 09 00 00 00 00
+// Button press values:
+//   BUF[8]  = 0x68 mode switch, 0x00 released
+//   BUF[9]  = 0x69 left back,   0x00 released
+//   BUF[10] = 0x6a right back,  0x00 released
 //
-// BUF[0]   - Modifiers (standard keyboard)
-// BUF[1]   - Reserved
-// BUF[2-7] - Standard keyboard Keys[6]
-// BUF[8]   - Mode switch button (short press) trigger value
-// BUF[9]   - Left back button trigger value
-// BUF[10]  - Right back button trigger value
-// BUF[11]  - Reserved
-//
-// TODO: Verify with actual firmware data capture:
-// - Exact trigger values (assumed non-zero = pressed)
-// - Actual report size (may be larger than 12 bytes)
-
-/// Report size for the extended keyboard data
-pub const REPORT_SIZE: usize = 12;
+/// HID report size (device sends 12 bytes per report)
+pub const PACKET_SIZE: usize = 12;
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "12")]
 pub struct GpdWin5ButtonReport {
-    // BUF[0]: Standard keyboard modifiers
-    #[packed_field(bytes = "0")]
-    pub modifiers: u8,
+    // BUF[0-7]: Header / padding (not used by this driver)
+    #[packed_field(bytes = "0..=7")]
+    pub header: [u8; 8],
 
-    // BUF[1]: Reserved
-    #[packed_field(bytes = "1")]
-    pub reserved: u8,
-
-    // BUF[2-7]: Standard keyboard keys (not used by this driver)
-    #[packed_field(bytes = "2..=7")]
-    pub keys: [u8; 6],
-
-    // BUF[8]: Mode switch / QuickAccess button trigger value
+    // BUF[8]: Mode switch / QuickAccess button (0x68 = pressed)
     #[packed_field(bytes = "8")]
     pub mode_switch: u8,
 
-    // BUF[9]: Left back button trigger value
+    // BUF[9]: Left back button (0x69 = pressed)
     #[packed_field(bytes = "9")]
     pub left_back: u8,
 
-    // BUF[10]: Right back button trigger value
+    // BUF[10]: Right back button (0x6a = pressed)
     #[packed_field(bytes = "10")]
     pub right_back: u8,
 
-    // BUF[11]: Reserved
+    // BUF[11]: Padding
     #[packed_field(bytes = "11")]
-    pub reserved2: u8,
+    pub _pad: u8,
 }

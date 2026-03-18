@@ -595,8 +595,7 @@ impl HidRawDevice {
             return DriverType::ZotacZone;
         }
 
-        // GPD Win 5 Buttons
-        // TODO: Verify VID/PID/IID after firmware update
+        // GPD Win 5 back buttons (vendor HID report)
         if vid == drivers::gpd_win5::driver::VID
             && pid == drivers::gpd_win5::driver::PID
             && iid == drivers::gpd_win5::driver::IID
