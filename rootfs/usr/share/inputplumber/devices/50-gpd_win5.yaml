@@ -33,6 +33,13 @@ source_devices:
       name: "  Mouse for Windows"
       handler: event*
       phys_path: usb-0000:66:00.0-5.2/input0
+  # New firmware: hidden buttons via HID (mode switch, back buttons)
+  # TODO: Verify vendor_id, product_id, and interface_num after firmware update
+  - group: keyboard
+    hidraw:
+      vendor_id: 0x2f24
+      product_id: 0x0135
+      interface_num: 2
   - group: keyboard
     evdev:
       name: "  Keyboard for Windows"
