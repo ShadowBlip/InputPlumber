@@ -6,8 +6,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct HidrawConfig {
-    pub report_id: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub report_id: Option<u8>,
     pub input_type: String,
     pub byte_start: u64,
-    pub bit_offset: u8,
+    /// Bit position within the byte (LSB=0).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bit_offset: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<u8>,
 }
