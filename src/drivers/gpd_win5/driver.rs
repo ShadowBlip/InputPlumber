@@ -19,9 +19,6 @@ const HID_TIMEOUT: i32 = 10;
 
 pub struct GpdWin5ButtonDriver {
     device: HidDevice,
-    mode_pressed: bool,
-    l4_pressed: bool,
-    r4_pressed: bool,
     state: Option<GpdWin5ButtonReport>,
 }
 
@@ -40,9 +37,6 @@ impl GpdWin5ButtonDriver {
 
         Ok(Self {
             device,
-            mode_pressed: false,
-            l4_pressed: false,
-            r4_pressed: false,
             state: None,
         })
     }
@@ -78,45 +72,41 @@ impl GpdWin5ButtonDriver {
         let old_state = self.state;
         self.state = Some(report);
 
-        // Skip the first report (no previous state to compare)
-        if old_state.is_none() {
+        let Some(old_state) = old_state else {
             return Ok(Vec::new());
-        }
+        };
 
-        Ok(self.translate_events(&report))
+        Ok(self.translate_events(old_state))
     }
 
-    fn translate_events(&mut self, report: &GpdWin5ButtonReport) -> Vec<Event> {
+    fn translate_events(&self, old_state: GpdWin5ButtonReport) -> Vec<Event> {
         let mut events = Vec::new();
+        let Some(state) = self.state else {
+            return events;
+        };
 
-        // Mode switch button (BUF[8])
-        let mode_now = report.mode_switch != 0;
-        if mode_now != self.mode_pressed {
-            log::trace!("Mode switch button: {}", if mode_now { "pressed" } else { "released" });
+        if state.mode_switch != old_state.mode_switch {
+            let pressed = state.mode_switch != 0;
+            log::trace!("Mode switch button: {}", if pressed { "pressed" } else { "released" });
             events.push(Event::GamepadButton(GamepadButtonEvent::QuickAccess(
-                BinaryInput { pressed: mode_now },
+                BinaryInput { pressed },
             )));
-            self.mode_pressed = mode_now;
         }
 
-        // Left back button (BUF[9])
-        let l4_now = report.left_back != 0;
-        if l4_now != self.l4_pressed {
-            log::trace!("Left back button: {}", if l4_now { "pressed" } else { "released" });
+        if state.left_back != old_state.left_back {
+            let pressed = state.left_back != 0;
+            log::trace!("Left back button: {}", if pressed { "pressed" } else { "released" });
             events.push(Event::GamepadButton(GamepadButtonEvent::L4(
-                BinaryInput { pressed: l4_now },
+                BinaryInput { pressed },
             )));
-            self.l4_pressed = l4_now;
         }
 
-        // Right back button (BUF[10])
-        let r4_now = report.right_back != 0;
-        if r4_now != self.r4_pressed {
-            log::trace!("Right back button: {}", if r4_now { "pressed" } else { "released" });
+        if state.right_back != old_state.right_back {
+            let pressed = state.right_back != 0;
+            log::trace!("Right back button: {}", if pressed { "pressed" } else { "released" });
             events.push(Event::GamepadButton(GamepadButtonEvent::R4(
-                BinaryInput { pressed: r4_now },
+                BinaryInput { pressed },
             )));
-            self.r4_pressed = r4_now;
         }
 
         events
