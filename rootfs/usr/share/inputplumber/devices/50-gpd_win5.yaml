@@ -38,6 +38,13 @@ source_devices:
       name: "  Keyboard for Windows"
       handler: event*
       phys_path: usb-0000:66:00.0-5.3/input0
+  # New firmware: back buttons via vendor HID report
+  - group: keyboard
+    hidraw:
+      vendor_id: 0x2f24
+      product_id: 0x0137
+      interface_num: 0
+    capability_map_id: gpd_win5_hid
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
