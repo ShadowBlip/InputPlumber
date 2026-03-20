@@ -115,15 +115,15 @@ impl IioDevice {
         let device_name = device.name();
         let name = device_name.as_str();
         log::debug!("Finding driver for IIO interface: {name}");
-        // BMI_IMU
-        if glob_match("{i2c-10EC5280*,i2c-BOSC*,i2c-BMI*,bmi*-imu,bmi260}", name) {
-            log::info!("Detected BMI IMU");
+        // BMI_IMU (Bosch BMI160/260/323 and InvenSense ICM42xxx)
+        if glob_match("{i2c-10EC5280*,i2c-BOSC*,i2c-BMI*,bmi*-imu,bmi260,icm4*}", name) {
+            log::info!("Detected IMU: {name}");
             return DriverType::BmiImu;
         }
 
-        // AccelGryo3D
+        // AccelGryo3D (Windows-style HID sensor proxies)
         if glob_match("{gyro_3d,accel_3d}", name) {
-            log::info!("Detected Legion Go");
+            log::info!("Detected AccelGyro3D: {name}");
             return DriverType::AccelGryo3D;
         }
         log::debug!("No driver found for IIO Interface: {name}");
