@@ -2,12 +2,13 @@ use super::event::{Event, KeyCodes};
 use crate::udev::device::UdevDevice;
 use hidapi::HidDevice;
 use std::collections::VecDeque;
-use std::{error::Error, ffi::CString};
+use std::{error::Error, ffi::CString, fs, io::Write, path::Path};
 
 pub const VID: u16 = 0x1532;
 pub const PID: u16 = 0x0244;
 
-const RAZER_HID_ARRAY_SIZE: usize = 91;
+const ANALOG_MODE: [u8; 2] = [0x3, 0x0];
+const BASIC_MODE: [u8; 2] = [0x0, 0x0];
 const MESSAGE_DATA_PAYLOAD: usize = 24;
 const RAZER_FEATURE_ENDPOINT: i32 = 2;
 const TREND_KEYDOWN: f64 = 1.0;
@@ -18,27 +19,70 @@ const UNIT_TO_MM: f64 = 0.1 / 12.0;
 
 pub struct Driver {
     device: HidDevice,
-    razer_message_id: u8,
+    control_path: String,
     hysteresis: VecDeque<[u8; KEY_COUNT]>,
     key_actions: [AnalogAction; KEY_COUNT],
     key_state: Vec<KeyCodes>,
 }
 
+/// Stores threshold values derived from user profile and provides state machine memory for a
+/// given key
 #[derive(Clone, Copy, Default, Debug)]
 pub struct AnalogAction {
+    /// User setting (primary function, secondary function), must be > 0 to be active.
     actuation_point: (u8, u8),
-    retrigger_window: (f64, f64), // as mm
+    /// User setting (downward, upward), > 0 activates. If upward == 0 it will use downward value.
+    retrigger_threshold: (f64, f64),
+    /// User setting from profile, enable continuous retrigger in algorithm.
     crt_en: bool,
+    /// (primary binding, secondary binding), captures whether the keystroke is in actuated range
     actuated: (bool, bool),
-    retrigger_track: f64, // as mm
+    /// Buffer for tracking the retrigger window in mm
+    retrigger_track: f64,
+    /// Tracks eligibility for retrigger
     retrigger_go: bool,
-    keydown_up_n: bool, // Reflects the previous trend on a key
+    /// Reflects the previous trend
+    key_is_upstroke: bool,
+    /// Do not immediately activate first function when second function resets in dual function.
+    backoff_first_func: bool,
 }
 
-// This driver implementation is shared across all three HID handles on the
-// Tartarus Pro. Certain code-paths will only execute on certain handles.
-// Refer to handle_input_report()
+/// Find the location of control nodes for the razerkbd driver instance
+fn get_razerkbd_controls(hidraw_name: &str) -> Option<String> {
+    // Log whether or not the razerkbd module is loaded on the system
+    if Path::new(&String::from(format!("/sys/module/razerkbd"))).exists() {
+        log::info!("razerkbd module detected on system");
+    } else {
+        log::info!("No module detected on system");
+    }
 
+    // Get name from a path (/dev/hidrawX) or node name
+    let node = hidraw_name
+        .rsplit_once('/')
+        .map(|(_, suffix)| suffix)
+        .unwrap_or(hidraw_name);
+
+    // Map hidraw to the USB identifier then check if it exists within razerkbd
+    let sys_path = format!("/sys/class/hidraw/{}/device", node);
+
+    if let Ok(target) = fs::read_link(sys_path) {
+        let razer_path = String::from(format!(
+            "/sys/bus/hid/drivers/razerkbd/{}",
+            target
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap()
+        ));
+        if Path::new(&razer_path).exists() {
+            return Some(razer_path);
+        }
+    }
+    None
+}
+
+/// This driver implementation is shared across all three HID handles on the
+/// Tartarus Pro. Different interfaces traverse different code-paths though.
+/// Refer to handle_input_report()
 impl Driver {
     pub fn new(udevice: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let hidrawpath = udevice.devnode();
@@ -46,40 +90,65 @@ impl Driver {
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&cs_path)?;
         let info = device.get_device_info()?;
-        let mut razer_message_id = 0 as u8;
+        let control_path: String;
+
         if info.vendor_id() != VID || info.product_id() != PID {
             return Err(format!("Device '{hidrawpath}' is not a Razer Tartarus Pro").into());
         }
+
         if info.interface_number() == RAZER_FEATURE_ENDPOINT {
-            // Check if we can get serial number
-            let mut packet = Self::razer_report(0x0, 0x82, 0x16, &[0x0], &mut razer_message_id);
-            let output = Self::transaction(packet, &device).unwrap();
-            log::info!(
-                "Tartarus Serial Number: {:?}",
-                String::from_utf8(output).unwrap().trim_end_matches("\0")
-            );
-            // Enable analog mode
-            packet = Self::razer_report(0x0, 0x4, 0x2, &[0x3, 0x0], &mut razer_message_id);
-            log::info!("Enabling Tartarus Pro analog mode");
-            let _ = Self::transaction(packet, &device).unwrap();
+            if let Some(path) = get_razerkbd_controls(&hidrawpath) {
+                log::info!("Driver controls available at {:?}", path);
+                control_path = path;
+            } else {
+                control_path = String::default();
+            }
+
+            // TODO based on the loaded user profile:
+            // - Check if profile asks for features that require Kernel module,
+            //   fail if module is not loaded.
+            // - Validate device matching if defined (serial # specific profiles)
+            // - Set hardware mode as required
+            // END TODO
+
+            // TODO DEMO set analog mode using driver, to refactor before release
+            let mode_path = format!("{}/{}", &control_path, "device_mode");
+            let mut file = fs::OpenOptions::new().write(true).open(mode_path)?;
+            file.write_all(&ANALOG_MODE)?;
+            log::info!("Device mode set");
+            // TODO DEMO END
+        } else {
+            control_path = String::default();
         }
 
-        let mut zeroes = VecDeque::with_capacity(REGRESSION_WINDOW);
-        for _ in 0..zeroes.capacity() {
-            zeroes.push_back([0; KEY_COUNT]);
-        }
-        let mut check = Self {
+        // Create a 20x5 null matrix to initialize the buffer supporting key hysteresis
+        let mut zeroes = VecDeque::with_capacity(5);
+        zeroes.extend([[0; KEY_COUNT]; REGRESSION_WINDOW]);
+
+        let mut demo_config = Self {
             device,
-            razer_message_id,
             hysteresis: zeroes,
+            control_path: control_path,
             key_actions: [AnalogAction::default(); KEY_COUNT],
             key_state: Vec::new(),
         };
-        check.key_actions[0].actuation_point = (0x24, 0x78);
-        check.key_actions[0].retrigger_window = (0.0, 0.0);
-        check.key_actions[0].crt_en = false;
+        // TODO DEMO Remove, demo allocations in lieu of profile support
+        // Can be customised to suit
+        demo_config.key_actions[0].actuation_point = (0x24, 0x78);
+        demo_config.key_actions[0].retrigger_threshold = (0.0, 0.0);
+        demo_config.key_actions[0].crt_en = false;
+        demo_config.key_actions[1].actuation_point = (0x45, 0x0);
+        demo_config.key_actions[1].retrigger_threshold = (0.3, 0.0);
+        demo_config.key_actions[1].crt_en = false;
+        demo_config.key_actions[2].actuation_point = (0x50, 0x0);
+        demo_config.key_actions[2].retrigger_threshold = (0.5, 0.0);
+        demo_config.key_actions[2].crt_en = true;
+        demo_config.key_actions[3].actuation_point = (0x50, 0x0);
+        demo_config.key_actions[3].retrigger_threshold = (0.5, 0.8);
+        demo_config.key_actions[3].crt_en = true;
+        // TODO DEMO END
 
-        Ok(check)
+        Ok(demo_config)
     }
 
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
@@ -90,81 +159,8 @@ impl Driver {
         Ok(events)
     }
 
-    // The hidapi crate enforces the Windows-ism of needing a dud zeroth byte for sending feature
-    // reports to devices with no report ID specified. For unused report ID This means our window
-    // is [1..] and we ignore [0], though leave it 0. The XOR is always the penultimate byte with
-    // the ultimate byte being 0. Byte [1] is a status byte which for PC->DEV is 0. Replies
-    // always start with 0x2. Bytes [3..5] are used in other Razer devices but not the Tartarus
-    // so we leave them 0.
-    fn razer_report(
-        cmd_class: i32,
-        cmd_id: i32,
-        data_size: i32,
-        payload: &[u8],
-        id: &mut u8,
-    ) -> [u8; RAZER_HID_ARRAY_SIZE] {
-        let mut message: [u8; RAZER_HID_ARRAY_SIZE] = [0; RAZER_HID_ARRAY_SIZE];
-        message[1] = 0; // Always 0 when sending to the device
-        message[2] = *id as u8;
-        message[6] = data_size as u8;
-        message[7] = cmd_class as u8;
-        message[8] = cmd_id as u8;
-        message[9..(9 + payload.len())].copy_from_slice(&payload);
-
-        // Generate checksum
-        let mut xorval = 0;
-        for refr in message[6..89].iter() {
-            xorval ^= refr;
-        }
-
-        message[89] = xorval as u8;
-
-        // Increment next transaction id
-        *id = id.wrapping_add(1);
-        return message;
-    }
-
-    // This validates any received reports against the feature request and provides the payload
-    // as a vector for further processing.
-    fn razer_decapsulate(
-        request: &[u8],
-        response: &[u8],
-    ) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
-        let mut is_valid = true;
-        is_valid = (response[1] == 2) && is_valid;
-        is_valid = response[3..5].iter().all(|&b| b == 0) && is_valid;
-        is_valid = (response[6] <= 0x50) && is_valid;
-        is_valid = (response[7] == request[7]) && is_valid;
-        is_valid = (response[8] == request[8]) && is_valid;
-
-        // Validate the checksum
-        let mut xorval = 0;
-        for refr in response[6..89].iter() {
-            xorval ^= refr;
-        }
-        is_valid = (response[89] == xorval) && is_valid;
-        if !is_valid {
-            log::error!("Invalid Tartarus transaction received");
-            Ok(Vec::new())
-        } else {
-            Ok(response[9..(9 + response[6] as usize)].to_vec())
-        }
-    }
-
-    fn transaction(
-        packet: [u8; RAZER_HID_ARRAY_SIZE],
-        handle: &HidDevice,
-    ) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
-        if handle.get_device_info().unwrap().interface_number() == RAZER_FEATURE_ENDPOINT {
-            let _ = handle.send_feature_report(&packet);
-            let mut feature_buffer: [u8; RAZER_HID_ARRAY_SIZE] = [0; RAZER_HID_ARRAY_SIZE];
-            let _ = handle.get_feature_report(&mut feature_buffer);
-            return Ok(Self::razer_decapsulate(&packet, &feature_buffer)?);
-        }
-        log::error!("Tartarus attempting to transact on incorrect endpoint");
-        return Ok(Vec::new());
-    }
-
+    /// Routes an input report to the appropriate hander based on what endpoint received it
+    /// and the report ID
     fn handle_input_report(
         &mut self,
         buf: &[u8],
@@ -208,10 +204,11 @@ impl Driver {
         }
     }
 
-    // The basic case for all 3 endpoints is essentially identical. The first byte is unique for
-    // each; For endpoints 1.1 and 1.3 this is where code 0x04 is interpreted and discarded for
-    // endpoint 1.2 as it was a report ID which has served its purpose if we got this far.
-    // Given the conversion to variant space it is open to misinterpretation if left there.
+    /// Manage all input reports other than the analog function.
+    /// The basic case for all 3 endpoints is essentially identical. The first byte is unique for
+    /// each; For endpoints 1.1 and 1.3 this is where code 0x04 is interpreted and discarded for
+    /// endpoint 1.2 as it was a report ID which has served its purpose if we got this far.
+    /// Given the conversion to variant space it is best removed to stop confusion.
     fn handle_basic(
         &mut self,
         buf: &[u8],
@@ -250,8 +247,82 @@ impl Driver {
         Ok(events)
     }
 
+    /// Manage analog input reports and translate to key strokes
+    ///
+    /// Concepts:
+    ///
+    /// Measurement
+    /// A key in analog mode returns an 8-bit value representing height displacement with 0
+    /// representing the top (~1.5mm) and 255 when it is bottomed out (~3.6mm).
+    /// The OEM software has defined a minimum discernable step size as 0.1mm which we will adopt.
+    /// We define a 'unit' which is total key travel (2.1mm) divided by quantization level (255)
+    /// noting that '0' is a parked value as we measure changes from 0.
+    /// With quantization error we declare that 0.1mm is equivalent to 12 (0xC) units and this
+    /// forms the basis of determining the displacement of a key.
+    ///
+    /// For a given keystroke it is not expected to see all values between 0 to 255. The guaranteed
+    /// value is 0 and 255 if you bottom out. All other values are based on poll rate and
+    /// incidental location at time of sampling. The other guarantee is trend - if you press
+    /// down, the value goes up and vice-versa. During development the shortest run of values
+    /// measured on the downstroke (i.e. slamming the key down) was 5. Uncontrolled return
+    /// (lifting off) also generated 5 to 6 values. If you gradually move the key are you able to
+    /// get fidelity down to individual units (0.00833 mm) but this generally a slow motion and not
+    /// reflective of all usage patterns. To account for the variable displacement speed and the
+    /// resultant discontinuous values when measuring a stroke, linear regression is used to
+    /// establish the direction of travel and forms the basis of mapping displacement to actions.
+    /// A 5-sample deep buffer matches the observed shortest run of values during a keystroke.
+    /// Picking a trend criteria of ± 1 is important as that tells us all numbers in the buffer
+    /// are trending in the same direction.
+    ///
+    /// Reports
+    /// The Tartarus Pro generates reports on the change of any one of its analog keys.
+    /// The report contains the state of all 20 keys (bytes) with no indication as to what key
+    /// triggered it. Keys are mapped to fixed offsets in the report making translation straight
+    /// forward. In the case of this function it just sees an array of key values to process with
+    /// no further interpretation.
+    ///
+    /// Algorithm:
+    ///
+    /// A keystroke is defined as starting at the top, displaces downwards & optionally
+    /// hovers around a point then displaces again downward or upward, optionally hovering
+    /// and repeat until eventually returning to the top. To map an event we need to know from
+    /// the user what displacement should be used as the event trigger and then everything else
+    /// is filtering as analog-optical keyboards continuously sample during travel.
+    ///
+    /// The summary of key processing is
+    /// - Update group hysteresis
+    /// - Check if this key should be actuated or ignored this cycle
+    /// - If actuated previously get the key direction of travel
+    /// - For a given direction
+    ///   * Manage special cases, dual-function on downstroke and reset cases on upstroke
+    ///   * Manage direction specific retrigger functions
+    ///
+    /// A key returning to the top (zeroing) resets any state associated with that key's travel.
+    ///
+    /// Analog Methods:
+    ///
+    /// Dual-Function
+    /// Allocate two actuation points to a key which can be mapped to two different events.
+    /// Triggered on the downstroke, the sequence goes f1 keydown -> f1 keyup / f2 keydown.
+    /// On the upstroke f2 keyup is triggered at the initial f2 actuation point. The functions do
+    /// not trigger again until the key is above their respective initial actuation points noting
+    /// that the functions trigger independently e.g. f2 keyup does not trigger f1 keydown, but
+    /// f2 keydown can occur again if the key changes direction.
+    ///
+    /// Retrigger
+    /// For a key allocated a single actuation point instead of resetting only at this point
+    /// it can be reset after a user defined about of negative displacement under actuation.
+    /// Once reset (or armed) a user defined amount of positive displacement will retrigger the
+    /// key. This will continue until the set actuation point is reached on the upstroke, in which
+    /// case the retrigger logic will be disabled. Users can enable 'continuous retrigger'
+    /// which changes this to only disable the retrigger logic only once the key is at the top of
+    /// its travel regardless of the profile actuation point.
+    /// The retrigger displacement can be a shared value or defined independently.
+    ///
+    /// Dual function and retrigger on a specific key is an either/or affair at this stage.
     fn handle_analog(&mut self, keys: &[u8]) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let key_arr: &[u8; KEY_COUNT];
+
         if let Ok(value) = <&[u8] as TryInto<&[u8; KEY_COUNT]>>::try_into(keys) {
             key_arr = value;
         } else {
@@ -263,186 +334,212 @@ impl Driver {
         self.hysteresis.push_back(*key_arr);
         let previous_state = self.hysteresis.get(self.hysteresis.len() - 2).unwrap();
         let front_state = self.hysteresis.front().unwrap();
-        // Add Vector of events TBD
+        //  TODO PLumb in
+        let mut events: Vec<Event> = Vec::new();
+        // END TODO
 
         // Manage per-key functions as each report gives us a snapshot of the whole matrix
-        for (index, element) in keys.iter().enumerate() {
-            // Short-circuit as it is unlikely all 20 keys are pressed.
-            // If a key is not actuated and has a value of 0, ignore processing this round.
-            if !(self.key_actions[index].actuated.0 ^ self.key_actions[index].actuated.1)
-                && *element == 0
-            {
+        for (key, displacement) in keys.iter().enumerate() {
+            // Calculate and label decisions for readability
+            let first_func_actd = self.key_actions[key].actuated.0;
+            let first_func_act_point = self.key_actions[key].actuation_point.0;
+            let first_func_reset_rule = first_func_actd && (first_func_act_point >= *displacement);
+            let second_func_actd = self.key_actions[key].actuated.1;
+            let second_func_act_point = self.key_actions[key].actuation_point.1;
+            let second_func_user_valid = second_func_act_point > first_func_act_point;
+            let second_func_reset_rule = (second_func_act_point >= *displacement)
+                && second_func_user_valid
+                && second_func_actd;
+            let continuous_retrigger = self.key_actions[key].crt_en;
+            let backoff_first_func = self.key_actions[key].backoff_first_func;
+            let func_actd = first_func_actd ^ second_func_actd;
+            let retrigger_shared_value = self.key_actions[key].retrigger_threshold.0;
+            let retrigger_downstroke_value = self.key_actions[key].retrigger_threshold.1;
+
+            // Perform starting actuation checks if we aren't backing off or we aren't actuated.
+            if !func_actd && !backoff_first_func {
+                // Short-circuit as it is unlikely all 20 keys are pressed.
+                // If a key is not actuated and has a value of 0, ignore processing this round.
+                if *displacement == 0 {
+                    continue;
+                }
+
+                // Actuate if the following criteria are met
+                if first_func_act_point == 0 && *displacement > 0 {
+                    // First the exception case where actuation is set to 0 (1.5mm) as
+                    // any displacement will trigger it.
+                    self.key_actions[key].actuated.0 = true;
+                    // TODO keydown stuff (1.5mm case). Logged for demo purposes
+                    log::info!("A1 Key {} Keydown @ {}!", key, *displacement);
+                } else if first_func_act_point <= *displacement {
+                    // Finally general case where key is at or exceeds actuation point.
+                    self.key_actions[key].actuated.0 = true;
+                    // TODO keydown stuff (all other cases), logged for demo purposes
+                    log::info!("A1 Key {} Keydown @ {}!", key, *displacement);
+                }
                 continue;
             }
 
-            // Establish the direction of travel for the keys
-            let run: Vec<f64> = self
-                .hysteresis
-                .iter()
-                .map(|arr| arr[index] as f64)
-                .collect();
+            // As we have an actuation, track behavior using direction of travel and issue
+            // events per user profile.
+
+            // Establish the direction of travel for the key
+            let run: Vec<f64> = self.hysteresis.iter().map(|arr| arr[key] as f64).collect();
             let trend = self.linear_regression(&run).unwrap_or_else(|| 0.0);
 
-            // If we are not actuated, establish whether we should
-            if !(self.key_actions[index].actuated.0 ^ self.key_actions[index].actuated.1) {
-                // Exception for 1.5mm as any depression will trigger it
-                if self.key_actions[index].actuation_point.0 == 0 && *element > 0 {
-                    self.key_actions[index].actuated.0 = true;
-                    // Do keydown stuff (1.5mm case)
-                    log::info!("A1 Key {} Keydown @ {}!", index, *element);
-                } else if trend >= TREND_KEYDOWN
-                    && self.key_actions[index].actuation_point.0 <= *element
+            // Manage a key moving downwards
+            if trend >= TREND_KEYDOWN {
+                // Check if we need to perform dual function
+                if second_func_user_valid
+                    && !second_func_actd
+                    && second_func_act_point <= *displacement
                 {
-                    self.key_actions[index].actuated.0 = true;
-                    // Do keydown stuff (standard)
-                    log::info!("A1 Key {} Keydown @ {}!", index, *element);
-                }
-            } else {
-                // We are actuated, what happens now is based mainly on trends
-
-                // Picking a trend criteria of ± 1 is important as it allows us to initialize
-                // the retrigger distance given all numbers are in the same direction.
-                // Using the keydown_up_n flag we can determine whether to look at only the
-                // previous value or look at the start of the buffer.
-                if trend >= TREND_KEYDOWN {
-                    // Check if we need to perform dual function
-                    if self.key_actions[index].actuation_point.1
-                        > self.key_actions[index].actuation_point.0
-                        && !self.key_actions[index].actuated.1
-                        && self.key_actions[index].actuation_point.1 <= *element
-                    {
-                        self.key_actions[index].actuated.1 = true;
-                        self.key_actions[index].actuated.0 = false;
-                        // Do keydown stuff (second function)
-                        log::info!("A1 Key {} Keyup @ {}!", index, *element);
-                        log::info!("A2 Key {} Keydown @ {}!", index, *element);
+                    if first_func_actd {
+                        // TODO Keyup stuff for A1, logged for demo purposes
+                        log::info!("A1 Key {} Keyup @ {}!", key, *displacement);
+                        self.key_actions[key].actuated.0 = false;
                     }
+                    // TODO Keydown stuff for A2, logged for demo purposes
+                    log::info!("A2 Key {} Keydown @ {}!", key, *displacement);
+                    self.key_actions[key].actuated.1 = true;
+                }
 
-                    // Manage retrigger
-                    // retrigger_track uses negative and positive values.
-                    // When negative we track reset, when positive we track triggering.
-                    if self.key_actions[index].retrigger_go {
-                        if self.key_actions[index].retrigger_track == 0.0 {
-                            self.key_actions[index].retrigger_track =
-                                *element as f64 - front_state[index] as f64;
-                            self.key_actions[index].retrigger_track *= UNIT_TO_MM;
-                        } else {
-                            let difference = *element as f64 - previous_state[index] as f64;
-                            self.key_actions[index].retrigger_track += difference * UNIT_TO_MM;
-                        }
-
+                // Manage retrigger events
+                // This assumes we are armed from keyup
+                if self.key_actions[key].retrigger_go {
+                    // Calculate displacement track value based on whether we've changed direction
+                    if self.key_actions[key].retrigger_track == 0.0 {
+                        self.key_actions[key].retrigger_track =
+                            *displacement as f64 - front_state[key] as f64;
+                        self.key_actions[key].retrigger_track *= UNIT_TO_MM;
+                    } else {
+                        let difference = *displacement as f64 - previous_state[key] as f64;
+                        self.key_actions[key].retrigger_track += difference * UNIT_TO_MM;
+                    }
+                    // Check if we can retrigger, firstly if the downstroke value is defined
+                    if retrigger_downstroke_value != 0.0
+                        && self.key_actions[key].retrigger_track >= retrigger_downstroke_value
+                    {
                         // Retrigger windows can be shared or separate.
                         // Manage the case where keydown is separate from keyup
-                        if self.key_actions[index].retrigger_window.1 != 0.0
-                            && self.key_actions[index].retrigger_track
-                                >= self.key_actions[index].retrigger_window.1
-                        {
-                            self.key_actions[index].retrigger_go = false;
-                            self.key_actions[index].retrigger_track = 0.0;
-                            // Do keydown stuff
-                            // Then the shared case.
-                        } else if self.key_actions[index].retrigger_window.0 != 0.0
-                            && self.key_actions[index].retrigger_track
-                                >= self.key_actions[index].retrigger_window.0
-                        {
-                            self.key_actions[index].retrigger_go = false;
-                            self.key_actions[index].retrigger_track = 0.0;
-                            log::info!("Key {} retriggered!", index);
-                            // Do keydown stuff
-                        }
-                    // Cases for backing off retrigger, such as travelling back down.
-                    // We don't cancel, but we do effectively undo progress.
-                    } else if self.key_actions[index].retrigger_track != 0.0 {
-                        let difference: f64;
-                        if !self.key_actions[index].keydown_up_n {
-                            difference = *element as f64 - front_state[index] as f64;
-                        } else {
-                            difference = *element as f64 - previous_state[index] as f64;
-                        }
-                        self.key_actions[index].retrigger_track += difference * UNIT_TO_MM;
-
-                        // Regardless if we totally undo retrigger progress, zero it rather than
-                        // making it harder to perform next time.
-                        if self.key_actions[index].retrigger_track > 0.0 {
-                            self.key_actions[index].retrigger_track = 0.0;
-                        }
-                    }
-                    self.key_actions[index].keydown_up_n = true;
-                } else if trend <= TREND_KEYUP {
-                    // Manage actuation point
-                    if self.key_actions[index].actuation_point.0 >= *element {
-                        // If the key returns to the neutral position everything resets.
-                        if *element == 0 {
-                            self.key_actions[index].retrigger_go = false;
-                            self.key_actions[index].retrigger_track = 0.0;
-                            if self.key_actions[index].actuated.0 {
-                                self.key_actions[index].actuated = (false, false);
-                                // Do keyup stuff
-                                log::info!("Key {} Neutral! {:?}", index, run);
-                                continue;
-                            }
-                        // If crt_en isn't covering for retrigger then stop when our
-                        // actuation point has been met.
-                        } else if !self.key_actions[index].crt_en {
-                            self.key_actions[index].retrigger_go = false;
-                            self.key_actions[index].retrigger_track = 0.0;
-                            self.key_actions[index].actuated = (false, false);
-                            // Do keyup stuff
-                            log::info!("A1 Key {} Keyup @ {}!", index, *element);
-                            continue;
-                        }
-                    }
-
-                    if self.key_actions[index].actuation_point.1
-                        > self.key_actions[index].actuation_point.0
-                        && self.key_actions[index].actuation_point.1 >= *element
-                        && self.key_actions[index].actuated.1
+                        self.key_actions[key].retrigger_go = false;
+                        self.key_actions[key].retrigger_track = 0.0;
+                        // TODO keydown stuff, Logged for demo purposes
+                        log::info!("Key {} separate value retrigger!", key);
+                    } else if retrigger_downstroke_value == 0.0
+                        && self.key_actions[key].retrigger_track >= retrigger_shared_value
                     {
-                        if !self.key_actions[index].crt_en {
-                            self.key_actions[index].retrigger_go = false;
-                            self.key_actions[index].retrigger_track = 0.0;
-                            self.key_actions[index].actuated.1 = false;
-                            // Do keyup stuff
-                            log::info!("A2 Key {} Keyup @ {}!", index, *element);
-                            continue;
-                        }
+                        // Otherwise check again using the shared point for keydown
+                        self.key_actions[key].retrigger_go = false;
+                        self.key_actions[key].retrigger_track = 0.0;
+                        // TODO keydown stuff, Logged for demo purposes
+                        log::info!("Key {} shared value retrigger!", key);
                     }
-                    // Manage retrigger
-                    // The tuple representing the retrigger window is conditionally set.
-                    // If the tracker is 0, then initialise the counter from where we are.
-                    if !self.key_actions[index].retrigger_go
-                        && self.key_actions[index].retrigger_window.0 != 0.0
-                    {
-                        let difference: f64;
-                        if self.key_actions[index].keydown_up_n {
-                            difference = front_state[index] as f64 - *element as f64;
-                        } else {
-                            difference = previous_state[index] as f64 - *element as f64;
-                        }
-                        self.key_actions[index].retrigger_track -= difference * UNIT_TO_MM;
-
-                        if self.key_actions[index].retrigger_window.0
-                            <= self.key_actions[index].retrigger_track.abs()
-                        {
-                            log::info!("Key {} retrigger armed!", index);
-                            self.key_actions[index].retrigger_track = 0.0;
-                            self.key_actions[index].retrigger_go = true;
-                            // Do keyup stuff
-                        }
+                } else if self.key_actions[key].retrigger_track != 0.0 {
+                    // Calculate and apply retrigger resistance
+                    // retrigger_track uses negative and positive displacement.
+                    // When negative we track reset, when positive we track triggering.
+                    // Normally with a retrigger sequence the key moves up then down on one motion.
+                    // But if you move up then down then up again you can 'undo' retriggering
+                    // progress so much so as to negate it. In such case we call it zero
+                    // and do nothing more, otherwise it just increases difficulty to retrigger.
+                    let difference: f64;
+                    if self.key_actions[key].key_is_upstroke {
+                        difference = *displacement as f64 - front_state[key] as f64;
+                    } else {
+                        difference = *displacement as f64 - previous_state[key] as f64;
                     }
-                    self.key_actions[index].keydown_up_n = false;
+                    self.key_actions[key].retrigger_track += difference * UNIT_TO_MM;
+                    // If we totally undo retrigger progress, zero it rather than
+                    // making it harder to perform next time.
+                    if self.key_actions[key].retrigger_track > 0.0 {
+                        self.key_actions[key].retrigger_track = 0.0;
+                    }
                 }
+                self.key_actions[key].key_is_upstroke = false;
+            }
+
+            // Manage a key moving upwards
+            if trend <= TREND_KEYUP {
+                // Manage actuation point reset
+                if first_func_reset_rule || second_func_reset_rule {
+                    // If the key returns to the top everything resets.
+                    // If crt_en isn't covering for retrigger then stop when our
+                    // actuation point has been met.
+                    if *displacement == 0 || !continuous_retrigger {
+                        // TODO These logs clarify the entry state, remove once
+                        // events are plumbed in.
+                        // Case for where actuation point is 0
+                        if first_func_actd && *displacement == 0 {
+                            // TODO this is effectively a NOP, logged to track state.
+                            log::info!("Key {} reached top! {:?}", key, run);
+                        } else if second_func_reset_rule {
+                            // If the second function resets we have to prevent the first
+                            // function from actuating until we reach its reset point.
+                            // If left as-is it will trigger immediately as the function is
+                            // in its actuation window.
+                            // TODO keyup stuff, Logged for demo purposes
+                            log::info!("A2 Key {} Keyup @ {}!", key, *displacement);
+                            if *displacement > 0 {
+                                self.key_actions[key].backoff_first_func = true;
+                            }
+                        } else {
+                            // TODO Do keyup stuff, Logged for demo purposes
+                            log::info!("A1 Key {} Keyup @ {}!", key, *displacement);
+                        }
+
+                        // Update persistent state
+                        self.key_actions[key].retrigger_go = false;
+                        self.key_actions[key].retrigger_track = 0.0;
+                        self.key_actions[key].actuated = (false, false);
+                        continue;
+                    }
+                }
+                // Remove the actuation block in dual function once we've reached reset
+                // for the first function.
+                if backoff_first_func && first_func_act_point >= *displacement {
+                    self.key_actions[key].backoff_first_func = false;
+                }
+                // Manage retrigger for upward keystrokes
+                // If we've transitioned state (from down to up) then our initial
+                // displacement is calculated from the start of the regression window. If
+                // continuing in the same direction then the displacement accumulates from
+                // the previous reading. The displacement is compared against the retrigger
+                // threshold, in the case of upwards stroke reaching the threshold 'arms' the
+                // downward stroke allowing it to issue a retrigger. There can be separate
+                // thresholds for upwards and downwards displacement per the profile.
+                // Retrigger is disabled when dual-function is defined for a key
+                // pending a plausible use case. This matches OEM software behavior.
+                if !self.key_actions[key].retrigger_go
+                    && retrigger_shared_value != 0.0
+                    && !second_func_user_valid
+                {
+                    let difference: f64;
+                    // Using the key_is_upstroke flag we can determine whether to look at only the
+                    // previous value or look at the start of the buffer.
+                    if !self.key_actions[key].key_is_upstroke {
+                        difference = front_state[key] as f64 - *displacement as f64;
+                    } else {
+                        difference = previous_state[key] as f64 - *displacement as f64;
+                    }
+                    self.key_actions[key].retrigger_track -= difference * UNIT_TO_MM;
+                    if retrigger_shared_value <= self.key_actions[key].retrigger_track.abs() {
+                        // TODO do keyup stuff, logged for demo purposes
+                        log::info!("Key {} retrigger armed!", key);
+                        self.key_actions[key].retrigger_track = 0.0;
+                        self.key_actions[key].retrigger_go = true;
+                    }
+                }
+                self.key_actions[key].key_is_upstroke = true;
             }
         }
-
-        Ok(Vec::new())
+        Ok(events)
     }
 
+    /// Implement the simple linear regression equation
+    /// m = (n*Σxy - ΣxΣy) / (n*Σx² - (Σx)²)
+    /// where n >= 2 (defined by length of data)
     fn linear_regression(&self, data: &[f64]) -> Option<f64> {
-        // Implement simple linear regression equation
-        // m = (n*Σxy - ΣxΣy) / (n*Σx² - (Σx)²)
-        // where n >= 2 (defined by length of data)
-
         let n = data.len() as f64;
         if n < 2.0 {
             return None;
