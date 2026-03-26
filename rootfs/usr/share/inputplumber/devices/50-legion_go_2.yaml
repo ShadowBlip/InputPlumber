@@ -75,6 +75,7 @@ source_devices:
   ## XInput - Connected 0x61eb (Go 2 PID)
   # Gamepad
   - group: gamepad
+    unique: false
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61eb
@@ -83,11 +84,13 @@ source_devices:
   ## DInput - Attached 0x61ec (Go 2 PID)
   # Gamepad
   - group: gamepad # Dinput report
+    unique: false
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61ec
       interface_num: 0
   - group: gamepad # XInput report 40Hz
+    unique: false
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61ec
@@ -96,6 +99,7 @@ source_devices:
   ## DInput - Detached 0x61ed (Go 2 PID)
   # Gamepad
   - group: gamepad
+    unique: false
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61ed
@@ -104,6 +108,7 @@ source_devices:
   ## FPS Mode - 0x61ee (Go 2 PID)
   # Gamepad
   - group: gamepad
+    unique: false
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61ee
