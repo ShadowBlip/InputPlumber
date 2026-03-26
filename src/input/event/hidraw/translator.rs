@@ -25,14 +25,14 @@ enum DetectionMode {
 /// Translates raw HID reports into [NativeEvent]s using a capability map.
 #[derive(Debug)]
 pub struct HidrawEventTranslator {
-    mappings: Vec<HidrawButtonMapping>,
+    source_events: Vec<HidrawButtonMapping>,
     state: Vec<bool>,
 }
 
 impl HidrawEventTranslator {
     /// Create a new translator from a V2 capability map.
     pub fn new(capability_map: &CapabilityMapConfigV2) -> Self {
-        let mut mappings = Vec::new();
+        let mut source_events = Vec::new();
 
         for mapping in capability_map.mapping.iter() {
             for source in mapping.source_events.iter() {
@@ -66,7 +66,7 @@ impl HidrawEventTranslator {
                     DetectionMode::NonZero
                 };
 
-                mappings.push(HidrawButtonMapping {
+                source_events.push(HidrawButtonMapping {
                     report_id: hidraw.report_id,
                     byte_index: hidraw.byte_start as usize,
                     detection,
@@ -75,16 +75,16 @@ impl HidrawEventTranslator {
             }
         }
 
-        let state = vec![false; mappings.len()];
-        Self { mappings, state }
+        let state = vec![false; source_events.len()];
+        Self { source_events, state }
     }
 
-    pub fn has_mappings(&self) -> bool {
-        !self.mappings.is_empty()
+    pub fn has_hid_translation(&self) -> bool {
+        !self.source_events.is_empty()
     }
 
     pub fn capabilities(&self) -> Vec<Capability> {
-        self.mappings.iter().map(|m| m.capability.clone()).collect()
+        self.source_events.iter().map(|m| m.capability.clone()).collect()
     }
 
     /// Translate a raw HID report into [NativeEvent]s. Only emits events on
@@ -92,7 +92,7 @@ impl HidrawEventTranslator {
     pub fn translate(&mut self, report: &[u8]) -> Vec<NativeEvent> {
         let mut events = Vec::new();
 
-        for (idx, mapping) in self.mappings.iter().enumerate() {
+        for (idx, mapping) in self.source_events.iter().enumerate() {
             if let Some(expected_id) = mapping.report_id {
                 if report.first().copied() != Some(expected_id) {
                     continue;
@@ -100,6 +100,11 @@ impl HidrawEventTranslator {
             }
 
             if mapping.byte_index >= report.len() {
+                log::warn!(
+                    "HID report too short for mapping at byte {}: got {} bytes",
+                    mapping.byte_index,
+                    report.len(),
+                );
                 continue;
             }
 
@@ -120,13 +125,5 @@ impl HidrawEventTranslator {
         }
 
         events
-    }
-
-    /// Returns whether the capability map contains any hidraw source events.
-    pub fn has_hidraw_mappings(capability_map: &CapabilityMapConfigV2) -> bool {
-        capability_map
-            .mapping
-            .iter()
-            .any(|m| m.source_events.iter().any(|s| s.hidraw.is_some()))
     }
 }

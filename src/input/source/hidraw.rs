@@ -42,7 +42,6 @@ use crate::{
     input::{
         capability::Capability,
         composite_device::client::CompositeDeviceClient,
-        event::hidraw::translator::HidrawEventTranslator,
         info::DeviceInfoRef,
         output_capability::OutputCapability,
     },
@@ -288,11 +287,7 @@ impl HidRawDevice {
 
         match driver_type {
             DriverType::Unknown => {
-                if let Some(cap_map) = Self::load_hidraw_capability_map(&conf) {
-                    log::info!(
-                        "Using generic hidraw button driver with capability map '{}'",
-                        cap_map.name,
-                    );
+                if let Some(cap_map) = Self::load_capability_map_v2(&conf) {
                     let device = GenericHidrawButtons::new(device_info.clone(), cap_map)?;
                     let source_device =
                         SourceDriver::new(composite_device, device, device_info.into(), conf);
@@ -492,24 +487,18 @@ impl HidRawDevice {
         }
     }
 
-    fn load_hidraw_capability_map(
+    fn load_capability_map_v2(
         conf: &Option<config::SourceDevice>,
     ) -> Option<CapabilityMapConfigV2> {
         let cap_map_id = conf.as_ref()?.capability_map_id.as_ref()?;
         let mappings = load_capability_mappings();
-        let cap_map = match mappings.get(cap_map_id) {
-            Some(CapabilityMapConfig::V2(config)) => config.clone(),
+        match mappings.get(cap_map_id) {
+            Some(CapabilityMapConfig::V2(config)) => Some(config.clone()),
             _ => {
                 log::warn!("Capability map '{cap_map_id}' not found or not V2");
-                return None;
+                None
             }
-        };
-
-        if !HidrawEventTranslator::has_hidraw_mappings(&cap_map) {
-            return None;
         }
-
-        Some(cap_map)
     }
 
     /// Return the driver type for the given vendor and product

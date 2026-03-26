@@ -33,7 +33,7 @@ impl GenericHidrawButtons {
         device.set_blocking_mode(false)?;
 
         let translator = HidrawEventTranslator::new(&capability_map);
-        if !translator.has_mappings() {
+        if !translator.has_hid_translation() {
             return Err(format!(
                 "Capability map '{}' has no hidraw button mappings",
                 capability_map.name
