@@ -8,6 +8,7 @@ pub mod lego;
 pub mod legos;
 pub mod msi_claw;
 pub mod opineo;
+pub mod oxp_hid;
 pub mod oxp_tty;
 pub mod rog_ally;
 pub mod steam_deck;
