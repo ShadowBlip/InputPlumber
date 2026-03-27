@@ -150,7 +150,7 @@ impl Driver {
             }
             count += 1;
             let cid = buf[0];
-            log::info!(
+            log::debug!(
                 "OXP HID: {phase} ACK #{count}: CID=0x{cid:02X} ({n}B) [{}]",
                 hex_prefix(buf, 16)
             );
@@ -169,29 +169,29 @@ impl Driver {
 
         // Phase 1: B4 button mappings
         let w1 = self.device.write(&INIT_CMD_1)?;
-        log::info!("OXP HID: B4 page1 sent ({w1}B)");
+        log::debug!("OXP HID: B4 page1 sent ({w1}B)");
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         let w2 = self.device.write(&INIT_CMD_2)?;
-        log::info!("OXP HID: B4 page2 sent ({w2}B) — M1→F14(0x67), M2→F13(0x66)");
+        log::debug!("OXP HID: B4 page2 sent ({w2}B) — M1→F14(0x67), M2→F13(0x66)");
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         self.drain_responses("B4", &mut drain_buf)?;
 
         // Phase 2: B2 report mode ENABLE→DISABLE cycle
         let w3 = self.device.write(&B2_ENABLE)?;
-        log::info!("OXP HID: B2 ENABLE sent ({w3}B)");
+        log::debug!("OXP HID: B2 ENABLE sent ({w3}B)");
         std::thread::sleep(std::time::Duration::from_millis(200));
         self.drain_responses("B2-EN", &mut drain_buf)?;
 
         let w4 = self.device.write(&B2_DISABLE)?;
-        log::info!("OXP HID: B2 DISABLE sent ({w4}B)");
+        log::debug!("OXP HID: B2 DISABLE sent ({w4}B)");
         std::thread::sleep(std::time::Duration::from_millis(100));
         self.drain_responses("B2-DIS", &mut drain_buf)?;
 
         // Phase 3: B3 vibration (must be AFTER B2 cycle)
         let w5 = self.device.write(&B3_VIBRATION)?;
-        log::info!("OXP HID: B3 vibration sent ({w5}B) — intensity=5");
+        log::debug!("OXP HID: B3 vibration sent ({w5}B) — intensity=5");
         std::thread::sleep(std::time::Duration::from_millis(50));
         self.drain_responses("B3", &mut drain_buf)?;
 
@@ -243,7 +243,7 @@ impl Driver {
                 );
                 self.initialized = false;
             } else {
-                log::info!(
+                log::debug!(
                     "OXP HID: non-B2 packet CID=0x{cid:02X}: [{}]",
                     hex_prefix(&buf, 16)
                 );
@@ -282,7 +282,7 @@ impl Driver {
             *prev = pressed;
         }
 
-        log::info!(
+        log::debug!(
             "OXP HID: btn=0x{btn:02x} {} (type=0x{pkt_type:02x} flag=0x{flag:02x} func=0x{func_code:02x})",
             if pressed { "PRESSED" } else { "RELEASED" }
         );
