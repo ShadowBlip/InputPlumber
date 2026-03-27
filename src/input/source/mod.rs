@@ -229,6 +229,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
         let (tx, rx) = mpsc::channel(options.buffer_size);
 
         // Check to see if the device configuration calls for event filtering
+        let mut events_exclude_all = false;
         let mut events_exclude = HashSet::new();
         let mut events_include = HashSet::new();
         if let Some(conf) = config.as_ref() {
@@ -243,6 +244,9 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                 .and_then(|e| e.include)
                 .unwrap_or_default();
 
+            // Look for any '*' patterns to exclude all input events
+            events_exclude_all = events_to_exclude.iter().any(|v| v.as_str() == "*");
+
             // Convert the capability strings into capabilities
             events_exclude = events_to_exclude
                 .iter()
@@ -253,7 +257,8 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                 .filter_map(|cap| Capability::from_str(cap.as_str()).ok())
                 .collect();
         }
-        let event_filter_enabled = !events_exclude.is_empty() || !events_include.is_empty();
+        let event_filter_enabled =
+            !events_exclude.is_empty() || !events_include.is_empty() || events_exclude_all;
         if event_filter_enabled {
             let devnode = device_info.path();
             if !events_include.is_empty() {
