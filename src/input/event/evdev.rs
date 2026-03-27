@@ -117,8 +117,8 @@ impl EvdevEvent {
         if let Some(info) = self.abs_info {
             let code = self.event.code();
             match AbsoluteAxisCode(code) {
-                AbsoluteAxisCode::ABS_Z => normalize_unsigned_value(raw_value, info.maximum()),
-                AbsoluteAxisCode::ABS_RZ => normalize_unsigned_value(raw_value, info.maximum()),
+                AbsoluteAxisCode::ABS_Z => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
+                AbsoluteAxisCode::ABS_RZ => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
                 _ => normalize_signed_value(raw_value, info.minimum(), info.maximum()),
             }
         } else {
@@ -1037,9 +1037,13 @@ fn normalize_signed_value(raw_value: i32, min: i32, max: i32) -> f64 {
 }
 
 /// Returns a value between 0.0 and 1.0 based on the given value with its
-/// maximum.
-fn normalize_unsigned_value(raw_value: i32, max: i32) -> f64 {
-    raw_value as f64 / max as f64
+/// minimum and maximum.
+fn normalize_unsigned_value(raw_value: i32, min: i32, max: i32) -> f64 {
+    let range = max - min;
+    if range == 0 {
+        return 0.0;
+    }
+    ((raw_value - min) as f64 / range as f64).clamp(0.0, 1.0)
 }
 
 /// De-normalizes the given value from -1.0 - 1.0 into a real value based on the
@@ -1067,13 +1071,14 @@ fn denormalize_signed_value(normal_value: f64, axis_info: AbsInfo) -> i32 {
 }
 
 /// De-normalizes the given value from 0.0 - 1.0 into a real value based on
-/// the maximum axis range.
+/// the minimum and maximum axis range.
 fn denormalize_unsigned_value(normal_value: f64, axis_info: Option<AbsInfo>) -> i32 {
-    // TODO: this better
     let Some(axis_info) = axis_info else {
         return normal_value as i32;
     };
-    (normal_value * axis_info.maximum() as f64).round() as i32
+    let min = axis_info.minimum() as f64;
+    let max = axis_info.maximum() as f64;
+    (normal_value * (max - min) + min).round() as i32
 }
 
 /// The AxisDirection is used to determine if a button value should be mapped
