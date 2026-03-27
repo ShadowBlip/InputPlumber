@@ -84,6 +84,24 @@ const B3_VIBRATION: [u8; PACKET_SIZE] = gen_cmd(
 const B2_ENABLE: [u8; PACKET_SIZE] = gen_cmd(CMD_BUTTON, &[0x03, 0x01, 0x02]);
 const B2_DISABLE: [u8; PACKET_SIZE] = gen_cmd(CMD_BUTTON, &[0x00, 0x01, 0x02]);
 
+// MCU status notification (CID 0xB8). The MCU emits these unsolicited during
+// normal operation (touchpad, sensor events, etc.) and after resume from
+// suspend.
+//
+// Observed on X1 Mini (VID:1a86 PID:fe00, CH32 MCU): after every s2idle
+// resume the MCU sends a consistent three-packet burst ~6s after wake:
+//   B8 [... fd ... 03 ...]
+//   B8 [... fe ... 00 ...]   ← byte3=0xFE, only appears during MCU init
+//   B8 [... fd 04 ... 04 ...]
+// The 0xFE packet signals that the MCU has completed its own re-initialization
+// and has reset volatile settings (B3 vibration intensity, B4 button mappings).
+// Without re-initialization, vibration stops working after resume.
+//
+// This detection is safe for devices that do not emit B8 0xFE (e.g. Apex):
+// the condition simply never triggers, and re-initialization is idempotent.
+const CMD_MCU_STATUS: u8 = 0xB8;
+const MCU_INIT_COMPLETE: u8 = 0xFE;
+
 pub struct Driver {
     device: HidDevice,
     btn_state: [bool; 0x25],
@@ -219,10 +237,17 @@ impl Driver {
         }
 
         if cid != CMD_BUTTON {
-            log::info!(
-                "OXP HID: non-B2 packet CID=0x{cid:02X}: [{}]",
-                hex_prefix(&buf, 16)
-            );
+            if cid == CMD_MCU_STATUS && buf[3] == MCU_INIT_COMPLETE {
+                log::info!(
+                    "OXP HID: MCU init-complete (B8 0xFE) detected, scheduling re-initialization"
+                );
+                self.initialized = false;
+            } else {
+                log::info!(
+                    "OXP HID: non-B2 packet CID=0x{cid:02X}: [{}]",
+                    hex_prefix(&buf, 16)
+                );
+            }
             return Ok(Vec::new());
         }
 
