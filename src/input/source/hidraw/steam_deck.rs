@@ -237,7 +237,13 @@ impl SourceOutputDevice for DeckController {
                 let report = packed_rumble_report.pack().map_err(|e| e.to_string())?;
                 self.driver.write(&report)?;
             }
-            OutputEvent::Rumble { .. } => (),
+            OutputEvent::GenericRumble {
+                weak_magnitude,
+                strong_magnitude,
+            } => {
+                self.driver
+                    .haptic_rumble(strong_magnitude, weak_magnitude)?;
+            }
         }
 
         Ok(())

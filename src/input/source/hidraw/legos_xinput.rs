@@ -185,7 +185,14 @@ impl SourceOutputDevice for LegionSXInputController {
                 let r_speed = (report.right_speed.to_primitive() / 256) as u8;
                 self.driver.haptic_rumble(l_speed, r_speed)?;
             }
-            OutputEvent::Rumble { .. } => (),
+            OutputEvent::GenericRumble {
+                weak_magnitude,
+                strong_magnitude,
+            } => {
+                let left_speed = (strong_magnitude / 256) as u8;
+                let right_speed = (weak_magnitude / 256) as u8;
+                self.driver.haptic_rumble(left_speed, right_speed)?;
+            }
         }
 
         Ok(())
