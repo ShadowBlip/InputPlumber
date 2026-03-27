@@ -186,7 +186,15 @@ impl SourceOutputDevice for DualSenseController {
                 }
                 Ok(())
             }
-            OutputEvent::Rumble { .. } => Ok(()),
+            OutputEvent::GenericRumble {
+                weak_magnitude,
+                strong_magnitude,
+            } => {
+                let left_speed = (strong_magnitude / 256) as u8;
+                let right_speed = (weak_magnitude / 256) as u8;
+                self.driver.rumble(left_speed, right_speed)?;
+                Ok(())
+            }
         }
     }
 

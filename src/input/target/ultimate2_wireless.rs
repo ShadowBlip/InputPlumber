@@ -12,8 +12,7 @@ use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 use crate::{
     drivers::ultimate2_wireless::{
         driver::{
-            ACCEL_SCALE, JOY_AXIS_MAX, JOY_AXIS_MIN, PID, REPORT_ID_RUMBLE,
-            TRIGGER_AXIS_MAX, VID,
+            ACCEL_SCALE, JOY_AXIS_MAX, JOY_AXIS_MIN, PID, REPORT_ID_RUMBLE, TRIGGER_AXIS_MAX, VID,
         },
         hid_report::{DpadDirection, PackedInputDataReport, PackedRumbleOutputReport},
         report_descriptor::REPORT_DESCRIPTOR,
@@ -269,7 +268,7 @@ impl Ultimate2WirelessDevice {
             let strong_magnitude = (report.strong_magnitude as u16) << 8;
             let weak_magnitude = (report.weak_magnitude as u16) << 8;
             log::trace!("Rumble: strong={strong_magnitude} weak={weak_magnitude}");
-            return Ok(vec![OutputEvent::Rumble {
+            return Ok(vec![OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,
             }]);
@@ -285,8 +284,7 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
 
         // QuickAccess maps to Guide+South combo (press: Guide@0ms South@160ms,
         // release: South@160ms Guide@240ms), same timing as xpad target.
-        if event.as_capability()
-            == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess))
+        if event.as_capability() == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess))
         {
             let pressed = event.pressed();
             let guide = NativeEvent::new(
@@ -315,8 +313,7 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
 
         // Screenshot maps to Guide+RightTrigger combo (press: Guide@0ms RightTrigger@160ms,
         // release: RightTrigger@160ms Guide@240ms), same timing as horipad target.
-        if event.as_capability()
-            == Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot))
+        if event.as_capability() == Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot))
         {
             let pressed = event.pressed();
             let guide = NativeEvent::new(
@@ -476,4 +473,3 @@ fn denormalize_accel(value_m_s2: f64) -> i16 {
     let g = value_m_s2 / GRAVITY;
     (g * ACCEL_SCALE).clamp(i16::MIN as f64, i16::MAX as f64) as i16
 }
-

@@ -10,12 +10,12 @@ use std::{
 use debug::DebugDevice;
 use horipad_steam::HoripadSteamDevice;
 use steam_deck_uhid::SteamDeckUhidDevice;
-use ultimate2_wireless::Ultimate2WirelessDevice;
 use thiserror::Error;
 use tokio::{
     sync::mpsc::{self, error::TryRecvError},
     task::JoinHandle,
 };
+use ultimate2_wireless::Ultimate2WirelessDevice;
 use unified_gamepad::UnifiedGamepadDevice;
 
 use crate::{

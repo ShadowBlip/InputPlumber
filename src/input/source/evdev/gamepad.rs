@@ -652,7 +652,7 @@ impl SourceOutputDevice for GamepadEventDevice {
                 }
                 Ok(())
             }
-            OutputEvent::Rumble {
+            OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,
             } => {
