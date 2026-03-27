@@ -251,7 +251,7 @@ impl EventTranslator {
             }
 
             // Normalize the input value
-            let value = self.get_input_value(event, &evdev_config.value_type);
+            let value = self.get_input_value(event, &evdev_config.value_type, evdev_config.inverted);
             log::trace!(
                 "Translated value {:?} {} to {:?}",
                 event.code(),
@@ -447,8 +447,15 @@ impl EventTranslator {
     }
 
     /// Returns the normalized value of the event expressed as an [InputValue].
-    fn get_input_value(&self, event: &InputEvent, value_type: &ValueType) -> InputValue {
-        let normal_value = self.get_normalized_value(event, value_type);
+    fn get_input_value(&self, event: &InputEvent, value_type: &ValueType, inverted: bool) -> InputValue {
+        let mut normal_value = self.get_normalized_value(event, value_type);
+
+        if inverted {
+            normal_value = match value_type {
+                ValueType::Trigger | ValueType::Button => 1.0 - normal_value,
+                _ => -normal_value,
+            };
+        }
 
         match value_type {
             ValueType::Button => {
@@ -504,8 +511,8 @@ impl EventTranslator {
         const IMU_SCALE: f64 = 0.01;
 
         match value_type {
-            ValueType::Button => normalize_unsigned_value(raw_value, info.maximum()),
-            ValueType::Trigger => normalize_unsigned_value(raw_value, info.maximum()),
+            ValueType::Button => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
+            ValueType::Trigger => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
             ValueType::JoystickX | ValueType::JoystickY => {
                 normalize_signed_value(raw_value, info.minimum(), info.maximum())
             }
