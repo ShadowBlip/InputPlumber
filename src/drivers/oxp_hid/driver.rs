@@ -65,6 +65,20 @@ const fn gen_cmd(cid: u8, data: &[u8]) -> [u8; PACKET_SIZE] {
     buf
 }
 
+// B3 vibration intensity: set to max (5) so Xbox gamepad rumble works.
+// MCU does not persist this across reboots, so it must be sent every init.
+// Payload: 15-byte header + 35 zero padding + 9-byte tail = 59 bytes.
+const B3_VIBRATION: [u8; PACKET_SIZE] = gen_cmd(
+    0xB3,
+    &[
+        0x02, 0x38, 0x02, 0xE3, 0x39, 0xE3, 0x39, 0xE3, 0x39, 0x01, 0x05, 0x05,
+        0xE3, 0x39, 0xE3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x39, 0xE3, 0x39, 0xE3, 0xE3, 0x02, 0x04, 0x39, 0x39,
+    ],
+);
+
 // B2 report mode activation: ENABLE then DISABLE cycle.
 // Required on Apex; harmless on X1 Mini (tested: both phases produce events).
 const B2_ENABLE: [u8; PACKET_SIZE] = gen_cmd(CMD_BUTTON, &[0x03, 0x01, 0x02]);
@@ -129,7 +143,8 @@ impl Driver {
         Ok(count)
     }
 
-    /// Send initialization commands: B4 button mapping → B2 report mode.
+    /// Send initialization commands: B4 button mapping → B2 report mode → B3 vibration.
+    /// B3 must be sent AFTER the B2 cycle because B2 ENABLE resets vibration intensity.
     fn initialize(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         log::info!("OXP HID: starting initialization sequence");
         let mut drain_buf = [0u8; PACKET_SIZE];
@@ -156,8 +171,14 @@ impl Driver {
         std::thread::sleep(std::time::Duration::from_millis(100));
         self.drain_responses("B2-DIS", &mut drain_buf)?;
 
+        // Phase 3: B3 vibration (must be AFTER B2 cycle)
+        let w5 = self.device.write(&B3_VIBRATION)?;
+        log::info!("OXP HID: B3 vibration sent ({w5}B) — intensity=5");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        self.drain_responses("B3", &mut drain_buf)?;
+
         log::info!(
-            "OXP HID: initialization complete — B4({w1}+{w2}B) B2({w3}+{w4}B)"
+            "OXP HID: initialization complete — B4({w1}+{w2}B) B2({w3}+{w4}B) B3({w5}B)"
         );
         self.initialized = true;
         Ok(())
