@@ -1,6 +1,6 @@
 Name:           inputplumber
 Version:        0.75.2
-Release:        0%{?dist}
+Release:        1%{?dist}
 Summary:        InputPlumber is an open source input routing and control daemon for Linux. It can be used to combine any number of input devices (like gamepads, mice, and keyboards) and translate their input to a variety of virtual device formats.
 License:        GPLv3+
 URL:            https://github.com/ShadowBlip/InputPlumber
