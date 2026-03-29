@@ -198,4 +198,9 @@ impl ScheduledNativeEvent {
     pub fn is_ready(&self) -> bool {
         self.scheduled_time.elapsed() > self.wait_time
     }
+
+    /// Returns a reference to the underlying event
+    pub fn event(&self) -> &NativeEvent {
+        &self.event
+    }
 }
