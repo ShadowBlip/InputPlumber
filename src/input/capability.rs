@@ -107,9 +107,9 @@ impl Capability {
             return None;
         };
         let any_gesture = match gesture {
-            GestureType::SwipeRight(_) => GestureType::SwipeRight(GestureArea::Any),
-            GestureType::SwipeLeft(_) => GestureType::SwipeLeft(GestureArea::Any),
-            GestureType::SwipeUp | GestureType::SwipeDown => return None,
+            GestureType::Right(_) => GestureType::Right(GestureArea::Any),
+            GestureType::Left(_) => GestureType::Left(GestureArea::Any),
+            GestureType::Up | GestureType::Down => return None,
         };
         Some(Capability::Touchscreen(Touch::Gesture(any_gesture)))
     }
@@ -1420,22 +1420,22 @@ impl FromStr for GestureArea {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GestureType {
     /// Swipe inward from the left edge
-    SwipeRight(GestureArea),
+    Right(GestureArea),
     /// Swipe inward from the right edge
-    SwipeLeft(GestureArea),
+    Left(GestureArea),
     /// Swipe inward from the bottom edge
-    SwipeUp,
+    Up,
     /// Swipe inward from the top edge
-    SwipeDown,
+    Down,
 }
 
 impl fmt::Display for GestureType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            GestureType::SwipeRight(area) => write!(f, "SwipeRight:{area}"),
-            GestureType::SwipeLeft(area) => write!(f, "SwipeLeft:{area}"),
-            GestureType::SwipeUp => write!(f, "SwipeUp"),
-            GestureType::SwipeDown => write!(f, "SwipeDown"),
+            GestureType::Right(area) => write!(f, "SwipeRight:{area}"),
+            GestureType::Left(area) => write!(f, "SwipeLeft:{area}"),
+            GestureType::Up => write!(f, "SwipeUp"),
+            GestureType::Down => write!(f, "SwipeDown"),
         }
     }
 }
@@ -1448,14 +1448,14 @@ impl FromStr for GestureType {
             return Err(());
         };
         match *part {
-            "SwipeRight" => Ok(GestureType::SwipeRight(GestureArea::from_str(
+            "SwipeRight" => Ok(GestureType::Right(GestureArea::from_str(
                 rest.join(":").as_str(),
             )?)),
-            "SwipeLeft" => Ok(GestureType::SwipeLeft(GestureArea::from_str(
+            "SwipeLeft" => Ok(GestureType::Left(GestureArea::from_str(
                 rest.join(":").as_str(),
             )?)),
-            "SwipeUp" => Ok(GestureType::SwipeUp),
-            "SwipeDown" => Ok(GestureType::SwipeDown),
+            "SwipeUp" => Ok(GestureType::Up),
+            "SwipeDown" => Ok(GestureType::Down),
             _ => Err(()),
         }
     }

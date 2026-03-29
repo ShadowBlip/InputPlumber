@@ -519,7 +519,7 @@ impl TouchscreenEventDevice {
             } else {
                 GestureArea::Bottom
             };
-            Some(GestureType::SwipeRight(area))
+            Some(GestureType::Right(area))
         } else if start_x > 1.0 - GESTURE_START && (start_x - last_x) > GESTURE_MIN_TRAVEL {
             // Swipe inward from the right edge
             let area = if start_y < GESTURE_TOP_RATIO {
@@ -527,13 +527,13 @@ impl TouchscreenEventDevice {
             } else {
                 GestureArea::Bottom
             };
-            Some(GestureType::SwipeLeft(area))
+            Some(GestureType::Left(area))
         } else if start_y > 1.0 - GESTURE_START && (start_y - last_y) > GESTURE_MIN_TRAVEL {
             // Swipe inward from the bottom edge
-            Some(GestureType::SwipeUp)
+            Some(GestureType::Up)
         } else if start_y < GESTURE_START && (last_y - start_y) > GESTURE_MIN_TRAVEL {
             // Swipe inward from the top edge
-            Some(GestureType::SwipeDown)
+            Some(GestureType::Down)
         } else {
             None
         };
@@ -643,12 +643,12 @@ impl SourceInputDevice for TouchscreenEventDevice {
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(vec![
             Capability::Touchscreen(Touch::Motion),
-            Capability::Touchscreen(Touch::Gesture(GestureType::SwipeRight(GestureArea::Top))),
-            Capability::Touchscreen(Touch::Gesture(GestureType::SwipeRight(GestureArea::Bottom))),
-            Capability::Touchscreen(Touch::Gesture(GestureType::SwipeLeft(GestureArea::Top))),
-            Capability::Touchscreen(Touch::Gesture(GestureType::SwipeLeft(GestureArea::Bottom))),
-            Capability::Touchscreen(Touch::Gesture(GestureType::SwipeUp)),
-            Capability::Touchscreen(Touch::Gesture(GestureType::SwipeDown)),
+            Capability::Touchscreen(Touch::Gesture(GestureType::Right(GestureArea::Top))),
+            Capability::Touchscreen(Touch::Gesture(GestureType::Right(GestureArea::Bottom))),
+            Capability::Touchscreen(Touch::Gesture(GestureType::Left(GestureArea::Top))),
+            Capability::Touchscreen(Touch::Gesture(GestureType::Left(GestureArea::Bottom))),
+            Capability::Touchscreen(Touch::Gesture(GestureType::Up)),
+            Capability::Touchscreen(Touch::Gesture(GestureType::Down)),
         ])
     }
 }
