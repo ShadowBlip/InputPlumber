@@ -178,6 +178,7 @@ impl CompositeDevice {
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         let name = config.name.clone();
         let dbus = DBusInterfaceManager::new(conn.clone(), dbus_path.clone())?;
+        let targets = CompositeDeviceTargets::new(conn, dbus_path, tx.clone().into(), manager, &config);
         let mut device = Self {
             dbus,
             config,
@@ -205,7 +206,7 @@ impl CompositeDevice {
             source_device_tasks: JoinSet::new(),
             source_device_persistent_ids: HashMap::new(),
             source_devices_used: Vec::new(),
-            targets: CompositeDeviceTargets::new(conn, dbus_path, tx.into(), manager),
+            targets,
             ff_enabled: true,
             ff_effect_ids: (0..64).collect(),
             ff_effect_id_source_map: HashMap::new(),
@@ -1561,6 +1562,92 @@ impl CompositeDevice {
                 }
             }
             return Ok(events);
+        }
+
+        // For gesture capabilities with a specific area (Top/Bottom), fall back
+        // to any GestureArea::Any mapping configured in the profile.
+        if let Some(any_cap) = source_cap.with_gesture_area_any() {
+            if let Some(mappings) = self.device_profile_config_map.get(&any_cap) {
+                let matched_mappings = mappings
+                    .iter()
+                    .filter(|mapping| mapping.source_matches_properties(event));
+
+                let mut events = Vec::new();
+                for mapping in matched_mappings {
+                    log::trace!(
+                        "Found Any-area translation for gesture {:?} via mapping: {}",
+                        source_cap,
+                        mapping.name
+                    );
+
+                    for target_event in mapping.target_events.iter() {
+                        let target_cap: Capability = target_event.clone().into();
+                        let result = event.get_value().translate(
+                            &source_cap,
+                            &mapping.source_event,
+                            &target_cap,
+                            target_event,
+                        );
+                        let value = match result {
+                            Ok(v) => v,
+                            Err(err) => {
+                                match err {
+                                    TranslationError::NotImplemented => {
+                                        log::warn!(
+                                            "Translation not implemented for Any-area mapping '{}': {:?} -> {:?}",
+                                            mapping.name,
+                                            source_cap,
+                                            target_cap,
+                                        );
+                                        continue;
+                                    }
+                                    TranslationError::ImpossibleTranslation(msg) => {
+                                        log::warn!(
+                                            "Impossible translation for Any-area mapping '{}': {msg}",
+                                            mapping.name
+                                        );
+                                        continue;
+                                    }
+                                    TranslationError::InvalidSourceConfig(msg) => {
+                                        log::warn!("Invalid source event config in Any-area mapping '{}': {msg}", mapping.name);
+                                        continue;
+                                    }
+                                    TranslationError::InvalidTargetConfig(msg) => {
+                                        log::warn!("Invalid target event config in Any-area mapping '{}': {msg}", mapping.name);
+                                        continue;
+                                    }
+                                }
+                            }
+                        };
+                        if matches!(value, InputValue::None) {
+                            continue;
+                        }
+
+                        if source_cap.is_momentary_translation(&target_cap) {
+                            events.push(NativeEvent::new_translated(
+                                source_cap.clone(),
+                                target_cap.clone(),
+                                InputValue::Bool(true),
+                            ));
+                            events.push(NativeEvent::new_translated(
+                                source_cap.clone(),
+                                target_cap,
+                                InputValue::Bool(false),
+                            ));
+                            continue;
+                        }
+
+                        events.push(NativeEvent::new_translated(
+                            source_cap.clone(),
+                            target_cap,
+                            value,
+                        ));
+                    }
+                }
+                if !events.is_empty() {
+                    return Ok(events);
+                }
+            }
         }
 
         log::trace!("No translation mapping found for event: {:?}", source_cap);

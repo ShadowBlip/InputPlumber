@@ -4,6 +4,9 @@ use std::{
     time::Duration,
 };
 
+/// The target device type identifier for the virtual touchscreen
+const TOUCHSCREEN_TARGET_ID: &str = "touchscreen";
+
 use tokio::{
     sync::mpsc::{self, Sender},
     task::JoinSet,
@@ -51,6 +54,9 @@ pub struct CompositeDeviceTargets {
     /// Map of DBusDevice DBus paths to their respective transmitter channel.
     /// E.g. {"/org/shadowblip/InputPlumber/devices/target/dbus0": <Sender>}
     target_dbus_devices: HashMap<String, TargetDeviceClient>,
+    /// True if this composite device has a grabbed touchscreen source.
+    /// When true, the touchscreen target will always be kept in the target list.
+    has_touchscreen_source: bool,
 }
 
 impl CompositeDeviceTargets {
@@ -60,7 +66,17 @@ impl CompositeDeviceTargets {
         path: String,
         device: CompositeDeviceClient,
         manager: Sender<ManagerCommand>,
+        config: &crate::config::CompositeDeviceConfig,
     ) -> Self {
+        let has_touchscreen_source = config.source_devices.iter().any(|src| {
+            src.group == "touchscreen"
+                && src
+                    .config
+                    .as_ref()
+                    .and_then(|c| c.touchscreen.as_ref())
+                    .and_then(|t| t.grab)
+                    .unwrap_or(false)
+        });
         Self {
             _dbus: dbus,
             path,
@@ -71,6 +87,7 @@ impl CompositeDeviceTargets {
             target_devices_queued: Default::default(),
             target_devices_suspended: Default::default(),
             target_dbus_devices: Default::default(),
+            has_touchscreen_source,
         }
     }
 
@@ -124,9 +141,20 @@ impl CompositeDeviceTargets {
     /// existing devices.
     pub async fn set_devices(
         &mut self,
-        device_types: Vec<TargetDeviceTypeId>,
+        mut device_types: Vec<TargetDeviceTypeId>,
     ) -> Result<(), Box<dyn Error>> {
         let dbus_path = self.path.as_str();
+
+        // If the composite device has a grabbed touchscreen source, always keep
+        // touchscreen in the target list regardless of what the caller requested.
+        if self.has_touchscreen_source {
+            let touchscreen_id: TargetDeviceTypeId = TOUCHSCREEN_TARGET_ID.try_into().unwrap();
+            if !device_types.contains(&touchscreen_id) {
+                log::debug!("[{dbus_path}] Auto-adding touchscreen target (grabbed touchscreen source detected)");
+                device_types.push(touchscreen_id);
+            }
+        }
+
         log::info!("[{dbus_path}] Setting target devices: {device_types:?}");
 
         // NOTE: If the device is suspended, we resume the device and use the new
