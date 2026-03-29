@@ -303,6 +303,12 @@ pub struct TouchscreenConfig {
     /// instead of the size advertised by the device itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub override_source_size: Option<bool>,
+    /// If true, the device will be grabbed exclusively. Touch events will be
+    /// fully managed by InputPlumber; a virtual touchscreen target device will
+    /// be created and edge-swipe gestures will suppress raw touch delivery.
+    /// Defaults to false (pass-through mode).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grab: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
