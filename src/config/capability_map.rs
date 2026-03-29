@@ -318,6 +318,9 @@ pub struct TouchCapability {
     pub button: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub motion: Option<TouchMotionCapability>,
+    /// Edge-swipe gesture type
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gesture: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]

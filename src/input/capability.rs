@@ -69,18 +69,21 @@ impl Capability {
                     Touch::Button(touch_button) => {
                         format!("Touchpad:LeftPad:Touch:Button:{touch_button}")
                     }
+                    Touch::Gesture(g) => format!("Touchpad:LeftPad:Touch:Gesture:{g}"),
                 },
                 Touchpad::RightPad(touch) => match touch {
                     Touch::Motion => "Touchpad:RightPad:Touch:Motion".to_string(),
                     Touch::Button(touch_button) => {
                         format!("Touchpad:RightPad:Touch:Button:{touch_button}")
                     }
+                    Touch::Gesture(g) => format!("Touchpad:RightPad:Touch:Gesture:{g}"),
                 },
                 Touchpad::CenterPad(touch) => match touch {
                     Touch::Motion => "Touchpad:CenterPad:Touch:Motion".to_string(),
                     Touch::Button(touch_button) => {
                         format!("Touchpad:CenterPad:Touch:Button:{touch_button}")
                     }
+                    Touch::Gesture(g) => format!("Touchpad:CenterPad:Touch:Gesture:{g}"),
                 },
             },
             Capability::Touchscreen(touch) => match touch {
@@ -88,10 +91,27 @@ impl Capability {
                 Touch::Button(touch_button) => {
                     format!("Touchscreen:Touch:Button:{touch_button}")
                 }
+                Touch::Gesture(g) => format!("Touchscreen:Touch:Gesture:{g}"),
             },
             Capability::Gyroscope(source) => format!("Gyroscope:{source}"),
             Capability::Accelerometer(source) => format!("Accelerometer:{source}"),
         }
+    }
+
+    /// If this capability is a touchscreen gesture with a specific area (Top or
+    /// Bottom), return the same gesture with `GestureArea::Any`. Returns `None`
+    /// for gestures that have no area concept (SwipeUp/SwipeDown) or for
+    /// non-gesture capabilities.
+    pub fn with_gesture_area_any(&self) -> Option<Capability> {
+        let Capability::Touchscreen(Touch::Gesture(gesture)) = self else {
+            return None;
+        };
+        let any_gesture = match gesture {
+            GestureType::SwipeRight(_) => GestureType::SwipeRight(GestureArea::Any),
+            GestureType::SwipeLeft(_) => GestureType::SwipeLeft(GestureArea::Any),
+            GestureType::SwipeUp | GestureType::SwipeDown => return None,
+        };
+        Some(Capability::Touchscreen(Touch::Gesture(any_gesture)))
     }
 }
 
@@ -331,6 +351,17 @@ impl From<CapabilityConfig> for Capability {
                 }
                 let button = button.unwrap();
                 return Capability::Touchscreen(Touch::Button(button));
+            }
+
+            // Gesture
+            if let Some(gesture_string) = touch.gesture.as_ref() {
+                let gesture = GestureType::from_str(gesture_string);
+                if gesture.is_err() {
+                    log::error!("Invalid or unimplemented gesture: {gesture_string}");
+                    return Capability::NotImplemented;
+                }
+                let gesture = gesture.unwrap();
+                return Capability::Touchscreen(Touch::Gesture(gesture));
             }
         }
 
@@ -1350,10 +1381,91 @@ impl FromStr for Touchpad {
     }
 }
 
+/// Area on the screen where a gesture starts, used to differentiate regions
+/// for left/right swipes. `Any` is used only in profile configurations as a
+/// wildcard that matches both Top and Bottom.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum GestureArea {
+    /// Upper portion of the screen
+    Top,
+    /// Lower portion of the screen
+    Bottom,
+    /// Wildcard used in profile mappings; matches both Top and Bottom
+    Any,
+}
+
+impl fmt::Display for GestureArea {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GestureArea::Top => write!(f, "Top"),
+            GestureArea::Bottom => write!(f, "Bottom"),
+            GestureArea::Any => write!(f, "Any"),
+        }
+    }
+}
+
+impl FromStr for GestureArea {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Top" => Ok(GestureArea::Top),
+            "Bottom" => Ok(GestureArea::Bottom),
+            "Any" => Ok(GestureArea::Any),
+            _ => Err(()),
+        }
+    }
+}
+
+/// Touchscreen edge swipe gestures detected in userspace from evdev MT events
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum GestureType {
+    /// Swipe inward from the left edge
+    SwipeRight(GestureArea),
+    /// Swipe inward from the right edge
+    SwipeLeft(GestureArea),
+    /// Swipe inward from the bottom edge
+    SwipeUp,
+    /// Swipe inward from the top edge
+    SwipeDown,
+}
+
+impl fmt::Display for GestureType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GestureType::SwipeRight(area) => write!(f, "SwipeRight:{area}"),
+            GestureType::SwipeLeft(area) => write!(f, "SwipeLeft:{area}"),
+            GestureType::SwipeUp => write!(f, "SwipeUp"),
+            GestureType::SwipeDown => write!(f, "SwipeDown"),
+        }
+    }
+}
+
+impl FromStr for GestureType {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        let Some((part, rest)) = parts.split_first() else {
+            return Err(());
+        };
+        match *part {
+            "SwipeRight" => Ok(GestureType::SwipeRight(GestureArea::from_str(
+                rest.join(":").as_str(),
+            )?)),
+            "SwipeLeft" => Ok(GestureType::SwipeLeft(GestureArea::from_str(
+                rest.join(":").as_str(),
+            )?)),
+            "SwipeUp" => Ok(GestureType::SwipeUp),
+            "SwipeDown" => Ok(GestureType::SwipeDown),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Touch {
     Motion,
     Button(TouchButton),
+    Gesture(GestureType),
 }
 
 impl fmt::Display for Touch {
@@ -1361,6 +1473,7 @@ impl fmt::Display for Touch {
         match self {
             Touch::Motion => write!(f, "Motion"),
             Touch::Button(_) => write!(f, "Button"),
+            Touch::Gesture(g) => write!(f, "Gesture:{g}"),
         }
     }
 }
@@ -1375,6 +1488,9 @@ impl FromStr for Touch {
         match *part {
             "Motion" => Ok(Touch::Motion),
             "Button" => Ok(Touch::Button(TouchButton::from_str(
+                parts.join(":").as_str(),
+            )?)),
+            "Gesture" => Ok(Touch::Gesture(GestureType::from_str(
                 parts.join(":").as_str(),
             )?)),
             _ => Err(()),

@@ -897,6 +897,7 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                     TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
                     TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
                 },
+                Touch::Gesture(_) => vec![],
             },
             Touchpad::RightPad(action) => match action {
                 Touch::Motion => vec![
@@ -907,6 +908,7 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                     TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
                     TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
                 },
+                Touch::Gesture(_) => vec![],
             },
             Touchpad::CenterPad(action) => match action {
                 Touch::Motion => vec![
@@ -917,6 +919,7 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                     TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
                     TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
                 },
+                Touch::Gesture(_) => vec![],
             },
         },
         Capability::Touchscreen(touch) => match touch {
@@ -928,6 +931,7 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
                 TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
             },
+            Touch::Gesture(_) => vec![],
         },
         Capability::Gyroscope(_) => vec![],
         Capability::Accelerometer(_) => vec![],
