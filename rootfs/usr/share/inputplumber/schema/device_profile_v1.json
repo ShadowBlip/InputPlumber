@@ -379,6 +379,20 @@
             "Touch",
             "Press"
           ]
+        },
+        "gesture": {
+          "type": "string",
+          "description": "Edge-swipe gesture type. Left/right swipes support an optional area suffix (:Top, :Bottom, :Any).",
+          "examples": [
+            "SwipeRight:Top",
+            "SwipeRight:Bottom",
+            "SwipeRight:Any",
+            "SwipeLeft:Top",
+            "SwipeLeft:Bottom",
+            "SwipeLeft:Any",
+            "SwipeUp",
+            "SwipeDown"
+          ]
         }
       },
       "required": []

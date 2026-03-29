@@ -243,6 +243,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "grab": {
+          "description": "If true, the touchscreen will be exclusively grabbed so raw touch events are not passed to other consumers. Defaults to false.",
+          "type": "boolean"
+        },
         "orientation": {
           "description": "Orientation of the touchscreen device. Defaults to normal.",
           "type": "string",
