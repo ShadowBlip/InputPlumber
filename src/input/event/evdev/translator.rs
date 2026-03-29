@@ -251,7 +251,7 @@ impl EventTranslator {
             }
 
             // Normalize the input value
-            let value = self.get_input_value(event, &evdev_config.value_type, evdev_config.inverted);
+            let value = self.get_input_value(event, &evdev_config.value_type, evdev_config.invert);
             log::trace!(
                 "Translated value {:?} {} to {:?}",
                 event.code(),
