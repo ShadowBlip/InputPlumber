@@ -419,8 +419,7 @@ impl TouchscreenEventDevice {
                         // In grab mode, pre-suppress touches that start in the
                         // edge zone to avoid any leakage before gesture confirm.
                         let suppressing = self.grab
-                            && (normal_value < GESTURE_SUPPRESS_START
-                                || normal_value > 1.0 - GESTURE_SUPPRESS_START);
+                            && !(GESTURE_SUPPRESS_START..=1.0 - GESTURE_SUPPRESS_START).contains(&normal_value);
                         self.gesture_state.start_x = normal_value;
                         self.gesture_state.start_time = Some(Instant::now());
                         self.gesture_state.phase = GesturePhase::Tracking { suppressing };
@@ -452,8 +451,7 @@ impl TouchscreenEventDevice {
                         // In grab mode, also suppress touches starting at the
                         // top or bottom edge.
                         if self.grab
-                            && (normal_value < GESTURE_SUPPRESS_START
-                                || normal_value > 1.0 - GESTURE_SUPPRESS_START)
+                            && !(GESTURE_SUPPRESS_START..=1.0 - GESTURE_SUPPRESS_START).contains(&normal_value)
                         {
                             self.gesture_state.phase = GesturePhase::Tracking { suppressing: true };
                         }
