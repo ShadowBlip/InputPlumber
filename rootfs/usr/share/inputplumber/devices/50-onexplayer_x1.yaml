@@ -53,6 +53,17 @@ source_devices:
   - group: imu
     iio:
       name: "{i2c-BMI0260:00,bmi260}"
+  - group: touchscreen
+    udev:
+      properties:
+        - name: ID_INPUT_TOUCHSCREEN
+          value: "1"
+      sys_name: "event*"
+      subsystem: input
+    config:
+      touchscreen:
+        grab: true
+        orientation: "left"
 
 # The target input device(s) that the virtual device profile can use
 target_devices:
