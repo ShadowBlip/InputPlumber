@@ -44,7 +44,7 @@ source_devices:
       vendor_id: 0x2f24
       product_id: 0x0137
       interface_num: 0
-    capability_map_id: gpd_win5_hid
+    capability_map_id: gpd_v2_hid1
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard

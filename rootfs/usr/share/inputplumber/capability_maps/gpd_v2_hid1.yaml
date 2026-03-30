@@ -1,7 +1,14 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
 version: 2
+
+# The type of configuration schema
 kind: CapabilityMap
-name: GPD Win 5 HID Buttons
-id: gpd_win5_hid
+
+# Name for the device event map
+name: GPD HID Type 1
+
+id: gpd_v2_hid1
 
 # GPD Win 5 vendor HID report (VID 0x2f24, PID 0x0137, Usage Page 0xFF00)
 # Idle:  01 a5 00 5a ff 00 01 09 00 00 00 00
