@@ -2,8 +2,10 @@ use std::error::Error;
 use std::ffi::CString;
 
 use hidapi::HidDevice;
+use packed_struct::prelude::*;
 
 use super::event::{BinaryInput, ButtonEvent, Event};
+use super::hid_report::{ButtonId, InputDataReport};
 
 pub const VID: u16 = 0x1a86;
 pub const PID: u16 = 0xfe00;
@@ -16,12 +18,6 @@ const HID_TIMEOUT: i32 = 10;
 
 // HID command IDs
 const CMD_BUTTON: u8 = 0xB2;
-
-// Button codes for vendor HID report mode events
-const BTN_GUIDE: u8 = 0x21;
-const BTN_M1: u8 = 0x22;
-const BTN_M2: u8 = 0x23;
-const BTN_KEYBOARD: u8 = 0x24;
 
 // B4 button mapping commands: configure M1→F14, M2→F13 keyboard keycodes
 // to get independent back paddle HID reports without Xbox gamepad mirroring.
@@ -239,56 +235,55 @@ impl Driver {
             return Ok(Vec::new());
         }
 
-        let cid = buf[0];
-        let valid = buf[1] == 0x3F && buf[PACKET_SIZE - 2] == 0x3F;
+        let report = InputDataReport::unpack(&buf)?;
 
-        if !valid {
+        if report.frame_head != 0x3F || report.frame_foot != 0x3F {
             log::warn!(
                 "OXP HID: invalid frame (byte1=0x{:02x}, byte62=0x{:02x}): [{}]",
-                buf[1],
-                buf[PACKET_SIZE - 2],
+                report.frame_head,
+                report.frame_foot,
                 hex_prefix(&buf, 16)
             );
             return Ok(Vec::new());
         }
 
-        if cid == CMD_MCU_STATUS && buf[3] == MCU_INIT_COMPLETE {
+        if report.cid == CMD_MCU_STATUS && report.pkt_type == MCU_INIT_COMPLETE {
             log::info!(
                 "OXP HID: MCU init-complete (B8 0xFE) detected, scheduling re-initialization"
             );
             self.initialized = false;
         }
 
-        if cid != CMD_BUTTON {
+        if report.cid != CMD_BUTTON {
             return Ok(Vec::new());
         }
 
-        let btn = buf[6];
-        let pressed = buf[12] == 1;
+        let btn = report.btn;
+        let pressed = report.pressed;
 
         // Debounce: skip if state is unchanged
-        if let Some(prev) = self.btn_state.get_mut(btn as usize) {
+        if let Some(prev) = self.btn_state.get_mut(btn.to_primitive() as usize) {
             if *prev == pressed {
                 return Ok(Vec::new());
             }
             *prev = pressed;
         }
 
-        let pkt_type = buf[3];
-        let flag = buf[5];
-        let func_code = buf[7];
-
         let event = match btn {
-            BTN_M1 => ButtonEvent::M1(BinaryInput { pressed }),
-            BTN_M2 => ButtonEvent::M2(BinaryInput { pressed }),
-            BTN_KEYBOARD => ButtonEvent::Keyboard(BinaryInput { pressed }),
-            BTN_GUIDE => ButtonEvent::Guide(BinaryInput { pressed }),
+            ButtonId::M1 => ButtonEvent::M1(BinaryInput { pressed }),
+            ButtonId::M2 => ButtonEvent::M2(BinaryInput { pressed }),
+            ButtonId::Keyboard => ButtonEvent::Keyboard(BinaryInput { pressed }),
+            ButtonId::Guide => ButtonEvent::Guide(BinaryInput { pressed }),
             _ => return Ok(Vec::new()),
         };
 
         log::debug!(
-            "OXP HID: btn=0x{btn:02x} {} (type=0x{pkt_type:02x} flag=0x{flag:02x} func=0x{func_code:02x})",
-            if pressed { "PRESSED" } else { "RELEASED" }
+            "OXP HID: btn=0x{:02x} {} (type=0x{:02x} flag=0x{:02x} func=0x{:02x})",
+            btn.to_primitive(),
+            if pressed { "PRESSED" } else { "RELEASED" },
+            report.pkt_type,
+            report.flag,
+            report.func_code,
         );
 
         Ok(vec![Event::Button(event)])
