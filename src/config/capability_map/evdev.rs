@@ -10,10 +10,6 @@ pub struct EvdevConfig {
     pub event_value: Option<u16>,
     pub value_type: ValueType,
     pub axis_direction: Option<AxisDirection>,
-    /// If true, invert the axis value. For triggers (0.0 to 1.0), this applies
-    /// `1.0 - value`. For joystick axes (-1.0 to 1.0), this negates the value.
-    #[serde(default)]
-    pub invert: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]

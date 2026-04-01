@@ -268,11 +268,6 @@
           "maximum": 65535,
           "minimum": 0
         },
-        "invert": {
-          "description": "If true, invert the axis value. For triggers (0.0 to 1.0), this applies 1.0 - value. For joystick axes (-1.0 to 1.0), this negates the value.",
-          "type": "boolean",
-          "default": false
-        },
         "value_type": {
           "$ref": "#/$defs/ValueType"
         }
