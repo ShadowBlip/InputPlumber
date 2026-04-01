@@ -252,51 +252,39 @@ impl Driver {
             return Ok(Vec::new());
         }
 
+        if cid == CMD_MCU_STATUS && buf[3] == MCU_INIT_COMPLETE {
+            log::info!(
+                "OXP HID: MCU init-complete (B8 0xFE) detected, scheduling re-initialization"
+            );
+            self.initialized = false;
+        }
+
         if cid != CMD_BUTTON {
-            if cid == CMD_MCU_STATUS && buf[3] == MCU_INIT_COMPLETE {
-                log::info!(
-                    "OXP HID: MCU init-complete (B8 0xFE) detected, scheduling re-initialization"
-                );
-                self.initialized = false;
-            } else {
-                log::debug!(
-                    "OXP HID: non-B2 packet CID=0x{cid:02X}: [{}]",
-                    hex_prefix(&buf, 16)
-                );
-            }
             return Ok(Vec::new());
         }
 
-        let pkt_type = buf[3];
-        let flag = buf[5];
         let btn = buf[6];
-        let func_code = buf[7];
         let pressed = buf[12] == 1;
 
-        let event = match btn {
-            BTN_M1 => ButtonEvent::M1(BinaryInput { pressed }),
-            BTN_M2 => ButtonEvent::M2(BinaryInput { pressed }),
-            BTN_KEYBOARD => ButtonEvent::Keyboard(BinaryInput { pressed }),
-            BTN_GUIDE => ButtonEvent::Guide(BinaryInput { pressed }),
-            0x00 => return Ok(Vec::new()),
-            _ => {
-                log::warn!(
-                    "OXP HID: unknown btn=0x{btn:02x} type=0x{pkt_type:02x} \
-                     flag=0x{flag:02x} func=0x{func_code:02x} state=0x{:02x}: [{}]",
-                    buf[12],
-                    hex_prefix(&buf, 16)
-                );
-                return Ok(Vec::new());
-            }
-        };
-
-        // Debounce
+        // Debounce: skip if state is unchanged
         if let Some(prev) = self.btn_state.get_mut(btn as usize) {
             if *prev == pressed {
                 return Ok(Vec::new());
             }
             *prev = pressed;
         }
+
+        let pkt_type = buf[3];
+        let flag = buf[5];
+        let func_code = buf[7];
+
+        let event = match btn {
+            BTN_M1 => ButtonEvent::M1(BinaryInput { pressed }),
+            BTN_M2 => ButtonEvent::M2(BinaryInput { pressed }),
+            BTN_KEYBOARD => ButtonEvent::Keyboard(BinaryInput { pressed }),
+            BTN_GUIDE => ButtonEvent::Guide(BinaryInput { pressed }),
+            _ => return Ok(Vec::new()),
+        };
 
         log::debug!(
             "OXP HID: btn=0x{btn:02x} {} (type=0x{pkt_type:02x} flag=0x{flag:02x} func=0x{func_code:02x})",
