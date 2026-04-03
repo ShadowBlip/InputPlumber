@@ -111,25 +111,22 @@ fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {
 fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
     match event {
         iio_imu::event::Event::Accelerometer(data) => {
+            let factor = 1.0 / 0.0006125; // m/s² → UHID LSB
             let cap = Capability::Accelerometer(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * 10.0),
-                y: Some(data.pitch * 10.0),
-                z: Some(data.yaw * 10.0),
+                x: Some(data.roll * factor),
+                y: Some(data.pitch * factor),
+                z: Some(data.yaw * factor),
             };
             NativeEvent::new(cap, value)
         }
         iio_imu::event::Event::Gyro(data) => {
-            // Translate gyro values into the expected units of degrees per sec
-            // We apply a 500x scale so the motion feels like natural 1:1 motion.
-            // Adjusting the scale is not possible on the accel_gyro_3d IMU.
-            // From testing this is the highest scale we can apply before noise
-            // is amplified to the point the gyro cannot calibrate.
+            let factor = (180.0 / PI) / 0.0625; // rad/s → UHID LSB
             let cap = Capability::Gyroscope(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * (180.0 / PI) * 1500.0),
-                y: Some(data.pitch * (180.0 / PI) * 1500.0),
-                z: Some(data.yaw * (180.0 / PI) * 1500.0),
+                x: Some(data.roll * factor),
+                y: Some(data.pitch * factor),
+                z: Some(data.yaw * factor),
             };
             NativeEvent::new(cap, value)
         }
