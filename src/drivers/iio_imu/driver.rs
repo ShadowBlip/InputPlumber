@@ -17,8 +17,11 @@ use super::{
     info::AxisInfo,
 };
 
+const DEFAULT_SAMPLE_RATE: f64 = 200.0;
+
 /// Driver for reading IIO IMU data
 pub struct Driver {
+    _device: Device, // must outlive Channel raw pointers
     mount_matrix: MountMatrix,
     accel: HashMap<String, Channel>,
     accel_info: HashMap<String, AxisInfo>,
@@ -33,6 +36,7 @@ impl Driver {
         id: String,
         name: String,
         matrix: Option<MountMatrix>,
+        sample_rate: Option<f64>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         log::debug!("Creating IIO IMU driver instance for {name}");
 
@@ -87,9 +91,21 @@ impl Driver {
             }
         }
 
-        // Calculate the initial sample delay
+        // Request a higher sampling rate
+        for (channels, ch_type) in [(&accel, ChannelType::Accel), (&gyro, ChannelType::AnglVel)] {
+            if channels.is_empty() {
+                continue;
+            }
+            if let Err(err) =
+                set_sample_rate_or_default(&device, channels, ch_type, sample_rate)
+            {
+                log::warn!("Failed to set sample rate: {err}, falling back to max available");
+                set_sample_rate_max(&device, channels, ch_type);
+            }
+        }
 
         Ok(Self {
+            _device: device,
             mount_matrix,
             accel,
             accel_info,
@@ -158,6 +174,10 @@ impl Driver {
 
     /// Polls all the channels from the accelerometer
     fn poll_accel(&self) -> Result<Option<Event>, Box<dyn Error + Send + Sync>> {
+        if self.accel.is_empty() {
+            return Ok(None);
+        }
+
         // Read from each accel channel
         let mut accel_input = AxisData::default();
         for (id, channel) in self.accel.iter() {
@@ -186,7 +206,10 @@ impl Driver {
 
     /// Polls all the channels from the gyro
     fn poll_gyro(&self) -> Result<Option<Event>, Box<dyn Error + Send + Sync>> {
-        // Read from each accel channel
+        if self.gyro.is_empty() {
+            return Ok(None);
+        }
+
         let mut gyro_input = AxisData::default();
         for (id, channel) in self.gyro.iter() {
             // Get the info for the axis and read the data
@@ -342,4 +365,132 @@ fn is_driver_loaded(driver_name: &str) -> io::Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// Try to set a specific or default sampling rate. Returns Err if the
+/// requested rate is not in the hardware's available list.
+fn set_sample_rate_or_default(
+    device: &Device,
+    channels: &HashMap<String, Channel>,
+    channel_type: ChannelType,
+    target_rate: Option<f64>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let rate = target_rate.unwrap_or(DEFAULT_SAMPLE_RATE);
+    let avail = read_sample_rates_available(device, channels, &channel_type);
+
+    if !avail.is_empty() && !avail.contains(&rate) {
+        return Err(format!(
+            "Requested {rate} Hz not in available rates: {avail:?}"
+        )
+        .into());
+    }
+
+    write_sample_rate(device, channels, channel_type, rate)
+}
+
+/// Set sampling rate to the maximum reported by the hardware.
+/// Falls back to DEFAULT_SAMPLE_RATE if no available rates are reported.
+fn set_sample_rate_max(
+    device: &Device,
+    channels: &HashMap<String, Channel>,
+    channel_type: ChannelType,
+) {
+    let avail = read_sample_rates_available(device, channels, &channel_type);
+    let rate = if avail.is_empty() {
+        log::warn!(
+            "No available sample rates reported, using default {DEFAULT_SAMPLE_RATE} Hz"
+        );
+        DEFAULT_SAMPLE_RATE
+    } else {
+        let max = avail.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        log::info!("Using max available sample rate: {max} Hz");
+        max
+    };
+
+    if let Err(err) = write_sample_rate(device, channels, channel_type, rate) {
+        log::warn!("Failed to set max sample rate: {err}");
+    }
+}
+
+/// Write a sampling rate to the device. Tries per-channel first (BMI-style),
+/// then falls back to device-level attribute (HID Sensor Hub).
+fn write_sample_rate(
+    device: &Device,
+    channels: &HashMap<String, Channel>,
+    channel_type: ChannelType,
+    rate: f64,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    for (id, channel) in channels.iter() {
+        match channel.attr_write_float("sampling_frequency", rate) {
+            Ok(_) => {
+                match channel.attr_read_float("sampling_frequency") {
+                    Ok(actual) => {
+                        log::info!("Set sampling_frequency to {actual} Hz via channel {id}")
+                    }
+                    Err(err) => log::warn!(
+                        "Set sampling_frequency for {id} but read-back failed: {err}, assuming {rate} Hz"
+                    ),
+                }
+                return Ok(());
+            }
+            Err(err) => {
+                log::warn!(
+                    "Per-channel sampling_frequency write failed for {id}: {err}"
+                );
+            }
+        }
+    }
+
+    let attr = match channel_type {
+        ChannelType::Accel => "in_accel_sampling_frequency",
+        ChannelType::AnglVel => "in_anglvel_sampling_frequency",
+        _ => return Err("Unknown channel type".into()),
+    };
+
+    device.attr_write_float(attr, rate)?;
+    match device.attr_read_float(attr) {
+        Ok(actual) => log::info!("Set device-level {attr} to {actual} Hz"),
+        Err(err) => log::warn!(
+            "Set {attr} but read-back failed: {err}, assuming {rate} Hz"
+        ),
+    }
+    Ok(())
+}
+
+/// Read the list of supported sampling rates from the hardware.
+/// Tries per-channel attribute first, then device-level global attribute.
+fn read_sample_rates_available(
+    device: &Device,
+    channels: &HashMap<String, Channel>,
+    channel_type: &ChannelType,
+) -> Vec<f64> {
+    for (_, channel) in channels.iter() {
+        if let Ok(val) = channel.attr_read_str("sampling_frequency_available") {
+            let rates: Vec<f64> = val
+                .split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            if !rates.is_empty() {
+                return rates;
+            }
+        }
+    }
+
+    let attr = match channel_type {
+        ChannelType::Accel => "in_accel_sampling_frequency_available",
+        ChannelType::AnglVel => "in_anglvel_sampling_frequency_available",
+        _ => return vec![],
+    };
+
+    if let Ok(val) = device.attr_read_str(attr) {
+        let rates: Vec<f64> = val
+            .split_whitespace()
+            .filter_map(|s| s.parse().ok())
+            .collect();
+        if !rates.is_empty() {
+            return rates;
+        }
+    }
+
+    vec![]
 }

@@ -392,6 +392,9 @@ pub struct IIO {
     pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Desired sampling rate in Hz.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<f64>,
     #[deprecated(
         since = "0.43.0",
         note = "please use `<SourceDevice>.config.imu.mount_matrix` instead"
