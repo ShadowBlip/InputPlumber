@@ -13,6 +13,7 @@ use crate::{
 
 pub struct AccelGyro3dImu {
     driver: Driver,
+    capabilities: Vec<Capability>,
 }
 
 impl AccelGyro3dImu {
@@ -43,7 +44,19 @@ impl AccelGyro3dImu {
         let name = device_info.name();
         let driver = Driver::new(id, name, mount_matrix)?;
 
-        Ok(Self { driver })
+        let mut capabilities = vec![];
+        if driver.has_accel() {
+            capabilities.push(Capability::Accelerometer(Source::Center));
+        }
+        if driver.has_gyro() {
+            capabilities.push(Capability::Gyroscope(Source::Center));
+        }
+        log::debug!("AccelGyro3dImu capabilities: {capabilities:?}");
+
+        Ok(Self {
+            driver,
+            capabilities,
+        })
     }
 }
 
@@ -57,7 +70,7 @@ impl SourceInputDevice for AccelGyro3dImu {
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(self.capabilities.clone())
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
@@ -123,8 +136,3 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
     }
 }
 
-/// List of all capabilities that the driver implements
-pub const CAPABILITIES: &[Capability] = &[
-    Capability::Accelerometer(Source::Center),
-    Capability::Gyroscope(Source::Center),
-];

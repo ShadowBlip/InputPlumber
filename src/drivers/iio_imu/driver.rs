@@ -19,6 +19,7 @@ use super::{
 
 /// Driver for reading IIO IMU data
 pub struct Driver {
+    _device: Device, // must outlive Channel raw pointers
     mount_matrix: MountMatrix,
     accel: HashMap<String, Channel>,
     accel_info: HashMap<String, AxisInfo>,
@@ -87,9 +88,8 @@ impl Driver {
             }
         }
 
-        // Calculate the initial sample delay
-
         Ok(Self {
+            _device: device,
             mount_matrix,
             accel,
             accel_info,
@@ -103,6 +103,14 @@ impl Driver {
     //a standalone crate. When this driver is eventually separated, refactor the Event type to
     //follow the pattern DeviceEvent(Event, Value) and create a match table for
     //Capability->Event/Event->Capability in the SourceDriver implementation.
+    pub fn has_accel(&self) -> bool {
+        !self.accel.is_empty()
+    }
+
+    pub fn has_gyro(&self) -> bool {
+        !self.gyro.is_empty()
+    }
+
     pub fn update_filtered_events(&mut self, events: HashSet<Capability>) {
         self.filtered_events = events;
     }
@@ -158,6 +166,10 @@ impl Driver {
 
     /// Polls all the channels from the accelerometer
     fn poll_accel(&self) -> Result<Option<Event>, Box<dyn Error + Send + Sync>> {
+        if self.accel.is_empty() {
+            return Ok(None);
+        }
+
         // Read from each accel channel
         let mut accel_input = AxisData::default();
         for (id, channel) in self.accel.iter() {
@@ -186,7 +198,10 @@ impl Driver {
 
     /// Polls all the channels from the gyro
     fn poll_gyro(&self) -> Result<Option<Event>, Box<dyn Error + Send + Sync>> {
-        // Read from each accel channel
+        if self.gyro.is_empty() {
+            return Ok(None);
+        }
+
         let mut gyro_input = AxisData::default();
         for (id, channel) in self.gyro.iter() {
             // Get the info for the axis and read the data
