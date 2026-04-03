@@ -17,6 +17,8 @@ use super::{
     info::AxisInfo,
 };
 
+const DEFAULT_SAMPLE_RATE: f64 = 200.0;
+
 /// Driver for reading IIO IMU data
 pub struct Driver {
     _device: Device, // must outlive Channel raw pointers
@@ -34,6 +36,7 @@ impl Driver {
         id: String,
         name: String,
         matrix: Option<MountMatrix>,
+        sample_rate: Option<f64>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         log::debug!("Creating IIO IMU driver instance for {name}");
 
@@ -86,6 +89,13 @@ impl Driver {
             for attr in channel.attrs() {
                 log::trace!("  Found attribute: {:?}", attr);
             }
+        }
+
+        if !accel.is_empty() {
+            set_sample_rate(&device, &accel, ChannelType::Accel, sample_rate);
+        }
+        if !gyro.is_empty() {
+            set_sample_rate(&device, &gyro, ChannelType::AnglVel, sample_rate);
         }
 
         Ok(Self {
@@ -357,4 +367,97 @@ fn is_driver_loaded(driver_name: &str) -> io::Result<bool> {
         }
     }
     Ok(false)
+}
+
+fn set_sample_rate(
+    device: &Device,
+    channels: &HashMap<String, Channel>,
+    channel_type: ChannelType,
+    target_rate: Option<f64>,
+) {
+    let rate = if let Some(r) = target_rate {
+        log::debug!("Using configured sample rate: {r} Hz");
+        r
+    } else {
+        let avail = read_sample_rates_available(device, channels, &channel_type);
+        if !avail.is_empty() {
+            let max = avail.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            log::debug!("Using max available sample rate: {max} Hz");
+            max
+        } else {
+            log::debug!("No available rates found, using default: {DEFAULT_SAMPLE_RATE} Hz");
+            DEFAULT_SAMPLE_RATE
+        }
+    };
+
+    // per-channel attribute
+    for (id, channel) in channels.iter() {
+        match channel.attr_write_float("sampling_frequency", rate) {
+            Ok(_) => {
+                let actual = channel
+                    .attr_read_float("sampling_frequency")
+                    .unwrap_or(rate);
+                log::debug!("Set sampling_frequency to {actual} Hz via channel {id}");
+                return;
+            }
+            Err(e) => {
+                log::debug!(
+                    "Per-channel sampling_frequency write failed for {id}: {e:?}, trying device-level"
+                );
+            }
+        }
+    }
+
+    // device-level fallback
+    let attr = match channel_type {
+        ChannelType::Accel => "in_accel_sampling_frequency",
+        ChannelType::AnglVel => "in_anglvel_sampling_frequency",
+        _ => return,
+    };
+
+    match device.attr_write_float(attr, rate) {
+        Ok(_) => {
+            let actual = device.attr_read_float(attr).unwrap_or(rate);
+            log::info!("Set device-level {attr} to {actual} Hz");
+        }
+        Err(e) => {
+            log::warn!("Failed to set {attr}: {e:?}");
+        }
+    }
+}
+
+fn read_sample_rates_available(
+    device: &Device,
+    channels: &HashMap<String, Channel>,
+    channel_type: &ChannelType,
+) -> Vec<f64> {
+    for (_, channel) in channels.iter() {
+        if let Ok(v) = channel.attr_read_str("sampling_frequency_available") {
+            let rates: Vec<f64> = v
+                .split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            if !rates.is_empty() {
+                return rates;
+            }
+        }
+    }
+
+    let attr = match channel_type {
+        ChannelType::Accel => "in_accel_sampling_frequency_available",
+        ChannelType::AnglVel => "in_anglvel_sampling_frequency_available",
+        _ => return vec![],
+    };
+
+    if let Ok(v) = device.attr_read_str(attr) {
+        let rates: Vec<f64> = v
+            .split_whitespace()
+            .filter_map(|s| s.parse().ok())
+            .collect();
+        if !rates.is_empty() {
+            return rates;
+        }
+    }
+
+    vec![]
 }
