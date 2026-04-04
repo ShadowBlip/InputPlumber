@@ -236,6 +236,9 @@
         },
         "led": {
           "$ref": "#/definitions/LedConfig"
+        },
+        "analogkeys": {
+          "$ref": "#/definitions/AnalogKeysConfig"
         }
       }
     },
@@ -282,6 +285,27 @@
       "properties": {
         "fixed_color": {
           "$ref": "#/definitions/Color"
+        }
+      }
+    },
+    "AnalogKeysConfig":{
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "primary_actuation": {
+          "$ref": "#/definitions/PrimaryActuation"
+          },
+        "secondary_actuation": {
+          "$ref": "#/definitions/SecondaryActuation"
+          },
+        "retrigger_reset_threshold": {
+          "$ref": "#/definitions/RetriggerResetThreshold"
+          },
+        "retrigger_trigger_threshold": {
+          "$ref": "#/definitions/RetriggerTriggerThreshold"
+          },
+        "continuous_retrigger": {
+          "$ref": "#/definitions/ContinuousRetrigger"
         }
       }
     },
@@ -511,6 +535,101 @@
           "type": "number"
         }
       }
-    }
+    },
+    "PrimaryActuation": {
+      "type": "object",
+      "description": "Depth value for actuation of first keybind. Limit between 1.4 to 3.6mm in 0.1mm steps",
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "description": "Matrix for x value",
+          "type": "array",
+          "minItems": 20,
+          "maxItems": 20,
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "keys",
+      ]
+    },
+    "SecondaryActuation": {
+      "type": "object",
+      "description": "Depth value for actuation of second keybind. Limit between 1.4 to 3.6mm in 0.1mm steps",
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "description": "Matrix for x value",
+          "type": "array",
+          "minItems": 20,
+          "maxItems": 20,
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "keys",
+      ]
+    },
+    "RetriggerResetThreshold": {
+      "type": "object",
+      "description": "Distance in mm which resets a key. Limit between 0 to 2.1mm in 0.1mm steps",
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "description": "Matrix for x value",
+          "type": "array",
+          "minItems": 20,
+          "maxItems": 20,
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "keys",
+      ]
+    },
+    "RetriggerTriggerThreshold": {
+      "type": "object",
+      "description": "Optional distance in mm which triggers a key after reset. Limit between 0 to 2.1mm in 0.1mm steps",
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "description": "Matrix for x value",
+          "type": "array",
+          "minItems": 20,
+          "maxItems": 20,
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "keys",
+      ]
+    },
+    "ContinuousRetrigger": {
+      "type": "object",
+      "description": "Enable continuous retrigger for a key",
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "description": "Matrix for x value",
+          "type": "array",
+          "minItems": 20,
+          "maxItems": 20,
+          "items": {
+            "type": "boolean"
+          }
+        }
+      },
+      "required": [
+        "keys",
+      ]
+    },
   }
 }

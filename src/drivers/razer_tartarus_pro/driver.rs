@@ -1,4 +1,5 @@
-use super::event::{Event, KeyCodes};
+use super::event::{Event, KeyCodes, ANALOG_KEY_CODES};
+use crate::config::SourceDevice;
 use crate::udev::device::UdevDevice;
 use hidapi::HidDevice;
 use std::collections::VecDeque;
@@ -15,7 +16,11 @@ const TREND_KEYDOWN: f64 = 1.0;
 const TREND_KEYUP: f64 = -1.0;
 const REGRESSION_WINDOW: usize = 5;
 const KEY_COUNT: usize = 20;
-const UNIT_TO_MM: f64 = 0.1 / 12.0;
+const CONFIG_STEP_SIZE_MM: f64 = 0.1;
+const KEY_TOP_MM: f64 = 1.4;
+const KEY_BOTTOM_MM: f64 = 3.6;
+const KEY_TRAVEL: f64 = KEY_BOTTOM_MM - KEY_TOP_MM - CONFIG_STEP_SIZE_MM;
+const UNIT_TO_MM: f64 = CONFIG_STEP_SIZE_MM / 12.0;
 
 pub struct Driver {
     device: HidDevice,
@@ -53,7 +58,7 @@ fn get_razerkbd_controls(hidraw_name: &str) -> Option<String> {
     if Path::new(&String::from(format!("/sys/module/razerkbd"))).exists() {
         log::info!("razerkbd module detected on system");
     } else {
-        log::info!("No module detected on system");
+        log::info!("No Kernel module detected on system");
     }
 
     // Get name from a path (/dev/hidrawX) or node name
@@ -80,11 +85,63 @@ fn get_razerkbd_controls(hidraw_name: &str) -> Option<String> {
     None
 }
 
+/// Translates an absolute key actuation point in mm to a u8 unit value
+fn convert_actuation_to_unit(value: f64) -> u8 {
+    if value < KEY_TOP_MM || value > KEY_BOTTOM_MM {
+        if value != 0.0 {
+            log::error!(
+                "Invalid range f64 value found in config: {}, treating as 0",
+                value
+            );
+        }
+        return 0;
+    }
+
+    let zeroed = value - KEY_TOP_MM;
+    let remainder = zeroed.rem_euclid(CONFIG_STEP_SIZE_MM);
+    let epsilon = 1e-10;
+
+    if remainder < epsilon || (CONFIG_STEP_SIZE_MM - remainder).abs() < epsilon {
+        return (zeroed / UNIT_TO_MM) as u8;
+    }
+    log::error!(
+        "Invalid precision f64 value found in config: {}, treating as 0",
+        value
+    );
+    0
+}
+
+/// Sanitise a relative displacement value to ensure it is in the correct range and prevision
+fn validate_retrigger_value(value: f64) -> f64 {
+    if value < 0.0 || value > KEY_TRAVEL {
+        log::error!(
+            "Invalid range f64 value found in config: {}, treating as 0",
+            value
+        );
+        return 0.0;
+    }
+
+    let remainder = value.rem_euclid(CONFIG_STEP_SIZE_MM);
+    let epsilon = 1e-10;
+
+    if remainder < epsilon || (CONFIG_STEP_SIZE_MM - remainder).abs() < epsilon {
+        return value;
+    }
+    log::error!(
+        "Invalid precision f64 value found in config: {}, treating as 0",
+        value
+    );
+    0.0
+}
+
 /// This driver implementation is shared across all three HID handles on the
 /// Tartarus Pro. Different interfaces traverse different code-paths though.
 /// Refer to handle_input_report()
 impl Driver {
-    pub fn new(udevice: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        udevice: UdevDevice,
+        conf: Option<SourceDevice>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let hidrawpath = udevice.devnode();
         let cs_path = CString::new(hidrawpath.clone())?;
         let api = hidapi::HidApi::new()?;
@@ -102,6 +159,7 @@ impl Driver {
                 control_path = path;
             } else {
                 control_path = String::default();
+                log::info!("Driver controls are not available, cannot determine device state");
             }
 
             // TODO based on the loaded user profile:
@@ -115,7 +173,7 @@ impl Driver {
             let mode_path = format!("{}/{}", &control_path, "device_mode");
             let mut file = fs::OpenOptions::new().write(true).open(mode_path)?;
             file.write_all(&ANALOG_MODE)?;
-            log::info!("Device mode set");
+            log::info!("Analog key mode set on device");
             // TODO DEMO END
         } else {
             control_path = String::default();
@@ -132,23 +190,50 @@ impl Driver {
             key_actions: [AnalogAction::default(); KEY_COUNT],
             key_state: Vec::new(),
         };
-        // TODO DEMO Remove, demo allocations in lieu of profile support
-        // Can be customised to suit
-        demo_config.key_actions[0].actuation_point = (0x24, 0x78);
-        demo_config.key_actions[0].retrigger_threshold = (0.0, 0.0);
-        demo_config.key_actions[0].crt_en = false;
-        demo_config.key_actions[1].actuation_point = (0x45, 0x0);
-        demo_config.key_actions[1].retrigger_threshold = (0.3, 0.0);
-        demo_config.key_actions[1].crt_en = false;
-        demo_config.key_actions[2].actuation_point = (0x50, 0x0);
-        demo_config.key_actions[2].retrigger_threshold = (0.5, 0.0);
-        demo_config.key_actions[2].crt_en = true;
-        demo_config.key_actions[3].actuation_point = (0x50, 0x0);
-        demo_config.key_actions[3].retrigger_threshold = (0.5, 0.8);
-        demo_config.key_actions[3].crt_en = true;
-        // TODO DEMO END
+
+        // Read in analog key config and apply
+        if info.interface_number() == 1 {
+            demo_config.key_action_config(conf);
+            log::info!("Info 1 {:?}", demo_config.key_actions[0]);
+        }
 
         Ok(demo_config)
+    }
+
+    /// Allocate analog key properties from device YAML to key_action structs
+    fn key_action_config(&mut self, conf: Option<SourceDevice>) {
+        if conf.is_some() {
+            if let Some(analog_keys) = conf
+                .map(|s| s.config.as_ref()?.analogkeys.clone())
+                .unwrap_or(None)
+            {
+                if let Some(property) = analog_keys.primary_actuation {
+                    for (s, new_val) in self.key_actions.iter_mut().zip(property.keys.iter()) {
+                        s.actuation_point.0 = convert_actuation_to_unit(*new_val);
+                    }
+                }
+                if let Some(property) = analog_keys.secondary_actuation {
+                    for (s, new_val) in self.key_actions.iter_mut().zip(property.keys.iter()) {
+                        s.actuation_point.1 = convert_actuation_to_unit(*new_val);
+                    }
+                }
+                if let Some(property) = analog_keys.retrigger_reset_threshold {
+                    for (s, new_val) in self.key_actions.iter_mut().zip(property.keys.iter()) {
+                        s.retrigger_threshold.0 = validate_retrigger_value(*new_val);
+                    }
+                }
+                if let Some(property) = analog_keys.retrigger_trigger_threshold {
+                    for (s, new_val) in self.key_actions.iter_mut().zip(property.keys.iter()) {
+                        s.retrigger_threshold.1 = validate_retrigger_value(*new_val);
+                    }
+                }
+                if let Some(property) = analog_keys.continuous_retrigger {
+                    for (s, new_val) in self.key_actions.iter_mut().zip(property.keys.iter()) {
+                        s.crt_en = *new_val;
+                    }
+                }
+            }
+        }
     }
 
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
@@ -167,7 +252,6 @@ impl Driver {
         bytes_read: usize,
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let info = self.device.get_device_info()?;
-        let mut events = Vec::new();
 
         // Depending on what handle we actually are (this code runs on all 3)
         // we have different reports that we can expect and respond to in kind.
@@ -185,22 +269,38 @@ impl Driver {
         // This interface captures the scroll wheel.
 
         match info.interface_number() {
-            0 => self.handle_basic(buf, KeyCodes::Aux, false),
-            1 => {
-                match buf[0] {
-                    0x1 => return self.handle_basic(buf, KeyCodes::Blank, true),
-                    0x6 => {
-                        return self.handle_analog(&buf[1..21]);
-                    }
-                    _ => {
-                        // Other report types exist but don't appear to be
-                        // actually used.
-                        Ok(events)
-                    }
+            0 => {
+                if bytes_read == 8 {
+                    self.handle_basic(buf, KeyCodes::PhantomAux, false)
+                } else {
+                    Ok(Vec::new())
                 }
             }
-            2 => self.handle_basic(buf, KeyCodes::MClick, false),
-            _ => Ok(events),
+            1 => {
+                if bytes_read == 24 {
+                    match buf[0] {
+                        0x1 => return self.handle_basic(buf, KeyCodes::PhantomBlank, true),
+                        0x6 => {
+                            return self.handle_analog(&buf[1..21]);
+                        }
+                        _ => {
+                            // Other report types exist but don't appear to be
+                            // actually used.
+                            Ok(Vec::new())
+                        }
+                    }
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+            2 => {
+                if bytes_read == 8 {
+                    self.handle_basic(buf, KeyCodes::PhantomMClick, false)
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+            _ => Ok(Vec::new()),
         }
     }
 
@@ -222,7 +322,7 @@ impl Driver {
         if pad_state[0] == KeyCodes::KeyTwelve || overwrite {
             pad_state[0] = key_replace;
         }
-        pad_state.retain(|x| *x != KeyCodes::Blank);
+        pad_state.retain(|x| *x != KeyCodes::PhantomBlank);
 
         // If a key is present in the report then it was pressed
         for i in &pad_state {
@@ -274,6 +374,11 @@ impl Driver {
     /// Picking a trend criteria of ± 1 is important as that tells us all numbers in the buffer
     /// are trending in the same direction.
     ///
+    /// As the actual values of the actuation range are somewhat ambiguous, for the purposes of
+    /// managing configuration we have declared 1.4mm as the 'top-top' point which translates to
+    /// unit value 0 allowing 3.6mm to translate (clamp) to 255. This does mean that 3.5mm is 252
+    /// rather than the usual spacing of 12 units.
+    ///
     /// Reports
     /// The Tartarus Pro generates reports on the change of any one of its analog keys.
     /// The report contains the state of all 20 keys (bytes) with no indication as to what key
@@ -310,9 +415,9 @@ impl Driver {
     /// f2 keydown can occur again if the key changes direction.
     ///
     /// Retrigger
-    /// For a key allocated a single actuation point instead of resetting only at this point
-    /// it can be reset after a user defined about of negative displacement under actuation.
-    /// Once reset (or armed) a user defined amount of positive displacement will retrigger the
+    /// For a key allocated a single actuation point its reset state can be redefined to occur
+    /// after an amount of negative displacement instead of returning to the actuation point.
+    /// Once reached a user defined amount of positive displacement will retrigger the
     /// key. This will continue until the set actuation point is reached on the upstroke, in which
     /// case the retrigger logic will be disabled. Users can enable 'continuous retrigger'
     /// which changes this to only disable the retrigger logic only once the key is at the top of
@@ -334,13 +439,12 @@ impl Driver {
         self.hysteresis.push_back(*key_arr);
         let previous_state = self.hysteresis.get(self.hysteresis.len() - 2).unwrap();
         let front_state = self.hysteresis.front().unwrap();
-        //  TODO PLumb in
         let mut events: Vec<Event> = Vec::new();
-        // END TODO
+
 
         // Manage per-key functions as each report gives us a snapshot of the whole matrix
         for (key, displacement) in keys.iter().enumerate() {
-            // Calculate and label decisions for readability
+            // Decisions made in each iteration depend on these conditions
             let first_func_actd = self.key_actions[key].actuated.0;
             let first_func_act_point = self.key_actions[key].actuation_point.0;
             let first_func_reset_rule = first_func_actd && (first_func_act_point >= *displacement);
@@ -356,7 +460,7 @@ impl Driver {
             let retrigger_shared_value = self.key_actions[key].retrigger_threshold.0;
             let retrigger_downstroke_value = self.key_actions[key].retrigger_threshold.1;
 
-            // Perform starting actuation checks if we aren't backing off or we aren't actuated.
+            // Perform starting actuation checks if we aren't backing off and not actuated.
             if !func_actd && !backoff_first_func {
                 // Short-circuit as it is unlikely all 20 keys are pressed.
                 // If a key is not actuated and has a value of 0, ignore processing this round.
@@ -369,13 +473,21 @@ impl Driver {
                     // First the exception case where actuation is set to 0 (1.5mm) as
                     // any displacement will trigger it.
                     self.key_actions[key].actuated.0 = true;
-                    // TODO keydown stuff (1.5mm case). Logged for demo purposes
-                    log::info!("A1 Key {} Keydown @ {}!", key, *displacement);
+                    // Keydown for top-top case
+                    log::trace!("A1 Key {} Keydown @ {}!", key, *displacement);
+                    events.push(Event {
+                        key: ANALOG_KEY_CODES[key].0.clone(),
+                        pressed: true,
+                    });
                 } else if first_func_act_point <= *displacement {
                     // Finally general case where key is at or exceeds actuation point.
                     self.key_actions[key].actuated.0 = true;
-                    // TODO keydown stuff (all other cases), logged for demo purposes
-                    log::info!("A1 Key {} Keydown @ {}!", key, *displacement);
+                    // Keydown for general case
+                    log::trace!("A1 Key {} Keydown @ {}!", key, *displacement);
+                    events.push(Event {
+                        key: ANALOG_KEY_CODES[key].0.clone(),
+                        pressed: true,
+                    });
                 }
                 continue;
             }
@@ -395,17 +507,25 @@ impl Driver {
                     && second_func_act_point <= *displacement
                 {
                     if first_func_actd {
-                        // TODO Keyup stuff for A1, logged for demo purposes
-                        log::info!("A1 Key {} Keyup @ {}!", key, *displacement);
+                        // Keyup for first actuation
+                        log::trace!("A1 Key {} Keyup @ {}!", key, *displacement);
                         self.key_actions[key].actuated.0 = false;
+                        events.push(Event {
+                            key: ANALOG_KEY_CODES[key].0.clone(),
+                            pressed: false,
+                        });
                     }
-                    // TODO Keydown stuff for A2, logged for demo purposes
-                    log::info!("A2 Key {} Keydown @ {}!", key, *displacement);
+                    // Keydown for second actuation
+                    log::trace!("A2 Key {} Keydown @ {}!", key, *displacement);
                     self.key_actions[key].actuated.1 = true;
+                    events.push(Event {
+                        key: ANALOG_KEY_CODES[key].1.clone(),
+                        pressed: true,
+                    });
                 }
 
                 // Manage retrigger events
-                // This assumes we are armed from keyup
+                // In the keydown context this carries on from being set up by keyup.
                 if self.key_actions[key].retrigger_go {
                     // Calculate displacement track value based on whether we've changed direction
                     if self.key_actions[key].retrigger_track == 0.0 {
@@ -424,16 +544,24 @@ impl Driver {
                         // Manage the case where keydown is separate from keyup
                         self.key_actions[key].retrigger_go = false;
                         self.key_actions[key].retrigger_track = 0.0;
-                        // TODO keydown stuff, Logged for demo purposes
-                        log::info!("Key {} separate value retrigger!", key);
+                        // Keydown for retrigger using separate reset and trigger values
+                        log::trace!("Key {} separate value retrigger!", key);
+                        events.push(Event {
+                            key: ANALOG_KEY_CODES[key].0.clone(),
+                            pressed: true,
+                        });
                     } else if retrigger_downstroke_value == 0.0
                         && self.key_actions[key].retrigger_track >= retrigger_shared_value
                     {
                         // Otherwise check again using the shared point for keydown
                         self.key_actions[key].retrigger_go = false;
                         self.key_actions[key].retrigger_track = 0.0;
-                        // TODO keydown stuff, Logged for demo purposes
-                        log::info!("Key {} shared value retrigger!", key);
+                        // Keydown for shared retrigger threshold
+                        log::trace!("Key {} shared value retrigger!", key);
+                        events.push(Event {
+                            key: ANALOG_KEY_CODES[key].0.clone(),
+                            pressed: true,
+                        });
                     }
                 } else if self.key_actions[key].retrigger_track != 0.0 {
                     // Calculate and apply retrigger resistance
@@ -463,29 +591,37 @@ impl Driver {
             if trend <= TREND_KEYUP {
                 // Manage actuation point reset
                 if first_func_reset_rule || second_func_reset_rule {
-                    // If the key returns to the top everything resets.
-                    // If crt_en isn't covering for retrigger then stop when our
-                    // actuation point has been met.
+                    // Cover off reset states: the top of travel and actuation point respectively.
                     if *displacement == 0 || !continuous_retrigger {
-                        // TODO These logs clarify the entry state, remove once
-                        // events are plumbed in.
-                        // Case for where actuation point is 0
+                        // Case for where actuation point is at or near the top
                         if first_func_actd && *displacement == 0 {
-                            // TODO this is effectively a NOP, logged to track state.
-                            log::info!("Key {} reached top! {:?}", key, run);
+                            log::trace!("Key {} reached top! {:?}", key, run);
+                            // Keyup for first function
+                            events.push(Event {
+                                key: ANALOG_KEY_CODES[key].0.clone(),
+                                pressed: false,
+                            });
                         } else if second_func_reset_rule {
                             // If the second function resets we have to prevent the first
                             // function from actuating until we reach its reset point.
                             // If left as-is it will trigger immediately as the function is
                             // in its actuation window.
-                            // TODO keyup stuff, Logged for demo purposes
-                            log::info!("A2 Key {} Keyup @ {}!", key, *displacement);
+                            // Keyup for second function
+                            log::trace!("A2 Key {} Keyup @ {}!", key, *displacement);
+                            events.push(Event {
+                                key: ANALOG_KEY_CODES[key].1.clone(),
+                                pressed: false,
+                            });
                             if *displacement > 0 {
                                 self.key_actions[key].backoff_first_func = true;
                             }
                         } else {
-                            // TODO Do keyup stuff, Logged for demo purposes
-                            log::info!("A1 Key {} Keyup @ {}!", key, *displacement);
+                            // Keyup for first function
+                            log::trace!("A1 Key {} Keyup @ {}!", key, *displacement);
+                            events.push(Event {
+                                key: ANALOG_KEY_CODES[key].0.clone(),
+                                pressed: false,
+                            });
                         }
 
                         // Update persistent state
@@ -511,7 +647,7 @@ impl Driver {
                 // Retrigger is disabled when dual-function is defined for a key
                 // pending a plausible use case. This matches OEM software behavior.
                 if !self.key_actions[key].retrigger_go
-                    && retrigger_shared_value != 0.0
+                    && retrigger_shared_value > 0.0
                     && !second_func_user_valid
                 {
                     let difference: f64;
@@ -524,8 +660,11 @@ impl Driver {
                     }
                     self.key_actions[key].retrigger_track -= difference * UNIT_TO_MM;
                     if retrigger_shared_value <= self.key_actions[key].retrigger_track.abs() {
-                        // TODO do keyup stuff, logged for demo purposes
-                        log::info!("Key {} retrigger armed!", key);
+                        log::trace!("Key {} retrigger reached!", key);
+                        events.push(Event {
+                            key: ANALOG_KEY_CODES[key].0.clone(),
+                            pressed: false,
+                        });
                         self.key_actions[key].retrigger_track = 0.0;
                         self.key_actions[key].retrigger_go = true;
                     }

@@ -404,7 +404,7 @@ impl HidRawDevice {
                 Ok(Self::XpadUhid(source_device))
             }
             DriverType::RazerTartarusPro => {
-                let device = RazerTartarusPro::new(device_info.clone())?;
+                let device = RazerTartarusPro::new(device_info.clone(), conf.clone())?;
                 let options = SourceDriverOptions {
                     poll_rate: Duration::from_micros(500),
                     buffer_size: 1024,

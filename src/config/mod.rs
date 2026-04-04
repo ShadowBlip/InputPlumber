@@ -283,6 +283,8 @@ pub struct SourceDeviceConfig {
     pub imu: Option<ImuConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub led: Option<LedConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub analogkeys: Option<AnalogKeysConfig>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -317,6 +319,56 @@ pub struct ImuConfig {
 pub struct LedConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixed_color: Option<FixedRgbColor>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct AnalogKeysConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_actuation: Option<PrimaryActuation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secondary_actuation: Option<SecondaryActuation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retrigger_reset_threshold: Option<RetriggerResetThreshold>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retrigger_trigger_threshold: Option<RetriggerTriggerThreshold>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continuous_retrigger: Option<ContinuousRetrigger>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct PrimaryActuation {
+    pub keys: [f64; 20]
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct SecondaryActuation {
+    pub keys: [f64; 20]
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct RetriggerResetThreshold {
+    pub keys: [f64; 20]
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct RetriggerTriggerThreshold {
+    pub keys: [f64; 20]
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[allow(clippy::upper_case_acronyms)]
+pub struct ContinuousRetrigger {
+    pub keys: [bool; 20]
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

@@ -1,40 +1,58 @@
 use num_enum::FromPrimitive;
 
-// The Tartarus Pro despite looking like a lot of things is ultimately
-// just a set of buttons.
-
 #[derive(Clone, Debug)]
 pub struct Event {
     pub key: KeyCodes,
     pub pressed: bool,
 }
 
-// Complete set of key codes that a Tartarus Pro emits in standard mode
-// Despite the varied interfaces, there is only one overloaded scancode (0x04)
-// and fortunately it is in a fixed position in the report types and unique per
-// endpoint so we only have do deal with one instance at a time.
+/// Keycodes implemented for the Razer Tartarus Pro. Names not prefixed with
+/// Phantom are emitted by hardware. Phantom keys are are used to implement
+/// dual-function or overloaded bindings.
+/// There are 22 phantom keys, 20 for the analog keys and 2 to account for
+/// the additional definitions of 0x04 across the USB endpoints.
 #[derive(Clone, Debug, FromPrimitive, PartialEq)]
 #[repr(u8)]
 pub enum KeyCodes {
     #[num_enum(default)]
-    Blank,
+    PhantomBlank,
     ScrollUp,
-    KeyTwelve = 0x04,    // A / Aux / Middle Mouse click
-    KeyNineteen = 0x06,  // C
-    KeyFourteen,         // D
-    KeyNine,             // E
-    KeyFifteen,          // F
-    KeySeven = 0x14,     // Q
-    KeyTen,              // R
-    KeyThirteen,         // S
-    KeyEight = 0x1A,     // W
-    KeyEighteen,         // X
-    KeySeventeen = 0x1D, // Z
+    KeyTwelve = 0x04, // A / Aux / Middle Mouse click
+    PhantomOne,
+    KeyNineteen, // C
+    KeyFourteen, // D
+    KeyNine,     // E
+    KeyFifteen,  // F
+    PhantomTwo,
+    PhantomThree,
+    PhantomFour,
+    PhantomFive,
+    PhantomSix,
+    PhantomSeven,
+    PhantomEight,
+    PhantomNine,
+    PhantomTen,
+    PhantomEleven,
+    KeySeven,    // Q
+    KeyTen,      // R
+    KeyThirteen, // S
+    PhantomTwelve,
+    PhantomThirteen,
+    PhantomFourteen,
+    KeyEight,    // W
+    KeyEighteen, // X
+    PhantomFifteen,
+    KeySeventeen, // Z
     KeyOne,
     KeyTwo,
     KeyThree,
     KeyFour,
     KeyFive,
+    PhantomSixteen,
+    PhantomSeventeen,
+    PhantomEighteen,
+    PhantomNineteen,
+    PhantomTwenty,
     KeySix = 0x2B,    // Tab
     KeyTwenty,        // Spacebar
     KeyEleven = 0x39, // Capslock
@@ -43,10 +61,30 @@ pub enum KeyCodes {
     Down,
     Up,
     KeySixteen = 0xE1, // LShift
-    Aux = 0xFD,        // Internal label to account for overload. Never sent by HW
-    MClick,            // Internal label to account for overload. Never sent by HW
+    PhantomAux = 0xFD,
+    PhantomMClick,
     ScrollDown,
 }
 
-// Analog mode is positional - key 1 is array index 1 so translating a report
-// into variant space is trivial.
+pub static ANALOG_KEY_CODES: [(KeyCodes, KeyCodes); 20] = [
+    (KeyCodes::KeyOne, KeyCodes::PhantomOne),
+    (KeyCodes::KeyTwo, KeyCodes::PhantomTwo),
+    (KeyCodes::KeyThree, KeyCodes::PhantomThree),
+    (KeyCodes::KeyFour, KeyCodes::PhantomFour),
+    (KeyCodes::KeyFive, KeyCodes::PhantomFive),
+    (KeyCodes::KeySix, KeyCodes::PhantomSix),
+    (KeyCodes::KeySeven, KeyCodes::PhantomSeven),
+    (KeyCodes::KeyEight, KeyCodes::PhantomEight),
+    (KeyCodes::KeyNine, KeyCodes::PhantomNine),
+    (KeyCodes::KeyTen, KeyCodes::PhantomTen),
+    (KeyCodes::KeyEleven, KeyCodes::PhantomEleven),
+    (KeyCodes::KeyTwelve, KeyCodes::PhantomTwelve),
+    (KeyCodes::KeyThirteen, KeyCodes::PhantomThirteen),
+    (KeyCodes::KeyFourteen, KeyCodes::PhantomFourteen),
+    (KeyCodes::KeyFifteen, KeyCodes::PhantomFifteen),
+    (KeyCodes::KeySixteen, KeyCodes::PhantomSixteen),
+    (KeyCodes::KeySeventeen, KeyCodes::PhantomSeventeen),
+    (KeyCodes::KeyEighteen, KeyCodes::PhantomEighteen),
+    (KeyCodes::KeyNineteen, KeyCodes::PhantomNineteen),
+    (KeyCodes::KeyTwenty, KeyCodes::PhantomTwenty),
+];
