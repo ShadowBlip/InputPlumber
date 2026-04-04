@@ -542,7 +542,7 @@
       "additionalProperties": false,
       "properties": {
         "keys": {
-          "description": "Matrix for x value",
+          "description": "Matrix of keys storing the property value",
           "type": "array",
           "minItems": 20,
           "maxItems": 20,
@@ -561,7 +561,7 @@
       "additionalProperties": false,
       "properties": {
         "keys": {
-          "description": "Matrix for x value",
+          "description": "Matrix of keys storing the property value",
           "type": "array",
           "minItems": 20,
           "maxItems": 20,
@@ -580,7 +580,7 @@
       "additionalProperties": false,
       "properties": {
         "keys": {
-          "description": "Matrix for x value",
+          "description": "Matrix of keys storing the property value",
           "type": "array",
           "minItems": 20,
           "maxItems": 20,
@@ -599,7 +599,7 @@
       "additionalProperties": false,
       "properties": {
         "keys": {
-          "description": "Matrix for x value",
+          "description": "Matrix of keys storing the property value",
           "type": "array",
           "minItems": 20,
           "maxItems": 20,
@@ -618,7 +618,7 @@
       "additionalProperties": false,
       "properties": {
         "keys": {
-          "description": "Matrix for x value",
+          "description": "Matrix of keys storing the property value",
           "type": "array",
           "minItems": 20,
           "maxItems": 20,

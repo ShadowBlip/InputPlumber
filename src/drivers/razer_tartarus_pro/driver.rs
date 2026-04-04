@@ -30,8 +30,7 @@ pub struct Driver {
     key_state: Vec<KeyCodes>,
 }
 
-/// Stores threshold values derived from user profile and provides state machine memory for a
-/// given key
+/// Stores threshold values derived from profile and provides state machine memory for keys
 #[derive(Clone, Copy, Default, Debug)]
 pub struct AnalogAction {
     /// User setting (primary function, secondary function), must be > 0 to be active.
@@ -111,7 +110,7 @@ fn convert_actuation_to_unit(value: f64) -> u8 {
     0
 }
 
-/// Sanitise a relative displacement value to ensure it is in the correct range and prevision
+/// Sanitise a relative displacement value to ensure it is in the correct range and position
 fn validate_retrigger_value(value: f64) -> f64 {
     if value < 0.0 || value > KEY_TRAVEL {
         log::error!(
@@ -194,7 +193,6 @@ impl Driver {
         // Read in analog key config and apply
         if info.interface_number() == 1 {
             demo_config.key_action_config(conf);
-            log::info!("Info 1 {:?}", demo_config.key_actions[0]);
         }
 
         Ok(demo_config)
