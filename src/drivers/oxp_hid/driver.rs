@@ -72,24 +72,36 @@ impl Driver {
             return Ok(Vec::new());
         }
 
-        let report = InputDataReport::unpack(&buf)?;
-
-        if report.frame_head != 0x3F || report.frame_foot != 0x3F {
+        // Pre-filter before unpack: check frame markers and CID using raw
+        // bytes to avoid PackingError from enum fields in non-button packets
+        // (e.g. B3/B4/B8 ACKs from the kernel hid-oxp driver).
+        if buf[1] != 0x3F || buf[PACKET_SIZE - 2] != 0x3F {
             log::warn!(
                 "OXP HID: invalid frame (byte1=0x{:02x}, byte62=0x{:02x}): [{}]",
-                report.frame_head,
-                report.frame_foot,
+                buf[1],
+                buf[PACKET_SIZE - 2],
                 hex_prefix(&buf, 16)
             );
             return Ok(Vec::new());
         }
 
-        if report.cid != CMD_BUTTON {
+        if buf[0] != CMD_BUTTON {
             return Ok(Vec::new());
         }
 
+        let report = match InputDataReport::unpack(&buf) {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!(
+                    "OXP HID: failed to parse B2 report: {e}: [{}]",
+                    hex_prefix(&buf, 16)
+                );
+                return Ok(Vec::new());
+            }
+        };
+
         let btn = report.btn;
-        let pressed = report.pressed;
+        let pressed = report.press_state == 1;
 
         // Debounce: skip if state is unchanged
         if let Some(prev) = self.btn_state.get_mut(btn.to_primitive() as usize) {

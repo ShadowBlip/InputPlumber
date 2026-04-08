@@ -52,7 +52,7 @@ pub struct InputDataReport {
     #[packed_field(bytes = "8..=11")]
     pub _reserved_8_11: [u8; 4],
     #[packed_field(bytes = "12")]
-    pub pressed: bool,
+    pub press_state: u8,
     #[packed_field(bytes = "13..=61")]
     pub _reserved_13_61: [u8; 49],
     #[packed_field(bytes = "62")]
