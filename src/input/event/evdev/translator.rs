@@ -504,8 +504,8 @@ impl EventTranslator {
         const IMU_SCALE: f64 = 0.01;
 
         match value_type {
-            ValueType::Button => normalize_unsigned_value(raw_value, info.maximum()),
-            ValueType::Trigger => normalize_unsigned_value(raw_value, info.maximum()),
+            ValueType::Button => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
+            ValueType::Trigger => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
             ValueType::JoystickX | ValueType::JoystickY => {
                 normalize_signed_value(raw_value, info.minimum(), info.maximum())
             }
