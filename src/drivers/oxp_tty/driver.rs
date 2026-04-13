@@ -10,9 +10,9 @@ use tokio::time::Instant;
 
 use crate::drivers::oxp_tty::{
     event::{AxisEvent, BinaryInput, Event, GamepadButtonEvent, JoyAxisInput, TriggerInput},
-    serial_report::{ButtonDataReport, ButtonId, ButtonStatus, JoystickDataReport},
-    OxpDriverType, BUTTON_DATA_REPORT, INPUT_REPORT_SIZE, JOYSTICK_DATA_REPORT, TAKEOVER_COMMAND,
-    TAKEOVER_DATA_REPORT, TTY_TIMEOUT,
+    serial_report::{ButtonDataReport, ButtonStatus, JoystickDataReport},
+    ButtonId, OxpDriverType, BUTTON_DATA_REPORT, INPUT_REPORT_SIZE, JOYSTICK_DATA_REPORT,
+    TAKEOVER_COMMAND, TAKEOVER_DATA_REPORT, TTY_TIMEOUT,
 };
 
 pub struct Driver {

@@ -29,6 +29,13 @@ mapping:
     target_event:
       gamepad:
         button: QuickAccess
+  - name: QuickAccess from HID
+    source_events:
+      - gamepad:
+          button: Keyboard
+    target_event:
+      gamepad:
+        button: QuickAccess
 
 # List of events to filter from the source devices
 filtered_events: []
