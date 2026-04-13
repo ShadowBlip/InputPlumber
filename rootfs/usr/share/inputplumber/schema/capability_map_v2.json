@@ -1191,7 +1191,11 @@
       "type": "object",
       "properties": {
         "bit_offset": {
-          "type": "integer",
+          "description": "Bit position within the byte (LSB=0).",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint8",
           "maximum": 255,
           "minimum": 0
@@ -1205,16 +1209,27 @@
           "type": "string"
         },
         "report_id": {
-          "type": "integer",
-          "format": "uint32",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "value": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
           "minimum": 0
         }
       },
       "required": [
-        "report_id",
         "input_type",
-        "byte_start",
-        "bit_offset"
+        "byte_start"
       ]
     },
     "MappingType": {

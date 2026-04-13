@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: GPD HID Type 1
+
+id: gpd_v2_hid1
+
+# GPD Win 5 vendor HID report (VID 0x2f24, PID 0x0137, Usage Page 0xFF00)
+# Idle:  01 a5 00 5a ff 00 01 09 00 00 00 00
+# BUF[8]  = 0x68 mode switch, 0x00 released
+# BUF[9]  = 0x69 left back,   0x00 released
+# BUF[10] = 0x6a right back,  0x00 released
+mapping:
+  - name: Mode Switch
+    source_events:
+      - hidraw:
+          input_type: button
+          byte_start: 8
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+  - name: Left Back
+    source_events:
+      - hidraw:
+          input_type: button
+          byte_start: 9
+    target_event:
+      gamepad:
+        button: LeftPaddle1
+
+  - name: Right Back
+    source_events:
+      - hidraw:
+          input_type: button
+          byte_start: 10
+    target_event:
+      gamepad:
+        button: RightPaddle1
