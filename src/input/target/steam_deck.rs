@@ -4,11 +4,10 @@ use packed_struct::{
 };
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     error::Error,
     fmt::Debug,
     sync::mpsc::{channel, Receiver, TryRecvError},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use virtual_usb::{
@@ -68,10 +67,6 @@ impl Default for SteamDeckConfig {
     }
 }
 
-// The minimum amount of time that button up events must wait after
-// a button down event.
-const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
-
 pub struct SteamDeckDevice {
     chip_id: [u8; 15],
     config: SteamDeckConfig,
@@ -82,7 +77,6 @@ pub struct SteamDeckDevice {
     device: Option<VirtualUSBDevice>,
     lizard_mode_enabled: bool,
     output_event: Option<OutputEvent>,
-    pressed_events: HashMap<Capability, Instant>,
     queued_events: Vec<ScheduledNativeEvent>,
     serial_number: String,
     state: PackedInputDataReport,
@@ -109,7 +103,6 @@ impl SteamDeckDevice {
             device: None,
             lizard_mode_enabled: false,
             output_event: None,
-            pressed_events: HashMap::new(),
             queued_events: vec![],
             serial_number: "1NPU7PLUMB3R".to_string(),
             state: PackedInputDataReport::default(),
@@ -741,6 +734,7 @@ impl SteamDeckDevice {
                         TouchButton::Touch => self.state.l_pad_touch = event.pressed(),
                         TouchButton::Press => self.state.l_pad_press = event.pressed(),
                     },
+                    Touch::Gesture(_) => (),
                 },
                 //TODO:: Remove CenterPad after we implement Target Profiles
                 Touchpad::RightPad(touch_event) | Touchpad::CenterPad(touch_event) => {
@@ -773,6 +767,7 @@ impl SteamDeckDevice {
                             TouchButton::Touch => self.state.r_pad_touch = event.pressed(),
                             TouchButton::Press => self.state.r_pad_press = event.pressed(),
                         },
+                        Touch::Gesture(_) => (),
                     }
                 }
             },
@@ -916,41 +911,6 @@ impl TargetInputDevice for SteamDeckDevice {
 
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
-
-        // Check to see if this is a button event
-        // In some cases, a button down and button up event can happen within
-        // the same "frame", which would result in no net state change. This
-        // allows us to process up events at a later time.
-        let cap = event.as_capability();
-        if let Capability::Gamepad(Gamepad::Button(_)) = cap {
-            if event.pressed() {
-                log::trace!("Button down: {cap:?}");
-                // Keep track of button down events
-                self.pressed_events.insert(cap.clone(), Instant::now());
-            } else {
-                log::trace!("Button up: {cap:?}");
-                // If the event is a button up event, check to
-                // see if we received a down event in the same
-                // frame.
-                if let Some(last_pressed) = self.pressed_events.get(&cap) {
-                    log::trace!("Button was pressed {:?} ago", last_pressed.elapsed());
-                    if last_pressed.elapsed() < MIN_FRAME_TIME {
-                        log::trace!("Button up & down event received in the same frame. Queueing event for the next frame.");
-                        let scheduled_event = ScheduledNativeEvent::new_with_time(
-                            event,
-                            *last_pressed,
-                            MIN_FRAME_TIME,
-                        );
-                        self.queued_events.push(scheduled_event);
-                        return Ok(());
-                    } else {
-                        log::trace!("Removing button from pressed");
-                        // Button up event should be processed now
-                        self.pressed_events.remove(&cap);
-                    }
-                }
-            }
-        }
 
         // Update device state with input events
         self.update_state(event);
@@ -1126,7 +1086,6 @@ impl Debug for SteamDeckDevice {
             .field("lizard_mode_enabled", &self.lizard_mode_enabled)
             .field("serial_number", &self.serial_number)
             .field("queued_events", &self.queued_events)
-            .field("pressed_events", &self.pressed_events)
             .finish()
     }
 }

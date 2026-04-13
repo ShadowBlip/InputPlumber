@@ -43,6 +43,16 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+  - group: touchscreen
+    udev:
+      properties:
+        - name: ID_INPUT_TOUCHSCREEN
+          value: "1"
+      sys_name: "event*"
+      subsystem: input
+    config:
+      touchscreen:
+        grab: true
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"

@@ -78,3 +78,17 @@ mapping:
           direction: clockwise
     target_events:
       - keyboard: KeyBrightnessUp
+  - name: Swipe Right from Bottom-Left
+    source_event:
+      touchscreen:
+        gesture: SwipeRight:Bottom
+    target_events:
+      - gamepad:
+          button: Guide
+  - name: Swipe Left from Bottom-Right
+    source_event:
+      touchscreen:
+        gesture: SwipeLeft:Bottom
+    target_events:
+      - gamepad:
+          button: QuickAccess
