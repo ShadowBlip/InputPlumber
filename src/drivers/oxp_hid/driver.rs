@@ -39,7 +39,7 @@ impl Driver {
         let api = hidapi::HidApi::new()?;
         let device = api.open_path(&cs_path)?;
         let info = device.get_device_info()?;
-        log::info!(
+        log::debug!(
             "OXP HID: opened {path} (VID:{:04x} PID:{:04x} iface:{})",
             info.vendor_id(),
             info.product_id(),

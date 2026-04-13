@@ -1,32 +1,6 @@
 use packed_struct::prelude::*;
 
-/// Button IDs emitted by the OXP vendor HID report mode.
-/// Covers all IDs that appear in B4 mapping commands.
-#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
-pub enum ButtonId {
-    #[default]
-    None = 0x00,
-    A = 0x01,
-    B = 0x02,
-    X = 0x03,
-    Y = 0x04,
-    LB = 0x05,
-    RB = 0x06,
-    LT = 0x07,
-    RT = 0x08,
-    Start = 0x09,
-    Back = 0x0a,
-    L3 = 0x0b,
-    R3 = 0x0c,
-    DUp = 0x0d,
-    DDown = 0x0e,
-    DLeft = 0x0f,
-    DRight = 0x10,
-    Guide = 0x21,
-    M1 = 0x22,
-    M2 = 0x23,
-    Keyboard = 0x24,
-}
+pub use crate::drivers::oxp_tty::ButtonId;
 
 /// OXP HID 64-byte input report.
 /// Frame: [cid, 0x3F, 0x01, ...payload..., 0x3F, cid]
