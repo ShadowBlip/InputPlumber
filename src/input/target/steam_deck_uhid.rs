@@ -176,10 +176,7 @@ impl SteamDeckUhidDevice {
             "Zotac Zone" => {
                 device_config.vendor = "Zotac".to_string();
                 device_config.name = "Zone Controller".to_string();
-                // Steam only exposes the gyro calibration path and the correct
-                // handheld layout when the Zotac path uses the 0x12ff profile.
                 device_config.product_id = ProductId::LenovoLegionGoS;
-                device_config.gyro_layout = SteamDeckGyroLayout::ZotacZone;
             }
             "Steam Deck" => {
                 device_config.vendor = "Valve Corporation".to_string();
@@ -1025,7 +1022,7 @@ mod tests {
     };
 
     #[test]
-    fn zotac_target_config_uses_legion_go_s_profile_and_zotac_layout() {
+    fn zotac_target_config_uses_legion_go_s_profile() {
         let mut config = SteamDeckConfig::default();
 
         SteamDeckUhidDevice::apply_composite_device_config(&mut config, "Zotac Zone");
@@ -1033,7 +1030,7 @@ mod tests {
         assert_eq!(config.vendor, "Zotac");
         assert_eq!(config.name, "Zone Controller");
         assert_eq!(config.product_id.to_u16(), ProductId::LenovoLegionGoS.to_u16());
-        assert_eq!(config.gyro_layout, SteamDeckGyroLayout::ZotacZone);
+        assert_eq!(config.gyro_layout, SteamDeckGyroLayout::Standard);
     }
 
     #[test]
