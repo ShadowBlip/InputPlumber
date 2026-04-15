@@ -1,4 +1,4 @@
-use std::{collections::HashSet, error::Error, f64::consts::PI, fmt::Debug};
+use std::{collections::HashSet, error::Error, fmt::Debug};
 
 use crate::{
     config,
@@ -11,9 +11,15 @@ use crate::{
     udev::device::UdevDevice,
 };
 
+// Scale from IIO SI units to Steam Deck UHID raw LSB.
+// IIO channels report m/s² for accel and rad/s for gyro after applying scale:
+//   https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-bus-iio
+// UHID LSB constants from src/drivers/steam_deck/driver.rs.
+const ACCEL_SCALE_FACTOR: f64 = 1632.6530612244898; // 1 / 0.0006125 (m/s² → UHID LSB)
+const GYRO_SCALE_FACTOR: f64 = 916.7324722093172; // (180/π) / 0.0625 (rad/s → °/s → UHID LSB)
+
 pub struct AccelGyro3dImu {
     driver: Driver,
-    capabilities: Vec<Capability>,
 }
 
 impl AccelGyro3dImu {
@@ -46,20 +52,7 @@ impl AccelGyro3dImu {
         let name = device_info.name();
         let driver = Driver::new(id, name, mount_matrix, sample_rate)?;
 
-        // accel and gyro may be separate IIO devices on HID Sensor Hub
-        let mut capabilities = vec![];
-        if driver.has_accel() {
-            capabilities.push(Capability::Accelerometer(Source::Center));
-        }
-        if driver.has_gyro() {
-            capabilities.push(Capability::Gyroscope(Source::Center));
-        }
-        log::debug!("AccelGyro3dImu capabilities: {capabilities:?}");
-
-        Ok(Self {
-            driver,
-            capabilities,
-        })
+        Ok(Self { driver })
     }
 }
 
@@ -73,7 +66,7 @@ impl SourceInputDevice for AccelGyro3dImu {
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(self.capabilities.clone())
+        Ok(CAPABILITIES.into())
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
@@ -114,25 +107,28 @@ fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {
 fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
     match event {
         iio_imu::event::Event::Accelerometer(data) => {
-            let factor = 1.0 / 0.0006125; // m/s² → UHID LSB
             let cap = Capability::Accelerometer(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * factor),
-                y: Some(data.pitch * factor),
-                z: Some(data.yaw * factor),
+                x: Some(data.roll * ACCEL_SCALE_FACTOR),
+                y: Some(data.pitch * ACCEL_SCALE_FACTOR),
+                z: Some(data.yaw * ACCEL_SCALE_FACTOR),
             };
             NativeEvent::new(cap, value)
         }
         iio_imu::event::Event::Gyro(data) => {
-            let factor = (180.0 / PI) / 0.0625; // rad/s → UHID LSB
             let cap = Capability::Gyroscope(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * factor),
-                y: Some(data.pitch * factor),
-                z: Some(data.yaw * factor),
+                x: Some(data.roll * GYRO_SCALE_FACTOR),
+                y: Some(data.pitch * GYRO_SCALE_FACTOR),
+                z: Some(data.yaw * GYRO_SCALE_FACTOR),
             };
             NativeEvent::new(cap, value)
         }
     }
 }
 
+/// List of all capabilities that the driver implements
+pub const CAPABILITIES: &[Capability] = &[
+    Capability::Accelerometer(Source::Center),
+    Capability::Gyroscope(Source::Center),
+];

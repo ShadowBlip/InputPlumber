@@ -113,14 +113,6 @@ impl Driver {
     //a standalone crate. When this driver is eventually separated, refactor the Event type to
     //follow the pattern DeviceEvent(Event, Value) and create a match table for
     //Capability->Event/Event->Capability in the SourceDriver implementation.
-    pub fn has_accel(&self) -> bool {
-        !self.accel.is_empty()
-    }
-
-    pub fn has_gyro(&self) -> bool {
-        !self.gyro.is_empty()
-    }
-
     pub fn update_filtered_events(&mut self, events: HashSet<Capability>) {
         self.filtered_events = events;
     }
