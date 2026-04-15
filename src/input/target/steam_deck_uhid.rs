@@ -41,7 +41,7 @@ use crate::{
 };
 
 use super::{
-    steam_deck::{denormalize_unsigned_to_signed_value, SteamDeckConfig},
+    steam_deck::{denormalize_unsigned_to_signed_value, SteamDeckConfig, SteamDeckGyroLayout},
     InputError, OutputError, TargetInputDevice, TargetOutputDevice,
 };
 
@@ -100,6 +100,116 @@ impl SteamDeckUhidDevice {
         })?;
 
         Ok(device)
+    }
+
+    fn apply_gyro_state(
+        state: &mut PackedInputDataReport,
+        gyro_layout: SteamDeckGyroLayout,
+        x: Option<f64>,
+        y: Option<f64>,
+        z: Option<f64>,
+    ) {
+        if let Some(x) = x {
+            match gyro_layout {
+                SteamDeckGyroLayout::Standard => {
+                    state.pitch = Integer::from_primitive(x as i16);
+                }
+                SteamDeckGyroLayout::ZotacZone => {
+                    state.yaw = Integer::from_primitive(x as i16);
+                }
+            }
+        }
+        if let Some(y) = y {
+            match gyro_layout {
+                SteamDeckGyroLayout::Standard => {
+                    state.yaw = Integer::from_primitive(y as i16);
+                }
+                SteamDeckGyroLayout::ZotacZone => {
+                    state.pitch = Integer::from_primitive(y as i16);
+                }
+            }
+        }
+        if let Some(z) = z {
+            state.roll = Integer::from_primitive(z as i16);
+        }
+    }
+
+    fn apply_composite_device_config(device_config: &mut SteamDeckConfig, composite_name: &str) {
+        device_config.gyro_layout = SteamDeckGyroLayout::Standard;
+
+        match composite_name {
+            "Lenovo Legion Go" => {
+                device_config.vendor = "Lenovo".to_string();
+                device_config.name = "Legion Go Controller".to_string();
+                device_config.product_id = ProductId::LenovoLegionGo;
+            }
+            "Lenovo Legion Go 2" => {
+                device_config.vendor = "Lenovo".to_string();
+                device_config.name = "Legion Go 2 Controller".to_string();
+                device_config.product_id = ProductId::LenovoLegionGo2;
+            }
+            "Lenovo Legion Go S" => {
+                device_config.vendor = "Lenovo".to_string();
+                device_config.name = "Legion Go S Controller".to_string();
+                device_config.product_id = ProductId::LenovoLegionGoS;
+            }
+            "ASUS ROG Ally" => {
+                device_config.vendor = "ASUS".to_string();
+                device_config.name = "ROG Ally Controller".to_string();
+                device_config.product_id = ProductId::AsusRogAlly;
+            }
+            "ASUS ROG Ally X" => {
+                device_config.vendor = "ASUS".to_string();
+                device_config.name = "ROG Ally X Controller".to_string();
+                device_config.product_id = ProductId::AsusRogAlly;
+            }
+            "ASUS ROG Xbox Ally" => {
+                device_config.vendor = "ASUS".to_string();
+                device_config.name = "ROG Xbox Ally Controller".to_string();
+                device_config.product_id = ProductId::AsusRogAlly;
+            }
+            "ASUS ROG Xbox Ally X" => {
+                device_config.vendor = "ASUS".to_string();
+                device_config.name = "ROG Xbox Ally X Controller".to_string();
+                device_config.product_id = ProductId::AsusRogAlly;
+            }
+            "Zotac Zone" => {
+                device_config.vendor = "Zotac".to_string();
+                device_config.name = "Zone Controller".to_string();
+                // Steam only exposes the gyro calibration path and the correct
+                // handheld layout when the Zotac path uses the 0x12ff profile.
+                device_config.product_id = ProductId::LenovoLegionGoS;
+                device_config.gyro_layout = SteamDeckGyroLayout::ZotacZone;
+            }
+            "Steam Deck" => {
+                device_config.vendor = "Valve Corporation".to_string();
+                device_config.name = "Steam Controller".to_string();
+                // True PID will only work with the VCHI target as Steam looks for a
+                // specific bInterfaceNumber when that PID is detected.
+                device_config.product_id = ProductId::Generic;
+            }
+            "MSI Claw" => {
+                device_config.vendor = "MSI".to_string();
+                device_config.name = "Claw Controller".to_string();
+                device_config.product_id = ProductId::MsiClaw;
+            }
+            "MSI Claw 7 AI+ A2VM" => {
+                device_config.vendor = "MSI".to_string();
+                device_config.name = "Claw Controller".to_string();
+                device_config.product_id = ProductId::MsiClaw;
+            }
+            "MSI Claw 8 AI+ A2VM" => {
+                device_config.vendor = "MSI".to_string();
+                device_config.name = "Claw Controller".to_string();
+                device_config.product_id = ProductId::MsiClaw;
+            }
+            "MSI Claw A8 BZ2EM" => {
+                device_config.vendor = "MSI".to_string();
+                device_config.name = "Claw Controller".to_string();
+                device_config.product_id = ProductId::MsiClaw;
+            }
+            _ => {}
+        }
     }
 
     /// Write the current device state to the device
@@ -304,15 +414,7 @@ impl SteamDeckUhidDevice {
                 }
                 Gamepad::Gyro => {
                     if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            self.state.pitch = Integer::from_primitive(x as i16);
-                        }
-                        if let Some(y) = y {
-                            self.state.yaw = Integer::from_primitive(y as i16);
-                        }
-                        if let Some(z) = z {
-                            self.state.roll = Integer::from_primitive(z as i16);
-                        }
+                        Self::apply_gyro_state(&mut self.state, self.config.gyro_layout, x, y, z);
                     }
                 }
                 _ => (),
@@ -382,15 +484,7 @@ impl SteamDeckUhidDevice {
             },
             Capability::Gyroscope(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
-                    if let Some(x) = x {
-                        self.state.pitch = Integer::from_primitive(x as i16);
-                    }
-                    if let Some(y) = y {
-                        self.state.yaw = Integer::from_primitive(y as i16);
-                    }
-                    if let Some(z) = z {
-                        self.state.roll = Integer::from_primitive(z as i16);
-                    }
+                    Self::apply_gyro_state(&mut self.state, self.config.gyro_layout, x, y, z);
                 }
             }
             Capability::Accelerometer(_) => {
@@ -634,79 +728,7 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                     return;
                 }
             };
-
-            match cd_config.name.as_str() {
-                "Lenovo Legion Go" => {
-                    device_config.vendor = "Lenovo".to_string();
-                    device_config.name = "Legion Go Controller".to_string();
-                    device_config.product_id = ProductId::LenovoLegionGo;
-                }
-                "Lenovo Legion Go 2" => {
-                    device_config.vendor = "Lenovo".to_string();
-                    device_config.name = "Legion Go 2 Controller".to_string();
-                    device_config.product_id = ProductId::LenovoLegionGo2;
-                }
-                "Lenovo Legion Go S" => {
-                    device_config.vendor = "Lenovo".to_string();
-                    device_config.name = "Legion Go S Controller".to_string();
-                    device_config.product_id = ProductId::LenovoLegionGoS;
-                }
-                "ASUS ROG Ally" => {
-                    device_config.vendor = "ASUS".to_string();
-                    device_config.name = "ROG Ally Controller".to_string();
-                    device_config.product_id = ProductId::AsusRogAlly;
-                }
-                "ASUS ROG Ally X" => {
-                    device_config.vendor = "ASUS".to_string();
-                    device_config.name = "ROG Ally X Controller".to_string();
-                    device_config.product_id = ProductId::AsusRogAlly;
-                }
-                "ASUS ROG Xbox Ally" => {
-                    device_config.vendor = "ASUS".to_string();
-                    device_config.name = "ROG Xbox Ally Controller".to_string();
-                    device_config.product_id = ProductId::AsusRogAlly;
-                }
-                "ASUS ROG Xbox Ally X" => {
-                    device_config.vendor = "ASUS".to_string();
-                    device_config.name = "ROG Xbox Ally X Controller".to_string();
-                    device_config.product_id = ProductId::AsusRogAlly;
-                }
-                "Zotac Zone" => {
-                    device_config.vendor = "Zotac".to_string();
-                    device_config.name = "Zone Controller".to_string();
-                    // Steam only exposes the gyro calibration path and the correct
-                    // handheld layout when the Zotac path uses the 0x12ff profile.
-                    device_config.product_id = ProductId::LenovoLegionGoS;
-                }
-                "Steam Deck" => {
-                    device_config.vendor = "Valve Corporation".to_string();
-                    device_config.name = "Steam Controller".to_string();
-                    // True PID will only work with the VCHI target as Steam looks for a
-                    // specific bInterfaceNumber when that PID is detected.
-                    device_config.product_id = ProductId::Generic;
-                }
-                "MSI Claw" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                "MSI Claw 7 AI+ A2VM" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                "MSI Claw 8 AI+ A2VM" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                "MSI Claw A8 BZ2EM" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                _ => {}
-            };
+            Self::apply_composite_device_config(&mut device_config, cd_config.name.as_str());
 
             log::debug!(
                 "Found Steam Deck target config: {} {} PID: {:?}",
@@ -989,5 +1011,74 @@ impl Debug for SteamDeckUhidDevice {
             .field("queued_events", &self.queued_events)
             .field("pressed_events", &self.pressed_events)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use packed_struct::types::SizedInteger;
+
+    use super::SteamDeckUhidDevice;
+    use crate::{
+        drivers::steam_deck::{hid_report::PackedInputDataReport, ProductId},
+        input::target::steam_deck::{SteamDeckConfig, SteamDeckGyroLayout},
+    };
+
+    #[test]
+    fn zotac_target_config_uses_legion_go_s_profile_and_zotac_layout() {
+        let mut config = SteamDeckConfig::default();
+
+        SteamDeckUhidDevice::apply_composite_device_config(&mut config, "Zotac Zone");
+
+        assert_eq!(config.vendor, "Zotac");
+        assert_eq!(config.name, "Zone Controller");
+        assert_eq!(config.product_id.to_u16(), ProductId::LenovoLegionGoS.to_u16());
+        assert_eq!(config.gyro_layout, SteamDeckGyroLayout::ZotacZone);
+    }
+
+    #[test]
+    fn legion_go_s_target_config_keeps_standard_gyro_layout() {
+        let mut config = SteamDeckConfig::default();
+
+        SteamDeckUhidDevice::apply_composite_device_config(&mut config, "Lenovo Legion Go S");
+
+        assert_eq!(config.vendor, "Lenovo");
+        assert_eq!(config.name, "Legion Go S Controller");
+        assert_eq!(config.product_id.to_u16(), ProductId::LenovoLegionGoS.to_u16());
+        assert_eq!(config.gyro_layout, SteamDeckGyroLayout::Standard);
+    }
+
+    #[test]
+    fn standard_gyro_layout_maps_x_to_pitch_y_to_yaw_z_to_roll() {
+        let mut state = PackedInputDataReport::default();
+
+        SteamDeckUhidDevice::apply_gyro_state(
+            &mut state,
+            SteamDeckGyroLayout::Standard,
+            Some(1.0),
+            Some(2.0),
+            Some(3.0),
+        );
+
+        assert_eq!(state.pitch.to_primitive(), 1);
+        assert_eq!(state.yaw.to_primitive(), 2);
+        assert_eq!(state.roll.to_primitive(), 3);
+    }
+
+    #[test]
+    fn zotac_gyro_layout_maps_x_to_yaw_y_to_pitch_z_to_roll() {
+        let mut state = PackedInputDataReport::default();
+
+        SteamDeckUhidDevice::apply_gyro_state(
+            &mut state,
+            SteamDeckGyroLayout::ZotacZone,
+            Some(1.0),
+            Some(2.0),
+            Some(3.0),
+        );
+
+        assert_eq!(state.pitch.to_primitive(), 2);
+        assert_eq!(state.yaw.to_primitive(), 1);
+        assert_eq!(state.roll.to_primitive(), 3);
     }
 }

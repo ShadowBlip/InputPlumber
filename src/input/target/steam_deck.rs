@@ -51,8 +51,15 @@ use crate::{
 use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
 /// Configuration of the target SteamDeck device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SteamDeckGyroLayout {
+    Standard,
+    ZotacZone,
+}
+
 #[derive(Debug, Clone)]
 pub struct SteamDeckConfig {
+    pub gyro_layout: SteamDeckGyroLayout,
     pub vendor: String,
     pub name: String,
     pub product_id: ProductId,
@@ -61,6 +68,7 @@ pub struct SteamDeckConfig {
 impl Default for SteamDeckConfig {
     fn default() -> Self {
         Self {
+            gyro_layout: SteamDeckGyroLayout::Standard,
             vendor: "InputPlumber".to_string(),
             name: "Generic Steam Controller".to_string(),
             product_id: ProductId::Generic,
@@ -828,7 +836,7 @@ impl TargetInputDevice for SteamDeckDevice {
                     return;
                 }
             };
-
+            device_config.gyro_layout = SteamDeckGyroLayout::Standard;
             match cd_config.name.as_str() {
                 "Lenovo Legion Go" => {
                     device_config.vendor = "Lenovo".to_string();
@@ -1136,4 +1144,17 @@ impl Debug for SteamDeckDevice {
 pub fn denormalize_unsigned_to_signed_value(normal_value: f64, min: f64, max: f64) -> i16 {
     let normal_value = (normal_value * 2.0) - 1.0;
     denormalize_signed_value_i16(normal_value, min, max)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SteamDeckConfig, SteamDeckGyroLayout};
+
+    #[test]
+    fn steam_deck_config_defaults_to_standard_gyro_layout() {
+        assert_eq!(
+            SteamDeckConfig::default().gyro_layout,
+            SteamDeckGyroLayout::Standard
+        );
+    }
 }
