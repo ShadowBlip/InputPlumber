@@ -1,4 +1,4 @@
-use std::{collections::HashSet, error::Error, f64::consts::PI, fmt::Debug};
+use std::{collections::HashSet, error::Error, fmt::Debug};
 
 use crate::{
     config,
@@ -10,6 +10,13 @@ use crate::{
     },
     udev::device::UdevDevice,
 };
+
+// Scale from IIO SI units to Steam Deck UHID raw LSB.
+// IIO channels report m/s² for accel and rad/s for gyro after applying scale:
+//   https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-bus-iio
+// UHID LSB constants from src/drivers/steam_deck/driver.rs.
+const ACCEL_SCALE_FACTOR: f64 = 1632.6530612244898; // 1 / 0.0006125 (m/s² → UHID LSB)
+const GYRO_SCALE_FACTOR: f64 = 916.7324722093172; // (180/π) / 0.0625 (rad/s → °/s → UHID LSB)
 
 pub struct AccelGyro3dImu {
     driver: Driver,
@@ -39,9 +46,11 @@ impl AccelGyro3dImu {
             None
         };
 
+        let sample_rate = config.as_ref().and_then(|c| c.sample_rate);
+
         let id = device_info.sysname();
         let name = device_info.name();
-        let driver = Driver::new(id, name, mount_matrix)?;
+        let driver = Driver::new(id, name, mount_matrix, sample_rate)?;
 
         Ok(Self { driver })
     }
@@ -100,23 +109,18 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
         iio_imu::event::Event::Accelerometer(data) => {
             let cap = Capability::Accelerometer(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * 10.0),
-                y: Some(data.pitch * 10.0),
-                z: Some(data.yaw * 10.0),
+                x: Some(data.roll * ACCEL_SCALE_FACTOR),
+                y: Some(data.pitch * ACCEL_SCALE_FACTOR),
+                z: Some(data.yaw * ACCEL_SCALE_FACTOR),
             };
             NativeEvent::new(cap, value)
         }
         iio_imu::event::Event::Gyro(data) => {
-            // Translate gyro values into the expected units of degrees per sec
-            // We apply a 500x scale so the motion feels like natural 1:1 motion.
-            // Adjusting the scale is not possible on the accel_gyro_3d IMU.
-            // From testing this is the highest scale we can apply before noise
-            // is amplified to the point the gyro cannot calibrate.
             let cap = Capability::Gyroscope(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * (180.0 / PI) * 1500.0),
-                y: Some(data.pitch * (180.0 / PI) * 1500.0),
-                z: Some(data.yaw * (180.0 / PI) * 1500.0),
+                x: Some(data.roll * GYRO_SCALE_FACTOR),
+                y: Some(data.pitch * GYRO_SCALE_FACTOR),
+                z: Some(data.yaw * GYRO_SCALE_FACTOR),
             };
             NativeEvent::new(cap, value)
         }
