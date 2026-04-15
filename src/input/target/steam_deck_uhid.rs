@@ -674,7 +674,9 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                 "Zotac Zone" => {
                     device_config.vendor = "Zotac".to_string();
                     device_config.name = "Zone Controller".to_string();
-                    device_config.product_id = ProductId::ZotacZone;
+                    // Steam only exposes the gyro calibration path and the correct
+                    // handheld layout when the Zotac path uses the 0x12ff profile.
+                    device_config.product_id = ProductId::LenovoLegionGoS;
                 }
                 "Steam Deck" => {
                     device_config.vendor = "Valve Corporation".to_string();
