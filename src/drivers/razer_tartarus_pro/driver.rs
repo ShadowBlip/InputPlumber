@@ -134,7 +134,7 @@ fn validate_retrigger_value(value: f64) -> f64 {
 }
 
 /// This driver implementation is shared across all three HID handles on the
-/// Tartarus Pro. Different interfaces traverse different code-paths though.
+/// Tartarus Pro. Different interfaces traverse different code-paths.
 /// Refer to handle_input_report()
 impl Driver {
     pub fn new(
@@ -178,7 +178,7 @@ impl Driver {
             control_path = String::default();
         }
 
-        // Create a 20x5 null matrix to initialize the buffer supporting key hysteresis
+        // Create a 20x5 null matrix to initialize the buffer that implements key hysteresis
         let mut zeroes = VecDeque::with_capacity(5);
         zeroes.extend([[0; KEY_COUNT]; REGRESSION_WINDOW]);
 
@@ -251,20 +251,16 @@ impl Driver {
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let info = self.device.get_device_info()?;
 
-        // Depending on what handle we actually are (this code runs on all 3)
-        // we have different reports that we can expect and respond to in kind.
-
-        // Endpoint 1.1 is always played as per its HID report descriptor but it is simple enough
-        // to re-implement here. There is no report ID, it gets straight to business.
-        // This interface captures the D-pad and the aux key.
-
-        // Endpoint 1.2 has two personalities, if report ID 1 is seen then it is in default
-        // keyboard mode and is played exactly as its descriptor says. If report ID 6 is seen
-        // that is analog mode so we need to run the threshold checks.
-        // This interface regardless of personality captures the 20 numbered keys.
-
-        // Endpoint 1.3 is in the same basket as 1.1, different patterns to match though.
-        // This interface captures the scroll wheel.
+        // Depending on what interface the handle is associated with there are different reports
+        // that we can expect and respond to in kind.
+        // - Endpoint 1.1 is fully described by its HID report descriptor and is implemented here.
+        //   This interface captures the D-pad and the aux key.
+        // - Endpoint 1.2 has two reports, if report ID 1 is seen then it is in default
+        //   keyboard mode and is fully described. If report ID 6 is seen this is vendor defined
+        //   and reflects analog mode which is handled separately.
+        //   This interface regardless of report captures the 20 numbered keys.
+        // - Endpoint 1.3 is processed identically to 1.1, different patterns to match though.
+        //   This interface captures the scroll wheel.
 
         match info.interface_number() {
             0 => {
@@ -302,11 +298,7 @@ impl Driver {
         }
     }
 
-    /// Manage all input reports other than the analog function.
-    /// The basic case for all 3 endpoints is essentially identical. The first byte is unique for
-    /// each; For endpoints 1.1 and 1.3 this is where code 0x04 is interpreted and discarded for
-    /// endpoint 1.2 as it was a report ID which has served its purpose if we got this far.
-    /// Given the conversion to variant space it is best removed to stop confusion.
+    /// Manage input reports for endpoints 1.1 and 1.3
     fn handle_basic(
         &mut self,
         buf: &[u8],
@@ -316,7 +308,8 @@ impl Driver {
         let mut events = Vec::new();
         let mut pad_state: Vec<KeyCodes> = buf.iter().map(|&s| KeyCodes::from(s)).collect();
 
-        // Override Byte 0 as specified and remove any blanks
+        // Override Byte 0 as specified and remove any blanks. This refers to the overloaded value
+        // of 0x04 and is managed differently based on which endpoint sent it.
         if pad_state[0] == KeyCodes::KeyTwelve || overwrite {
             pad_state[0] = key_replace;
         }
@@ -347,9 +340,9 @@ impl Driver {
 
     /// Manage analog input reports and translate to key strokes
     ///
-    /// Concepts:
+    /// # Concepts:
     ///
-    /// Measurement
+    /// ## Measurement
     /// A key in analog mode returns an 8-bit value representing height displacement with 0
     /// representing the top (~1.5mm) and 255 when it is bottomed out (~3.6mm).
     /// The OEM software has defined a minimum discernable step size as 0.1mm which we will adopt.
@@ -377,14 +370,14 @@ impl Driver {
     /// unit value 0 allowing 3.6mm to translate (clamp) to 255. This does mean that 3.5mm is 252
     /// rather than the usual spacing of 12 units.
     ///
-    /// Reports
+    /// ## Reports
     /// The Tartarus Pro generates reports on the change of any one of its analog keys.
-    /// The report contains the state of all 20 keys (bytes) with no indication as to what key
-    /// triggered it. Keys are mapped to fixed offsets in the report making translation straight
-    /// forward. In the case of this function it just sees an array of key values to process with
-    /// no further interpretation.
+    /// The report (ID 6) contains the state of all 20 keys (bytes) with no indication as to which
+    /// key triggered it. Keys are mapped to fixed offsets in the report (0-19) making translation
+    /// straight forward. The report ID byte is assumed to be dropped allowing for direct
+    /// processing of keys.
     ///
-    /// Algorithm:
+    /// # Algorithm:
     ///
     /// A keystroke is defined as starting at the top, displaces downwards & optionally
     /// hovers around a point then displaces again downward or upward, optionally hovering
@@ -393,61 +386,73 @@ impl Driver {
     /// is filtering as analog-optical keyboards continuously sample during travel.
     ///
     /// The summary of key processing is
-    /// - Update group hysteresis
-    /// - Check if this key should be actuated or ignored this cycle
-    /// - If actuated previously get the key direction of travel
-    /// - For a given direction
-    ///   * Manage special cases, dual-function on downstroke and reset cases on upstroke
-    ///   * Manage direction specific retrigger functions
+    /// - Push the whole matrix state into the hysteresis buffer, maintaining its depth of 5.
+    /// - Iterate over each key in the matrix:
+    ///   * Check if this key should be actuated or ignored this cycle
+    ///   * If actuated already get the key's direction of travel by slicing the buffer at the
+    ///     key's offset and perform linear regression to perform further functions
+    ///   * With the direction determined:
+    ///     + Manage direction specific retrigger functions
+    ///     + Manage special cases, dual-function on downstroke and reset cases on upstroke
     ///
     /// A key returning to the top (zeroing) resets any state associated with that key's travel.
     ///
-    /// Analog Methods:
+    /// # Analog Methods:
     ///
-    /// Dual-Function
-    /// Allocate two actuation points to a key which can be mapped to two different events.
-    /// Triggered on the downstroke, the sequence goes f1 keydown -> f1 keyup / f2 keydown.
-    /// On the upstroke f2 keyup is triggered at the initial f2 actuation point. The functions do
-    /// not trigger again until the key is above their respective initial actuation points noting
-    /// that the functions trigger independently e.g. f2 keyup does not trigger f1 keydown, but
-    /// f2 keydown can occur again if the key changes direction.
+    /// ## Variable actuation
+    ///   A key event can be mapped to a specific key displacement threshold as specified in the
+    ///   device YAML file. Keydown and keyup events share the same threshold triggered based on
+    ///   direction of travel.
     ///
-    /// Retrigger
-    /// For a key allocated a single actuation point its reset state can be redefined to occur
-    /// after an amount of negative displacement instead of returning to the actuation point.
-    /// Once reached a user defined amount of positive displacement will retrigger the
-    /// key. This will continue until the set actuation point is reached on the upstroke, in which
-    /// case the retrigger logic will be disabled. Users can enable 'continuous retrigger'
-    /// which changes this to only disable the retrigger logic only once the key is at the top of
-    /// its travel regardless of the profile actuation point.
-    /// The retrigger displacement can be a shared value or defined independently.
+    ///   A key may also have one of the following methods applied to it:
+    /// ## Dual-Function
+    ///   Allocate two actuation points to a key which can be mapped to two different events.
+    ///   Triggered on the downstroke, the sequence goes f1 keydown -> f1 keyup / f2 keydown.
+    ///   On the upstroke f2 keyup is triggered at the initial f2 actuation point. The functions do
+    ///   not trigger again until the key is above their respective initial actuation points noting
+    ///   that the functions trigger independently e.g. f2 keyup does not trigger f1 keydown, but
+    ///   f2 keydown can occur again if the key changes direction.
     ///
-    /// Dual function and retrigger on a specific key is an either/or affair at this stage.
+    /// ## Retrigger
+    ///   For a key allocated a single actuation point its reset state can be redefined to occur
+    ///   after an amount of negative displacement instead of returning to the actuation point.
+    ///   Once reached a user defined amount of positive displacement will retrigger the key.
+    ///   This will continue until the set actuation point is reached on the upstroke, in which
+    ///   case the retrigger logic will be disabled. Users can enable 'continuous retrigger'
+    ///   which changes this to only disable the retrigger logic only once the key is at the top of
+    ///   its travel regardless of the profile actuation point.
+    ///   The retrigger displacement can be a shared value or defined independently.
     fn handle_analog(&mut self, keys: &[u8]) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let key_arr: &[u8; KEY_COUNT];
+        let mut events: Vec<Event> = Vec::new();
 
         if let Ok(value) = <&[u8] as TryInto<&[u8; KEY_COUNT]>>::try_into(keys) {
             key_arr = value;
         } else {
             log::error!("Incorrect size array passed to handle_analog");
-            return Ok(Vec::new());
+            return Ok(events);
         }
 
+        // Update matrix hysteresis
         self.hysteresis.pop_front();
         self.hysteresis.push_back(*key_arr);
+
+        // Alias local parameters for comprehension
         let previous_state = self.hysteresis.get(self.hysteresis.len() - 2).unwrap();
         let front_state = self.hysteresis.front().unwrap();
-        let mut events: Vec<Event> = Vec::new();
 
-
-        // Manage per-key functions as each report gives us a snapshot of the whole matrix
+        // Iterate through each key using the incoming report
         for (key, displacement) in keys.iter().enumerate() {
-            // Decisions made in each iteration depend on these conditions
+            // Alias local parameters for comprehension
             let first_func_actd = self.key_actions[key].actuated.0;
-            let first_func_act_point = self.key_actions[key].actuation_point.0;
-            let first_func_reset_rule = first_func_actd && (first_func_act_point >= *displacement);
             let second_func_actd = self.key_actions[key].actuated.1;
+            let first_func_act_point = self.key_actions[key].actuation_point.0;
             let second_func_act_point = self.key_actions[key].actuation_point.1;
+            let retrigger_shared_value = self.key_actions[key].retrigger_threshold.0;
+            let retrigger_downstroke_value = self.key_actions[key].retrigger_threshold.1;
+
+            // Calculate the decisions used for traversing state machine
+            let first_func_reset_rule = first_func_actd && (first_func_act_point >= *displacement);
             let second_func_user_valid = second_func_act_point > first_func_act_point;
             let second_func_reset_rule = (second_func_act_point >= *displacement)
                 && second_func_user_valid
@@ -455,8 +460,6 @@ impl Driver {
             let continuous_retrigger = self.key_actions[key].crt_en;
             let backoff_first_func = self.key_actions[key].backoff_first_func;
             let func_actd = first_func_actd ^ second_func_actd;
-            let retrigger_shared_value = self.key_actions[key].retrigger_threshold.0;
-            let retrigger_downstroke_value = self.key_actions[key].retrigger_threshold.1;
 
             // Perform starting actuation checks if we aren't backing off and not actuated.
             if !func_actd && !backoff_first_func {
@@ -487,13 +490,12 @@ impl Driver {
                         pressed: true,
                     });
                 }
+                // Stop processing as we have emitted a key event
                 continue;
             }
 
-            // As we have an actuation, track behavior using direction of travel and issue
-            // events per user profile.
-
-            // Establish the direction of travel for the key
+            // If we are already actuated then track behavior using direction of travel and issue
+            // events per the user profile. First establish the direction of travel for the key
             let run: Vec<f64> = self.hysteresis.iter().map(|arr| arr[key] as f64).collect();
             let trend = self.linear_regression(&run).unwrap_or_else(|| 0.0);
 
@@ -523,7 +525,7 @@ impl Driver {
                 }
 
                 // Manage retrigger events
-                // In the keydown context this carries on from being set up by keyup.
+                // Check if we've been set up to retrigger from keydown and manage that.
                 if self.key_actions[key].retrigger_go {
                     // Calculate displacement track value based on whether we've changed direction
                     if self.key_actions[key].retrigger_track == 0.0 {
@@ -600,10 +602,9 @@ impl Driver {
                                 pressed: false,
                             });
                         } else if second_func_reset_rule {
-                            // If the second function resets we have to prevent the first
-                            // function from actuating until we reach its reset point.
-                            // If left as-is it will trigger immediately as the function is
-                            // in its actuation window.
+                            // If the second function resets we have to prevent the first function
+                            // from actuating until we reach its reset point. If left as-is it will
+                            // trigger immediately as the function is in its actuation window.
                             // Keyup for second function
                             log::trace!("A2 Key {} Keyup @ {}!", key, *displacement);
                             events.push(Event {
@@ -622,7 +623,7 @@ impl Driver {
                             });
                         }
 
-                        // Update persistent state
+                        // Reset key state
                         self.key_actions[key].retrigger_go = false;
                         self.key_actions[key].retrigger_track = 0.0;
                         self.key_actions[key].actuated = (false, false);
@@ -635,15 +636,14 @@ impl Driver {
                     self.key_actions[key].backoff_first_func = false;
                 }
                 // Manage retrigger for upward keystrokes
-                // If we've transitioned state (from down to up) then our initial
-                // displacement is calculated from the start of the regression window. If
-                // continuing in the same direction then the displacement accumulates from
-                // the previous reading. The displacement is compared against the retrigger
-                // threshold, in the case of upwards stroke reaching the threshold 'arms' the
-                // downward stroke allowing it to issue a retrigger. There can be separate
-                // thresholds for upwards and downwards displacement per the profile.
-                // Retrigger is disabled when dual-function is defined for a key
-                // pending a plausible use case. This matches OEM software behavior.
+                // If the stroke direction has changed then our initial displacement is calculated
+                // from the start of the regression window. If continuing in the same direction
+                // then the displacement accumulates from the previous reading.
+                // The displacement is compared against the retrigger threshold, in the case of
+                // an upwards stroke reaching the threshold sets the retrigger flag allowing the
+                // downward stroke to issue a retrigger. The user profile can define separate
+                // thresholds for upwards and downwards displacement. Retrigger is disabled when
+                // dual-function is defined for a key which matches OEM software behavior.
                 if !self.key_actions[key].retrigger_go
                     && retrigger_shared_value > 0.0
                     && !second_func_user_valid
