@@ -8,10 +8,13 @@ use std::{error::Error, ffi::CString, fs, io::Write, path::Path};
 pub const VID: u16 = 0x1532;
 pub const PID: u16 = 0x0244;
 
+const ENDPOINT_1: i32 = 0;
+const ENDPOINT_2: i32 = 1;
+const ENDPOINT_3: i32 = 2;
 const ANALOG_MODE: [u8; 2] = [0x3, 0x0];
 const BASIC_MODE: [u8; 2] = [0x0, 0x0];
-const MESSAGE_DATA_PAYLOAD: usize = 24;
-const RAZER_FEATURE_ENDPOINT: i32 = 2;
+const SHORT_DATA_PAYLOAD: usize = 8;
+const LONG_DATA_PAYLOAD: usize = 24;
 const TREND_KEYDOWN: f64 = 1.0;
 const TREND_KEYUP: f64 = -1.0;
 const REGRESSION_WINDOW: usize = 5;
@@ -30,24 +33,24 @@ pub struct Driver {
     key_state: Vec<KeyCodes>,
 }
 
-/// Stores threshold values derived from profile and provides state machine memory for keys
+/// Structure for per-key threshold values from profile and state machine memory
 #[derive(Clone, Copy, Default, Debug)]
 pub struct AnalogAction {
     /// User setting (primary function, secondary function), must be > 0 to be active.
     actuation_point: (u8, u8),
     /// User setting (downward, upward), > 0 activates. If upward == 0 it will use downward value.
     retrigger_threshold: (f64, f64),
-    /// User setting from profile, enable continuous retrigger in algorithm.
+    /// User setting enable continuous retrigger in algorithm.
     crt_en: bool,
-    /// (primary binding, secondary binding), captures whether the keystroke is in actuated range
+    /// Captures whether the keystroke is in actuated range (primary binding, secondary binding)
     actuated: (bool, bool),
     /// Buffer for tracking the retrigger window in mm
     retrigger_track: f64,
     /// Tracks eligibility for retrigger
     retrigger_go: bool,
-    /// Reflects the previous trend
+    /// Tracks keystroke direction of previous report
     key_is_upstroke: bool,
-    /// Do not immediately activate first function when second function resets in dual function.
+    /// Flag to prevent early actuation of primary function during secondary function reset
     backoff_first_func: bool,
 }
 
@@ -84,7 +87,7 @@ fn get_razerkbd_controls(hidraw_name: &str) -> Option<String> {
     None
 }
 
-/// Translates an absolute key actuation point in mm to a u8 unit value
+/// Translates an absolute key actuation point in mm with sanitised precision to a u8 unit value
 fn convert_actuation_to_unit(value: f64) -> u8 {
     if value < KEY_TOP_MM || value > KEY_BOTTOM_MM {
         if value != 0.0 {
@@ -110,7 +113,7 @@ fn convert_actuation_to_unit(value: f64) -> u8 {
     0
 }
 
-/// Sanitise a relative displacement value to ensure it is in the correct range and position
+/// Sanitise a relative displacement value to ensure it is in the correct range and precision
 fn validate_retrigger_value(value: f64) -> f64 {
     if value < 0.0 || value > KEY_TRAVEL {
         log::error!(
@@ -152,7 +155,7 @@ impl Driver {
             return Err(format!("Device '{hidrawpath}' is not a Razer Tartarus Pro").into());
         }
 
-        if info.interface_number() == RAZER_FEATURE_ENDPOINT {
+        if info.interface_number() == ENDPOINT_3 {
             if let Some(path) = get_razerkbd_controls(&hidrawpath) {
                 log::info!("Driver controls available at {:?}", path);
                 control_path = path;
@@ -179,10 +182,10 @@ impl Driver {
         }
 
         // Create a 20x5 null matrix to initialize the buffer that implements key hysteresis
-        let mut zeroes = VecDeque::with_capacity(5);
+        let mut zeroes = VecDeque::with_capacity(REGRESSION_WINDOW);
         zeroes.extend([[0; KEY_COUNT]; REGRESSION_WINDOW]);
 
-        let mut demo_config = Self {
+        let mut tartarus = Self {
             device,
             hysteresis: zeroes,
             control_path: control_path,
@@ -191,11 +194,10 @@ impl Driver {
         };
 
         // Read in analog key config and apply
-        if info.interface_number() == 1 {
-            demo_config.key_action_config(conf);
+        if info.interface_number() == ENDPOINT_2 {
+            tartarus.key_action_config(conf);
         }
-
-        Ok(demo_config)
+        Ok(tartarus)
     }
 
     /// Allocate analog key properties from device YAML to key_action structs
@@ -234,16 +236,16 @@ impl Driver {
         }
     }
 
+    /// Poll the device and read input reports
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let mut buf = [0; MESSAGE_DATA_PAYLOAD];
+        let mut buf = [0; LONG_DATA_PAYLOAD];
         let bytes_read = self.device.read(&mut buf[..])?;
         let slice = &buf[..bytes_read];
         let events = self.handle_input_report(slice, bytes_read)?;
         Ok(events)
     }
 
-    /// Routes an input report to the appropriate hander based on what endpoint received it
-    /// and the report ID
+    /// Route an input report to the appropriate handler based on origin endpoint and report ID
     fn handle_input_report(
         &mut self,
         buf: &[u8],
@@ -251,44 +253,41 @@ impl Driver {
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let info = self.device.get_device_info()?;
 
-        // Depending on what interface the handle is associated with there are different reports
-        // that we can expect and respond to in kind.
-        // - Endpoint 1.1 is fully described by its HID report descriptor and is implemented here.
-        //   This interface captures the D-pad and the aux key.
-        // - Endpoint 1.2 has two reports, if report ID 1 is seen then it is in default
-        //   keyboard mode and is fully described. If report ID 6 is seen this is vendor defined
-        //   and reflects analog mode which is handled separately.
+        // Each endpoint generates different types of reports. Whilst each handle is associated
+        // with a single endpoint this code is common to all.
+        // - Endpoint 1 is fully described by its HID report descriptor and relates to the
+        //   D-pad and the aux key on the Tartarus.
+        // - Endpoint 2 has two reports, if report ID 1 is seen this is a normal keyboard report
+        //   and is fully described by the HID report descriptor. If report ID 6 is seen this is
+        //   vendor defined and reflects analog mode which is handled separately. Other reports are
+        //   defined in the descriptor table but are seemingly unused.
         //   This interface regardless of report captures the 20 numbered keys.
-        // - Endpoint 1.3 is processed identically to 1.1, different patterns to match though.
-        //   This interface captures the scroll wheel.
+        // - Endpoint 3 like endpoint 1 is fully described by its HID report descriptor.
+        //   This interface captures the scroll wheel and also serves as the control interface.
 
         match info.interface_number() {
-            0 => {
-                if bytes_read == 8 {
+            ENDPOINT_1 => {
+                if bytes_read == SHORT_DATA_PAYLOAD {
                     self.handle_basic(buf, KeyCodes::PhantomAux, false)
                 } else {
                     Ok(Vec::new())
                 }
             }
-            1 => {
-                if bytes_read == 24 {
+            ENDPOINT_2 => {
+                if bytes_read == LONG_DATA_PAYLOAD {
                     match buf[0] {
+                        // Only manage report IDs 1 & 6. Other report types are defined in firmware
+                        // but don't appear to be used.
                         0x1 => return self.handle_basic(buf, KeyCodes::PhantomBlank, true),
-                        0x6 => {
-                            return self.handle_analog(&buf[1..21]);
-                        }
-                        _ => {
-                            // Other report types exist but don't appear to be
-                            // actually used.
-                            Ok(Vec::new())
-                        }
+                        0x6 => return self.handle_analog(&buf[1..21]),
+                        _ => Ok(Vec::new()),
                     }
                 } else {
                     Ok(Vec::new())
                 }
             }
-            2 => {
-                if bytes_read == 8 {
+            ENDPOINT_3 => {
+                if bytes_read == SHORT_DATA_PAYLOAD {
                     self.handle_basic(buf, KeyCodes::PhantomMClick, false)
                 } else {
                     Ok(Vec::new())
@@ -298,7 +297,7 @@ impl Driver {
         }
     }
 
-    /// Manage input reports for endpoints 1.1 and 1.3
+    /// Manage input reports for endpoints 1 and 3
     fn handle_basic(
         &mut self,
         buf: &[u8],
@@ -338,59 +337,56 @@ impl Driver {
         Ok(events)
     }
 
-    /// Manage analog input reports and translate to key strokes
-    ///
-    /// # Concepts:
+    /// # Analog Mode Concepts
     ///
     /// ## Measurement
     /// A key in analog mode returns an 8-bit value representing height displacement with 0
     /// representing the top (~1.5mm) and 255 when it is bottomed out (~3.6mm).
     /// The OEM software has defined a minimum discernable step size as 0.1mm which we will adopt.
     /// We define a 'unit' which is total key travel (2.1mm) divided by quantization level (255)
-    /// noting that '0' is a parked value as we measure changes from 0.
-    /// With quantization error we declare that 0.1mm is equivalent to 12 (0xC) units and this
-    /// forms the basis of determining the displacement of a key.
+    /// noting that '0' is a parked value as we measure changes from 0. With quantization error we
+    /// declare that 0.1mm is equivalent to 12 (0xC) units.
     ///
     /// For a given keystroke it is not expected to see all values between 0 to 255. The guaranteed
-    /// value is 0 and 255 if you bottom out. All other values are based on poll rate and
-    /// incidental location at time of sampling. The other guarantee is trend - if you press
-    /// down, the value goes up and vice-versa. During development the shortest run of values
-    /// measured on the downstroke (i.e. slamming the key down) was 5. Uncontrolled return
-    /// (lifting off) also generated 5 to 6 values. If you gradually move the key are you able to
-    /// get fidelity down to individual units (0.00833 mm) but this generally a slow motion and not
-    /// reflective of all usage patterns. To account for the variable displacement speed and the
-    /// resultant discontinuous values when measuring a stroke, linear regression is used to
-    /// establish the direction of travel and forms the basis of mapping displacement to actions.
-    /// A 5-sample deep buffer matches the observed shortest run of values during a keystroke.
-    /// Picking a trend criteria of ± 1 is important as that tells us all numbers in the buffer
-    /// are trending in the same direction.
+    /// value is 0, and then 255 if you bottom out. All other values are based on poll rate and
+    /// incidental key location at time of sampling. The other guarantee is trend - if you press
+    /// down the value goes up and vice-versa. During development the shortest run of values
+    /// measured on the downstroke (i.e. slamming the key down) was 5. Uncontrolled release
+    /// generates 5 to 6 values. If you carefully manipulate the key you are able to make changes
+    /// down to the unit value (0.00833 mm) but this is generally a slow motion and not reflective
+    /// of all usage patterns. To account for the variable displacement speed and resultant
+    /// discontinuous values when measuring a stroke, linear regression is used to establish the
+    /// direction of travel and forms the basis of mapping displacement to actions. A 5-sample
+    /// deep buffer matches the observed shortest run of values during a keystroke. Picking a trend
+    /// criteria of ± 1 is important as this filters out key jitter (from say holding position)
+    /// giving a clear indication as to whether a key is moving up or down.
     ///
-    /// As the actual values of the actuation range are somewhat ambiguous, for the purposes of
+    /// As the true values of the actuation range are somewhat ambiguous, for the purposes of
     /// managing configuration we have declared 1.4mm as the 'top-top' point which translates to
-    /// unit value 0 allowing 3.6mm to translate (clamp) to 255. This does mean that 3.5mm is 252
-    /// rather than the usual spacing of 12 units.
+    /// unit value 0 allowing 3.6mm to translate (clamp) to 255. This does mean that 3.5mm is
+    /// mapped to 252 instead of 243 when using 12 unit spacing.
     ///
     /// ## Reports
-    /// The Tartarus Pro generates reports on the change of any one of its analog keys.
-    /// The report (ID 6) contains the state of all 20 keys (bytes) with no indication as to which
-    /// key triggered it. Keys are mapped to fixed offsets in the report (0-19) making translation
-    /// straight forward. The report ID byte is assumed to be dropped allowing for direct
-    /// processing of keys.
+    /// Any change from any one of the Tartarus pro analog keys will generate an input report.
+    /// The report (ID 6) contains the state of all 20 keys as individual bytes with no indication
+    /// as to which key triggered its generation. Keys are mapped to fixed offsets in the report
+    /// (0-19). The report ID byte is assumed to be dropped allowing for 1:1 mapping of keys to the
+    /// displacement values.
     ///
     /// # Algorithm:
     ///
-    /// A keystroke is defined as starting at the top, displaces downwards & optionally
-    /// hovers around a point then displaces again downward or upward, optionally hovering
-    /// and repeat until eventually returning to the top. To map an event we need to know from
-    /// the user what displacement should be used as the event trigger and then everything else
-    /// is filtering as analog-optical keyboards continuously sample during travel.
+    /// A keystroke is defined as starting from the top, moving downwards & holding about a point
+    /// until the desired effect is seen by the user. There may be subsequent move and holds but
+    /// the key will eventually return to the top. To map an event we need to know from the user
+    /// what displacement should be used as the event trigger, everything else from that point is
+    /// filtering as analog-optical keyboards sample continuously during travel.
     ///
     /// The summary of key processing is
-    /// - Push the whole matrix state into the hysteresis buffer, maintaining its depth of 5.
-    /// - Iterate over each key in the matrix:
+    /// - Push the report into the buffer, maintaining its depth of 5.
+    /// - Iterate over each key in the current report:
     ///   * Check if this key should be actuated or ignored this cycle
     ///   * If actuated already get the key's direction of travel by slicing the buffer at the
-    ///     key's offset and perform linear regression to perform further functions
+    ///     key's offset and perform linear regression on the run to perform further functions
     ///   * With the direction determined:
     ///     + Manage direction specific retrigger functions
     ///     + Manage special cases, dual-function on downstroke and reset cases on upstroke
@@ -422,6 +418,8 @@ impl Driver {
     ///   which changes this to only disable the retrigger logic only once the key is at the top of
     ///   its travel regardless of the profile actuation point.
     ///   The retrigger displacement can be a shared value or defined independently.
+
+    /// Manage analog input reports and translate to keystroke events
     fn handle_analog(&mut self, keys: &[u8]) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let key_arr: &[u8; KEY_COUNT];
         let mut events: Vec<Event> = Vec::new();
@@ -433,7 +431,7 @@ impl Driver {
             return Ok(events);
         }
 
-        // Update matrix hysteresis
+        // Update hysteresis with the current report
         self.hysteresis.pop_front();
         self.hysteresis.push_back(*key_arr);
 
@@ -450,18 +448,18 @@ impl Driver {
             let second_func_act_point = self.key_actions[key].actuation_point.1;
             let retrigger_shared_value = self.key_actions[key].retrigger_threshold.0;
             let retrigger_downstroke_value = self.key_actions[key].retrigger_threshold.1;
+            let continuous_retrigger = self.key_actions[key].crt_en;
+            let backoff_first_func = self.key_actions[key].backoff_first_func;
 
-            // Calculate the decisions used for traversing state machine
+            // State machine traversal logic
+            let func_actd = first_func_actd ^ second_func_actd;
             let first_func_reset_rule = first_func_actd && (first_func_act_point >= *displacement);
             let second_func_user_valid = second_func_act_point > first_func_act_point;
             let second_func_reset_rule = (second_func_act_point >= *displacement)
                 && second_func_user_valid
                 && second_func_actd;
-            let continuous_retrigger = self.key_actions[key].crt_en;
-            let backoff_first_func = self.key_actions[key].backoff_first_func;
-            let func_actd = first_func_actd ^ second_func_actd;
 
-            // Perform starting actuation checks if we aren't backing off and not actuated.
+            // Perform initial actuation checks, assuming key is not actuated.
             if !func_actd && !backoff_first_func {
                 // Short-circuit as it is unlikely all 20 keys are pressed.
                 // If a key is not actuated and has a value of 0, ignore processing this round.
@@ -471,7 +469,7 @@ impl Driver {
 
                 // Actuate if the following criteria are met
                 if first_func_act_point == 0 && *displacement > 0 {
-                    // First the exception case where actuation is set to 0 (1.5mm) as
+                    // First the exception case where actuation is set to 0 as
                     // any displacement will trigger it.
                     self.key_actions[key].actuated.0 = true;
                     // Keydown for top-top case
@@ -490,12 +488,12 @@ impl Driver {
                         pressed: true,
                     });
                 }
-                // Stop processing as we have emitted a key event
+                // Stop processing as we have emitted a keystroke event
                 continue;
             }
 
-            // If we are already actuated then track behavior using direction of travel and issue
-            // events per the user profile. First establish the direction of travel for the key
+            // If already actuated then get the direction of travel and check for matching
+            // event conditions based on downward or upward traversal.
             let run: Vec<f64> = self.hysteresis.iter().map(|arr| arr[key] as f64).collect();
             let trend = self.linear_regression(&run).unwrap_or_else(|| 0.0);
 
@@ -525,7 +523,7 @@ impl Driver {
                 }
 
                 // Manage retrigger events
-                // Check if we've been set up to retrigger from keydown and manage that.
+                // Check if we should be evaluating a keydown retrigger
                 if self.key_actions[key].retrigger_go {
                     // Calculate displacement track value based on whether we've changed direction
                     if self.key_actions[key].retrigger_track == 0.0 {
@@ -564,7 +562,7 @@ impl Driver {
                         });
                     }
                 } else if self.key_actions[key].retrigger_track != 0.0 {
-                    // Calculate and apply retrigger resistance
+                    // If not evaluating then calculate and apply retrigger 'resistance'.
                     // retrigger_track uses negative and positive displacement.
                     // When negative we track reset, when positive we track triggering.
                     // Normally with a retrigger sequence the key moves up then down on one motion.
@@ -602,10 +600,10 @@ impl Driver {
                                 pressed: false,
                             });
                         } else if second_func_reset_rule {
-                            // If the second function resets we have to prevent the first function
-                            // from actuating until we reach its reset point. If left as-is it will
-                            // trigger immediately as the function is in its actuation window.
-                            // Keyup for second function
+                            // When the second function resets the first function must be prevented
+                            // from immediately triggering as it will be within its actuation
+                            // window. Set a flag to back-off actuation until its initial actuation
+                            // (reset) point has been reached.
                             log::trace!("A2 Key {} Keyup @ {}!", key, *displacement);
                             events.push(Event {
                                 key: ANALOG_KEY_CODES[key].1.clone(),
@@ -615,6 +613,7 @@ impl Driver {
                                 self.key_actions[key].backoff_first_func = true;
                             }
                         } else {
+                            // Otherwise regular / first function reset
                             // Keyup for first function
                             log::trace!("A1 Key {} Keyup @ {}!", key, *displacement);
                             events.push(Event {
@@ -630,8 +629,7 @@ impl Driver {
                         continue;
                     }
                 }
-                // Remove the actuation block in dual function once we've reached reset
-                // for the first function.
+                // Reset actuation back-off flag when the first function reset point is reached
                 if backoff_first_func && first_func_act_point >= *displacement {
                     self.key_actions[key].backoff_first_func = false;
                 }
