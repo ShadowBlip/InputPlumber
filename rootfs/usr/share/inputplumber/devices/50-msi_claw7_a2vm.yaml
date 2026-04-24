@@ -22,26 +22,71 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  # Extra Buttons
+  # Face Extra Buttons
   - group: keyboard
-    evdev:
-      name: AT Translated Set 2 keyboard
-      phys_path: isa0060/serio0/input0
+    udev:
+      attributes:
+        - name: name
+          value: "AT Translated Set 2 keyboard"
+        - name: phys
+          value: "isa0060/serio0/input0"
 
-  # Gamepad
+  # Xinput Gamepad
   - group: gamepad
-    evdev:
-      vendor_id: "0db0"
-      product_id: "1901"
-      phys_path: "usb-0000:00:14.0-2/input0"
-  - group: gamepad
-    passthrough: true
-    hidraw:
-      vendor_id: 0x0db0
-      product_id: 0x1901
-      interface_num: 2
+    udev:
+      properties:
+        - name: ID_INPUT_JOYSTICK
+          value: "1"
+      attributes:
+        - name: id/vendor
+          value: "0db0"
+        - name: id/product
+          value: "1901"
+        - name: phys
+          value: "usb-0000:00:14.0-2/input0"
 
-  # IMU
+  # Xinput Mkey Extra Buttons
+  - group: gamepad
+    udev:
+      properties:
+        - name: ID_INPUT_KEYBOARD
+          value: "1"
+      attributes:
+        - name: id/vendor
+          value: "0db0"
+        - name: id/product
+          value: "1901"
+        - name: phys
+          value: "usb-0000:00:14.0-2/input2"
+
+  # Dinput Gamepad
+  - group: gamepad
+    udev:
+      properties:
+        - name: ID_INPUT_JOYSTICK
+          value: "1"
+      attributes:
+        - name: id/vendor
+          value: "0db0"
+        - name: id/product
+          value: "1902"
+        - name: phys
+          value: "usb-0000:00:14.0-2/input0"
+    capability_map_id: claw1-dinput
+
+  # Dinput Mkey Extra Buttons
+  - group: gamepad
+    udev:
+      properties:
+        - name: ID_INPUT_KEYBOARD
+          value: "1"
+      attributes:
+        - name: id/vendor
+          value: "0db0"
+        - name: id/product
+          value: "1902"
+        - name: phys
+          value: "usb-0000:00:14.0-2/input1"
 
 # Optional configuration for the composite device
 options:
