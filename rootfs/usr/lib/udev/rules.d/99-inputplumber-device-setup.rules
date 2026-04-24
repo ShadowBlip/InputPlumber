@@ -24,6 +24,9 @@ ACTION=="add|change|bind", ATTRS{idVendor}=="17ef", ATTRS{idProduct}=="61e[bcde]
 #ACTION=="add|change", KERNEL=="0003:0B05:1B4C*", SUBSYSTEM=="hid", DRIVER=="asus_rog_ally", ATTRS{bInterfaceNumber}=="02", ATTR{btn_m1/remap}="KB_F15", ATTR{btn_m2/remap}="KB_F14", ATTR{gamepad_mode}="1", ATTR{apply_all}="1", GOTO="end"
 #ACTION=="add|change", KERNEL=="0003:0B05:1B4C*", SUBSYSTEM=="hid", DRIVER=="asus_rog_ally", ATTRS{bInterfaceNumber}=="05", ATTR{qam_mode}="0", GOTO="end"
 
+# MSI Claw Settings
+ACTION=="add|change|bind", ATTRS{idVendor}=="0db0", ATTRS{idProduct}=="190[1-3]", SUBSYSTEM=="hid", DRIVER=="hid-msi-claw", ATTR{button_m1}="KEY_RIGHTBRACE", ATTR{button_m2}="KEY_LEFTBRACE", ATTR{mkeys_function}="macro" GOTO="end"
+
 LABEL="end"
 
 
