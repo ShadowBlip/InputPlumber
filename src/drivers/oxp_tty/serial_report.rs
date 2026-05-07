@@ -6,6 +6,8 @@ use packed_struct::prelude::*;
 use std::fmt::Display;
 use std::fmt::Formatter;
 
+use super::ButtonId;
+
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum ReportType {
     #[default]
@@ -22,32 +24,6 @@ impl ReportType {
             ReportType::TakeoverAck => ReportType::TakeoverAck as u8,
         }
     }
-}
-
-#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
-pub enum ButtonId {
-    #[default]
-    None = 0x00,
-    A = 0x01,
-    B = 0x02,
-    X = 0x03,
-    Y = 0x04,
-    LeftBumper = 0x05,
-    RightBumper = 0x06,
-    LeftTrigger = 0x07,
-    RightTrigger = 0x08,
-    Menu = 0x09,
-    View = 0x0a,
-    LeftStick = 0x0b,
-    RightStick = 0x0c,
-    DpadUp = 0x0d,
-    DpadDown = 0x0e,
-    DpadLeft = 0x0f,
-    DpadRight = 0x10,
-    Guide = 0x21,
-    M1 = 0x22,
-    M2 = 0x23,
-    Keyboard = 0x24,
 }
 
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]

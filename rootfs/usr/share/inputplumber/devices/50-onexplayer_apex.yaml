@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: ONEXPLAYER X1
+name: ONEXPLAYER APEX
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -16,13 +16,7 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: ONEXPLAYER X1 A
-      sys_vendor: ONE-NETBOOK
-  - dmi_data:
-      product_name: ONEXPLAYER X1 i
-      sys_vendor: ONE-NETBOOK
-  - dmi_data:
-      product_name: ONEXPLAYER X1 mini
+      product_name: ONEXPLAYER APEX
       sys_vendor: ONE-NETBOOK
 
 # One or more source devices to combine into a single virtual device. The events
@@ -31,52 +25,30 @@ source_devices:
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:c4:00.3-4/input0
+      phys_path: usb-0000:65:00.4-1.3/input0
       handler: event*
+
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+
   - group: keyboard
     evdev:
-      name: HID 1a86:fe00
-      phys_path: usb-0000:c4:00.3-2.2/input0
+      name: "HID 1a86:fe00"
+      phys_path: usb-0000:65:00.4-1.2/input0
       handler: event*
+
   - group: gamepad
     hidraw:
       vendor_id: 0x1a86
       product_id: 0xfe00
       interface_num: 2
-  - group: gamepad
-    udev:
-      id_vendor: "1a86"
-      id_product: "7523"
-      interface_number: "00"
-      sys_name: "ttyUSB*"
-      subsystem: tty
+
   - group: imu
     iio:
-      name: "{i2c-BMI0260:00,i2c-BOSC0260:00,bmi260}"
-      mount_matrix:
-        x: [0, 1, 0]
-        y: [1, 0, 0]
-        z: [0, 0, -1]
-
-  # External / docked controllers: joined dock supplies power and 2.4 GHz to the
-  # handheld. The gamepad entry is the receiver's XInput-style device; the fe02
-  # HID is companion keys on that receiver path. Absent when controllers are
-  # attached directly to the unit.
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:c4:00.3-1.1/input0
-      handler: event*
-  - group: keyboard
-    evdev:
-      name: HID 1a86:fe02
-      phys_path: usb-0000:c4:00.3-1.2/input0
-      handler: event*
+      name: "{i2c-BMI0160:00,bmi260}"
 
 # Optional configuration for the composite device
 options:
@@ -85,11 +57,11 @@ options:
   # external service enables management of the device. Defaults to 'false'
   auto_manage: true
 
-# The target input device(s) that the virtual device profile can use
+# The target input device(s) to emulate by default
 target_devices:
-  - xbox-elite
+  - xbox-series
   - mouse
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: oxp5
+capability_map_id: oxp8
