@@ -57,9 +57,12 @@ options:
   # external service enables management of the device. Defaults to 'false'
   auto_manage: true
 
-# The target input device(s) to emulate by default
+# The target input device(s) to emulate by default. xbox-elite (matching
+# 50-onexplayer_x1.yaml) so the oxp8 capability map's LeftPaddle1 /
+# RightPaddle1 outputs surface — those button codes only exist on
+# Xbox Elite, not Xbox Series.
 target_devices:
-  - xbox-series
+  - xbox-elite
   - mouse
   - keyboard
 
