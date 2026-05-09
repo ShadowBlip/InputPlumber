@@ -59,7 +59,7 @@ options:
 
 # The target input device(s) to emulate by default
 target_devices:
-  - xbox-series
+  - xbox-elite
   - mouse
   - keyboard
 
