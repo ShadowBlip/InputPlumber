@@ -6,7 +6,11 @@ pub mod device_test;
 
 pub mod device;
 
-use std::{error::Error, fs, path::PathBuf};
+use std::{
+    error::Error,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use tokio::process::Command;
 use udev::Enumerator;
@@ -46,16 +50,21 @@ pub async fn hide_device(path: &str, flags: &[HideFlag]) -> Result<(), Box<dyn E
             return Err("Unable to determine chmod command location".into());
         };
         let chmod_cmd = chmod_cmd.to_string_lossy().to_string();
+        // Find the setfacl command to clear any facls as we are overwriting using chmod
+        let Some(setfacl_cmd) = find_executable("setfacl") else {
+            return Err("Unable to determine setfacl command location".into());
+        };
+        let setfacl_cmd = setfacl_cmd.to_string_lossy().to_string();
 
         // Build the rule content
         chmod_early_rule = format!(
-            r#"KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN+="{chmod_cmd} 000 /dev/input/%k", SYMLINK+="inputplumber/by-hidden/%k"
-KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN+="{chmod_cmd} 000 /dev/%k", SYMLINK+="inputplumber/by-hidden/%k"
+            r#"KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN+="{chmod_cmd} 000 /dev/input/%k", RUN+="{setfacl_cmd} -b /dev/input/%k", SYMLINK+="inputplumber/by-hidden/%k"
+KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE:="0000", GROUP:="root", RUN+="{chmod_cmd} 000 /dev/%k", RUN+="{setfacl_cmd} -b /dev/%k", SYMLINK+="inputplumber/by-hidden/%k"
 "#
         );
         chmod_late_rule = format!(
-            r#"KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/input/%k"
-KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/%k"
+            r#"KERNEL=="js[0-9]*|event[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/input/%k", RUN+="{setfacl_cmd} -b /dev/input/%k"
+KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", MODE="000", GROUP="root", TAG-="uaccess", RUN+="{chmod_cmd} 000 /dev/%k", RUN+="{setfacl_cmd} -b /dev/%k"
 "#
         );
     }
@@ -178,6 +187,11 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
         let path = entry.path().to_string_lossy().to_string();
         log::debug!("Removing hide rule: {path}");
         fs::remove_file(path)?;
+    }
+
+    if !Path::new("/dev/inputplumber/sources").is_dir() {
+        reload_all().await?;
+        return Ok(());
     }
 
     // Move all devices back
