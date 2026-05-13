@@ -141,6 +141,8 @@ pub struct CompositeDevice {
     /// Whether or not force feedback output events should be routed to
     /// supported source devices.
     ff_enabled: bool,
+    /// Set the scale for the force feedback intensity.
+    ff_scale: f64,
     /// Set of available Force Feedback effect IDs that are not in use
     /// TODO: Just use the keys from ff_effect_id_source_map to determine next id
     ff_effect_ids: BTreeSet<i16>,
@@ -207,6 +209,7 @@ impl CompositeDevice {
             source_devices_used: Vec::new(),
             targets: CompositeDeviceTargets::new(conn, dbus_path, tx.into(), manager),
             ff_enabled: true,
+            ff_scale: 1.0,
             ff_effect_ids: (0..64).collect(),
             ff_effect_id_source_map: HashMap::new(),
             intercept_activation_caps: vec![Capability::Gamepad(Gamepad::Button(
@@ -509,6 +512,16 @@ impl CompositeDevice {
                         log::info!("Setting force feedback enabled: {enabled:?}");
                         self.ff_enabled = enabled;
                     }
+                    CompositeCommand::GetForceFeedbackScale(sender) => {
+                        if let Err(e) = sender.send(self.ff_scale).await {
+                            log::error!("Failed to send force feedback scale status: {e}");
+                        }
+                    }
+                    CompositeCommand::SetForceFeedbackScale(scale) => {
+                        let scale = scale.clamp(0.0, 1.0);
+                        log::info!("Setting force feedback scale: {scale}");
+                        self.ff_scale = scale;
+                    }
                     CompositeCommand::Stop => {
                         log::debug!(
                             "Got STOP signal. Stopping CompositeDevice: {}",
@@ -743,7 +756,7 @@ impl CompositeDevice {
     }
 
     /// Process a single output event from a target device.
-    async fn process_output_event(&mut self, event: OutputEvent) -> Result<(), Box<dyn Error>> {
+    async fn process_output_event(&mut self, mut event: OutputEvent) -> Result<(), Box<dyn Error>> {
         log::trace!("Received output event: {:?}", event);
 
         // Handle any output events that need to upload FF effect data
@@ -833,11 +846,19 @@ impl CompositeDevice {
             return Ok(());
         }
 
-        // If force feedback is disabled at the composite device level, don't
-        // forward any other FF events to source devices.
-        if !self.ff_enabled && event.is_force_feedback() {
-            log::trace!("Force feedback not enabled. Nothing to do.");
-            return Ok(());
+        // Process force feedback events
+        if event.is_force_feedback() {
+            // If force feedback is disabled at the composite device level, don't
+            // forward any other FF events to source devices.
+            if !self.ff_enabled {
+                log::trace!("Force feedback not enabled. Nothing to do.");
+                return Ok(());
+            }
+
+            // Scale the force feedback event if needed
+            if self.ff_scale != 1.0 {
+                event.scale(self.ff_scale);
+            }
         }
 
         // Write the event to devices that are capable of handling it
