@@ -440,6 +440,16 @@ pub struct MountMatrix {
     pub z: [f64; 3],
 }
 
+impl Default for MountMatrix {
+    fn default() -> Self {
+        MountMatrix {
+            x: [1.0, 0.0, 0.0],
+            y: [0.0, 1.0, 0.0],
+            z: [0.0, 0.0, 1.0],
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct EventsConfig {
