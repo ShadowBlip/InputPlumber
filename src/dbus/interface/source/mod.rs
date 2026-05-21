@@ -1,4 +1,5 @@
 pub mod evdev;
+pub mod fastrpc;
 pub mod hidraw;
 pub mod iio_imu;
 pub mod led;

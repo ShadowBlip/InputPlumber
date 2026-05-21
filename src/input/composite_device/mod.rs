@@ -18,29 +18,24 @@ use zbus::{object_server::Interface, Connection};
 
 use crate::{
     config::{
-        capability_map::CapabilityMapConfig, path::get_profiles_path, CompositeDeviceConfig,
-        DeviceProfile, LoadError, ProfileMapping,
+        CompositeDeviceConfig, DeviceProfile, LoadError, ProfileMapping, capability_map::CapabilityMapConfig, path::get_profiles_path
     },
     dbus::interface::{
-        composite_device::CompositeDeviceInterface, force_feedback::ForceFeedbackInterface,
-        DBusInterfaceManager,
+        DBusInterfaceManager, composite_device::CompositeDeviceInterface, force_feedback::ForceFeedbackInterface
     },
     input::{
         capability::{Capability, Gamepad, GamepadButton, Mouse},
         event::{
-            native::NativeEvent,
-            value::{InputValue, TranslationError},
-            Event,
+            Event, native::NativeEvent, value::{InputValue, TranslationError}
         },
         output_capability::OutputCapability,
         output_event::UinputOutputEvent,
         source::{
-            evdev::EventDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice,
-            tty::TtyDevice, SourceDevice,
+            SourceDevice, evdev::EventDevice, fastrpc::FastRpcDevice, hidraw::HidRawDevice, iio::IioDevice, led::LedDevice, tty::TtyDevice
         },
         target::TargetDeviceTypeId,
     },
-    udev::{hide_device, unhide_device, HideFlag},
+    udev::{HideFlag, hide_device, unhide_device},
 };
 
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
@@ -1763,6 +1758,11 @@ impl CompositeDevice {
                         log::debug!("Adding TTY source device: {:?}", device.sysname());
                         let device = TtyDevice::new(device, self.client(), source_config.clone())?;
                         SourceDevice::Tty(device)
+                    }
+                    "fastrpc" => {
+                        log::debug!("Adding FastRPC source device: {:?}", device.sysname());
+                        let device = FastRpcDevice::new(device, self.client(), source_config.clone())?;
+                        SourceDevice::FastRpc(device)
                     }
                     _ => {
                         return Err(format!(
