@@ -3,7 +3,6 @@ pub mod glib {
     use std::error::Error;
 
     /* Main / basic types */
-    pub type GCancellable = std::ffi::c_void;
     pub type GObject = std::ffi::c_void;
     pub type GMainContext = std::ffi::c_void;
     pub type GQuark = std::ffi::c_uint;
@@ -79,6 +78,49 @@ pub mod glib {
     }
 }
 
+pub mod gio {
+    use libloading::Library;
+    use std::error::Error;
+
+    pub type GCancellable = std::ffi::c_void;
+
+    /* Function ptrs */
+    /// g_cancellable_new
+    pub type FnGCancellableNew = unsafe extern "C" fn() -> *mut GCancellable;
+
+    /// g_cancellable_cancel
+    pub type FnGCancellableCancel = unsafe extern "C" fn(cancellable: *mut GCancellable);
+
+    pub struct GioDylib {
+        _library: Library,
+        pub g_cancellable_new: FnGCancellableNew,
+        pub g_cancellable_cancel: FnGCancellableCancel,
+    }
+
+    impl GioDylib {
+        /// Load libgio-2.0.so and methods
+        pub fn load() -> Result<Self, Box<dyn Error + Send + Sync>> {
+            let library = unsafe {
+                Library::new("libgio-2.0.so.0").map_err(|e| format!("libgio-2.0 not found {e}"))?
+            };
+
+            Ok(Self {
+                g_cancellable_new: unsafe {
+                    *library
+                        .get(b"g_cancellable_new\0")
+                        .map_err(|e| format!("libgio-2.0:g_cancellable_new not found {e}"))?
+                },
+                g_cancellable_cancel: unsafe {
+                    *library
+                        .get(b"g_cancellable_cancel\0")
+                        .map_err(|e| format!("libgio-2.0:g_cancellable_cancel not found {e}"))?
+                },
+                _library: library,
+            })
+        }
+    }
+}
+
 pub mod gobject {
     use libloading::Library;
     use std::error::Error;
@@ -131,7 +173,8 @@ pub mod gobject {
 }
 
 pub mod ssc {
-    use super::glib::{gpointer, GCancellable, GClosure, GError, GObject};
+    use super::gio::GCancellable;
+    use super::glib::{gpointer, GClosure, GError, GObject};
     use libloading::Library;
     use std::error::Error;
 

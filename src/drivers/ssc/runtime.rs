@@ -1,6 +1,7 @@
-use std::{error::Error, ptr::null_mut};
+use std::{error::Error, ptr::null_mut, time::Duration};
 
 use super::bindings::{
+    gio::{GCancellable, GioDylib},
     glib::{glib_error, gpointer, GError, GlibDylib},
     gobject::{FnGObjectUnref, GObjectDylib},
     ssc::{
@@ -47,11 +48,45 @@ impl SscObject {
     }
 }
 
+/* Wrapper for GCancellable */
+struct Cancellable {
+    _ptr: *mut GCancellable,
+}
+
+impl Cancellable {
+    fn new(ptr: *mut GCancellable) -> Self {
+        Self { _ptr: ptr }
+    }
+
+    pub fn ptr(&self) -> *mut GCancellable {
+        self._ptr
+    }
+
+    pub fn cancel_after(libgobject: &GObjectDylib, libgio: &GioDylib, timeout: Duration) -> Self {
+        let this = Self::new(unsafe { (libgio.g_cancellable_new)() });
+        let this_ptr_u64 = this.ptr() as std::ffi::c_ulong;
+
+        let g_cancellable_cancel = libgio.g_cancellable_cancel;
+        let g_object_unref = libgobject.g_object_unref;
+
+        std::thread::spawn(move || {
+            std::thread::sleep(timeout);
+            unsafe {
+                (g_cancellable_cancel)(this_ptr_u64 as *mut GCancellable);
+                (g_object_unref)(this_ptr_u64 as *mut _);
+            }
+        });
+
+        this
+    }
+}
+
 /// This contains the dynamic libraries and all method pointers needed for libssc to work.
-/// This currently consists of: glib-2.0, gobject-2.0, libssc
+/// This currently consists of: glib-2.0, gobject-2.0, gio-2.0, libssc
 pub struct SscRuntime {
     pub(crate) libssc: SscDylib,
     pub(crate) libglib: GlibDylib,
+    pub(crate) libgio: GioDylib,
     pub(crate) libgobject: GObjectDylib,
 }
 
@@ -60,6 +95,7 @@ impl SscRuntime {
         Ok(Self {
             libssc: SscDylib::load()?,
             libglib: GlibDylib::load()?,
+            libgio: GioDylib::load()?,
             libgobject: GObjectDylib::load()?,
         })
     }
@@ -71,7 +107,11 @@ impl SscRuntime {
         open_fn: FnSscSensorOpenSync,
     ) -> Result<SscObject, Box<dyn Error + Send + Sync>> {
         let mut err: *mut GError = null_mut();
-        let ptr = unsafe { (new_fn)(std::ptr::null_mut(), &mut err) };
+        let ptr = unsafe {
+            let cancellable =
+                Cancellable::cancel_after(&self.libgobject, &self.libgio, Duration::from_secs(1));
+            (new_fn)(cancellable.ptr(), &mut err)
+        };
 
         // Instantiate the sensor and get our GObject ptr from it
         if let Some(v) = glib_error(err) {
@@ -86,7 +126,9 @@ impl SscRuntime {
         // note: We set the data callback later using set_measurement_handler, so this is just new sensor -> open sensor
         unsafe {
             err = std::ptr::null_mut();
-            (open_fn)(ptr, std::ptr::null_mut(), &mut err)
+            let cancellable =
+                Cancellable::cancel_after(&self.libgobject, &self.libgio, Duration::from_secs(4));
+            (open_fn)(ptr, cancellable.ptr(), &mut err)
         };
 
         if let Some(v) = glib_error(err) {
