@@ -92,9 +92,9 @@ fn translate_event(event: ssc::event::Event) -> NativeEvent {
             let value = InputValue::Vector3 {
                 // Similar to bmi_imu, these values needs to be scaled a bunch
                 // This seems close to correct, needs some more testing
-                x: Some(data.roll.to_degrees() * 14.0),
-                y: Some(data.pitch.to_degrees() * 14.0),
-                z: Some(data.yaw.to_degrees() * 14.0),
+                x: Some(data.roll.to_degrees() * 16.0),
+                y: Some(data.pitch.to_degrees() * 16.0),
+                z: Some(data.yaw.to_degrees() * 16.0),
             };
             NativeEvent::new(cap, value)
         }

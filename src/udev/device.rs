@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     error::Error,
-    ffi::OsStr,
     fs::{self, read_link},
     path::{Path, PathBuf},
 };

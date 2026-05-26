@@ -2,11 +2,11 @@ use std::{error::Error, ptr::null_mut, time::Duration};
 
 use super::bindings::{
     gio::{GCancellable, GioDylib},
-    glib::{glib_error, gpointer, GError, GlibDylib},
+    glib::{gpointer, GCallback, GError, GlibDylib},
     gobject::{FnGObjectUnref, GObjectDylib},
     ssc::{
         closure_destroy_handler, measurement_handler, FnSscSensorNewSync, FnSscSensorOpenSync,
-        SscDylib,
+        MeasurementHandlerCb, SscDylib,
     },
 };
 
@@ -27,19 +27,19 @@ impl Drop for SscObject {
 }
 
 impl SscObject {
-    pub fn set_measurement_handler<FnMeasure: FnMut(f32, f32, f32) + 'static>(
+    pub fn set_measurement_handler<MeasurementHandlerFn: FnMut(f32, f32, f32) + 'static>(
         &self,
         runtime: &SscRuntime,
-        callback: FnMeasure,
+        callback: MeasurementHandlerFn,
     ) {
-        let boxed: Box<Box<dyn FnMut(f32, f32, f32)>> = Box::new(Box::new(callback));
+        let boxed: Box<MeasurementHandlerCb> = Box::new(Box::new(callback));
         let user_data = Box::into_raw(boxed) as gpointer;
 
         unsafe {
             (runtime.libgobject.g_signal_connect_data)(
                 self.ptr as *mut _,
-                b"measurement\0".as_ptr() as *const _,
-                Some(std::mem::transmute(measurement_handler as *const ())),
+                c"measurement".as_ptr(),
+                std::mem::transmute::<*const (), GCallback>(measurement_handler as *const ()),
                 user_data,
                 Some(closure_destroy_handler),
                 0,
@@ -114,7 +114,7 @@ impl SscRuntime {
         };
 
         // Instantiate the sensor and get our GObject ptr from it
-        if let Some(v) = glib_error(err) {
+        if let Some(v) = self.libglib.convert_error(err) {
             return Err(format!("Failed to instantiate SSC sensor: {v}").into());
         }
 
@@ -131,7 +131,7 @@ impl SscRuntime {
             (open_fn)(ptr, cancellable.ptr(), &mut err)
         };
 
-        if let Some(v) = glib_error(err) {
+        if let Some(v) = self.libglib.convert_error(err) {
             return Err(format!("Failed to open SSC sensor: {v}").into());
         }
 

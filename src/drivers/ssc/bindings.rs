@@ -37,25 +37,13 @@ pub mod glib {
     pub type FnGMainContextIteration =
         unsafe extern "C" fn(context: *mut GMainContext, may_block: gboolean) -> gboolean;
 
-    /* Helpers */
-    /// Converts a GLib error ptr to a basic string (or None if the error is null)
-    pub fn glib_error(error: *mut GError) -> Option<String> {
-        if error.is_null() {
-            None
-        } else {
-            unsafe {
-                Some(format!(
-                    "GLib error: domain = {}, code = {}",
-                    (*error).domain,
-                    (*error).code
-                ))
-            }
-        }
-    }
+    /// g_quark_to_string
+    pub type FnGQuarkToString = unsafe extern "C" fn(quark: GQuark) -> *const std::ffi::c_char;
 
     pub struct GlibDylib {
         _library: Library,
         pub g_main_context_iteration: FnGMainContextIteration,
+        pub g_quark_to_string: FnGQuarkToString,
     }
 
     impl GlibDylib {
@@ -72,8 +60,36 @@ pub mod glib {
                         format!("libglib-2.0:g_main_context_iteration not found {e}")
                     })?
                 },
+
+                g_quark_to_string: unsafe {
+                    *library
+                        .get(b"g_quark_to_string\0")
+                        .map_err(|e| format!("libglib-2.0:g_quark_to_string not found {e}"))?
+                },
+
                 _library: library,
             })
+        }
+
+        /// Converts a GLib error ptr to a basic string (or None if the error is null)
+        pub fn convert_error(&self, error: *mut GError) -> Option<String> {
+            if error.is_null() {
+                None
+            } else {
+                let domain_str = unsafe {
+                    let domain_cstr =
+                        std::ffi::CStr::from_ptr((self.g_quark_to_string)((*error).domain));
+                    domain_cstr.to_string_lossy().into_owned()
+                };
+
+                let domain = unsafe { (*error).domain };
+                let code = unsafe { (*error).code };
+
+                Some(format!(
+                    "GLib error: domain = {} / {}, code = {}",
+                    domain, domain_str, code
+                ))
+            }
         }
     }
 }
@@ -241,6 +257,8 @@ pub mod ssc {
         }
     }
 
+    pub type MeasurementHandlerCb = Box<dyn FnMut(f32, f32, f32)>;
+
     pub unsafe extern "C" fn measurement_handler(
         _obj: *mut GObject,
         x: f32,
@@ -249,7 +267,7 @@ pub mod ssc {
         data: gpointer,
     ) {
         let cb: &mut Box<dyn FnMut(f32, f32, f32) + 'static> =
-            unsafe { &mut *(data as *mut Box<dyn FnMut(f32, f32, f32)>) };
+            unsafe { &mut *(data as *mut MeasurementHandlerCb) };
         cb(x, y, z);
     }
 
