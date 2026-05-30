@@ -173,9 +173,8 @@ impl SscDylibs {
         let gobject = unsafe { load_library!("libgobject-2.0.so.0")? };
         let ssc = unsafe { load_library!("libssc.so")? };
 
-        // SAFETY: We handle possible errors when a symbol doesn't exist, so this is safe as long as our function &
-        // type definitions are correct. The symbols should always be valid as long as the library handle is alive,
-        // as we keep a reference to those too.
+        // SAFETY: Handles possible errors when a symbol doesn't exist, so this is safe as long as our function &
+        // type definitions are correct. The symbols should always be valid as we also keep references to the library handles.
         unsafe {
             Ok(Self {
                 g_main_context_iteration: *load_symbol!(glib, "g_main_context_iteration")?,
