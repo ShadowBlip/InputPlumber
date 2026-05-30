@@ -1,16 +1,16 @@
 use std::collections::HashSet;
 use std::error::Error;
+use std::sync::Arc;
 use tokio::{sync::mpsc, sync::mpsc::error::TryRecvError};
 
 use crate::config::MountMatrix;
 use crate::input::capability::{Capability, Source};
 
-use super::bindings::glib::GFALSE;
 use super::event::{AxisData, Event};
 use super::runtime::{SscObject, SscRuntime};
 
 pub struct Driver {
-    runtime: SscRuntime,
+    runtime: Arc<SscRuntime>,
     _gyroscope: SscObject,
     _accelerometer: SscObject,
 
@@ -26,9 +26,9 @@ impl Driver {
         let runtime = SscRuntime::load()?;
         let (tx, rx) = mpsc::channel::<Event>(1024);
 
-        let gyroscope = runtime.create_gyroscope()?;
+        let gyroscope = runtime.clone().create_gyroscope()?;
         let gyroscope_tx = tx.clone();
-        gyroscope.set_measurement_handler(&runtime, move |x, y, z| {
+        gyroscope.set_measurement_handler(move |x, y, z| {
             _ = gyroscope_tx.try_send(Event::Gyro(AxisData {
                 roll: x as f64,
                 pitch: y as f64,
@@ -36,9 +36,9 @@ impl Driver {
             }));
         });
 
-        let accelerometer = runtime.create_accelerometer()?;
+        let accelerometer = runtime.clone().create_accelerometer()?;
         let accelerometer_tx = tx.clone();
-        accelerometer.set_measurement_handler(&runtime, move |x, y, z| {
+        accelerometer.set_measurement_handler(move |x, y, z| {
             _ = accelerometer_tx.try_send(Event::Accelerometer(AxisData {
                 roll: x as f64,
                 pitch: y as f64,
@@ -71,11 +71,7 @@ impl Driver {
         // libssc uses GLib and relies on the GLib main loop
         // Instead of creating a main loop and main context then managing it alongside InputPlumber's loop etc,
         // we can just perform an iteration of the GLib context every poll
-
-        // SAFETY: This function may have side effects if other parts of InputPlumber start using the main context.
-        // In terms of unsafe usage, this function handle is always non-null and we don't have to pass anything to it
-        // that isn't NULL / 0. We can safely ignore the return value as well.
-        unsafe { (self.runtime.libglib.g_main_context_iteration)(std::ptr::null_mut(), GFALSE) };
+        self.runtime.iterate_glib_main_loop();
 
         let mut events: Vec<Event> = vec![];
 
