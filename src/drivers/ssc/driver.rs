@@ -71,7 +71,10 @@ impl Driver {
         // libssc uses GLib and relies on the GLib main loop
         // Instead of creating a main loop and main context then managing it alongside InputPlumber's loop etc,
         // we can just perform an iteration of the GLib context every poll
-        // Not sure how this will work if other parts of InputPlumber start using the GLib main loop too for some reason
+
+        // SAFETY: This function may have side effects if other parts of InputPlumber start using the main context.
+        // In terms of unsafe usage, this function handle is always non-null and we don't have to pass anything to it
+        // that isn't NULL / 0. We can safely ignore the return value as well.
         unsafe { (self.runtime.libglib.g_main_context_iteration)(std::ptr::null_mut(), GFALSE) };
 
         let mut events: Vec<Event> = vec![];
