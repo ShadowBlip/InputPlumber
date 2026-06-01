@@ -292,7 +292,7 @@ impl InputValue {
                                 Mouse::Motion => self
                                     .translate_axis_to_mouse_motion(source_config, target_config),
                                 Mouse::Button(_) => self.translate_axis_to_button(source_config),
-                                Mouse::Wheel => Err(TranslationError::NotImplemented),
+                                Mouse::Wheel => self.translate_axis_to_wheel(source_config, target_config),
                             },
                             // Axis -> Keyboard
                             Capability::Keyboard(_) => self.translate_axis_to_button(source_config),
@@ -1179,6 +1179,128 @@ impl InputValue {
             _ => Err(TranslationError::InvalidSourceConfig(
                 "Incomplete dial config".to_string(),
             )),
+        }
+    }
+    fn translate_axis_to_wheel(
+        &self,
+        _source_config: &CapabilityConfig,
+        target_config: &CapabilityConfig,
+    ) -> Result<InputValue, TranslationError> {
+        let Some(mouse_config) = target_config.mouse.as_ref() else {
+            return Err(TranslationError::InvalidTargetConfig("No mouse config".to_string()));
+        };
+        let Some(wheel) = mouse_config.wheel.as_ref() else {
+            return Err(TranslationError::InvalidTargetConfig("No wheel config".to_string()));
+        };
+
+        let (mut x, mut y) = match self {
+            InputValue::Vector2 { x, y } => (*x, *y),
+            InputValue::Vector3 { x, y, z: _ } => (*x, *y),
+            _ => (None, None),
+        };
+
+        let deadzone = 0.20;
+        
+      
+        let max_tps = 12.0; 
+
+        
+        let tick_value = 1.0; 
+
+        // ==========================================================
+        // 1. Memory :)
+        // ==========================================================
+        static LAST_X: std::sync::Mutex<f64> = std::sync::Mutex::new(0.0);
+        static LAST_Y: std::sync::Mutex<f64> = std::sync::Mutex::new(0.0);
+
+        if let Some(val) = x {
+            *LAST_X.lock().unwrap() = if val.abs() < deadzone { 0.0 } else { val };
+        }
+        if let Some(val) = y {
+            *LAST_Y.lock().unwrap() = if val.abs() < deadzone { 0.0 } else { val };
+        }
+
+        let current_x = *LAST_X.lock().unwrap();
+        let current_y = *LAST_Y.lock().unwrap();
+
+        // ==========================================================
+        // 2. Cronometer :)
+        // ==========================================================
+        static WHEEL_TIMER_X: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+        static WHEEL_TIMER_Y: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+       
+        if current_x == 0.0 {
+            *WHEEL_TIMER_X.lock().unwrap() = None; // lock the cronometer on 0.p
+            x = Some(0.0);
+        } else {
+            
+            let target_tps = current_x.abs() * max_tps;
+            let delay_ms = (1000.0 / target_tps.max(0.1)) as u128;
+
+            let mut last = WHEEL_TIMER_X.lock().unwrap();
+            let now = std::time::Instant::now();
+
+            if last.is_none() || now.duration_since(last.unwrap()).as_millis() >= delay_ms {
+                //
+                x = Some(current_x.signum() * tick_value); 
+                *last = Some(now);
+            } else {
+                x = Some(0.0); 
+            }
+        }
+
+        // --- Axys Y ---
+        if current_y == 0.0 {
+            *WHEEL_TIMER_Y.lock().unwrap() = None;
+            y = Some(0.0);
+        } else {
+            let target_tps = current_y.abs() * max_tps;
+            let delay_ms = (1000.0 / target_tps.max(0.1)) as u128;
+
+            let mut last = WHEEL_TIMER_Y.lock().unwrap();
+            let now = std::time::Instant::now();
+
+            if last.is_none() || now.duration_since(last.unwrap()).as_millis() >= delay_ms {
+                y = Some(current_y.signum() * tick_value);
+                *last = Some(now);
+            } else {
+                y = Some(0.0);
+            }
+        }
+
+        if let Some(direction) = wheel.direction.as_ref() {
+            match direction.as_str() {
+                "horizontal" => Ok(InputValue::Vector2 { x, y: None }),
+                "vertical" => Ok(InputValue::Vector2 { x: None, y: y.map(|v| -v) }),
+                "left" => {
+                    if let Some(vx) = x {
+                        if vx <= 0.0 { Ok(InputValue::Vector2 { x: Some(vx), y: None }) }
+                        else { Ok(InputValue::Vector2 { x: None, y: None }) }
+                    } else { Ok(InputValue::Vector2 { x: None, y: None }) }
+                }
+                "right" => {
+                    if let Some(vx) = x {
+                        if vx >= 0.0 { Ok(InputValue::Vector2 { x: Some(vx), y: None }) }
+                        else { Ok(InputValue::Vector2 { x: None, y: None }) }
+                    } else { Ok(InputValue::Vector2 { x: None, y: None }) }
+                }
+                "up" => {
+                    if let Some(vy) = y {
+                        if vy <= 0.0 { Ok(InputValue::Vector2 { x: None, y: Some(-vy) }) }
+                        else { Ok(InputValue::Vector2 { x: None, y: None }) }
+                    } else { Ok(InputValue::Vector2 { x: None, y: None }) }
+                }
+                "down" => {
+                    if let Some(vy) = y {
+                        if vy >= 0.0 { Ok(InputValue::Vector2 { x: None, y: Some(-vy) }) }
+                        else { Ok(InputValue::Vector2 { x: None, y: None }) }
+                    } else { Ok(InputValue::Vector2 { x: None, y: None }) }
+                }
+                _ => Ok(InputValue::Vector2 { x, y: y.map(|v| -v) })
+            }
+        } else {
+            Ok(InputValue::Vector2 { x, y: y.map(|v| -v) })
         }
     }
 }
