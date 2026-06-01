@@ -302,6 +302,7 @@ pub struct MouseMotionCapability {
 #[serde(rename_all = "snake_case")]
 pub struct MouseWheelCapability {
     pub direction: Option<String>,
+    pub wheelspeed: Option<f64>, 
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
