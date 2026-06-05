@@ -25,6 +25,10 @@ ACTION=="add|change|bind", ATTRS{idVendor}=="17ef", ATTRS{idProduct}=="61e[bcde]
 #ACTION=="add|change", KERNEL=="0003:0B05:1B4C*", SUBSYSTEM=="hid", DRIVER=="asus_rog_ally", ATTRS{bInterfaceNumber}=="05", ATTR{qam_mode}="0", GOTO="end"
 
 # MSI Claw Settings
-ACTION=="add|change|bind", ATTRS{idVendor}=="0db0", ATTRS{idProduct}=="190[1-3]", SUBSYSTEM=="hid", DRIVER=="hid-msi", ATTR{button_m1}="KEY_RIGHTBRACE", ATTR{button_m2}="KEY_LEFTBRACE", GOTO="end"
+ACTION=="add|change|bind", ATTRS{idVendor}=="0db0", ATTRS{idProduct}=="190[1-3]", SUBSYSTEM=="hid", DRIVER=="hid-msi", ATTR{button_m1}="KEY_RIGHTBRACE", ATTR{button_m2}="KEY_LEFTBRACE", GOTO="claw_desktop"
+LABEL="claw_desktop"
+ACTION=="add|bind", ATTRS{idVendor}=="0db0", ATTRS{idProduct}=="1901", SUBSYSTEM=="hid", DRIVER=="hid-msi", ATTR{gamepad_mode}=="desktop", ATTR{gamepad_mode}="xinput", GOTO="end"
+ACTION=="add|bind", ATTRS{idVendor}=="0db0", ATTRS{idProduct}=="1902", SUBSYSTEM=="hid", DRIVER=="hid-msi", ATTR{gamepad_mode}=="desktop", ATTR{gamepad_mode}="dinput", GOTO="end"
+ACTION=="add|bind", ATTRS{idVendor}=="0db0", ATTRS{idProduct}=="1903", SUBSYSTEM=="hid", DRIVER=="hid-msi", ATTR{gamepad_mode}="xinput", GOTO="end"
 
 LABEL="end"
