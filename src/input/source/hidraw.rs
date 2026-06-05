@@ -14,6 +14,7 @@ pub mod opineo;
 pub mod oxp_hid;
 pub mod rog_ally;
 pub mod steam_deck;
+pub mod ultimate_2;
 pub mod xpad_uhid;
 pub mod zotac_zone;
 
@@ -26,6 +27,7 @@ use crate::{
     input::{
         capability::Capability, composite_device::client::CompositeDeviceClient,
         info::DeviceInfoRef, output_capability::OutputCapability,
+        source::hidraw::ultimate_2::Ultimate2,
     },
     udev::device::UdevDevice,
 };
@@ -60,6 +62,7 @@ enum DriverType {
     SteamDeck,
     Unknown,
     Vader4Pro,
+    Ultimate2,
     XpadUhid,
     ZotacZone,
 }
@@ -83,6 +86,7 @@ pub enum HidRawDevice {
     RogAlly(SourceDriver<RogAlly>),
     SteamDeck(SourceDriver<DeckController>),
     Vader4Pro(SourceDriver<Vader4Pro>),
+    Ultimate2(SourceDriver<Ultimate2>),
     XpadUhid(SourceDriver<XpadUhid>),
     ZotacZone(SourceDriver<ZotacZone>),
 }
@@ -106,6 +110,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.info_ref(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.info_ref(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.info_ref(),
+            HidRawDevice::Ultimate2(source_driver) => source_driver.info_ref(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.info_ref(),
             HidRawDevice::ZotacZone(source_driver) => source_driver.info_ref(),
         }
@@ -129,6 +134,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.get_id(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_id(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_id(),
+            HidRawDevice::Ultimate2(source_driver) => source_driver.get_id(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_id(),
             HidRawDevice::ZotacZone(source_driver) => source_driver.get_id(),
         }
@@ -152,6 +158,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.client(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.client(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.client(),
+            HidRawDevice::Ultimate2(source_driver) => source_driver.client(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.client(),
             HidRawDevice::ZotacZone(source_driver) => source_driver.client(),
         }
@@ -175,6 +182,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.run().await,
             HidRawDevice::SteamDeck(source_driver) => source_driver.run().await,
             HidRawDevice::Vader4Pro(source_driver) => source_driver.run().await,
+            HidRawDevice::Ultimate2(source_driver) => source_driver.run().await,
             HidRawDevice::XpadUhid(source_driver) => source_driver.run().await,
             HidRawDevice::ZotacZone(source_driver) => source_driver.run().await,
         }
@@ -200,6 +208,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::Ultimate2(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::ZotacZone(source_driver) => source_driver.get_capabilities(),
         }
@@ -231,6 +240,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::Ultimate2(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::ZotacZone(source_driver) => source_driver.get_output_capabilities(),
         }
@@ -254,6 +264,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::RogAlly(source_driver) => source_driver.get_device_path(),
             HidRawDevice::SteamDeck(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Vader4Pro(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::Ultimate2(source_driver) => source_driver.get_device_path(),
             HidRawDevice::XpadUhid(source_driver) => source_driver.get_device_path(),
             HidRawDevice::ZotacZone(source_driver) => source_driver.get_device_path(),
         }
@@ -463,6 +474,13 @@ impl HidRawDevice {
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::OxpHid(source_device))
             }
+
+            DriverType::Ultimate2 => {
+                let device = Ultimate2::new(device_info.clone())?;
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                Ok(Self::Ultimate2(source_device))
+            }
         }
     }
 
@@ -612,6 +630,11 @@ impl HidRawDevice {
         {
             log::info!("Detected GPD Win Mini Macro keyboard");
             return DriverType::GpdWinMiniMacroKeyboard;
+        }
+
+        if vid == drivers::ultimate_2::VID && pid == drivers::ultimate_2::PID {
+            log::info!("Detected 8BitDo Ultimate 2 Gamepad");
+            return DriverType::Ultimate2;
         }
 
         // Unknown
