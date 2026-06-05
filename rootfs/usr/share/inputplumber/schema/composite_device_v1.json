@@ -51,7 +51,7 @@
           "$ref": "#/definitions/Options"
         },
         "target_devices": {
-          "description": "Target input device(s) to emulate by default. Can be one of ['mouse', 'keyboard', 'gamepad', 'xb360', 'xbox-elite', 'xbox-series', 'deck', 'ds5', 'ds5-edge', 'touchscreen', 'touchpad'].",
+          "description": "Target input device(s) to emulate by default. Can be one of ['mouse', 'keyboard', 'gamepad', 'xb360', 'xbox-elite', 'xbox-series', 'deck', 'ds5', 'ds5-edge', 'touchscreen', 'touchpad', '8bitdo-u2'].",
           "type": "array",
           "items": {
             "type": "string",

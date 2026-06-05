@@ -25,7 +25,6 @@ impl ReportType {
 
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum DPadDirection {
-    #[default]
     Up = 0,
     UpRight = 1,
     Right = 2,
@@ -34,6 +33,7 @@ pub enum DPadDirection {
     DownLeft = 5,
     Left = 6,
     UpLeft = 7,
+    #[default]
     None = 8,
 }
 

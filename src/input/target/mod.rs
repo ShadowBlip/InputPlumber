@@ -1,3 +1,19 @@
+pub mod client;
+pub mod command;
+pub mod dbus;
+pub mod debug;
+pub mod dualsense;
+pub mod horipad_steam;
+pub mod keyboard;
+pub mod mouse;
+pub mod steam_deck;
+pub mod steam_deck_uhid;
+pub mod touchpad;
+pub mod touchscreen;
+pub mod ulitmate_2;
+pub mod unified_gamepad;
+pub mod xpad;
+
 use std::{
     collections::HashSet,
     env,
@@ -15,7 +31,6 @@ use tokio::{
     sync::mpsc::{self, error::TryRecvError},
     task::JoinHandle,
 };
-use ultimate2_wireless::Ultimate2WirelessDevice;
 use unified_gamepad::UnifiedGamepadDevice;
 
 use crate::{
@@ -50,22 +65,7 @@ use self::mouse::MouseDevice;
 use self::steam_deck::SteamDeckDevice;
 use self::touchpad::TouchpadDevice;
 use self::touchscreen::TouchscreenDevice;
-
-pub mod client;
-pub mod command;
-pub mod dbus;
-pub mod debug;
-pub mod dualsense;
-pub mod horipad_steam;
-pub mod keyboard;
-pub mod mouse;
-pub mod steam_deck;
-pub mod steam_deck_uhid;
-pub mod touchpad;
-pub mod touchscreen;
-pub mod ultimate2_wireless;
-pub mod unified_gamepad;
-pub mod xpad;
+use self::ulitmate_2::Ultimate2WirelessDevice;
 
 /// Possible errors for a target device client
 #[derive(Error, Debug)]
