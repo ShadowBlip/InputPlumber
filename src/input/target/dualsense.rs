@@ -124,6 +124,7 @@ pub struct DualSenseDevice {
     context: u8,
     hardware: DualSenseHardware,
     queued_events: Vec<ScheduledNativeEvent>,
+    last_written: Option<Vec<u8>>,
 }
 
 impl DualSenseDevice {
@@ -137,6 +138,7 @@ impl DualSenseDevice {
             context: Default::default(),
             hardware,
             queued_events: Vec::new(),
+            last_written: None,
         })
     }
 
@@ -193,26 +195,21 @@ impl DualSenseDevice {
 
     /// Write the current device state to the device
     fn write_state(&mut self) -> Result<(), Box<dyn Error>> {
-        match self.state {
-            PackedInputDataReport::Usb(state) => {
-                let data = state.pack()?;
-
-                // Write the state to the virtual HID
-                if let Err(e) = self.device.write(&data) {
-                    let err = format!("Failed to write input data report: {:?}", e);
-                    return Err(err.into());
-                }
-            }
-            PackedInputDataReport::Bluetooth(state) => {
-                let data = state.pack()?;
-
-                // Write the state to the virtual HID
-                if let Err(e) = self.device.write(&data) {
-                    let err = format!("Failed to write input data report: {:?}", e);
-                    return Err(err.into());
-                }
-            }
+        let data = match self.state {
+            PackedInputDataReport::Usb(state) => state.pack()?.to_vec(),
+            PackedInputDataReport::Bluetooth(state) => state.pack()?.to_vec(),
         };
+
+        if self.last_written.as_ref() == Some(&data) {
+            return Ok(());
+        }
+
+        // Write the state to the virtual HID
+        if let Err(e) = self.device.write(&data) {
+            let err = format!("Failed to write input data report: {:?}", e);
+            return Err(err.into());
+        }
+        self.last_written = Some(data);
 
         Ok(())
     }
@@ -1073,6 +1070,7 @@ impl TargetOutputDevice for DualSenseDevice {
             // send UHID_INPUT events to the kernel.
             uhid_virt::OutputEvent::Open => {
                 log::debug!("Open event received");
+                self.last_written = None;
                 Ok(vec![])
             }
             // This is sent when there are no more processes which read the HID data. It is
