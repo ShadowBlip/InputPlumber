@@ -407,15 +407,17 @@ impl Driver {
                     value: state.a_trigger_r,
                 })));
             }
-            if state.mouse_z != old_state.mouse_z {
-                log::debug!("Raw mouse value: {:b}, {}", state.mouse_z, !state.mouse_z);
-                let value = state.mouse_z.wrapping_sub(128) as i8;
-                let value = match value {
-                    64..=127 => value - 127 - 1,
-                    v => v,
+            // mouse_z is a 7-bit signed delta (bit 6 = sign bit) pulsed from 0:
+            //   scroll up   = 0x01 (+1 in 7-bit)
+            //   scroll down = 0x7f (-1 in 7-bit)
+            // Positive value → REL_WHEEL positive → traditional scroll up.
+            if state.mouse_z != old_state.mouse_z && state.mouse_z != 0 {
+                let value = if state.mouse_z & 0x40 != 0 {
+                    (state.mouse_z | 0x80) as i8 // sign-extend bit 6 → bit 7
+                } else {
+                    state.mouse_z as i8
                 };
-
-                log::debug!("Normalized mouse value: {value}");
+                log::debug!("Mouse wheel value: {value}");
                 events.push(Event::Trigger(TriggerEvent::MouseWheel(MouseWheelInput {
                     value,
                 })));
