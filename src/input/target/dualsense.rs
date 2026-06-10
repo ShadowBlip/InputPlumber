@@ -124,7 +124,10 @@ pub struct DualSenseDevice {
     context: u8,
     hardware: DualSenseHardware,
     queued_events: Vec<ScheduledNativeEvent>,
+    /// Last report written, used to skip re-emitting identical reports.
     last_written: Option<Vec<u8>>,
+    /// Whether a consumer has the device open, writes are skipped while closed.
+    is_open: bool,
 }
 
 impl DualSenseDevice {
@@ -139,6 +142,7 @@ impl DualSenseDevice {
             hardware,
             queued_events: Vec::new(),
             last_written: None,
+            is_open: false,
         })
     }
 
@@ -195,11 +199,18 @@ impl DualSenseDevice {
 
     /// Write the current device state to the device
     fn write_state(&mut self) -> Result<(), Box<dyn Error>> {
+        // No consumer so don't bother emitting. 
+        if !self.is_open {
+            return Ok(());
+        }
+
         let data = match self.state {
             PackedInputDataReport::Usb(state) => state.pack()?.to_vec(),
             PackedInputDataReport::Bluetooth(state) => state.pack()?.to_vec(),
         };
 
+        // Skip re-emitting an identical report: runs every poll, so an
+        // idle controller would otherwise send the same bytes every cycle.
         if self.last_written.as_ref() == Some(&data) {
             return Ok(());
         }
@@ -1070,13 +1081,16 @@ impl TargetOutputDevice for DualSenseDevice {
             // send UHID_INPUT events to the kernel.
             uhid_virt::OutputEvent::Open => {
                 log::debug!("Open event received");
-                self.last_written = None;
+                self.is_open = true;
                 Ok(vec![])
             }
             // This is sent when there are no more processes which read the HID data. It is
             // the counterpart of UHID_OPEN and you may as well ignore this event.
             uhid_virt::OutputEvent::Close => {
                 log::debug!("Close event received");
+                // Drop the cached report so the next consumer to open is synced.
+                self.is_open = false;
+                self.last_written = None;
                 Ok(vec![])
             }
             // This is sent if the HID device driver wants to send raw data to the I/O
