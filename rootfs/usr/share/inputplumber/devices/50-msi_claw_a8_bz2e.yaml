@@ -22,7 +22,7 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  # Face Extra Buttons
+  # Face Quick Access
   - group: keyboard
     udev:
       attributes:
@@ -30,6 +30,29 @@ source_devices:
           value: "AT Translated Set 2 keyboard"
         - name: phys
           value: "isa0060/serio0/input0"
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyG
+        - Keyboard:KeyTab
+        - Keyboard:KeyVolumeUp
+        - Keyboard:KeyVolumeDown
+
+  # Face Guide
+  - group: keyboard
+    udev:
+      attributes:
+        - name: name
+          value: "MSI WMI hotkeys"
+        - name: phys
+          value: "wmi/input0"
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyF15
 
   # Xinput Gamepad
   - group: gamepad
@@ -58,6 +81,12 @@ source_devices:
           value: "1901"
         - name: phys
           value: "usb-0000:c6:00.0-3/input2"
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyLeftBrace
+        - Keyboard:KeyRightBrace
 
   # Dinput Gamepad
   - group: gamepad
@@ -87,8 +116,22 @@ source_devices:
           value: "1902"
         - name: phys
           value: "usb-0000:c6:00.0-3/input1"
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyLeftBrace
+        - Keyboard:KeyRightBrace
 
   # IMU
+  - group: imu
+    iio:
+      name: gyro_3d
+      mount_matrix:
+        # TODO: Verify
+        x: [0, 1, 0]
+        y: [-1, 0, 0]
+        z: [0, 0, -1]
 
 # Optional configuration for the composite device
 options:

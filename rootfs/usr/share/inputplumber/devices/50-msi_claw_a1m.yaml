@@ -30,6 +30,27 @@ source_devices:
           value: "AT Translated Set 2 keyboard"
         - name: phys
           value: "isa0060/serio0/input0"
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyF15
+        - Keyboard:KeyF16
+        - Keyboard:KeyVolumeUp
+        - Keyboard:KeyVolumeDown
+
+  # Conflicts, block
+  - group: keyboard
+    blocked: true
+    udev:
+      attributes:
+        - name: name
+          value: "MSI WMI hotkeys"
+        - name: phys
+          value: "wmi/input0"
+    events:
+      exclude:
+        - "*"
 
   # Xinput Gamepad
   - group: gamepad
@@ -58,6 +79,12 @@ source_devices:
           value: "1901"
         - name: phys
           value: "usb-0000:00:14.0-9/input2"
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyLeftBrace
+        - Keyboard:KeyRightBrace
 
   # Dinput Gamepad
   - group: gamepad
@@ -87,6 +114,12 @@ source_devices:
           value: "1902"
         - name: phys
           value: "usb-0000:00:14.0-9/input1"
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyLeftBrace
+        - Keyboard:KeyRightBrace
 
   # IMU
   - group: imu
