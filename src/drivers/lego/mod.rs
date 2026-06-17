@@ -1,5 +1,6 @@
-pub mod driver;
 pub mod event;
+pub mod go1_driver;
+pub mod go2_driver;
 pub mod hid_report;
 
 use std::time::Duration;
@@ -7,27 +8,34 @@ use std::time::Duration;
 use crate::input::capability::{Capability, Source};
 
 // Hardware ID's
+pub const VID: u16 = 0x17ef;
+pub const GP_IID: i32 = 0x02;
+
+// Go 1
 const LEGO_1_XINPUT_PID: u16 = 0x6182;
 const LEGO_1_DINPUT_ATTACHED_PID: u16 = 0x6183;
 const LEGO_1_DINPUT_DETACHED_PID: u16 = 0x6184;
 const LEGO_1_FPS_PID: u16 = 0x6185;
+
+pub const GO1_PIDS: [u16; 4] = [
+    LEGO_1_XINPUT_PID,
+    LEGO_1_DINPUT_ATTACHED_PID,
+    LEGO_1_DINPUT_DETACHED_PID,
+    LEGO_1_FPS_PID,
+];
+
+// Go 2
 const LEGO_2_XINPUT_PID: u16 = 0x61eb;
 const LEGO_2_DINPUT_ATTACHED_PID: u16 = 0x61ec;
 const LEGO_2_DINPUT_DETATCHED_PID: u16 = 0x61ed;
 const LEGO_2_FPS_PID: u16 = 0x61ee;
 
-pub const PIDS: [u16; 8] = [
-    LEGO_1_XINPUT_PID,
-    LEGO_1_DINPUT_ATTACHED_PID,
-    LEGO_1_DINPUT_DETACHED_PID,
-    LEGO_1_FPS_PID,
+pub const GO2_PIDS: [u16; 4] = [
     LEGO_2_XINPUT_PID,
     LEGO_2_DINPUT_ATTACHED_PID,
     LEGO_2_DINPUT_DETATCHED_PID,
     LEGO_2_FPS_PID,
 ];
-pub const VID: u16 = 0x17ef;
-pub const GP_IID: i32 = 0x02;
 
 const CLICK_DELAY: Duration = Duration::from_millis(150);
 const RELEASE_DELAY: Duration = Duration::from_millis(30);

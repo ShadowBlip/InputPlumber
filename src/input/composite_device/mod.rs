@@ -1570,6 +1570,7 @@ impl CompositeDevice {
     /// Executed whenever a source device is added to this [CompositeDevice].
     async fn on_source_device_added(&mut self, device: DeviceInfo) -> Result<(), Box<dyn Error>> {
         if let Err(e) = self.add_source_device(device) {
+            log::error!("add_source_device failed: {:?}", e);
             return Err(e.to_string().into());
         }
         self.run_source_devices().await?;
