@@ -4,14 +4,14 @@ use std::{error::Error, fmt::Debug};
 use crate::{
     drivers::lego::{
         event::{self, AxisEvent},
-        go1_driver::Driver,
+        go2_driver::Driver,
         PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
         TRIGG_MAX,
     },
     input::{
         capability::{
             Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse, MouseButton,
-            Touch, TouchButton, Touchpad,
+            Source, Touch, TouchButton, Touchpad,
         },
         event::{
             native::NativeEvent,
@@ -24,11 +24,11 @@ use crate::{
 };
 
 /// Legion Go Controller source device implementation
-pub struct LegionGoController {
+pub struct LegionGo2Controller {
     driver: Driver,
 }
 
-impl LegionGoController {
+impl LegionGo2Controller {
     /// Create a new Legion controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -145,11 +145,22 @@ impl LegionGoController {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch)),
                     InputValue::Bool(value.pressed),
                 ),
+                event::GamepadButtonEvent::M1(value) => NativeEvent::new(
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch)),
+                    InputValue::Bool(value.pressed),
+                ),
                 event::GamepadButtonEvent::MouseClick(value) => NativeEvent::new(
                     Capability::Mouse(Mouse::Button(MouseButton::Middle)),
                     InputValue::Bool(value.pressed),
                 ),
-                _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
+                event::GamepadButtonEvent::ShowDesktop(value) => NativeEvent::new(
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::Keyboard)),
+                    InputValue::Bool(value.pressed),
+                ),
+                event::GamepadButtonEvent::AltTab(value) => NativeEvent::new(
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess2)),
+                    InputValue::Bool(value.pressed),
+                ),
             },
             event::Event::Axis(axis) => match axis.clone() {
                 AxisEvent::LStick(_) => NativeEvent::new(
@@ -164,7 +175,30 @@ impl LegionGoController {
                     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
                     normalize_axis_value(axis),
                 ),
-                _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
+                AxisEvent::LeftAccel(_) => NativeEvent::new(
+                    Capability::Accelerometer(Source::Left),
+                    normalize_axis_value(axis),
+                ),
+                AxisEvent::LeftGyro(_) => NativeEvent::new(
+                    Capability::Gyroscope(Source::Left),
+                    normalize_axis_value(axis),
+                ),
+                AxisEvent::RightAccel(_) => NativeEvent::new(
+                    Capability::Accelerometer(Source::Right),
+                    normalize_axis_value(axis),
+                ),
+                AxisEvent::RightGyro(_) => NativeEvent::new(
+                    Capability::Gyroscope(Source::Right),
+                    normalize_axis_value(axis),
+                ),
+                AxisEvent::MultiAccel(_) => NativeEvent::new(
+                    Capability::Accelerometer(Source::Center),
+                    normalize_axis_value(axis),
+                ),
+                AxisEvent::MultiGyro(_) => NativeEvent::new(
+                    Capability::Gyroscope(Source::Center),
+                    normalize_axis_value(axis),
+                ),
             },
             event::Event::Trigger(trigg) => match trigg.clone() {
                 event::TriggerEvent::ATriggerL(_) => NativeEvent::new(
@@ -194,7 +228,7 @@ impl LegionGoController {
     }
 }
 
-impl SourceInputDevice for LegionGoController {
+impl SourceInputDevice for LegionGo2Controller {
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
@@ -212,11 +246,22 @@ impl SourceInputDevice for LegionGoController {
         self.driver.update_filtered_events(events);
         Ok(())
     }
+
+    fn get_default_event_filter(&self) -> Result<HashSet<Capability>, InputError> {
+        let filtered_events = self.driver.get_default_event_filter();
+        let filtered_events = match filtered_events {
+            Ok(events) => events,
+            Err(e) => {
+                return Err(format!("Failed to get default event filter: {:?}", e).into());
+            }
+        };
+        Ok(filtered_events)
+    }
 }
 
-impl SourceOutputDevice for LegionGoController {}
+impl SourceOutputDevice for LegionGo2Controller {}
 
-impl Debug for LegionGoController {
+impl Debug for LegionGo2Controller {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LegionController").finish()
     }
@@ -252,6 +297,20 @@ fn normalize_axis_value(event: AxisEvent) -> InputValue {
 
             InputValue::Vector2 { x, y }
         }
+        AxisEvent::LeftAccel(value)
+        | AxisEvent::RightAccel(value)
+        | AxisEvent::MultiAccel(value) => InputValue::Vector3 {
+            x: Some(value.pitch as f64),
+            y: Some(value.roll as f64),
+            z: Some(value.yaw as f64),
+        },
+        AxisEvent::LeftGyro(value) | AxisEvent::RightGyro(value) | AxisEvent::MultiGyro(value) => {
+            InputValue::Vector3 {
+                x: Some(value.pitch as f64),
+                y: Some(value.roll as f64),
+                z: Some(value.yaw as f64),
+            }
+        }
         AxisEvent::Touchpad(value) => {
             let max = PAD_X_MAX;
             let x = normalize_unsigned_value(value.x as f64, max);
@@ -274,7 +333,6 @@ fn normalize_axis_value(event: AxisEvent) -> InputValue {
                 y,
             }
         }
-        _ => InputValue::None,
     }
 }
 
@@ -302,6 +360,9 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
 }
 /// List of all capabilities that the Legion Go driver implements
 pub const CAPABILITIES: &[Capability] = &[
+    Capability::Accelerometer(Source::Center),
+    Capability::Accelerometer(Source::Left),
+    Capability::Accelerometer(Source::Right),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -315,6 +376,7 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
+    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
@@ -333,6 +395,9 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+    Capability::Gyroscope(Source::Center),
+    Capability::Gyroscope(Source::Left),
+    Capability::Gyroscope(Source::Right),
     Capability::Mouse(Mouse::Wheel),
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),

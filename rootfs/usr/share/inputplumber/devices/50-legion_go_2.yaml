@@ -114,15 +114,6 @@ source_devices:
       product_id: 0x61ee
       interface_num: 2
 
-  # IMU
-  - group: imu
-    iio:
-      name: gyro_3d
-      mount_matrix:
-        x: [1, 0, 0]
-        y: [0, -1, 0]
-        z: [0, 0, 1]
-
 # Optional configuration for the composite device
 options:
   # If true, InputPlumber will automatically try to manage the input device. If

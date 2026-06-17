@@ -5,32 +5,22 @@ use hidapi::HidDevice;
 use packed_struct::PackedStruct;
 use tokio::time::Instant;
 
-use crate::drivers::lego::DEFAULT_EVENT_FILTER;
-use crate::input::capability::Source;
+use crate::input::capability::Capability;
 use crate::udev::device::UdevDevice;
-use crate::{
-    drivers::lego::{
-        event::{ImuAxisInput, TouchAxisInput, TouchButtonEvent},
-        hid_report::GamepadMode,
-        CLICK_DELAY, PAD_FORCE_NORMAL, RELEASE_DELAY, XINPUT_COMMAND_ID,
-    },
-    input::capability::Capability,
-};
 
 use super::{
     event::{
         AxisEvent, BinaryInput, Event, GamepadButtonEvent, JoyAxisInput, MouseWheelInput,
-        TriggerEvent, TriggerInput,
+        TouchAxisInput, TouchButtonEvent, TriggerEvent, TriggerInput,
     },
-    hid_report::XInputDataReport,
-    GP_IID, HID_TIMEOUT, PIDS, VID, XINPUT_DATA, XINPUT_PACKET_SIZE,
+    hid_report::{GamepadMode, XInputDataReport},
+    CLICK_DELAY, GO1_PIDS, GP_IID, HID_TIMEOUT, PAD_FORCE_NORMAL, RELEASE_DELAY, VID,
+    XINPUT_COMMAND_ID, XINPUT_DATA, XINPUT_PACKET_SIZE,
 };
 
 pub struct Driver {
     /// HIDRAW device instance
     hid_device: HidDevice,
-    /// Udev device instance
-    udev_device: UdevDevice,
     /// List of events that should not be generated
     filtered_events: HashSet<Capability>,
     /// Timestamp of the first touch event.
@@ -44,7 +34,7 @@ pub struct Driver {
     /// Whether or not a touch event was started that hasn't been cleared.
     touch_started: bool,
     /// State for the internal gamepad controller
-    xinput_state: Option<XInputDataReport>,
+    state: Option<XInputDataReport>,
 }
 
 impl Driver {
@@ -56,14 +46,13 @@ impl Driver {
         let info = hid_device.get_device_info()?;
 
         if info.vendor_id() != VID
-            || !PIDS.contains(&info.product_id())
+            || !GO1_PIDS.contains(&info.product_id())
             || info.interface_number() != GP_IID
         {
             return Err(format!("Device '{fmtpath}' is not a Legion Go S Controller").into());
         }
 
         Ok(Self {
-            udev_device,
             hid_device,
             filtered_events: Default::default(),
             first_touch: Instant::now(),
@@ -71,7 +60,7 @@ impl Driver {
             is_touching: false,
             last_touch: Instant::now(),
             touch_started: false,
-            xinput_state: None,
+            state: None,
         })
     }
 
@@ -83,41 +72,15 @@ impl Driver {
         self.filtered_events = events;
     }
 
-    pub fn get_default_event_filter(
-        &self,
-    ) -> Result<HashSet<Capability>, Box<dyn Error + Send + Sync>> {
-        let device = self.udev_device.get_device()?;
-        let Some(parent) = device.parent() else {
-            return Ok(HashSet::from(DEFAULT_EVENT_FILTER));
-        };
-
-        let Some(driver) = parent.driver() else {
-            return Ok(HashSet::from(DEFAULT_EVENT_FILTER));
-        };
-
-        let Some(driver) = driver.to_str() else {
-            return Ok(HashSet::from(DEFAULT_EVENT_FILTER));
-        };
-
-        let filtered_events = match driver {
-            "hid-lenovo-go" => HashSet::from([
-                Capability::Accelerometer(Source::Left),
-                Capability::Accelerometer(Source::Right),
-                Capability::Gyroscope(Source::Left),
-                Capability::Gyroscope(Source::Right),
-            ]),
-
-            _ => HashSet::from(DEFAULT_EVENT_FILTER),
-        };
-
-        Ok(filtered_events)
-    }
-
     /// Poll the device and read input reports
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; XINPUT_PACKET_SIZE];
         let bytes_read = self.hid_device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
+
+        if bytes_read > XINPUT_PACKET_SIZE {
+            return Err("Invalid packet size for X-Input Data.".into());
+        }
 
         let report_id = buf[0];
         let command_id = buf[2];
@@ -167,25 +130,25 @@ impl Driver {
         //log::debug!(" ---- End Report ----");
 
         // Update the state
-        let old_dinput_state = self.update_xinput_state(input_report);
+        let old_state = self.update_xinput_state(input_report);
 
         // Translate the state into a stream of input events
-        let events = self.translate_xinput(old_dinput_state);
+        let events = self.translate_xinput(old_state);
 
         Ok(events)
     }
 
     /// Update gamepad state
     fn update_xinput_state(&mut self, input_report: XInputDataReport) -> Option<XInputDataReport> {
-        let old_state = self.xinput_state;
-        self.xinput_state = Some(input_report);
+        let old_state = self.state;
+        self.state = Some(input_report);
         old_state
     }
 
     /// Translate the state into individual events
     fn translate_xinput(&mut self, old_state: Option<XInputDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
-        let Some(state) = self.xinput_state else {
+        let Some(state) = self.state else {
             return events;
         };
 
@@ -317,11 +280,6 @@ impl Driver {
                     },
                 )));
             }
-            if state.m1 != old_state.m1 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::M1(BinaryInput {
-                    pressed: state.m1,
-                })));
-            }
             if state.m2 != old_state.m2 {
                 events.push(Event::GamepadButton(GamepadButtonEvent::M2(BinaryInput {
                     pressed: state.m2,
@@ -351,20 +309,6 @@ impl Driver {
                 events.push(Event::GamepadButton(GamepadButtonEvent::MouseClick(
                     BinaryInput {
                         pressed: state.mouse_click,
-                    },
-                )));
-            }
-            if state.show_desktop != old_state.show_desktop {
-                events.push(Event::GamepadButton(GamepadButtonEvent::ShowDesktop(
-                    BinaryInput {
-                        pressed: state.show_desktop,
-                    },
-                )));
-            }
-            if state.alt_tab != old_state.alt_tab {
-                events.push(Event::GamepadButton(GamepadButtonEvent::AltTab(
-                    BinaryInput {
-                        pressed: state.alt_tab,
                     },
                 )));
             }
@@ -427,91 +371,6 @@ impl Driver {
             {
                 log::trace!("Left controller connected state: {:?}", state.l_con_state);
                 log::trace!("Right controller connected state: {:?}", state.r_con_state);
-            }
-            if !self
-                .filtered_events
-                .contains(&Capability::Accelerometer(Source::Left))
-                && (state.left_accel_x != old_state.left_accel_x
-                    || state.left_accel_y != old_state.left_accel_y
-                    || state.left_accel_z != old_state.left_accel_z)
-            {
-                events.push(Event::Axis(AxisEvent::LeftAccel(ImuAxisInput {
-                    pitch: -state.left_accel_x,
-                    roll: state.left_accel_y,
-                    yaw: state.left_accel_z,
-                })))
-            }
-            if !self
-                .filtered_events
-                .contains(&Capability::Accelerometer(Source::Right))
-                && (state.right_accel_x != old_state.right_accel_x
-                    || state.right_accel_y != old_state.right_accel_y
-                    || state.right_accel_z != old_state.right_accel_z)
-            {
-                events.push(Event::Axis(AxisEvent::RightAccel(ImuAxisInput {
-                    pitch: -state.right_accel_x,
-                    roll: -state.right_accel_y,
-                    yaw: state.right_accel_z,
-                })))
-            }
-            if !self
-                .filtered_events
-                .contains(&Capability::Accelerometer(Source::Center))
-                && (state.left_accel_x != old_state.left_accel_x
-                    || state.left_accel_y != old_state.left_accel_y
-                    || state.left_accel_z != old_state.left_accel_z
-                    || state.right_accel_x != old_state.right_accel_x
-                    || state.right_accel_y != old_state.right_accel_y
-                    || state.right_accel_z != old_state.right_accel_z)
-            {
-                events.push(Event::Axis(AxisEvent::MultiAccel(ImuAxisInput {
-                    pitch: -(state.left_accel_x + state.right_accel_x) / 2,
-                    roll: (state.left_accel_y + state.right_accel_y) / 2,
-                    yaw: (state.left_accel_z + state.right_accel_z) / 2,
-                })))
-            }
-            if !self
-                .filtered_events
-                .contains(&Capability::Gyroscope(Source::Left))
-                && (state.left_gyro_x != old_state.left_gyro_x
-                    || state.left_gyro_y != old_state.left_gyro_y
-                    || state.left_gyro_z != old_state.left_gyro_z)
-            {
-                events.push(Event::Axis(AxisEvent::LeftGyro(ImuAxisInput {
-                    pitch: -state.left_gyro_x,
-                    roll: state.left_gyro_y,
-                    yaw: state.left_gyro_z,
-                })))
-            }
-            if !self
-                .filtered_events
-                .contains(&Capability::Gyroscope(Source::Right))
-                && (state.right_gyro_x != old_state.right_gyro_x
-                    || state.right_gyro_y != old_state.right_gyro_y
-                    || state.right_gyro_z != old_state.right_gyro_z)
-            {
-                events.push(Event::Axis(AxisEvent::RightGyro(ImuAxisInput {
-                    pitch: -state.right_gyro_x,
-                    roll: state.right_gyro_y,
-                    yaw: state.right_gyro_z,
-                })))
-            }
-
-            if !self
-                .filtered_events
-                .contains(&Capability::Gyroscope(Source::Center))
-                && (state.left_gyro_x != old_state.left_gyro_x
-                    || state.left_gyro_y != old_state.left_gyro_y
-                    || state.left_gyro_z != old_state.left_gyro_z
-                    || state.right_gyro_x != old_state.right_gyro_x
-                    || state.right_gyro_y != old_state.right_gyro_y
-                    || state.right_gyro_z != old_state.right_gyro_z)
-            {
-                events.push(Event::Axis(AxisEvent::MultiGyro(ImuAxisInput {
-                    pitch: -(state.left_gyro_x + state.right_gyro_x) / 2,
-                    roll: (state.left_gyro_y + state.right_gyro_y) / 2,
-                    yaw: (state.left_gyro_z + state.right_gyro_z) / 2,
-                })))
             }
 
             // Touchpad events
