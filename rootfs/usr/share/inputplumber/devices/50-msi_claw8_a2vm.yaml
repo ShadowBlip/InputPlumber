@@ -36,8 +36,11 @@ source_devices:
       include:
         - Keyboard:KeyF15
         - Keyboard:KeyF16
-        - Keyboard:KeyVolumeUp
+        - Keyboard:KeyG
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyTab
         - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
 
   # Conflicts, block
   - group: keyboard
