@@ -22,6 +22,9 @@ matches:
       product_name: ONEXPLAYER F1 EVA-01
       sys_vendor: ONE-NETBOOK
   - dmi_data:
+      product_name: ONEXPLAYER F1 EVA-02
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
       product_name: ONEXPLAYER F1 OLED
       sys_vendor: ONE-NETBOOK
   - dmi_data:
