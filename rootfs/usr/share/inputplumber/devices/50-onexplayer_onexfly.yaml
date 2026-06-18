@@ -49,13 +49,6 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
-  - group: gamepad
-    udev:
-      attributes:
-        - name: port
-          value: "0x3E8"
-      sys_name: "ttyS*"
-      subsystem: tty
 
   - group: imu
     iio:
