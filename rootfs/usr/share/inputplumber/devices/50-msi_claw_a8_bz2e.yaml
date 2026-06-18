@@ -34,11 +34,13 @@ source_devices:
       exclude:
         - "*"
       include:
-        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyF15
+        - Keyboard:KeyF16
         - Keyboard:KeyG
+        - Keyboard:KeyLeftMeta
         - Keyboard:KeyTab
-        - Keyboard:KeyVolumeUp
         - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
 
   # Face Guide
   - group: keyboard
