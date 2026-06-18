@@ -1,8 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
-    fs::File,
-    io::{self, BufRead, BufReader},
 };
 
 use industrial_io::{Channel, ChannelType, Device, Direction};
@@ -34,11 +32,10 @@ pub struct Driver {
 impl Driver {
     pub fn new(
         id: String,
-        name: String,
         matrix: Option<MountMatrix>,
         sample_rate: Option<f64>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        log::debug!("Creating IIO IMU driver instance for {name}");
+        log::debug!("Creating IIO IMU driver instance for {id}");
 
         // Create an IIO local context used to query for devices
         let ctx = industrial_io::context::Context::new()?;
@@ -96,9 +93,7 @@ impl Driver {
             if channels.is_empty() {
                 continue;
             }
-            if let Err(err) =
-                set_sample_rate_or_default(&device, channels, ch_type, sample_rate)
-            {
+            if let Err(err) = set_sample_rate_or_default(&device, channels, ch_type, sample_rate) {
                 log::warn!("Failed to set sample rate: {err}, falling back to max available");
                 set_sample_rate_max(&device, channels, ch_type);
             }
@@ -115,34 +110,8 @@ impl Driver {
         })
     }
 
-    //TODO: Using InputPlumber Capability enum prevents this driver from having the ability to be
-    //a standalone crate. When this driver is eventually separated, refactor the Event type to
-    //follow the pattern DeviceEvent(Event, Value) and create a match table for
-    //Capability->Event/Event->Capability in the SourceDriver implementation.
     pub fn update_filtered_events(&mut self, events: HashSet<Capability>) {
         self.filtered_events = events;
-    }
-
-    pub fn get_default_event_filter(
-        &self,
-    ) -> Result<HashSet<Capability>, Box<dyn Error + Send + Sync>> {
-        let filtered_events = match is_driver_loaded("hid_lenovo_go") {
-            Ok(true) => {
-                log::debug!("Found hid-lenovo-go driver. Disabling internal gyroscope.");
-                HashSet::from([
-                    Capability::Accelerometer(Source::Center),
-                    Capability::Gyroscope(Source::Center),
-                ])
-            }
-            Ok(false) => {
-                log::debug!("Did not find hid-lenovo-go driver. Enabling internal gyroscope.");
-                HashSet::new()
-            }
-            Err(e) => {
-                return Err(format!("Failed to read '/proc/modules': {e:?}").into());
-            }
-        };
-        Ok(filtered_events)
     }
 
     /// Poll the device for data
@@ -354,19 +323,6 @@ fn get_channels_with_type(
     (channels, channel_info)
 }
 
-fn is_driver_loaded(driver_name: &str) -> io::Result<bool> {
-    let file = File::open("/proc/modules")?;
-    let reader = BufReader::new(file);
-
-    for line in reader.lines() {
-        let line = line?;
-        if line.starts_with(driver_name) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 /// Try to set a specific or default sampling rate. Returns Err if the
 /// requested rate is not in the hardware's available list.
 fn set_sample_rate_or_default(
@@ -379,10 +335,7 @@ fn set_sample_rate_or_default(
     let avail = read_sample_rates_available(device, channels, &channel_type);
 
     if !avail.is_empty() && !avail.contains(&rate) {
-        return Err(format!(
-            "Requested {rate} Hz not in available rates: {avail:?}"
-        )
-        .into());
+        return Err(format!("Requested {rate} Hz not in available rates: {avail:?}").into());
     }
 
     write_sample_rate(device, channels, channel_type, rate)
@@ -397,9 +350,7 @@ fn set_sample_rate_max(
 ) {
     let avail = read_sample_rates_available(device, channels, &channel_type);
     let rate = if avail.is_empty() {
-        log::warn!(
-            "No available sample rates reported, using default {DEFAULT_SAMPLE_RATE} Hz"
-        );
+        log::warn!("No available sample rates reported, using default {DEFAULT_SAMPLE_RATE} Hz");
         DEFAULT_SAMPLE_RATE
     } else {
         let max = avail.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -434,9 +385,7 @@ fn write_sample_rate(
                 return Ok(());
             }
             Err(err) => {
-                log::warn!(
-                    "Per-channel sampling_frequency write failed for {id}: {err}"
-                );
+                log::warn!("Per-channel sampling_frequency write failed for {id}: {err}");
             }
         }
     }
@@ -450,9 +399,7 @@ fn write_sample_rate(
     device.attr_write_float(attr, rate)?;
     match device.attr_read_float(attr) {
         Ok(actual) => log::info!("Set device-level {attr} to {actual} Hz"),
-        Err(err) => log::warn!(
-            "Set {attr} but read-back failed: {err}, assuming {rate} Hz"
-        ),
+        Err(err) => log::warn!("Set {attr} but read-back failed: {err}, assuming {rate} Hz"),
     }
     Ok(())
 }

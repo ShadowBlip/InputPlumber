@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Debug};
 use crate::{
     drivers::legos::{event, imu_driver::IMUDriver},
     input::{
-        capability::{Capability, Gamepad},
+        capability::{Capability, Source},
         event::{native::NativeEvent, value::InputValue},
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
@@ -64,19 +64,19 @@ fn translate_event(event: event::Event) -> NativeEvent {
     match event {
         event::Event::Inertia(motion) => match motion {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Accelerometer),
+                Capability::Accelerometer(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(value.x),
+                    y: Some(value.y),
+                    z: Some(value.z),
                 },
             ),
             event::InertialEvent::Gyro(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Gyro),
+                Capability::Gyroscope(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(value.x),
+                    y: Some(value.y),
+                    z: Some(value.z),
                 },
             ),
         },
@@ -86,6 +86,6 @@ fn translate_event(event: event::Event) -> NativeEvent {
 
 /// List of all capabilities that the Legion Go driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
-    Capability::Gamepad(Gamepad::Gyro),
+    Capability::Accelerometer(Source::Center),
+    Capability::Gyroscope(Source::Center),
 ];
