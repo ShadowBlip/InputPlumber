@@ -5,8 +5,8 @@
 
 use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
 
-use packed_struct::prelude::*;
 use packed_struct::types::SizedInteger;
+use packed_struct::{prelude::*, types::bits::Bits};
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
@@ -18,12 +18,11 @@ use crate::{
         report_descriptor::REPORT_DESCRIPTOR,
     },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source},
         composite_device::client::CompositeDeviceClient,
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
-            value::InputValue,
-            value::{denormalize_signed_value_u8, denormalize_unsigned_value_u8},
+            value::{denormalize_signed_value_u8, denormalize_unsigned_value_u8, InputValue},
         },
         output_capability::OutputCapability,
         output_event::OutputEvent,
@@ -190,38 +189,6 @@ impl Ultimate2WirelessDevice {
                     _ => (),
                 },
 
-                // Axis layout (x=pitch, y=yaw, z=roll): yaw/roll axes are swapped
-                // relative to SDL sGyro/sAccel naming; pitch is negated.
-                Gamepad::Accelerometer => {
-                    if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            self.state.accel_y =
-                                Integer::from_primitive(denormalize_accel(x).wrapping_neg());
-                        }
-                        if let Some(y) = y {
-                            self.state.accel_z = Integer::from_primitive(denormalize_accel(y));
-                        }
-                        if let Some(z) = z {
-                            self.state.accel_x =
-                                Integer::from_primitive(denormalize_accel(z).wrapping_neg());
-                        }
-                    }
-                }
-
-                Gamepad::Gyro => {
-                    if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            self.state.gyro_y = Integer::from_primitive((x as i16).wrapping_neg());
-                        }
-                        if let Some(y) = y {
-                            self.state.gyro_z = Integer::from_primitive(y as i16);
-                        }
-                        if let Some(z) = z {
-                            self.state.gyro_x = Integer::from_primitive((z as i16).wrapping_neg());
-                        }
-                    }
-                }
-
                 _ => (),
             },
 
@@ -241,13 +208,13 @@ impl Ultimate2WirelessDevice {
             Capability::Accelerometer(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        self.state.accel_x = Integer::from_primitive(x as i16);
+                        self.state.accel_x = denormalize_accel_value(x);
                     }
                     if let Some(y) = y {
-                        self.state.accel_y = Integer::from_primitive(y as i16);
+                        self.state.accel_y = denormalize_accel_value(y);
                     }
                     if let Some(z) = z {
-                        self.state.accel_z = Integer::from_primitive(z as i16);
+                        self.state.accel_z = denormalize_accel_value(z);
                     }
                 }
             }
@@ -347,8 +314,7 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(vec![
-            Capability::Gamepad(Gamepad::Accelerometer),
-            Capability::Gamepad(Gamepad::Gyro),
+            Capability::Accelerometer(Source::Center),
             Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
@@ -376,6 +342,7 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+            Capability::Gyroscope(Source::Center),
         ])
     }
 
@@ -469,7 +436,7 @@ impl Debug for Ultimate2WirelessDevice {
 }
 
 // m/s² → raw i16 (4096 units = 1G)
-fn denormalize_accel(value_m_s2: f64) -> i16 {
-    let g = value_m_s2 / GRAVITY;
-    (g * ACCEL_SCALE).clamp(i16::MIN as f64, i16::MAX as f64) as i16
+fn denormalize_accel_value(value_meters_sec: f64) -> Integer<i16, Bits<16>> {
+    let g = value_meters_sec / GRAVITY;
+    Integer::from_primitive((g * ACCEL_SCALE).clamp(i16::MIN as f64, i16::MAX as f64) as i16)
 }
