@@ -22,6 +22,12 @@ matches:
       product_name: ONEXPLAYER 2 PRO ARP23
       sys_vendor: ONE-NETBOOK
   - dmi_data:
+      product_name: ONEXPLAYER 2 PRO ARP23H
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
+      product_name: ONEXPLAYER 2 PRO ARP23P
+      sys_vendor: ONE-NETBOOK
+  - dmi_data:
       product_name: ONEXPLAYER 2 PRO ARP23 EVA-01
       sys_vendor: ONE-NETBOOK
 
