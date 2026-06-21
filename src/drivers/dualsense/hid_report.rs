@@ -5,7 +5,7 @@ use std::{error::Error, fmt::Display};
 
 use packed_struct::prelude::*;
 
-use super::driver::*;
+use super::{INPUT_REPORT_BT, INPUT_REPORT_BT_SIZE, INPUT_REPORT_USB, INPUT_REPORT_USB_SIZE};
 
 /// DualSense input report for USB and Bluetooth
 #[derive(Debug, Copy, Clone)]

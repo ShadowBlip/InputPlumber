@@ -4,20 +4,12 @@
 //! https://github.com/NeroReflex/ROGueENEMY/
 use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
 
-use packed_struct::prelude::*;
+use packed_struct::{prelude::*, types::bits::Bits};
 use rand::Rng;
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
     drivers::dualsense::{
-        driver::{
-            DS5_ACC_RES_PER_G, DS5_EDGE_NAME, DS5_EDGE_PID, DS5_EDGE_VERSION, DS5_EDGE_VID,
-            DS5_NAME, DS5_PID, DS5_TOUCHPAD_HEIGHT, DS5_TOUCHPAD_WIDTH, DS5_VERSION, DS5_VID,
-            FEATURE_REPORT_CALIBRATION, FEATURE_REPORT_FIRMWARE_INFO, FEATURE_REPORT_PAIRING_INFO,
-            OUTPUT_REPORT_BT, OUTPUT_REPORT_BT_SIZE, OUTPUT_REPORT_USB,
-            OUTPUT_REPORT_USB_SHORT_SIZE, OUTPUT_REPORT_USB_SIZE, STICK_X_MAX, STICK_X_MIN,
-            STICK_Y_MAX, STICK_Y_MIN, TRIGGER_MAX,
-        },
         hid_report::{
             Direction, PackedInputDataReport, USBPackedInputDataReport, UsbPackedOutputReport,
             UsbPackedOutputReportShort,
@@ -25,11 +17,17 @@ use crate::{
         report_descriptor::{
             DS_BT_DESCRIPTOR, DS_EDGE_BT_DESCRIPTOR, DS_EDGE_USB_DESCRIPTOR, DS_USB_DESCRIPTOR,
         },
+        DS5_EDGE_NAME, DS5_EDGE_PID, DS5_EDGE_VERSION, DS5_EDGE_VID, DS5_NAME, DS5_PID,
+        DS5_RADS_TO_GYRO, DS5_SI_TO_ACCEL, DS5_TOUCHPAD_HEIGHT, DS5_TOUCHPAD_WIDTH, DS5_VERSION,
+        DS5_VID, FEATURE_REPORT_CALIBRATION, FEATURE_REPORT_FIRMWARE_INFO,
+        FEATURE_REPORT_PAIRING_INFO, OUTPUT_REPORT_BT, OUTPUT_REPORT_BT_SIZE, OUTPUT_REPORT_USB,
+        OUTPUT_REPORT_USB_SHORT_SIZE, OUTPUT_REPORT_USB_SIZE, STICK_X_MAX, STICK_X_MIN,
+        STICK_Y_MAX, STICK_Y_MIN, TRIGGER_MAX,
     },
     input::{
         capability::{
-            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
-            Touchpad,
+            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source, Touch,
+            TouchButton, Touchpad,
         },
         composite_device::client::CompositeDeviceClient,
         event::{
@@ -544,32 +542,6 @@ impl DualSenseDevice {
                     GamepadTrigger::RightTouchpadForce => (),
                     GamepadTrigger::RightStickForce => (),
                 },
-                Gamepad::Accelerometer => {
-                    if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            state.accel_x = Integer::from_primitive(denormalize_accel_value(x))
-                        }
-                        if let Some(y) = y {
-                            state.accel_y = Integer::from_primitive(denormalize_accel_value(y))
-                        }
-                        if let Some(z) = z {
-                            state.accel_z = Integer::from_primitive(denormalize_accel_value(z))
-                        }
-                    }
-                }
-                Gamepad::Gyro => {
-                    if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            state.pitch = Integer::from_primitive(denormalize_gyro_value(x));
-                        }
-                        if let Some(y) = y {
-                            state.yaw = Integer::from_primitive(denormalize_gyro_value(y))
-                        }
-                        if let Some(z) = z {
-                            state.roll = Integer::from_primitive(denormalize_gyro_value(z))
-                        }
-                    }
-                }
                 _ => (),
             },
             //TODO: Remove RightPad when we add target profiles
@@ -627,26 +599,26 @@ impl DualSenseDevice {
             Capability::Gyroscope(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        state.pitch = Integer::from_primitive(x as i16);
+                        state.pitch = denormalize_gyro_value(x);
                     }
                     if let Some(y) = y {
-                        state.yaw = Integer::from_primitive(y as i16);
+                        state.yaw = denormalize_gyro_value(y);
                     }
                     if let Some(z) = z {
-                        state.roll = Integer::from_primitive(z as i16);
+                        state.roll = denormalize_gyro_value(z);
                     }
                 }
             }
             Capability::Accelerometer(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        state.accel_x = Integer::from_primitive(x as i16);
+                        state.accel_x = denormalize_accel_value(x);
                     }
                     if let Some(y) = y {
-                        state.accel_y = Integer::from_primitive(y as i16);
+                        state.accel_y = denormalize_accel_value(y);
                     }
                     if let Some(z) = z {
-                        state.accel_z = Integer::from_primitive(z as i16);
+                        state.accel_z = denormalize_accel_value(z);
                     }
                 }
             }
@@ -966,7 +938,7 @@ impl TargetInputDevice for DualSenseDevice {
 
     fn get_capabilities(&self) -> Result<Vec<crate::input::capability::Capability>, InputError> {
         Ok(vec![
-            Capability::Gamepad(Gamepad::Accelerometer),
+            Capability::Accelerometer(Source::Center),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -992,9 +964,9 @@ impl TargetInputDevice for DualSenseDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-            Capability::Gamepad(Gamepad::Gyro),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+            Capability::Gyroscope(Source::Center),
             Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Touch))),
             Capability::Touchpad(Touchpad::CenterPad(Touch::Motion)),
@@ -1172,15 +1144,12 @@ impl Debug for DualSenseDevice {
 /// values are measured in units of meters per second. To denormalize
 /// the value, it needs to be converted into G units (by dividing by 9.8),
 /// then multiplying that value by the [DS5_ACC_RES_PER_G].
-fn denormalize_accel_value(value_meters_sec: f64) -> i16 {
-    let value_g = value_meters_sec / 9.8;
-    let value = value_g * DS5_ACC_RES_PER_G as f64;
-    value as i16
+fn denormalize_accel_value(value_meters_sec: f64) -> Integer<i16, Bits<16>> {
+    Integer::from_primitive((value_meters_sec * DS5_SI_TO_ACCEL) as i16)
 }
 
 /// DualSense gyro values are measured in units of degrees per second.
-/// InputPlumber gyro values are also measured in degrees per second.
-fn denormalize_gyro_value(value_degrees_sec: f64) -> i16 {
-    let value = value_degrees_sec;
-    value as i16
+/// InputPlumber gyro values are measured in radians per second.
+fn denormalize_gyro_value(value_degrees_sec: f64) -> Integer<i16, Bits<16>> {
+    Integer::from_primitive((value_degrees_sec * DS5_RADS_TO_GYRO) as i16)
 }

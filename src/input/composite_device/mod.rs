@@ -970,10 +970,7 @@ impl CompositeDevice {
                         }
                     }
                     Gamepad::Dial(_) => {}
-                    Gamepad::Axis(_)
-                    | Gamepad::Trigger(_)
-                    | Gamepad::Accelerometer
-                    | Gamepad::Gyro => {}
+                    Gamepad::Axis(_) | Gamepad::Trigger(_) => {}
                 },
                 Capability::Mouse(ref t) => match t {
                     Mouse::Motion => {}
@@ -1099,28 +1096,6 @@ impl CompositeDevice {
         {
             log::trace!("Intercepted gamepad event: {event:?}");
             self.targets.write_dbus_event(event).await;
-            return Ok(());
-        }
-
-        //TODO: Temporary force of all Gyro and Accel events to legacy Gamepad:: format.
-        // Remove this after targets can handle translation profiles.
-        if matches!(cap, Capability::Accelerometer(_)) {
-            let event = NativeEvent::new_translated(
-                cap,
-                Capability::Gamepad(Gamepad::Accelerometer),
-                event.get_value(),
-            );
-            self.targets.write_event(event).await;
-            return Ok(());
-        }
-
-        if matches!(cap, Capability::Gyroscope(_)) {
-            let event = NativeEvent::new_translated(
-                cap,
-                Capability::Gamepad(Gamepad::Gyro),
-                event.get_value(),
-            );
-            self.targets.write_event(event).await;
             return Ok(());
         }
 

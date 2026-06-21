@@ -463,36 +463,6 @@ impl From<NativeEvent> for StateUpdate {
 
                     Self { capability, value }
                 }
-                Gamepad::Accelerometer => {
-                    let value = match event.get_value() {
-                        InputValue::Vector3 { x, y, z } => Int16Vector3Update {
-                            x: x.map(|x| (x * ACCEL_SCALE_FACTOR) as i16),
-                            y: y.map(|y| (y * ACCEL_SCALE_FACTOR) as i16),
-                            z: z.map(|z| (z * ACCEL_SCALE_FACTOR) as i16),
-                        },
-                        _ => {
-                            return Self::default();
-                        }
-                    };
-                    let value = ValueUpdate::Int16Vector3(value);
-
-                    Self { capability, value }
-                }
-                Gamepad::Gyro => {
-                    let value = match event.get_value() {
-                        InputValue::Vector3 { x, y, z } => Int16Vector3Update {
-                            x: x.map(|x| (x * GYRO_SCALE_FACTOR) as i16),
-                            y: y.map(|y| (y * GYRO_SCALE_FACTOR) as i16),
-                            z: z.map(|z| (z * GYRO_SCALE_FACTOR) as i16),
-                        },
-                        _ => {
-                            return Self::default();
-                        }
-                    };
-                    let value = ValueUpdate::Int16Vector3(value);
-
-                    Self { capability, value }
-                }
                 Gamepad::Dial(_) => {
                     let value = match event.get_value() {
                         InputValue::Bool(n) => BoolUpdate { value: n },
@@ -780,8 +750,6 @@ impl From<Capability> for InputCapability {
                     GamepadTrigger::RightTouchpadForce => Self::GamepadTriggerRightTouchpadForce,
                     GamepadTrigger::RightStickForce => Self::GamepadTriggerRightStickForce,
                 },
-                Gamepad::Accelerometer => Self::AccelerometerCenter,
-                Gamepad::Gyro => Self::GyroscopeCenter,
                 Gamepad::Dial(dial) => match dial {
                     GamepadDial::LeftStickDial => Self::GamepadDialLeft,
                     GamepadDial::RightStickDial => Self::GamepadDialRight,
@@ -1003,8 +971,6 @@ impl From<Capability> for InputCapabilityInfo {
                 Gamepad::Button(_) => Self::new(capability, ValueType::Bool),
                 Gamepad::Axis(_) => Self::new(capability, ValueType::UInt16Vector2),
                 Gamepad::Trigger(_) => Self::new(capability, ValueType::UInt8),
-                Gamepad::Accelerometer => Self::new(capability, ValueType::Int16Vector3),
-                Gamepad::Gyro => Self::new(capability, ValueType::Int16Vector3),
                 Gamepad::Dial(_) => Self::new(capability, ValueType::Int8),
             },
             Capability::Mouse(_) => Self::default(),

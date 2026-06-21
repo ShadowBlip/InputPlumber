@@ -1,6 +1,6 @@
 use packed_struct::prelude::*;
 
-use super::driver::REPORT_ID;
+use super::REPORT_ID;
 
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug, Default)]
 pub enum Direction {

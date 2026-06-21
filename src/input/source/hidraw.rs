@@ -565,9 +565,7 @@ impl HidRawDevice {
         }
 
         // Horipad Steam Controller
-        if vid == drivers::horipad_steam::driver::VID
-            && drivers::horipad_steam::driver::PIDS.contains(&pid)
-        {
+        if vid == drivers::horipad_steam::VID && drivers::horipad_steam::PIDS.contains(&pid) {
             log::info!("Detected Horipad Steam Controller");
             return DriverType::HoripadSteam;
         }

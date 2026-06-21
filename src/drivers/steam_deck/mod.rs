@@ -19,6 +19,12 @@ pub enum ProductId {
 /// Vendor ID
 pub const VID: u16 = 0x28de;
 
+/// Scale to multiply accelerometer values to get in units of meters per second
+pub const DECK_ACCEL_TO_SI: f64 = 0.0006125;
+pub const DECK_SI_TO_ACCEL: f64 = 1632.6530612244898;
+pub const DECK_GYRO_TO_RADS: f64 = 0.00109083078;
+pub const DECK_RADS_TO_GYRO: f64 = 916.7324722093181;
+
 impl ProductId {
     pub fn to_u16(&self) -> u16 {
         match self {
