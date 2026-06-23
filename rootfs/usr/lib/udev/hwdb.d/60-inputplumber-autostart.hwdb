@@ -77,10 +77,11 @@ dmi:*svnLENOVO:pn83Q3:*
 dmi:*svnLENOVO:pn83N0:*
 dmi:*svnLENOVO:pn83N1:*
 # MSI Claw
-dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClaw7AI+A2VM:*
-dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClaw8AI+A2VM:*
-dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClawA8BZ2EM:*
-dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnClawA1M:*
+dmi:*:rvnMicro-StarInternationalCo.,Ltd.:rnMS-1T41:*
+dmi:*:rvnMicro-StarInternationalCo.,Ltd.:rnMS-1T42:*
+dmi:*:rvnMicro-StarInternationalCo.,Ltd.:rnMS-1T52:*
+dmi:*:rvnMicro-StarInternationalCo.,Ltd.:rnMS-1T8K:*
+dmi:*:rvnMicro-StarInternationalCo.,Ltd.:rnMS-1T91:*
 # OneXPlayer Old models
 dmi:*svnONE-NETBOOK:pnONEXPLAYER:*
 dmi:*svnONE-NETBOOKTECHNOLOGYCO.,LTD.:pnONEXPLAYER:*

@@ -71,6 +71,11 @@ async fn check_autostart_rules() -> Result<(), Box<dyn Error>> {
                 let pattern_part = format!("pn{product}:");
                 patterns.push(pattern_part);
             }
+            if let Some(board_vendor) = dmi.board_vendor.as_ref() {
+                let board_vendor = board_vendor.replace(" ", ""); // Remove spaces
+                let pattern_part = format!("rvn{board_vendor}:");
+                patterns.push(pattern_part);
+            }
             if let Some(board_name) = dmi.board_name.as_ref() {
                 let board_name = board_name.replace(" ", ""); // Remove spaces
                 let pattern_part = format!("rn{board_name}:");
