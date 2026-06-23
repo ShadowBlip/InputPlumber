@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: MSI Claw A8 BZ2EM
+name: MSI Claw 8 EX AI+ CG3EM
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -16,13 +16,13 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      board_name: "MS-1T8K"
+      board_name: "MS-1T91"
       board_vendor: "Micro-Star International Co., Ltd."
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  # Face Quick Access
+  # Face Extra Buttons
   - group: keyboard
     udev:
       attributes:
@@ -42,8 +42,9 @@ source_devices:
         - Keyboard:KeyVolumeDown
         - Keyboard:KeyVolumeUp
 
-  # Face Guide
+  # Conflicts, block
   - group: keyboard
+    blocked: true
     udev:
       attributes:
         - name: name
@@ -53,8 +54,6 @@ source_devices:
     events:
       exclude:
         - "*"
-      include:
-        - Keyboard:KeyF15
 
   # Xinput Gamepad
   - group: gamepad
@@ -68,7 +67,7 @@ source_devices:
         - name: id/product
           value: "1901"
         - name: phys
-          value: "usb-0000:c6:00.0-3/input0"
+          value: "usb-0000:00:14.0-4/input0"
 
   # Xinput Mkey Extra Buttons
   - group: gamepad
@@ -82,7 +81,7 @@ source_devices:
         - name: id/product
           value: "1901"
         - name: phys
-          value: "usb-0000:c6:00.0-3/input2"
+          value: "usb-0000:00:14.0-4/input2"
     events:
       exclude:
         - "*"
@@ -102,7 +101,7 @@ source_devices:
         - name: id/product
           value: "1902"
         - name: phys
-          value: "usb-0000:c6:00.0-3/input0"
+          value: "usb-0000:00:14.0-4/input0"
     capability_map_id: claw1-dinput
 
   # Dinput Mkey Extra Buttons
@@ -117,7 +116,7 @@ source_devices:
         - name: id/product
           value: "1902"
         - name: phys
-          value: "usb-0000:c6:00.0-3/input1"
+          value: "usb-0000:00:14.0-4/input1"
     events:
       exclude:
         - "*"
@@ -126,14 +125,6 @@ source_devices:
         - Keyboard:KeyRightBrace
 
   # IMU
-  - group: imu
-    iio:
-      name: gyro_3d
-      mount_matrix:
-        # TODO: Verify
-        x: [0, 1, 0]
-        y: [-1, 0, 0]
-        z: [0, 0, -1]
 
 # Optional configuration for the composite device
 options:

@@ -698,6 +698,11 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                     device_config.name = "Claw Controller".to_string();
                     device_config.product_id = ProductId::MsiClaw;
                 }
+                "MSI Claw 8 EX AI+ CG3EM" => {
+                    device_config.vendor = "MSI".to_string();
+                    device_config.name = "Claw Controller".to_string();
+                    device_config.product_id = ProductId::MsiClaw;
+                }
                 "MSI Claw A8 BZ2EM" => {
                     device_config.vendor = "MSI".to_string();
                     device_config.name = "Claw Controller".to_string();

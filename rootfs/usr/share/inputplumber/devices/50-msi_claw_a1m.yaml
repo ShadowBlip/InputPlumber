@@ -16,8 +16,8 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: "Claw A1M"
-      sys_vendor: "Micro-Star International Co., Ltd."
+      board_name: "MS-1T41"
+      board_vendor: "Micro-Star International Co., Ltd."
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.

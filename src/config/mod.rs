@@ -212,6 +212,8 @@ pub struct DMIMatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub board_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub board_vendor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub product_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub product_version: Option<String>,
@@ -1077,6 +1079,13 @@ impl CompositeDeviceConfig {
 
                 if let Some(board_name) = dmi_config.board_name {
                     if !glob_match(board_name.as_str(), data.board_name.as_str()) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+
+                if let Some(board_vendor) = dmi_config.board_vendor {
+                    if !glob_match(board_vendor.as_str(), data.board_vendor.as_str()) {
                         continue;
                     }
                     has_matches = true;
