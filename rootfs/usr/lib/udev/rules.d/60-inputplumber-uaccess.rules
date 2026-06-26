@@ -1,0 +1,5 @@
+# Valve HID devices hidraw
+SUBSYSTEM=="hidraw", KERNELS=="000[356]:28DE:*", MODE="0660", TAG+="uaccess"
+
+# Sony Controllers hidraw
+SUBSYSTEM=="hidraw", KERNELS=="000[356]:054C:*", MODE="0660", TAG+="uaccess"

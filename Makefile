@@ -87,6 +87,7 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/lib/systemd/system/$(NAME)-suspend.service
 	rm $(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb
 	rm $(PREFIX)/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb
+	rm $(PREFIX)/lib/udev/hwdb.d/60-inputplumber-uaccess.hwdb
 	rm $(PREFIX)/lib/udev/rules.d/90-inputplumber-autostart.rules
 	rm $(PREFIX)/lib/udev/rules.d/99-inputplumber-device-setup.rules
 	rm -rf $(PREFIX)/share/$(NAME)/devices/
