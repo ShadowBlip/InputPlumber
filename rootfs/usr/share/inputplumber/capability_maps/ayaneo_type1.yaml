@@ -13,13 +13,6 @@ id: aya1
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  #TODO: Figure out how to use this and also KB.
-  #- name: Win
-  #  source_events:
-  #    - keyboard: KeyLeftMeta
-  #  target_event:
-  #    gamepad:
-  #      button: Screenshot
   - name: Task Manager
     source_events:
       - keyboard: KeyRightCtrl

@@ -66,6 +66,8 @@ dmi:*svnGPD:pnG1618-05:*
 dmi:*svnGPD:pnG1619-04:*
 # GPD Win Mini
 dmi:*svnGPD:pnG1617-01:*
+# KONKR Fit
+dmi:*svnKONKR:pnKONKRFIT:*
 # Lenovo Legion Go
 dmi:*svnLENOVO:pn83E1:*
 # Lenovo Legion Go S

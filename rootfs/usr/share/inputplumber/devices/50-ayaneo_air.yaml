@@ -35,6 +35,18 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyD
+        - Keyboard:KeyF10
+        - Keyboard:KeyF11
+        - Keyboard:KeyF12
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyRightCtrl
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
   #- group: imu #TODO:reenable after we switch from polling
   #  iio:
   #    name: "{i2c-BMI0160:00,bmi260}"

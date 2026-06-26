@@ -13,20 +13,6 @@ id: aya2
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  - name: Custom v1
-    source_events:
-      - keyboard: KeyApostrophe
-      - keyboard: KeyCopy
-    target_event:
-      gamepad:
-        button: QuickAccess
-  - name: Custom v2
-    source_events:
-      - keyboard: KeyD
-      - keyboard: KeyLeftMeta
-    target_event:
-      gamepad:
-        button: QuickAccess
   - name: Aya Space v1
     source_events:
       - keyboard: KeyKpEnter
@@ -35,14 +21,28 @@ mapping:
     target_event:
       gamepad:
         button: Guide
+  - name: Custom v1
+    source_events:
+      - keyboard: KeyApostrophe
+      - keyboard: KeyCopy
+    target_event:
+      gamepad:
+        button: QuickAccess
   - name: Aya Space v2
     source_events:
-      - keyboard: KeyF12
       - keyboard: KeyRightCtrl
       - keyboard: KeyLeftMeta
+      - keyboard: KeyF12
     target_event:
       gamepad:
         button: Guide
+  - name: Custom v2
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyD
+    target_event:
+      gamepad:
+        button: QuickAccess
 
 # List of events to filter from the source devices
 filtered_events: []

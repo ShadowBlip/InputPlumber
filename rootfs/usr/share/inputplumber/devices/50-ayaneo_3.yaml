@@ -44,12 +44,32 @@ source_devices:
       name: AYANEO COMPOSITE DEVICE
       phys_path: usb-0000:c7:00.0-1/input1
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyF21
+        - Keyboard:KeyF22
+        - Keyboard:KeyF23
+        - Keyboard:KeyF24
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
   # All devices
   - group: gamepad
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyF21
+        - Keyboard:KeyF22
+        - Keyboard:KeyF23
+        - Keyboard:KeyF24
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
   - group: imu
     iio:
       name: bmi323-imu

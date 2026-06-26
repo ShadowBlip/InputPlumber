@@ -44,6 +44,18 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyDelete
+        - Keyboard:KeyEsc
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyO
+        - Keyboard:KeyRightAlt
+        - Keyboard:KeyRightCtrl
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
   - group: imu
     iio:
       name: i2c-10EC5280:00
