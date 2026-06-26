@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: AYANEO Slide
+name: KONKR Fit
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -16,23 +16,38 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: SLIDE
-      sys_vendor: AYANEO
+      product_name: KONKR FIT
+      sys_vendor: KONKR
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
     evdev:
-      name: Nintendo Co., Ltd. Pro Controller
-      phys_path: usb-0000:c4:00.3-3/input0
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c7:00.0-2/input0
       handler: event*
   - group: gamepad
     evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:c4:00.3-3/input0
+      name: AYANEO COMPOSITE DEVICE
+      phys_path: usb-0000:c7:00.0-1/input1
       handler: event*
-  - group: keyboard
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyD
+        - Keyboard:KeyF21
+        - Keyboard:KeyF22
+        - Keyboard:KeyF23
+        - Keyboard:KeyF23
+        - Keyboard:KeyL
+        - Keyboard:KeyLeftCtrl
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyR
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
+  - group: gamepad
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
@@ -42,18 +57,25 @@ source_devices:
         - "*"
       include:
         - Keyboard:KeyD
-        - Keyboard:KeyF15
-        - Keyboard:KeyF16
-        - Keyboard:KeyF17
+        - Keyboard:KeyF21
+        - Keyboard:KeyF22
+        - Keyboard:KeyF23
+        - Keyboard:KeyF23
+        - Keyboard:KeyL
         - Keyboard:KeyLeftCtrl
         - Keyboard:KeyLeftMeta
+        - Keyboard:KeyR
         - Keyboard:KeyVolumeDown
         - Keyboard:KeyVolumeUp
   - group: imu
     iio:
-      name: "{i2c-BMI0160:00,bmi260}"
+      name: bmi323-imu
+      # mount_matrix:
+      #   x: [0, -1, 0]
+      #   y: [-1, 0, 0]
+      #   z: [0, 0, -1]
 
-  #RGB
+  # RGB
   - group: led
     udev: # Legacy
       sys_name: multicolor:chassis
@@ -77,4 +99,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: aya5
+capability_map_id: konkr1

@@ -24,6 +24,9 @@ matches:
   - dmi_data:
       product_name: AYANEO GEEK 1S
       sys_vendor: AYANEO
+  - dmi_data:
+      product_name: SuiPlay0X1
+      sys_vendor: Mysten Labs, Inc.
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -43,6 +46,19 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyD
+        - Keyboard:KeyF15
+        - Keyboard:KeyF16
+        - Keyboard:KeyF17
+        - Keyboard:KeyF18
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyRightCtrl
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"

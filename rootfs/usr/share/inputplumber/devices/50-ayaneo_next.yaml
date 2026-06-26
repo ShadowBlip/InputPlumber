@@ -50,6 +50,20 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyApostrophe
+        - Keyboard:KeyCopy
+        - Keyboard:KeyD
+        - Keyboard:KeyF12
+        - Keyboard:KeyKpEnter
+        - Keyboard:KeyLeft
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyRightCtrl
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
   - group: imu
     iio:
       name: i2c-BMI0160:00
