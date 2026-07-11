@@ -47,7 +47,7 @@ use super::{
 
 // The minimum amount of time that button up events must wait after
 // a button down event.
-const MIN_FRAME_TIME: Duration = Duration::from_millis(80);
+const MIN_FRAME_TIME: Duration = Duration::from_millis(8);
 
 pub struct SteamDeckUhidDevice {
     chip_id: [u8; 15],
@@ -735,6 +735,14 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                 log::trace!("Button down: {cap:?}");
                 // Keep track of button down events
                 self.pressed_events.insert(cap.clone(), Instant::now());
+                // Clear any stale up events for this capability
+                self.queued_events.retain(|scheduled| {
+                    let found = scheduled.as_capability() == cap;
+                    if found {
+                        log::trace!("Found stale queued release for {cap:?}, Clearing.");
+                    }
+                    !found
+                });
             } else {
                 log::trace!("Button up: {cap:?}");
                 // If the event is a button up event, check to
@@ -812,11 +820,18 @@ impl TargetInputDevice for SteamDeckUhidDevice {
         ])
     }
 
+    /// Returns any events in the queue up to the [TargetDriver]
     fn scheduled_events(&mut self) -> Option<Vec<ScheduledNativeEvent>> {
         if self.queued_events.is_empty() {
             return None;
         }
-        Some(self.queued_events.drain(..).collect())
+        let (ready, pending): (Vec<_>, Vec<_>) =
+            self.queued_events.drain(..).partition(|e| e.is_ready());
+        self.queued_events = pending;
+        if ready.is_empty() {
+            return None;
+        }
+        Some(ready)
     }
 
     fn stop(&mut self) -> Result<(), InputError> {

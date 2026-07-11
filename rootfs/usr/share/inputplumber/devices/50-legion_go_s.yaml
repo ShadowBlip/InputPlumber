@@ -79,15 +79,13 @@ source_devices:
   - group: gamepad
     evdev:
       vendor_id: "1a86"
-      product_id: "e310"
+      product_id: "{e31[01]}"
       name: "{QH Electronics Controller,Legion Go S}"
       handler: event*
-  - group: gamepad
-    evdev:
-      vendor_id: "1a86"
-      product_id: "e311"
-      name: "{QH Electronics Controller,Legion Go S}"
-      handler: event*
+    events:
+      # Block input events, but use device for output events
+      exclude:
+        - "*"
 
   # IMU
   - group: imu
@@ -116,4 +114,6 @@ options:
 
 # The target input device(s) to emulate by default
 target_devices:
-  - deck-uhid
+  - xbox-elite
+  - keyboard
+  - mouse
