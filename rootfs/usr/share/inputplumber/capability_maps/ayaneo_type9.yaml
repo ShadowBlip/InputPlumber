@@ -1,0 +1,51 @@
+version: 2
+kind: CapabilityMap
+name: AYANEO Type 9
+id: aya9
+
+mapping:
+    - name: Ayaneo Button to QuickAccess
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN6
+                value_type: button
+      target_event:
+          gamepad:
+              button: QuickAccess
+    - name: Ayaneo Button2 to Screenshot
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN5
+                value_type: button
+      target_event:
+          gamepad:
+              button: Screenshot
+    - name: L3
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN3
+                value_type: button
+      target_event:
+          gamepad:
+              button: LeftPaddle1
+    - name: R3
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN4
+                value_type: button
+      target_event:
+          gamepad:
+              button: RightPaddle1
+    - name: Side button to Keyboard
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN7
+                value_type: button
+      target_event:
+          gamepad:
+              button: Keyboard
