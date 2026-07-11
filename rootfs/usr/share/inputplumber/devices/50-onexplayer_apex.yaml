@@ -22,6 +22,7 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  # Original Firmware
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
@@ -30,14 +31,27 @@ source_devices:
 
   - group: keyboard
     evdev:
-      name: AT Translated Set 2 keyboard
-      phys_path: isa0060/serio0/input0
+      name: "HID 1a86:fe00"
+      phys_path: usb-0000:65:00.4-1.2/input0
+      handler: event*
+
+  # Updated Firmware
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c5:00.4-1.3/input0
       handler: event*
 
   - group: keyboard
     evdev:
       name: "HID 1a86:fe00"
-      phys_path: usb-0000:65:00.4-1.2/input0
+      phys_path: usb-0000:c5:00.4-1.2/input0
+      handler: event*
+
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
       handler: event*
 
   - group: gamepad
