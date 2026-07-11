@@ -1009,7 +1009,13 @@ impl TargetInputDevice for DualSenseDevice {
         if self.queued_events.is_empty() {
             return None;
         }
-        Some(self.queued_events.drain(..).collect())
+        let (ready, pending): (Vec<_>, Vec<_>) =
+            self.queued_events.drain(..).partition(|e| e.is_ready());
+        self.queued_events = pending;
+        if ready.is_empty() {
+            return None;
+        }
+        Some(ready)
     }
 
     fn stop(&mut self) -> Result<(), InputError> {

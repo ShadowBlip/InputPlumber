@@ -198,4 +198,9 @@ impl ScheduledNativeEvent {
     pub fn is_ready(&self) -> bool {
         self.scheduled_time.elapsed() > self.wait_time
     }
+
+    /// Returns the capability that the scheduled event implements
+    pub fn as_capability(&self) -> Capability {
+        self.event.capability.clone()
+    }
 }

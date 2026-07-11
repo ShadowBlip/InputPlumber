@@ -313,9 +313,7 @@ impl HoripadSteamDevice {
         report_number: u8,
         _report_type: uhid_virt::ReportType,
     ) -> Result<(), Box<dyn Error>> {
-        log::debug!(
-            "Received GetReport request: id: {id}, report_number: {report_number}"
-        );
+        log::debug!("Received GetReport request: id: {id}, report_number: {report_number}");
         if let Err(e) = self.device.write_get_report_reply(id, 1, vec![]) {
             log::warn!("Failed to write get report reply: {:?}", e);
             return Err(e.to_string().into());
@@ -372,7 +370,13 @@ impl TargetInputDevice for HoripadSteamDevice {
         if self.queued_events.is_empty() {
             return None;
         }
-        Some(self.queued_events.drain(..).collect())
+        let (ready, pending): (Vec<_>, Vec<_>) =
+            self.queued_events.drain(..).partition(|e| e.is_ready());
+        self.queued_events = pending;
+        if ready.is_empty() {
+            return None;
+        }
+        Some(ready)
     }
 
     fn stop(&mut self) -> Result<(), InputError> {

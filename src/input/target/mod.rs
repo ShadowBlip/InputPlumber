@@ -537,6 +537,7 @@ impl<T: TargetInputDevice + TargetOutputDevice + Send + 'static> TargetDriver<T>
                         i += 1;
                     }
                     for event in ready_events.drain(..) {
+                        log::trace!("Emmiting scheduled event: {event:?}");
                         let mut implementation = self.implementation.lock().unwrap();
                         if let Err(e) = implementation.write_event(event.into()) {
                             log::error!("Error writing event: {e:?}");
