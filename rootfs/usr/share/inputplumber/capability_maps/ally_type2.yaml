@@ -1,6 +1,6 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
 # Schema version number
-version: 2
+version: 1
 
 # The type of configuration schema
 kind: CapabilityMap
@@ -13,104 +13,42 @@ id: aly2
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  - name: Start
+  - name: Control Center (Short)
     source_events:
-      - evdev:
-          event_type: KEY
-          event_code: BTN_TR
-          value_type: button
+      - keyboard: KeyF16
     target_event:
       gamepad:
-        button: Start
+        button: Keyboard
+  - name: Control Center (Long)
+    source_events:
+      - keyboard: KeyF21
+    target_event:
+      gamepad:
+        button: LeftTop
+  - name: Armory Crate (Short)
+    source_events:
+      - keyboard: KeyProg1
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: Armory Crate (Long)
+    source_events:
+      - keyboard: KeyF22
+    target_event:
+      gamepad:
+        button: RightTop
+  - name: Left Paddle
+    source_events:
+      - keyboard: KeyF14
+    target_event:
+      gamepad:
+        button: LeftPaddle2
+  - name: Right Paddle
+    source_events:
+      - keyboard: KeyF15
+    target_event:
+      gamepad:
+        button: RightPaddle2
 
-  - name: Select
-    source_events:
-      - evdev:
-          event_type: KEY
-          event_code: BTN_TL
-          value_type: button
-    target_event:
-      gamepad:
-        button: Select
-
-  - name: X button
-    source_events:
-      - evdev:
-          event_type: KEY
-          event_code: BTN_C
-          value_type: button
-    target_event:
-      gamepad:
-        button: North
-
-  - name: Y button
-    source_events:
-      - evdev:
-          event_type: KEY
-          event_code: BTN_NORTH
-          value_type: button
-    target_event:
-      gamepad:
-        button: West
-
-  - name: LB button
-    source_events:
-      - evdev:
-          event_type: KEY
-          event_code: BTN_WEST
-          value_type: button
-    target_event:
-      gamepad:
-        button: LeftBumper
-
-  - name: RB button
-    source_events:
-      - evdev:
-          event_type: KEY
-          event_code: BTN_Z
-          value_type: button
-    target_event:
-      gamepad:
-        button: RightBumper
-
-  - name: Left Stick Click
-    source_events:
-      - evdev:
-          event_type: KEY
-          event_code: BTN_TL2
-          value_type: button
-    target_event:
-      gamepad:
-        button: LeftStick
-
-  - name: Right Stick Click
-    source_events:
-      - evdev:
-          event_type: KEY
-          event_code: BTN_TR2
-          value_type: button
-    target_event:
-      gamepad:
-        button: RightStick
-
-  - name: Left Trigger
-    source_events:
-      - evdev:
-          event_type: ABS
-          event_code: ABS_Z
-          value_type: trigger
-    target_event:
-      gamepad:
-        trigger:
-          name: LeftTrigger
-
-  - name: Right Trigger
-    source_events:
-      - evdev:
-          event_type: ABS
-          event_code: ABS_RZ
-          value_type: trigger
-    target_event:
-      gamepad:
-        trigger:
-          name: RightTrigger
+# List of events to filter from the source devices
+filtered_events: []
