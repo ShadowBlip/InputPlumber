@@ -67,4 +67,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: aly1
+capability_map_id: aly2
