@@ -193,7 +193,7 @@ impl DBusInterfaceManager {
 impl Debug for DBusInterfaceManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut dbus_ifaces: HashMap<String, &str> = HashMap::with_capacity(self.dbus_ifaces.len());
-        for (key, _value) in self.dbus_ifaces.iter() {
+        for key in self.dbus_ifaces.keys() {
             dbus_ifaces.insert(key.to_string(), "<UnregisterFn>");
         }
         f.debug_struct("DBusInterfaceManager")
