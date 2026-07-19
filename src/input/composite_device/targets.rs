@@ -186,7 +186,7 @@ impl CompositeDeviceTargets {
         for (path, target) in targets_to_stop.clone().into_iter() {
             log::debug!("[{dbus_path}] Stopping old target device: {path}");
             self.target_devices.remove(&path);
-            for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
+            for target_devices in self.target_devices_by_capability.values_mut() {
                 target_devices.remove(&path);
             }
             stop_tasks.spawn(async move { target.stop().await });
@@ -560,7 +560,7 @@ impl CompositeDeviceTargets {
 
             self.target_devices_suspended.push(target_type);
             self.target_devices.remove(&path);
-            for (_, target_devices) in self.target_devices_by_capability.iter_mut() {
+            for target_devices in self.target_devices_by_capability.values_mut() {
                 target_devices.remove(&path);
             }
             if let Err(e) = target.stop().await {

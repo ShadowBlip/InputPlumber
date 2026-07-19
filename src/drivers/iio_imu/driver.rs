@@ -464,7 +464,7 @@ fn read_sample_rates_available(
     channels: &HashMap<String, Channel>,
     channel_type: &ChannelType,
 ) -> Vec<f64> {
-    for (_, channel) in channels.iter() {
+    for channel in channels.values() {
         if let Ok(val) = channel.attr_read_str("sampling_frequency_available") {
             let rates: Vec<f64> = val
                 .split_whitespace()
