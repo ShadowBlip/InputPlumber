@@ -10,6 +10,7 @@ pub mod opineo;
 pub mod oxp_hid;
 pub mod oxp_tty;
 pub mod rog_ally;
+pub mod ssc;
 pub mod steam_deck;
 pub mod ultimate_2;
 pub mod unified_gamepad;

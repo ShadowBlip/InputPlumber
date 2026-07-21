@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     error::Error,
-    ffi::OsStr,
     fs::{self, read_link},
     path::{Path, PathBuf},
 };
@@ -369,15 +368,12 @@ impl UdevDevice {
         let devnode = format!("{base_path}/{name}");
         let subsystem = {
             match base_path {
-                "/dev" => {
-                    if name.starts_with("hidraw") {
-                        Some("hidraw")
-                    } else if name.starts_with("iio:") {
-                        Some("iio")
-                    } else {
-                        None
-                    }
-                }
+                "/dev" => match &name {
+                    x if x.starts_with("hidraw") => Some("hidraw"),
+                    x if x.starts_with("iio:") => Some("iio"),
+                    x if x.starts_with("fastrpc") => Some("fastrpc"),
+                    _ => None,
+                },
                 "/dev/input" => Some("input"),
 
                 _ => None,
@@ -436,15 +432,21 @@ impl UdevDevice {
             Err(_) => return Default::default(),
         };
 
+        let subsystem = match device.subsystem().map(|s| s.to_string_lossy().to_string()) {
+            // FastRPC has special behaviour, check the comment in "From<::udev::Device> for UdevDevice"
+            Some(x) if x == "misc" && device.sysname().to_string_lossy().starts_with("fastrpc") => {
+                "fastrpc".to_string()
+            }
+            Some(x) => x,
+            None => String::default(),
+        };
+
         Self {
             devnode: device
                 .devnode()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default(),
-            subsystem: device
-                .subsystem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default(),
+            subsystem,
             syspath: device.syspath().to_string_lossy().to_string(),
             sysname: device.sysname().to_string_lossy().to_string(),
             name: Some(device.name().to_string()),
@@ -624,6 +626,9 @@ impl UdevDevice {
             "leds" => {
                 format!("leds://{}", self.sysname)
             }
+            "fastrpc" => {
+                format!("fastrpc://{}", self.sysname)
+            }
             _ => "".to_string(),
         }
     }
@@ -695,11 +700,17 @@ impl From<::udev::Device> for UdevDevice {
             .unwrap_or(Path::new(""))
             .to_string_lossy()
             .to_string();
-        let subsystem = device
-            .subsystem()
-            .unwrap_or(OsStr::new(""))
-            .to_string_lossy()
-            .to_string();
+
+        let subsystem = match device.subsystem().map(|s| s.to_string_lossy().to_string()) {
+            // FastRPC devices are part of the "misc" subsystem
+            // Instead of handling that case everywhere, just check if the device is a fastrpc device and fake the subsystem
+            Some(x) if x == "misc" && device.sysname().to_string_lossy().starts_with("fastrpc") => {
+                "fastrpc".to_string()
+            }
+            Some(x) => x,
+            None => String::default(),
+        };
+
         let sysname = device.sysname().to_string_lossy().to_string();
         let syspath = device.syspath().to_string_lossy().to_string();
         let properties = device.get_properties();

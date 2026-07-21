@@ -94,7 +94,7 @@ impl Debug for AccelGyro3dImu {
     }
 }
 
-// NOTE: Mark this struct as thread-safe as it will only ever be called from
+// SAFETY: Mark this struct as thread-safe as it will only ever be called from
 // a single thread.
 unsafe impl Send for AccelGyro3dImu {}
 
