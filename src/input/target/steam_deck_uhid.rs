@@ -16,6 +16,7 @@ use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
     config::CompositeDeviceConfig,
+    dmi::get_dmi_data,
     drivers::steam_deck::{
         hid_report::{
             PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
@@ -48,6 +49,11 @@ use super::{
 // The minimum amount of time that button up events must wait after
 // a button down event.
 const MIN_FRAME_TIME: Duration = Duration::from_millis(8);
+
+/// DMI `board_name` values for ASUS ROG Ally hardware that need gyro yaw sign
+/// correction when emulating via deck-uhid. See `matches.dmi_data.board_name`
+/// in `/usr/share/inputplumber/devices/50-rog_*.yaml`.
+const GYRO_YAW_INVERT_BOARD_NAMES: &[&str] = &["RC71L", "RC72LA", "RC73XA", "RC73YA"];
 
 pub struct SteamDeckUhidDevice {
     chip_id: [u8; 15],
@@ -308,7 +314,10 @@ impl SteamDeckUhidDevice {
                             self.state.pitch = Integer::from_primitive(x as i16);
                         }
                         if let Some(y) = y {
-                            self.state.yaw = Integer::from_primitive(y as i16);
+                            self.state.yaw = Integer::from_primitive(gyro_yaw_to_hid(
+                                y,
+                                self.config.invert_gyro_yaw,
+                            ));
                         }
                         if let Some(z) = z {
                             self.state.roll = Integer::from_primitive(z as i16);
@@ -386,7 +395,10 @@ impl SteamDeckUhidDevice {
                         self.state.pitch = Integer::from_primitive(x as i16);
                     }
                     if let Some(y) = y {
-                        self.state.yaw = Integer::from_primitive(y as i16);
+                        self.state.yaw = Integer::from_primitive(gyro_yaw_to_hid(
+                            y,
+                            self.config.invert_gyro_yaw,
+                        ));
                     }
                     if let Some(z) = z {
                         self.state.roll = Integer::from_primitive(z as i16);
@@ -621,6 +633,7 @@ impl TargetInputDevice for SteamDeckUhidDevice {
     ) -> Result<(), InputError> {
         let (tx, rx) = channel();
         let mut device_config = self.config.clone();
+        let board_name = get_dmi_data().board_name;
 
         // Spawn a task to wait for the composite device config. This is done
         // to prevent potential deadlocks if the composite device and target
@@ -711,11 +724,16 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                 _ => {}
             };
 
+            device_config.invert_gyro_yaw =
+                GYRO_YAW_INVERT_BOARD_NAMES.contains(&board_name.as_str());
+
             log::debug!(
-                "Found Steam Deck target config: {} {} PID: {:?}",
+                "Found Steam Deck target config: {} {} PID: {:?} board_name: {} invert_gyro_yaw: {}",
                 device_config.vendor,
                 device_config.name,
                 device_config.product_id.to_u16(),
+                board_name,
+                device_config.invert_gyro_yaw,
             );
 
             if let Err(e) = tx.send(device_config) {
@@ -1008,4 +1026,9 @@ impl Debug for SteamDeckUhidDevice {
             .field("pressed_events", &self.pressed_events)
             .finish()
     }
+}
+
+fn gyro_yaw_to_hid(value: f64, invert: bool) -> i16 {
+    let value = if invert { -value } else { value };
+    value as i16
 }

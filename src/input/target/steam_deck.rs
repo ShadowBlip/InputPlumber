@@ -56,6 +56,10 @@ pub struct SteamDeckConfig {
     pub vendor: String,
     pub name: String,
     pub product_id: ProductId,
+    /// Invert gyro yaw written to the Deck HID report. Enabled only on ASUS ROG
+    /// Ally hardware (see `GYRO_YAW_INVERT_BOARD_NAMES` in steam_deck_uhid.rs)
+    /// when using the deck-uhid target.
+    pub invert_gyro_yaw: bool,
 }
 
 impl Default for SteamDeckConfig {
@@ -64,6 +68,7 @@ impl Default for SteamDeckConfig {
             vendor: "InputPlumber".to_string(),
             name: "Generic Steam Controller".to_string(),
             product_id: ProductId::Generic,
+            invert_gyro_yaw: false,
         }
     }
 }
