@@ -37,7 +37,6 @@ source_devices:
         - Keyboard:KeyF15
         - Keyboard:KeyF16
         - Keyboard:KeyG
-        - Keyboard:KeyLeftMeta
         - Keyboard:KeyTab
         - Keyboard:KeyVolumeDown
         - Keyboard:KeyVolumeUp
@@ -140,4 +139,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: claw1
+capability_map_id: claw2

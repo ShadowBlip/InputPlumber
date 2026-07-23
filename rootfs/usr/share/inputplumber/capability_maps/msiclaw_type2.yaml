@@ -6,24 +6,16 @@ version: 1
 kind: CapabilityMap
 
 # Name for the device event map
-name: MSI Claw Type 2
+name: MSI Claw Type 1
 
 # Unique identifier of the capability mapping
-id: claw2
+id: claw1
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  - name: Guide (Short)
+  - name: Guide
     source_events:
       - keyboard: KeyF15
-      - keyboard: KeyG
-    target_event:
-      gamepad:
-        button: Guide
-  - name: Guide (Long)
-    source_events:
-      - keyboard: KeyF15
-      - keyboard: KeyTab
     target_event:
       gamepad:
         button: Guide
@@ -33,6 +25,22 @@ mapping:
     target_event:
       gamepad:
         button: QuickAccess
+
+  # Newer firmware uses Win+G on a short press, and Win+Tab on a long press.
+  - name: QuickAccess
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyG
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: QuickAccess2
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyTab
+    target_event:
+      gamepad:
+        button: QuickAccess2
 
   # Driver hid-msi-claw maps the M-Keys to these events with our udev rule
   - name: M1
