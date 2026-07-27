@@ -1,6 +1,7 @@
 pub mod context;
 pub mod dbus;
 pub mod evdev;
+pub mod hidraw;
 pub mod native;
 pub mod value;
 
