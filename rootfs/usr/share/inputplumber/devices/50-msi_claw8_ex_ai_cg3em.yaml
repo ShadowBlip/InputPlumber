@@ -91,6 +91,7 @@ source_devices:
 
   # Dinput Gamepad
   - group: gamepad
+    blocked: true
     udev:
       properties:
         - name: ID_INPUT_JOYSTICK
@@ -102,7 +103,12 @@ source_devices:
           value: "1902"
         - name: phys
           value: "usb-0000:00:14.0-4/input0"
-    capability_map_id: claw1-dinput
+  - group: gamepad
+    unique: true
+    hidraw:
+      vendor_id: 0x0db0
+      product_id: 0x1902
+      interface_num: 0
 
   # Dinput Mkey Extra Buttons
   - group: gamepad
