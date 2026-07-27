@@ -239,6 +239,21 @@
         "name"
       ]
     },
+    "Endianness": {
+      "description": "Endianness is the order in which a multi-byte number is represented.",
+      "oneOf": [
+        {
+          "description": "Least significant byte ordering",
+          "type": "string",
+          "const": "lsb"
+        },
+        {
+          "description": "Most significant byte ordering",
+          "type": "string",
+          "const": "msb"
+        }
+      ]
+    },
     "EvdevConfig": {
       "description": "An [EvdevConfig] defines a matching evdev input event",
       "type": "object",
@@ -1191,30 +1206,66 @@
       "type": "object",
       "properties": {
         "bit_offset": {
-          "type": "integer",
+          "description": "Optional bit offset to start reading from",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint8",
           "maximum": 255,
           "minimum": 0
         },
         "byte_start": {
+          "description": "The byte where the data begins",
           "type": "integer",
-          "format": "uint64",
+          "format": "uint",
           "minimum": 0
         },
-        "input_type": {
-          "type": "string"
+        "endian": {
+          "description": "Optional endianness of the value being decoded. Defaults to LSB.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Endianness"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_value": {
+          "description": "Optional maximum value used for normalizing the value. InputPlumber\ntypically normalizes input values from 0.0 - 1.0 or from -1.0 - 1.0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "min_value": {
+          "description": "Optional minimum value used for normalizing the value. InputPlumber\ntypically normalizes input values from 0.0 - 1.0 or from -1.0 - 1.0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
         },
         "report_id": {
-          "type": "integer",
-          "format": "uint32",
+          "description": "Optional report ID of the input report. This is typically the first byte\nof the input report.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
           "minimum": 0
+        },
+        "value_type": {
+          "description": "Data type of the input. This is used to decode the value of the input\nreport.",
+          "$ref": "#/$defs/ValueType2"
         }
       },
       "required": [
-        "report_id",
-        "input_type",
-        "byte_start",
-        "bit_offset"
+        "value_type",
+        "byte_start"
       ]
     },
     "MappingType": {
@@ -1443,6 +1494,105 @@
         "imu_x",
         "imu_y",
         "imu_z"
+      ]
+    },
+    "ValueType2": {
+      "oneOf": [
+        {
+          "description": "Bool values take up 1 bit in the input report",
+          "type": "string",
+          "const": "bool"
+        },
+        {
+          "description": "Uint8 values take up 1 byte in the input report",
+          "type": "string",
+          "const": "uint8"
+        },
+        {
+          "description": "Uint16 values take up 2 bytes in the input report",
+          "type": "string",
+          "const": "uint16"
+        },
+        {
+          "description": "Uint32 values take up 4 bytes in the input report",
+          "type": "string",
+          "const": "uint32"
+        },
+        {
+          "description": "Int8 values take up 1 byte in the input report",
+          "type": "string",
+          "const": "int8"
+        },
+        {
+          "description": "Int16 values take up 2 bytes in the input report",
+          "type": "string",
+          "const": "int16"
+        },
+        {
+          "description": "Int32 values take up 4 bytes in the input report",
+          "type": "string",
+          "const": "int32"
+        },
+        {
+          "description": "UInt8Vector2 values take up 2 bytes in the input report",
+          "type": "string",
+          "const": "vector2_uint8"
+        },
+        {
+          "description": "UInt16Vector2 values take up 4 bytes in the input report",
+          "type": "string",
+          "const": "vector2_uint16"
+        },
+        {
+          "description": "UInt32Vector2 values take up 8 bytes in the input report",
+          "type": "string",
+          "const": "vector2_uint32"
+        },
+        {
+          "description": "Int8Vector2 values take up 2 bytes in the input report",
+          "type": "string",
+          "const": "vector2_int8"
+        },
+        {
+          "description": "Int16Vector2 values take up 4 bytes in the input report",
+          "type": "string",
+          "const": "vector2_int16"
+        },
+        {
+          "description": "Int32Vector2 values take up 8 bytes in the input report",
+          "type": "string",
+          "const": "vector2_int32"
+        },
+        {
+          "description": "UInt8Vector3 values take up 3 bytes in the input report",
+          "type": "string",
+          "const": "vector3_uint8"
+        },
+        {
+          "description": "UInt16Vector3 values take up 6 bytes in the input report",
+          "type": "string",
+          "const": "vector3_uint16"
+        },
+        {
+          "description": "UInt32Vector3 values take up 12 bytes in the input report",
+          "type": "string",
+          "const": "vector3_uint32"
+        },
+        {
+          "description": "Int8Vector3 values take up 3 bytes in the input report",
+          "type": "string",
+          "const": "vector3_int8"
+        },
+        {
+          "description": "Int16Vector3 values take up 6 bytes in the input report",
+          "type": "string",
+          "const": "vector3_int16"
+        },
+        {
+          "description": "Int32Vector3 values take up 12 bytes in the input report",
+          "type": "string",
+          "const": "vector3_int32"
+        }
       ]
     }
   }
