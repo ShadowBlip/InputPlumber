@@ -3,6 +3,7 @@ pub mod blocked;
 pub mod dualsense;
 pub mod flydigi_vader_4_pro;
 pub mod fts3528;
+pub mod generic;
 pub mod gpd_device;
 pub mod horipad_steam;
 pub mod legion_go;
@@ -19,7 +20,10 @@ pub mod zotac_zone;
 use std::{error::Error, time::Duration};
 
 use crate::{
-    config,
+    config::{
+        self,
+        capability_map::{load_capability_mappings, CapabilityMapConfig},
+    },
     constants::BUS_SOURCES_PREFIX,
     drivers::{self},
     input::{
@@ -36,6 +40,7 @@ use self::{
     dualsense::DualSenseController,
     flydigi_vader_4_pro::Vader4Pro,
     fts3528::Fts3528Touchscreen,
+    generic::GenericDevice,
     gpd_device::{
         macro_keyboard::GpdMacroKeyboard, touchpad_2023::GpdTouchpad2023,
         touchpad_2024::GpdTouchpad2024,
@@ -93,6 +98,7 @@ pub enum HidRawDevice {
     Blocked(SourceDriver<BlockedHidrawDevice>),
     DualSense(SourceDriver<DualSenseController>),
     Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
+    GenericDevice(SourceDriver<GenericDevice>),
     GpdMacroKeyboard(SourceDriver<GpdMacroKeyboard>),
     GpdTouchpad2023(SourceDriver<GpdTouchpad2023>),
     GpdTouchpad2024(SourceDriver<GpdTouchpad2024>),
@@ -121,6 +127,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Blocked(source_driver) => source_driver.info_ref(),
             HidRawDevice::DualSense(source_driver) => source_driver.info_ref(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.info_ref(),
+            HidRawDevice::GenericDevice(source_driver) => source_driver.info_ref(),
             HidRawDevice::GpdMacroKeyboard(source_driver) => source_driver.info_ref(),
             HidRawDevice::GpdTouchpad2023(source_driver) => source_driver.info_ref(),
             HidRawDevice::GpdTouchpad2024(source_driver) => source_driver.info_ref(),
@@ -149,6 +156,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Blocked(source_driver) => source_driver.get_id(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_id(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_id(),
+            HidRawDevice::GenericDevice(source_driver) => source_driver.get_id(),
             HidRawDevice::GpdMacroKeyboard(source_driver) => source_driver.get_id(),
             HidRawDevice::GpdTouchpad2023(source_driver) => source_driver.get_id(),
             HidRawDevice::GpdTouchpad2024(source_driver) => source_driver.get_id(),
@@ -177,6 +185,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Blocked(source_driver) => source_driver.client(),
             HidRawDevice::DualSense(source_driver) => source_driver.client(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.client(),
+            HidRawDevice::GenericDevice(source_driver) => source_driver.client(),
             HidRawDevice::GpdMacroKeyboard(source_driver) => source_driver.client(),
             HidRawDevice::GpdTouchpad2023(source_driver) => source_driver.client(),
             HidRawDevice::GpdTouchpad2024(source_driver) => source_driver.client(),
@@ -205,6 +214,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Blocked(source_driver) => source_driver.run().await,
             HidRawDevice::DualSense(source_driver) => source_driver.run().await,
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.run().await,
+            HidRawDevice::GenericDevice(source_driver) => source_driver.run().await,
             HidRawDevice::GpdMacroKeyboard(source_driver) => source_driver.run().await,
             HidRawDevice::GpdTouchpad2023(source_driver) => source_driver.run().await,
             HidRawDevice::GpdTouchpad2024(source_driver) => source_driver.run().await,
@@ -233,6 +243,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::GenericDevice(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::GpdMacroKeyboard(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::GpdTouchpad2023(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::GpdTouchpad2024(source_driver) => source_driver.get_capabilities(),
@@ -263,6 +274,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Fts3528Touchscreen(source_driver) => {
                 source_driver.get_output_capabilities()
             }
+            HidRawDevice::GenericDevice(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::GpdMacroKeyboard(source_driver) => {
                 source_driver.get_output_capabilities()
             }
@@ -299,6 +311,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::Blocked(source_driver) => source_driver.get_device_path(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::GenericDevice(source_driver) => source_driver.get_device_path(),
             HidRawDevice::GpdMacroKeyboard(source_driver) => source_driver.get_device_path(),
             HidRawDevice::GpdTouchpad2023(source_driver) => source_driver.get_device_path(),
             HidRawDevice::GpdTouchpad2024(source_driver) => source_driver.get_device_path(),
@@ -335,7 +348,34 @@ impl HidRawDevice {
         let driver_type = HidRawDevice::get_driver_type(&device_info, is_blocked);
 
         match driver_type {
-            DriverType::Unknown => Err("No driver for hidraw interface found".into()),
+            DriverType::Unknown => {
+                // A capability map is required to use the generic driver
+                let Some(source_conf) = conf.as_ref() else {
+                    return Err(
+                        "No driver or source device config for hidraw interface found".into(),
+                    );
+                };
+                let Some(map_id) = source_conf.capability_map_id.as_ref() else {
+                    return Err("No driver or capability map id for hidraw interface found".into());
+                };
+                let mappings = load_capability_mappings();
+                let Some(CapabilityMapConfig::V2(capability_map)) = mappings.get(map_id) else {
+                    return Err("No driver or capability map v2 for hidraw interface found".into());
+                };
+                let device = GenericDevice::new(device_info.clone(), capability_map)?;
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(0),
+                    buffer_size: 1024,
+                };
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
+                Ok(Self::GenericDevice(source_device))
+            }
             DriverType::AyaneoHaptics => {
                 let device = AyaneoHaptics::new(device_info.clone())?;
                 let source_device =

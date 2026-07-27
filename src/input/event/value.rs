@@ -21,7 +21,7 @@ pub enum TranslationError {
 }
 
 /// InputValue represents different ways to represent a value from an input event.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InputValue {
     None,
     /// Bool values are typically used by button input.
