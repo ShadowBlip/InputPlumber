@@ -10,6 +10,7 @@ pub mod legion_go2;
 pub mod legos_imu;
 pub mod legos_touchpad;
 pub mod legos_xinput;
+pub mod msi_claw;
 pub mod opineo;
 pub mod oxp_hid;
 pub mod rog_ally;
@@ -23,11 +24,13 @@ use std::{error::Error, time::Duration};
 use crate::{
     config,
     constants::BUS_SOURCES_PREFIX,
-    drivers,
+    drivers::{self},
     input::{
-        capability::Capability, composite_device::client::CompositeDeviceClient,
-        info::DeviceInfoRef, output_capability::OutputCapability,
-        source::hidraw::ultimate_2::Ultimate2,
+        capability::Capability,
+        composite_device::client::CompositeDeviceClient,
+        info::DeviceInfoRef,
+        output_capability::OutputCapability,
+        source::hidraw::{msi_claw::MsiClawController, ultimate_2::Ultimate2},
     },
     udev::device::UdevDevice,
 };
@@ -56,6 +59,7 @@ enum DriverType {
     LegionGoSImu,
     LegionGoSTouchpad,
     LegionGoSXInput,
+    MsiClaw,
     OrangePiNeo,
     OxpHid,
     RogAlly,
@@ -81,6 +85,7 @@ pub enum HidRawDevice {
     LegionGoSImu(SourceDriver<LegionSImuController>),
     LegionGoSTouchpad(SourceDriver<LegionSTouchpadController>),
     LegionGoSXInput(SourceDriver<LegionSXInputController>),
+    MsiClawController(SourceDriver<MsiClawController>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
     OxpHid(SourceDriver<OxpHid>),
     RogAlly(SourceDriver<RogAlly>),
@@ -105,6 +110,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.info_ref(),
+            HidRawDevice::MsiClawController(source_driver) => source_driver.info_ref(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.info_ref(),
             HidRawDevice::OxpHid(source_driver) => source_driver.info_ref(),
             HidRawDevice::RogAlly(source_driver) => source_driver.info_ref(),
@@ -129,6 +135,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_id(),
+            HidRawDevice::MsiClawController(source_driver) => source_driver.get_id(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_id(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_id(),
             HidRawDevice::RogAlly(source_driver) => source_driver.get_id(),
@@ -153,6 +160,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.client(),
+            HidRawDevice::MsiClawController(source_driver) => source_driver.client(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.client(),
             HidRawDevice::OxpHid(source_driver) => source_driver.client(),
             HidRawDevice::RogAlly(source_driver) => source_driver.client(),
@@ -177,6 +185,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.run().await,
+            HidRawDevice::MsiClawController(source_driver) => source_driver.run().await,
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.run().await,
             HidRawDevice::OxpHid(source_driver) => source_driver.run().await,
             HidRawDevice::RogAlly(source_driver) => source_driver.run().await,
@@ -203,6 +212,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::MsiClawController(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::RogAlly(source_driver) => source_driver.get_capabilities(),
@@ -235,6 +245,9 @@ impl SourceDeviceCompatible for HidRawDevice {
                 source_driver.get_output_capabilities()
             }
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::MsiClawController(source_driver) => {
+                source_driver.get_output_capabilities()
+            }
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::RogAlly(source_driver) => source_driver.get_output_capabilities(),
@@ -259,6 +272,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::MsiClawController(source_driver) => source_driver.get_device_path(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_device_path(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_device_path(),
             HidRawDevice::RogAlly(source_driver) => source_driver.get_device_path(),
@@ -386,6 +400,12 @@ impl HidRawDevice {
                     conf,
                 );
                 Ok(Self::LegionGoSXInput(source_device))
+            }
+            DriverType::MsiClaw => {
+                let device = MsiClawController::new(device_info.clone())?;
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                Ok(Self::MsiClawController(source_device))
             }
             DriverType::OrangePiNeo => {
                 let device = OrangePiNeoTouchpad::new(device_info.clone())?;
@@ -551,6 +571,13 @@ impl HidRawDevice {
         {
             log::info!("Detected Legion Go S Controller");
             return DriverType::LegionGoSXInput;
+        }
+
+        // MSI Claw Dinput
+        if vid == drivers::msi_claw::VID && pid == drivers::msi_claw::PID {
+            log::info!("Detected MSI Claw");
+
+            return DriverType::MsiClaw;
         }
 
         // OrangePi NEO
