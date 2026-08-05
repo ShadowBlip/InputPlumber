@@ -3,3 +3,5 @@
 /dist
 /settings.mk
 /.vscode
+/.direnv
+/.envrc
