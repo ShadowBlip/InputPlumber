@@ -45,10 +45,12 @@ source_devices:
         - "*"
       include:
         - Keyboard:KeyD
-        - Keyboard:KeyLeftAlt
-        - Keyboard:KeyLeftCtrl
+        - Keyboard:KeyF15
+        - Keyboard:KeyF16
+        - Keyboard:KeyF17
+        - Keyboard:KeyF18
         - Keyboard:KeyLeftMeta
-        - Keyboard:KeyO
+        - Keyboard:KeyRightCtrl
         - Keyboard:KeyVolumeDown
         - Keyboard:KeyVolumeUp
   - group: imu
