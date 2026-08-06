@@ -402,6 +402,14 @@ impl Manager {
                     });
                 }
                 ManagerCommand::RemoveFromGamepadOrder { device_path } => {
+                    // A gamepad target may have been re-attached while this
+                    // request was in flight (e.g. during a profile switch).
+                    // If so, the device should keep its place in the order.
+                    if self.has_gamepad_target_attached(&device_path).await {
+                        log::debug!("Device {device_path} still has a gamepad target attached, skipping removal from gamepad order");
+                        continue;
+                    }
+
                     let new_order = self
                         .target_gamepad_order
                         .drain(..)
@@ -753,6 +761,29 @@ impl Manager {
         log::debug!("Finished handling attach request for: {target_path}");
 
         Ok(())
+    }
+
+    /// Returns true if the given composite device currently has at least one
+    /// gamepad target device attached.
+    async fn has_gamepad_target_attached(&self, composite_path: &str) -> bool {
+        let Some(target_paths) = self.composite_device_targets.get(composite_path) else {
+            return false;
+        };
+        for target_path in target_paths {
+            let Some(target) = self.target_devices.get(target_path) else {
+                continue;
+            };
+            let Ok(kind) = target.get_type().await else {
+                continue;
+            };
+            let Ok(target_type) = TargetDeviceTypeId::try_from(kind.as_str()) else {
+                continue;
+            };
+            if target_type.is_gamepad() {
+                return true;
+            }
+        }
+        false
     }
 
     /// Create and start the given type of target device and return a mapping
