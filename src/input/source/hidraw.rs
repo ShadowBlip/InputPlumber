@@ -8,6 +8,7 @@ pub mod gpd_win_mini_touchpad;
 pub mod horipad_steam;
 pub mod legion_go;
 pub mod legion_go2;
+pub mod legion_go_tp;
 pub mod legos_imu;
 pub mod legos_touchpad;
 pub mod legos_xinput;
@@ -27,11 +28,8 @@ use crate::{
     constants::BUS_SOURCES_PREFIX,
     drivers::{self},
     input::{
-        capability::Capability,
-        composite_device::client::CompositeDeviceClient,
-        info::DeviceInfoRef,
-        output_capability::OutputCapability,
-        source::hidraw::{msi_claw::MsiClawController, ultimate_2::Ultimate2},
+        capability::Capability, composite_device::client::CompositeDeviceClient,
+        info::DeviceInfoRef, output_capability::OutputCapability,
     },
     udev::device::UdevDevice,
 };
@@ -41,10 +39,11 @@ use self::{
     flydigi_vader_4_pro::Vader4Pro, fts3528::Fts3528Touchscreen,
     gpd_win_mini_macro_keyboard::GpdWinMiniMacroKeyboard,
     gpd_win_mini_touchpad::GpdWinMiniTouchpad, horipad_steam::HoripadSteam,
-    legion_go::LegionGoController, legion_go2::LegionGo2Controller,
+    legion_go::LegionGoController, legion_go2::LegionGo2Controller, legion_go_tp::LegionGoTouchpad,
     legos_imu::LegionSImuController, legos_touchpad::LegionSTouchpadController,
-    legos_xinput::LegionSXInputController, opineo::OrangePiNeoTouchpad, oxp_hid::OxpHid,
-    rog_ally::RogAlly, steam_deck::DeckController, xpad_uhid::XpadUhid, zotac_zone::ZotacZone,
+    legos_xinput::LegionSXInputController, msi_claw::MsiClawController,
+    opineo::OrangePiNeoTouchpad, oxp_hid::OxpHid, rog_ally::RogAlly, steam_deck::DeckController,
+    ultimate_2::Ultimate2, xpad_uhid::XpadUhid, zotac_zone::ZotacZone,
 };
 use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 
@@ -62,6 +61,7 @@ enum DriverType {
     LegionGoSImu,
     LegionGoSTouchpad,
     LegionGoSXInput,
+    LegionGoTouchpad,
     MsiClaw,
     OrangePiNeo,
     OxpHid,
@@ -89,6 +89,7 @@ pub enum HidRawDevice {
     LegionGoSImu(SourceDriver<LegionSImuController>),
     LegionGoSTouchpad(SourceDriver<LegionSTouchpadController>),
     LegionGoSXInput(SourceDriver<LegionSXInputController>),
+    LegionGoTouchpad(SourceDriver<LegionGoTouchpad>),
     MsiClawController(SourceDriver<MsiClawController>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
     OxpHid(SourceDriver<OxpHid>),
@@ -115,6 +116,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.info_ref(),
+            HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.info_ref(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.info_ref(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.info_ref(),
             HidRawDevice::OxpHid(source_driver) => source_driver.info_ref(),
@@ -141,6 +143,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_id(),
+            HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.get_id(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.get_id(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_id(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_id(),
@@ -167,6 +170,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.client(),
+            HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.client(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.client(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.client(),
             HidRawDevice::OxpHid(source_driver) => source_driver.client(),
@@ -193,6 +197,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.run().await,
+            HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.run().await,
             HidRawDevice::MsiClawController(source_driver) => source_driver.run().await,
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.run().await,
             HidRawDevice::OxpHid(source_driver) => source_driver.run().await,
@@ -221,6 +226,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_capabilities(),
@@ -255,6 +261,9 @@ impl SourceDeviceCompatible for HidRawDevice {
                 source_driver.get_output_capabilities()
             }
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_output_capabilities(),
+            HidRawDevice::LegionGoTouchpad(source_driver) => {
+                source_driver.get_output_capabilities()
+            }
             HidRawDevice::MsiClawController(source_driver) => {
                 source_driver.get_output_capabilities()
             }
@@ -283,6 +292,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSImu(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.get_device_path(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.get_device_path(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_device_path(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_device_path(),
@@ -426,6 +436,21 @@ impl HidRawDevice {
                     conf,
                 );
                 Ok(Self::LegionGoSXInput(source_device))
+            }
+            DriverType::LegionGoTouchpad => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(4),
+                    buffer_size: 2048,
+                };
+                let device = LegionGoTouchpad::new(device_info.clone())?;
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
+                Ok(Self::LegionGoTouchpad(source_device))
             }
             DriverType::MsiClaw => {
                 let device = MsiClawController::new(device_info.clone())?;
@@ -576,6 +601,16 @@ impl HidRawDevice {
         {
             log::info!("Detected Legion Go 2 Controller");
             return DriverType::LegionGo2;
+        }
+
+        // Legion Go Touchpad
+        if vid == drivers::lego::VID
+            && (drivers::lego::GO_TOUCHPAD_D_PIDS.contains(&pid)
+                || drivers::lego::GO_TOUCHPAD_X_PIDS.contains(&pid))
+            && iid == drivers::lego::TP_IID
+        {
+            log::info!("Detected Legion Go Touchpad");
+            return DriverType::LegionGoTouchpad;
         }
 
         // Legion Go S IMU
