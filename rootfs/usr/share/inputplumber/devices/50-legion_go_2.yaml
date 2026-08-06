@@ -71,9 +71,9 @@ source_devices:
       exclude:
         - "*"
 
-  ## HIDRAWs
+  # HIDRAWs
+  ## Gamepad
   ## XInput - Connected 0x61eb (Go 2 PID)
-  # Gamepad
   - group: gamepad
     unique: false
     hidraw:
@@ -81,8 +81,7 @@ source_devices:
       product_id: 0x61eb
       interface_num: 2
 
-  ## DInput - Attached 0x61ec (Go 2 PID)
-  # Gamepad
+  ## DInput - Attached
   - group: gamepad # Dinput report
     unique: false
     hidraw:
@@ -96,8 +95,7 @@ source_devices:
       product_id: 0x61ec
       interface_num: 2
 
-  ## DInput - Detached 0x61ed (Go 2 PID)
-  # Gamepad
+  ## DInput - Detached
   - group: gamepad
     unique: false
     hidraw:
@@ -105,14 +103,46 @@ source_devices:
       product_id: 0x61ed
       interface_num: 2
 
-  ## FPS Mode - 0x61ee (Go 2 PID)
-  # Gamepad
+  ## FPS Mode
   - group: gamepad
     unique: false
     hidraw:
       vendor_id: 0x17ef
       product_id: 0x61ee
       interface_num: 2
+
+  ## Touchpad
+  ## XInput - Connected
+  - group: gamepad
+    unique: false
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61eb
+      interface_num: 1
+
+  ## DInput - Attached
+  - group: gamepad # Dinput report
+    unique: false
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ec
+      interface_num: 1
+
+  ## DInput - Detached
+  - group: gamepad
+    unique: false
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ed
+      interface_num: 1
+
+  ## FPS Mode
+  - group: gamepad
+    unique: false
+    hidraw:
+      vendor_id: 0x17ef
+      product_id: 0x61ee
+      interface_num: 1
 
 # Optional configuration for the composite device
 options:
