@@ -384,6 +384,8 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                     log::error!("Failed to set default event filter for {device_id}: {e}");
                 };
                 loop {
+                    let poll_time_start = std::time::Instant::now();
+
                     // Create a context with performance metrics for each event
                     let mut context = if metrics_enabled {
                         Some(EventContext::new())
@@ -455,8 +457,15 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                         break;
                     }
 
-                    // Sleep for the configured duration
-                    thread::sleep(self.options.poll_rate);
+                    // Sleep up to the configured duration after polling timeout
+                    if let Some(remaining) = self
+                        .options
+                        .poll_rate
+                        .checked_sub(poll_time_start.elapsed())
+                    {
+                        log::trace!("Remaining sleep time: {remaining:?}");
+                        thread::sleep(remaining);
+                    }
                 }
 
                 Ok(())
