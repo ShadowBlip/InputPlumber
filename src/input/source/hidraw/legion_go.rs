@@ -5,8 +5,7 @@ use crate::{
     drivers::lego::{
         event::{self, AxisEvent},
         go1_driver::Driver,
-        PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
-        TRIGG_MAX,
+        STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
     },
     input::{
         capability::{
@@ -179,10 +178,7 @@ impl LegionGoController {
                     Capability::Mouse(Mouse::Wheel),
                     normalize_trigger_value(trigg),
                 ),
-                event::TriggerEvent::RpadForce(_) => NativeEvent::new(
-                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
-                    normalize_trigger_value(trigg),
-                ),
+                _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
             },
             event::Event::TouchButton(button) => match button {
                 event::TouchButtonEvent::Left(value) => NativeEvent::new(
@@ -252,28 +248,6 @@ fn normalize_axis_value(event: AxisEvent) -> InputValue {
 
             InputValue::Vector2 { x, y }
         }
-        AxisEvent::Touchpad(value) => {
-            let max = PAD_X_MAX;
-            let x = normalize_unsigned_value(value.x as f64, max);
-
-            let max = PAD_Y_MAX;
-            let y = normalize_unsigned_value(value.y as f64, max);
-
-            // If this is an UP event, don't override the position of X/Y
-            let (x, y) = if !value.is_touching {
-                (None, None)
-            } else {
-                (Some(x), Some(y))
-            };
-
-            InputValue::Touch {
-                index: value.index,
-                is_touching: value.is_touching,
-                pressure: Some(1.0),
-                x,
-                y,
-            }
-        }
         _ => InputValue::None,
     }
 }
@@ -294,10 +268,7 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
             x: None,
             y: Some(value.value as f64),
         },
-        event::TriggerEvent::RpadForce(value) => {
-            let max = PAD_FORCE_MAX;
-            InputValue::Float(normalize_unsigned_value(value.value as f64, max))
-        }
+        _ => InputValue::None,
     }
 }
 /// List of all capabilities that the Legion Go driver implements
@@ -331,9 +302,6 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
-    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
     Capability::Mouse(Mouse::Wheel),
-    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
-    Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];
