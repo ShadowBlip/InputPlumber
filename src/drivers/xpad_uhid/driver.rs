@@ -4,7 +4,9 @@ use hidapi::HidDevice;
 use packed_struct::PackedStruct;
 
 use crate::{
-    drivers::xpad_uhid::hid_report::{DPadDirection, XBoxSeriesInputDataReport},
+    drivers::xpad_uhid::hid_report::{
+        DPadDirection, XBoxOneBtInputDataReport, XBoxSeriesInputDataReport,
+    },
     udev::device::UdevDevice,
 };
 
@@ -17,8 +19,10 @@ use super::{
 pub const DATA: u8 = 0x01;
 pub const GUIDE: u8 = 0x02;
 
-// Input report size
+// Input report size for Xbox Series controllers
 const PACKET_SIZE: usize = 17;
+// Input report size for Xbox One Bluetooth controllers
+const XBOX_ONE_BT_PACKET_SIZE: usize = 16;
 
 // HID buffer read timeout
 const HID_TIMEOUT: i32 = 10;
@@ -99,20 +103,28 @@ impl Driver {
         let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
 
         let report_id = buf[0];
-        let slice = &buf[..bytes_read];
         //log::debug!("Got Report ID: {report_id}");
         //log::debug!("Got Report Size: {bytes_read}");
 
         let events = match report_id {
             DATA => {
                 log::trace!("Got input data.");
-                if bytes_read != PACKET_SIZE {
-                    return Err("Invalid packet size for input data.".into());
-                }
-                // Handle the incoming input report
-                let sized_buf = slice.try_into()?;
-
-                self.handle_input_report(sized_buf)?
+                let input_report = match bytes_read {
+                    // Xbox Series controller format (17 bytes)
+                    PACKET_SIZE => XBoxSeriesInputDataReport::unpack(&buf)?,
+                    // Xbox One Bluetooth format (16 bytes)
+                    XBOX_ONE_BT_PACKET_SIZE => XBoxOneBtInputDataReport::unpack(
+                        buf[..XBOX_ONE_BT_PACKET_SIZE].try_into()?,
+                    )?
+                    .to_series_report(),
+                    _ => {
+                        log::warn!(
+                            "Unexpected packet size for input data: {bytes_read} (expected {PACKET_SIZE} or {XBOX_ONE_BT_PACKET_SIZE})"
+                        );
+                        return Ok(vec![]);
+                    }
+                };
+                self.handle_input_report(input_report)
             }
             // XBox One gamepads have a separate report for guide button presses
             // for some reason.
@@ -136,14 +148,9 @@ impl Driver {
         Ok(events)
     }
 
-    /// Unpacks the buffer into a [DataReport] structure and updates
-    /// the internal state
-    fn handle_input_report(
-        &mut self,
-        buf: [u8; PACKET_SIZE],
-    ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let input_report = XBoxSeriesInputDataReport::unpack(&buf)?;
-
+    /// Updates the internal state with the given input report and translates
+    /// state changes into a stream of input events
+    fn handle_input_report(&mut self, input_report: XBoxSeriesInputDataReport) -> Vec<Event> {
         // Print input report for debugging
         log::trace!("--- Input report ---");
         log::trace!("{input_report}");
@@ -153,9 +160,7 @@ impl Driver {
         let old_dinput_state = self.update_state(input_report);
 
         // Translate the state into a stream of input events
-        let events = self.translate_events(old_dinput_state);
-
-        Ok(events)
+        self.translate_events(old_dinput_state)
     }
 
     /// Update touchinput state
@@ -308,7 +313,7 @@ impl Driver {
                     value: state.trigger_l,
                 })));
             }
-            if state.trigger_l != old_state.trigger_r {
+            if state.trigger_r != old_state.trigger_r {
                 events.push(Event::Trigger(TriggerEvent::TriggerR(TriggerInput {
                     value: state.trigger_r,
                 })));

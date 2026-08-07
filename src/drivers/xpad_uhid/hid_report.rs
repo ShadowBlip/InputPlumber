@@ -277,6 +277,109 @@ pub enum DPadDirection {
     UpLeft = 8,
 }
 
+/// Button state for Xbox One Bluetooth controllers.
+/// The Xbox One S/X BT HID report packs 10 buttons into 2 bytes (10 bits + 6 padding),
+/// with a different bit layout than the Xbox Series controller.
+/// Button order from the HID descriptor (buttons 1-10):
+/// A, B, X, Y, LB, RB, View, Menu, LStick, RStick
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq, Default)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "2")]
+pub struct XBoxOneBtButtonState {
+    // byte 0 (byte 14 of report) - msb0: bit 0 = MSB (0x80), bit 7 = LSB (0x01)
+    #[packed_field(bits = "0")]
+    pub menu: bool, // 0x80
+    #[packed_field(bits = "1")]
+    pub view: bool, // 0x40
+    #[packed_field(bits = "2")]
+    pub rb: bool, // 0x20
+    #[packed_field(bits = "3")]
+    pub lb: bool, // 0x10
+    #[packed_field(bits = "4")]
+    pub y: bool, // 0x08
+    #[packed_field(bits = "5")]
+    pub x: bool, // 0x04
+    #[packed_field(bits = "6")]
+    pub b: bool, // 0x02
+    #[packed_field(bits = "7")]
+    pub a: bool, // 0x01
+
+    // byte 1 (byte 15 of report)
+    #[packed_field(bits = "14")]
+    pub thumb_r: bool, // 0x02
+    #[packed_field(bits = "15")]
+    pub thumb_l: bool, // 0x01
+}
+
+/// Xbox One Bluetooth input data report (16 bytes).
+/// This is the HID report format used by Xbox One S/X controllers over Bluetooth
+/// (e.g., product ID 0x02E0). It uses Report ID 0x01 but has a different layout
+/// from the Xbox Series controller: 10-bit triggers, 4-bit hat switch, and
+/// 10 buttons in 2 bytes instead of 3.
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "16")]
+pub struct XBoxOneBtInputDataReport {
+    // BYTE 0
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+
+    // Axes
+    // BYTES 1-2
+    #[packed_field(bytes = "1..=2", endian = "lsb")]
+    pub l_stick_x: u16,
+    // BYTES 3-4
+    #[packed_field(bytes = "3..=4", endian = "lsb")]
+    pub l_stick_y: u16,
+    // BYTES 5-6
+    #[packed_field(bytes = "5..=6", endian = "lsb")]
+    pub r_stick_x: u16,
+    // BYTES 7-8
+    #[packed_field(bytes = "7..=8", endian = "lsb")]
+    pub r_stick_y: u16,
+    // BYTES 9-10: left trigger (10-bit value + 6-bit padding, as u16 LE)
+    #[packed_field(bytes = "9..=10", endian = "lsb")]
+    pub trigger_l: u16,
+    // BYTES 11-12: right trigger (10-bit value + 6-bit padding, as u16 LE)
+    #[packed_field(bytes = "11..=12", endian = "lsb")]
+    pub trigger_r: u16,
+
+    // BYTE 13: hat switch (lower 4 bits) + padding (upper 4 bits)
+    #[packed_field(bytes = "13", ty = "enum")]
+    pub dpad_state: DPadDirection,
+
+    // BYTES 14-15: 10 buttons + 6-bit padding
+    #[packed_field(bytes = "14..=15")]
+    pub button_state: XBoxOneBtButtonState,
+}
+
+impl XBoxOneBtInputDataReport {
+    /// Convert to an XBoxSeriesInputDataReport for unified event processing
+    pub fn to_series_report(&self) -> XBoxSeriesInputDataReport {
+        XBoxSeriesInputDataReport {
+            report_id: self.report_id,
+            l_stick_x: self.l_stick_x,
+            l_stick_y: self.l_stick_y,
+            r_stick_x: self.r_stick_x,
+            r_stick_y: self.r_stick_y,
+            trigger_l: self.trigger_l,
+            trigger_r: self.trigger_r,
+            dpad_state: self.dpad_state,
+            button_state: ButtonState {
+                a: self.button_state.a,
+                b: self.button_state.b,
+                x: self.button_state.x,
+                y: self.button_state.y,
+                lb: self.button_state.lb,
+                rb: self.button_state.rb,
+                view: self.button_state.view,
+                menu: self.button_state.menu,
+                thumb_l: self.button_state.thumb_l,
+                thumb_r: self.button_state.thumb_r,
+                ..Default::default()
+            },
+        }
+    }
+}
+
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "17")]
 pub struct XBoxSeriesInputDataReport {
