@@ -345,7 +345,7 @@ impl EvdevEvent {
                 KeyCode::KEY_MACRO => Capability::NotImplemented,
                 KeyCode::KEY_MAIL => Capability::NotImplemented,
                 KeyCode::KEY_MEDIA => Capability::NotImplemented,
-                KeyCode::KEY_MENU => Capability::NotImplemented,
+                KeyCode::KEY_MENU => Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
                 KeyCode::KEY_MICMUTE => Capability::NotImplemented,
                 KeyCode::KEY_MINUS => Capability::Keyboard(Keyboard::KeyMinus),
                 KeyCode::KEY_MOVE => Capability::NotImplemented,
