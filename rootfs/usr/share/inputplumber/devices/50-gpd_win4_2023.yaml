@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: GPD WinMini
+name: GPD Win4 2023
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -16,65 +16,41 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: G1617-01
+      product_name: G1618-04
       sys_vendor: GPD
+      cpu_model: AMD Ryzen 7 7840U
   - dmi_data:
-      product_name: G1617-02
+      product_name: G1618-04
       sys_vendor: GPD
+      cpu_model: AMD Ryzen 5 7640U
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  # Win Mini (2023)
-  - group: gamepad
-    evdev:
-      name: "Microsoft X-Box 360 pad"
-      phys_path: "{usb-0000:63:00.3-5/input0,usb-0000:c3:00.3-5/input0}"
-      handler: event*
-  - group: keyboard
-    blocked: true
-    evdev:
-      name: "  Mouse for Windows"
-      phys_path: usb-0000:63:00.3-3/input1
-      handler: event*
-  # Win Mini (2025)
-  - group: gamepad
-    evdev:
-      name: "Microsoft X-Box 360 pad"
-      phys_path: usb-0000:c6:00.0-3.1/input0
-      handler: event*
-  - group: keyboard
-    blocked: true
-    evdev:
-      name: "  Keyboard for Windows"
-      phys_path: usb-0000:c6:00.0-3.3/input0
-      handler: event*
-  # All devices
-  - group: mouse
-    unique: false
-    blocked: true
-    evdev:
-      name: "{HTIX5288:00*}"
-      handler: event*
-  # Back Paddles
+  # Back paddles
   - group: keyboard
     hidraw:
       vendor_id: 0x2f24
       product_id: 0x0135
       interface_num: 1
-  # Touchpad
-  - group: mouse
-    hidraw:
-      vendor_id: 0x093A
-      product_id: 0x0255
-      interface_num: 0
+  - group: gamepad
+    evdev:
+      name: "Microsoft X-Box 360 pad"
+      phys_path: usb-0000:63:00.3-3.1/input0
+      handler: event*
+  - group: keyboard
+    blocked: true
+    evdev:
+      name: "  Mouse for Windows"
+      handler: event*
+      phys_path: usb-0000:63:00.3-3.2/input1
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
       mount_matrix:
-        x: [1, 0, 0]
-        y: [0, 0, -1]
-        z: [0, 1, 0]
+        x: [0, 1, 0]
+        y: [1, 0, 0]
+        z: [0, 0, -1]
 
 # Optional configuration for the composite device
 options:
@@ -88,4 +64,3 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
-  - touchpad

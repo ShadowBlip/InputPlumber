@@ -150,6 +150,10 @@
           "description": "System vendor to match found at /sys/class/dmi/id/sys_vendor",
           "type": "string"
         },
+        "cpu_model": {
+          "description": "CPU model to match from 'lscpu'",
+          "type": "string"
+        },
         "cpu_vendor": {
           "description": "CPU vendor to match from 'lscpu'",
           "type": "string"
