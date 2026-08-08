@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: GPD Win4
+name: GPD Win4 2023
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -18,46 +18,39 @@ matches:
   - dmi_data:
       product_name: G1618-04
       sys_vendor: GPD
+      cpu_model: AMD Ryzen 7 7840U
+  - dmi_data:
+      product_name: G1618-04
+      sys_vendor: GPD
+      cpu_model: AMD Ryzen 5 7640U
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
-  # GPD Win4 2022 (6800U)
+  # Back paddles
+  - group: keyboard
+    hidraw:
+      vendor_id: 0x2f24
+      product_id: 0x0135
+      interface_num: 1
   - group: gamepad
     evdev:
       name: "Microsoft X-Box 360 pad"
-      phys_path: usb-0000:73:00.3-4.1/input0
+      phys_path: usb-0000:63:00.3-3.1/input0
       handler: event*
   - group: keyboard
+    blocked: true
     evdev:
       name: "  Mouse for Windows"
       handler: event*
-      phys_path: usb-0000:73:00.3-4.2/input1
+      phys_path: usb-0000:63:00.3-3.2/input1
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
       mount_matrix:
-        x: [-1, 0, 0]
-        y: [0, -1, 0]
-        z: [0, 0, 1]
-  # GPD Win4 2025 (HX 370)
-  - group: gamepad
-    evdev:
-      name: "Microsoft X-Box 360 pad"
-      phys_path: usb-0000:66:00.0-2.1/input0
-      handler: event*
-  - group: keyboard
-    evdev:
-      name: "  Mouse for Windows"
-      handler: event*
-      phys_path: usb-0000:66:00.0-2.2/input1
-  - group: imu
-    iio:
-      name: i2c-BMI0260:00
-      mount_matrix:
-        x: [-1, 0, 0]
-        y: [0, -1, 0]
-        z: [0, 0, 1]
+        x: [0, 1, 0]
+        y: [1, 0, 0]
+        z: [0, 0, -1]
 
 # Optional configuration for the composite device
 options:
@@ -71,6 +64,3 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
-
-# The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: gpd3
