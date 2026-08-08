@@ -2,8 +2,8 @@ pub mod blocked;
 pub mod dualsense;
 pub mod flydigi_vader_4_pro;
 pub mod fts3528;
-pub mod gpd_win_mini_macro_keyboard;
-pub mod gpd_win_mini_touchpad;
+pub mod gpd_macro_keyboard;
+pub mod gpd_touchpad;
 pub mod horipad_steam;
 pub mod legion_go;
 pub mod legion_go2;
@@ -37,9 +37,8 @@ use crate::{
 
 use self::{
     blocked::BlockedHidrawDevice, dualsense::DualSenseController, flydigi_vader_4_pro::Vader4Pro,
-    fts3528::Fts3528Touchscreen, gpd_win_mini_macro_keyboard::GpdWinMiniMacroKeyboard,
-    gpd_win_mini_touchpad::GpdWinMiniTouchpad, horipad_steam::HoripadSteam,
-    legion_go::LegionGoController, legion_go2::LegionGo2Controller,
+    fts3528::Fts3528Touchscreen, gpd_macro_keyboard::GpdMacroKeyboard, gpd_touchpad::GpdTouchpad,
+    horipad_steam::HoripadSteam, legion_go::LegionGoController, legion_go2::LegionGo2Controller,
     legos_imu::LegionSImuController, legos_touchpad::LegionSTouchpadController,
     legos_xinput::LegionSXInputController, opineo::OrangePiNeoTouchpad, oxp_hid::OxpHid,
     rog_ally::RogAlly, steam_deck::DeckController, xpad_uhid::XpadUhid, zotac_zone::ZotacZone,
@@ -51,8 +50,8 @@ enum DriverType {
     Blocked,
     DualSense,
     Fts3528Touchscreen,
-    GpdWinMiniMacroKeyboard,
-    GpdWinMiniTouchpad,
+    GpdMacroKeyboard,
+    GpdTouchpad,
     HoripadSteam,
     LegionGo,
     LegionGo2,
@@ -77,8 +76,8 @@ pub enum HidRawDevice {
     Blocked(SourceDriver<BlockedHidrawDevice>),
     DualSense(SourceDriver<DualSenseController>),
     Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
-    GpdWinMiniMacroKeyboard(SourceDriver<GpdWinMiniMacroKeyboard>),
-    GpdWinMiniTouchpad(SourceDriver<GpdWinMiniTouchpad>),
+    GpdWinMiniMacroKeyboard(SourceDriver<GpdMacroKeyboard>),
+    GpdWinMiniTouchpad(SourceDriver<GpdTouchpad>),
     HoripadSteam(SourceDriver<HoripadSteam>),
     LegionGo(SourceDriver<LegionGoController>),
     LegionGo2(SourceDriver<LegionGo2Controller>),
@@ -476,14 +475,14 @@ impl HidRawDevice {
                 );
                 Ok(Self::ZotacZone(source_device))
             }
-            DriverType::GpdWinMiniTouchpad => {
-                let device = GpdWinMiniTouchpad::new(device_info.clone())?;
+            DriverType::GpdTouchpad => {
+                let device = GpdTouchpad::new(device_info.clone())?;
                 let source_device =
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::GpdWinMiniTouchpad(source_device))
             }
-            DriverType::GpdWinMiniMacroKeyboard => {
-                let device = GpdWinMiniMacroKeyboard::new(device_info.clone())?;
+            DriverType::GpdMacroKeyboard => {
+                let device = GpdMacroKeyboard::new(device_info.clone())?;
                 let source_device =
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::GpdWinMiniMacroKeyboard(source_device))
@@ -643,20 +642,20 @@ impl HidRawDevice {
         }
 
         // GPD Win Mini
-        if vid == drivers::gpd_win_mini::touchpad_driver::VID
-            && pid == drivers::gpd_win_mini::touchpad_driver::PID
-            && iid == drivers::gpd_win_mini::touchpad_driver::IID
+        if vid == drivers::gpd_device::touchpad_driver::VID
+            && pid == drivers::gpd_device::touchpad_driver::PID
+            && iid == drivers::gpd_device::touchpad_driver::IID
         {
             log::info!("Detected GPD Win Mini Touchpad");
-            return DriverType::GpdWinMiniTouchpad;
+            return DriverType::GpdTouchpad;
         }
 
-        if vid == drivers::gpd_win_mini::macro_keyboard_driver::VID
-            && pid == drivers::gpd_win_mini::macro_keyboard_driver::PID
-            && iid == drivers::gpd_win_mini::macro_keyboard_driver::IID
+        if vid == drivers::gpd_device::macro_keyboard_driver::VID
+            && pid == drivers::gpd_device::macro_keyboard_driver::PID
+            && iid == drivers::gpd_device::macro_keyboard_driver::IID
         {
             log::info!("Detected GPD Win Mini Macro keyboard");
-            return DriverType::GpdWinMiniMacroKeyboard;
+            return DriverType::GpdMacroKeyboard;
         }
 
         if vid == drivers::ultimate_2::VID && pid == drivers::ultimate_2::PID {
