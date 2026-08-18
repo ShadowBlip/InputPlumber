@@ -152,31 +152,24 @@ impl SteamDeckUhidDevice {
                     GamepadButton::RightStickTouch => self.state.r_stick_touch = event.pressed(),
                     // TODO: Remove this once we add target device profiles
                     GamepadButton::Screenshot => {
-                        let pressed = event.pressed();
                         let guide = NativeEvent::new(
                             Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
                             event.get_value(),
                         );
-                        let bumpr = NativeEvent::new(
+                        let bumper = NativeEvent::new(
                             Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
                             event.get_value(),
                         );
 
-                        let (guide, bumpr) = if pressed {
+                        let (guide, bumper) = {
                             let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                            let bumpr =
-                                ScheduledNativeEvent::new(bumpr, Duration::from_millis(160));
-                            (guide, bumpr)
-                        } else {
-                            let guide =
-                                ScheduledNativeEvent::new(guide, Duration::from_millis(240));
-                            let bumpr =
-                                ScheduledNativeEvent::new(bumpr, Duration::from_millis(160));
-                            (guide, bumpr)
+                            let bumper =
+                                ScheduledNativeEvent::new(bumper, Duration::from_millis(8));
+                            (guide, bumper)
                         };
 
                         self.queued_events.push(guide);
-                        self.queued_events.push(bumpr);
+                        self.queued_events.push(bumper);
                     }
                     _ => (),
                 },

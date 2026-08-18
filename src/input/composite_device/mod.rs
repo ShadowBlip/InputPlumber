@@ -728,14 +728,16 @@ impl CompositeDevice {
         // Check if the event needs to be translated based on the
         // capability map. Translated events will be re-enqueued, so this will
         // return early.
-        log::trace!(
-            "Translatable capabilities: {:?}",
-            self.translatable_capabilities
-        );
-        if self.capability_map.is_some() && self.translatable_capabilities.contains(&cap) {
-            log::trace!("Capability mapping found for event");
-            self.translate_capability(&event).await?;
-            return Ok(());
+        if !self.translatable_capabilities.is_empty() {
+            log::trace!(
+                "Translatable capabilities: {:?}",
+                self.translatable_capabilities
+            );
+            if self.capability_map.is_some() && self.translatable_capabilities.contains(&cap) {
+                log::trace!("Capability mapping found for event");
+                self.translate_capability(&event).await?;
+                return Ok(());
+            }
         }
         self.handle_event(event).await?;
 

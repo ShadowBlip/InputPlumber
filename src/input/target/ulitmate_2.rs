@@ -303,8 +303,6 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
             return Ok(());
         }
 
-        // Screenshot maps to Guide+RightTrigger combo (press: Guide@0ms RightTrigger@160ms,
-        // release: RightTrigger@160ms Guide@240ms), same timing as horipad target.
         if event.as_capability() == Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot))
         {
             let pressed = event.pressed();
@@ -312,24 +310,19 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
                 event.get_value(),
             );
-            let trigv = if pressed { 0.5 } else { 0.0 };
-            let trigr = NativeEvent::new(
+            let trigger_value = if pressed { 0.5 } else { 0.0 };
+            let trigger = NativeEvent::new(
                 Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-                InputValue::Float(trigv),
+                InputValue::Float(trigger_value),
             );
-            let (guide, trigr) = if pressed {
+            let (guide, trigger) = {
                 (
                     ScheduledNativeEvent::new(guide, Duration::from_millis(0)),
-                    ScheduledNativeEvent::new(trigr, Duration::from_millis(160)),
-                )
-            } else {
-                (
-                    ScheduledNativeEvent::new(guide, Duration::from_millis(240)),
-                    ScheduledNativeEvent::new(trigr, Duration::from_millis(160)),
+                    ScheduledNativeEvent::new(trigger, Duration::from_millis(1)),
                 )
             };
             self.queued_events.push(guide);
-            self.queued_events.push(trigr);
+            self.queued_events.push(trigger);
             return Ok(());
         }
 
