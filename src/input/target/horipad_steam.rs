@@ -122,27 +122,21 @@ impl HoripadSteamDevice {
                             event.get_value(),
                         );
                         // triggers at 128 exactly
-                        let trigv = if pressed { 0.5 } else { 0.0 };
-                        let trigr = NativeEvent::new(
+                        let trigger_value = if pressed { 0.5 } else { 0.0 };
+                        let trigger = NativeEvent::new(
                             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-                            InputValue::Float(trigv),
+                            InputValue::Float(trigger_value),
                         );
 
-                        let (guide, trigr) = if pressed {
+                        let (guide, trigger) = {
                             let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                            let trigr =
-                                ScheduledNativeEvent::new(trigr, Duration::from_millis(160));
-                            (guide, trigr)
-                        } else {
-                            let guide =
-                                ScheduledNativeEvent::new(guide, Duration::from_millis(240));
-                            let trigr =
-                                ScheduledNativeEvent::new(trigr, Duration::from_millis(160));
-                            (guide, trigr)
+                            let trigger =
+                                ScheduledNativeEvent::new(trigger, Duration::from_millis(8));
+                            (guide, trigger)
                         };
 
                         self.queued_events.push(guide);
-                        self.queued_events.push(trigr);
+                        self.queued_events.push(trigger);
                     }
                     _ => (),
                 },
