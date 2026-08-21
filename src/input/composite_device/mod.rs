@@ -1792,6 +1792,40 @@ impl CompositeDevice {
                 }
                 self.capabilities.insert(cap.clone());
             }
+            // If Gyroscope or Accelerometer capabilties exist, report that Gamepad::Accelerometer and
+            // Gamepad::Gyro exist so the tester works. This is because we're blanket converting
+            // them before sending to targets.
+            //TODO: Remove this one Gamepad::Gyro/Gamepad::Accel are removed.
+            if self
+                .capabilities
+                .iter()
+                .any(|cap| matches!(cap, Capability::Accelerometer(_)))
+            {
+                self.capabilities
+                    .retain(|cap| !matches!(cap, Capability::Accelerometer(_)));
+                if !self
+                    .capabilities
+                    .contains(&Capability::Gamepad(Gamepad::Accelerometer))
+                {
+                    self.capabilities
+                        .insert(Capability::Gamepad(Gamepad::Accelerometer));
+                }
+            }
+            if self
+                .capabilities
+                .iter()
+                .any(|cap| matches!(cap, Capability::Gyroscope(_)))
+            {
+                self.capabilities
+                    .retain(|cap| !matches!(cap, Capability::Gyroscope(_)));
+                if !self
+                    .capabilities
+                    .contains(&Capability::Gamepad(Gamepad::Gyro))
+                {
+                    self.capabilities.insert(Capability::Gamepad(Gamepad::Gyro));
+                }
+            }
+
             self.capabilities_by_source.insert(id.clone(), capabilities);
 
             // Get the output capabilities of the source device and keep track
