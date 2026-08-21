@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Razer Tartarus Pro
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty,then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# Maximum number of source devices per CompositeDevice.
+maximum_sources: 7
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: keyboard
+    blocked: true
+    unique: false
+    evdev:
+      name: "Razer Razer Tartarus Pro*"
+      handler: event*
+  - group: keyboard
+    unique: false
+    hidraw:
+      vendor_id: 0x1532
+      product_id: 0x244
+      interface_num: 0
+  - group: keyboard
+    unique: false
+    hidraw:
+      vendor_id: 0x1532
+      product_id: 0x244
+      interface_num: 1
+    config:
+      analogkeys:
+        primary_actuation:
+          #       01   02   03   04   05   06   07   08   09   10   11   12   13   14   15   16   17   18   19   20
+          keys: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+        secondary_actuation:
+          keys: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        retrigger_reset_threshold:
+          keys: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        retrigger_trigger_threshold:
+          keys: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        continuous_retrigger:
+          keys: ["N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N"]
+  - group: mouse
+    unique: false
+    passthrough: true
+    hidraw:
+      vendor_id: 0x1532
+      product_id: 0x244
+      interface_num: 2
+
+# The target input device(s) to emulate by default
+target_devices:
+    - mouse
+    - keyboard
+
+options:
+  auto_manage: true
