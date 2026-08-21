@@ -117,8 +117,12 @@ impl EvdevEvent {
         if let Some(info) = self.abs_info {
             let code = self.event.code();
             match AbsoluteAxisCode(code) {
-                AbsoluteAxisCode::ABS_Z => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
-                AbsoluteAxisCode::ABS_RZ => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
+                AbsoluteAxisCode::ABS_Z => {
+                    normalize_unsigned_value(raw_value, info.minimum(), info.maximum())
+                }
+                AbsoluteAxisCode::ABS_RZ => {
+                    normalize_unsigned_value(raw_value, info.minimum(), info.maximum())
+                }
                 _ => normalize_signed_value(raw_value, info.minimum(), info.maximum()),
             }
         } else {
@@ -584,8 +588,6 @@ fn event_type_from_capability(capability: Capability) -> Option<EventType> {
             Gamepad::Axis(_) => Some(EventType::ABSOLUTE),
             Gamepad::Trigger(_) => Some(EventType::ABSOLUTE),
             Gamepad::Dial(_) => Some(EventType::RELATIVE),
-            Gamepad::Accelerometer => None,
-            Gamepad::Gyro => None,
         },
         _ => None,
     }
@@ -687,8 +689,6 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
                 GamepadTrigger::RightTouchpadForce => vec![],
                 GamepadTrigger::RightStickForce => vec![],
             },
-            Gamepad::Accelerometer => vec![],
-            Gamepad::Gyro => vec![],
             Gamepad::Dial(dial) => match dial {
                 GamepadDial::LeftStickDial => {
                     vec![RelativeAxisCode::REL_HWHEEL.0]

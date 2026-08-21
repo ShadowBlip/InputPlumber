@@ -6,7 +6,7 @@ use packed_struct::{types::SizedInteger, PackedStruct};
 use super::{
     event::{Event, InertialEvent, InertialInput},
     hid_report::{InertialDataReport, InputReportType},
-    GYRO_SCALE, HID_TIMEOUT, IMU_IID, INERTIAL_PACKET_SIZE, PIDS, VID,
+    ACCEL_TO_SI, GPS_TO_RADS, HID_TIMEOUT, IMU_IID, INERTIAL_PACKET_SIZE, PIDS, VID,
 };
 
 pub struct IMUDriver {
@@ -132,9 +132,9 @@ impl IMUDriver {
         if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
             events.push(Event::Inertia(InertialEvent::Accelerometer(
                 InertialInput {
-                    x: -state.x.to_primitive(),
-                    y: -state.y.to_primitive(),
-                    z: -state.z.to_primitive(),
+                    x: -state.x.to_primitive() as f64 * ACCEL_TO_SI,
+                    y: -state.y.to_primitive() as f64 * ACCEL_TO_SI,
+                    z: -state.z.to_primitive() as f64 * ACCEL_TO_SI,
                 },
             )))
         };
@@ -156,9 +156,9 @@ impl IMUDriver {
 
         if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
             events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-                x: -state.x.to_primitive() * GYRO_SCALE,
-                y: -state.y.to_primitive() * GYRO_SCALE,
-                z: -state.z.to_primitive() * GYRO_SCALE,
+                x: -state.x.to_primitive() as f64 * GPS_TO_RADS,
+                y: -state.y.to_primitive() as f64 * GPS_TO_RADS,
+                z: -state.z.to_primitive() as f64 * GPS_TO_RADS,
             })))
         };
 
