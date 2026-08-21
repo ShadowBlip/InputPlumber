@@ -233,6 +233,9 @@ pub struct SourceDevice {
     /// Devices that match the given evdev properties will be captured by InputPlumber
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evdev: Option<Evdev>,
+    /// Devices that match the given fastrpc properties will be captured by InputPlumber
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fastrpc: Option<FastRpc>,
     /// Devices that match the given hidraw properties will be captured by InputPlumber
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hidraw: Option<Hidraw>,
@@ -407,6 +410,15 @@ pub struct IIO {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
+pub struct FastRpc {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
 #[allow(clippy::upper_case_acronyms)]
 pub struct Led {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -440,6 +452,16 @@ pub struct MountMatrix {
     pub x: [f64; 3],
     pub y: [f64; 3],
     pub z: [f64; 3],
+}
+
+impl Default for MountMatrix {
+    fn default() -> Self {
+        MountMatrix {
+            x: [1.0, 0.0, 0.0],
+            y: [0.0, 1.0, 0.0],
+            z: [0.0, 0.0, 1.0],
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -578,6 +600,12 @@ impl CompositeDeviceConfig {
             "tty" => {
                 let tty_config = config.tty.as_ref()?;
                 if self.has_matching_tty(udevice, tty_config) {
+                    return Some(config.clone());
+                }
+            }
+            "fastrpc" => {
+                let fastrpc_config = config.fastrpc.as_ref()?;
+                if self.has_matching_fastrpc(udevice, fastrpc_config) {
                     return Some(config.clone());
                 }
             }
@@ -835,6 +863,35 @@ impl CompositeDeviceConfig {
         if let Some(name) = tty_config.name.as_ref() {
             let dname = device.name();
             log::trace!("Checking name: {name} against {dname}");
+            if !glob_match(name.as_str(), dname.as_str()) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Returns true if a given FastRPC device is within a list of fastrpc configs.
+    pub fn has_matching_fastrpc(&self, device: &UdevDevice, fastrpc_config: &FastRpc) -> bool {
+        log::trace!(
+            "Checking FastRPC config: {:?} against {:?}",
+            fastrpc_config,
+            device
+        );
+
+        if let Some(id) = fastrpc_config.id.as_ref() {
+            let dsyspath = device.syspath();
+            log::trace!("Checking id: {id} against {dsyspath}");
+            if !glob_match(id.as_str(), dsyspath.as_str()) {
+                return false;
+            }
+        }
+
+        if let Some(name) = fastrpc_config.name.as_ref() {
+            // FastRPC devices don't seem to have a name (or it's empty)
+            // The sysname works fine
+            let dname = device.sysname();
+            log::trace!("Checking sysname: {name} against {dname}");
             if !glob_match(name.as_str(), dname.as_str()) {
                 return false;
             }
