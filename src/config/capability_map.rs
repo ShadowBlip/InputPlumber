@@ -218,6 +218,44 @@ pub struct GamepadCapability {
     pub dial: Option<DialCapability>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xbox_ally_special_buttons_keep_their_distinct_capabilities() {
+        let config = CapabilityMapConfig::from_yaml_file(
+            "./rootfs/usr/share/inputplumber/capability_maps/ally_type2.yaml",
+        )
+        .expect("Ally Type 2 capability map should load");
+        let CapabilityMapConfig::V1(config) = config else {
+            panic!("Ally Type 2 should use capability map version 1");
+        };
+
+        let actual: HashMap<&str, &str> = config
+            .mapping
+            .iter()
+            .filter_map(|mapping| {
+                let source = mapping.source_events.as_slice();
+                let [source] = source else {
+                    return None;
+                };
+                Some((
+                    source.keyboard.as_deref()?,
+                    mapping.target_event.gamepad.as_ref()?.button.as_deref()?,
+                ))
+            })
+            .collect();
+
+        assert_eq!(actual.get("KeyF16"), Some(&"Keyboard"));
+        assert_eq!(actual.get("KeyF21"), Some(&"LeftTop"));
+        assert_eq!(actual.get("KeyProg1"), Some(&"QuickAccess"));
+        assert_eq!(actual.get("KeyF22"), Some(&"RightTop"));
+        assert_eq!(actual.get("KeyF14"), Some(&"LeftPaddle2"));
+        assert_eq!(actual.get("KeyF15"), Some(&"RightPaddle2"));
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct AxisCapability {

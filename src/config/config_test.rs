@@ -11,6 +11,7 @@ use crate::config::CompositeDeviceConfig;
 
 const AUTOSTART_HWDB_FILE: &str = "./rootfs/usr/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb";
 const DEVICE_CONFIG_DIR: &str = "./rootfs/usr/share/inputplumber/devices";
+const XBOX_ALLY_CONFIG_FILE: &str = "./rootfs/usr/share/inputplumber/devices/50-rog_xbox_ally.yaml";
 
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
@@ -142,6 +143,22 @@ async fn check_autostart_rules() -> Result<(), Box<dyn Error>> {
     println!("Failed!");
 
     assert_eq!(failures.len(), 0);
+
+    Ok(())
+}
+
+#[test]
+fn xbox_ally_uses_the_paddle_capable_xbox_target() -> Result<(), Box<dyn Error>> {
+    let config = CompositeDeviceConfig::from_yaml_file(XBOX_ALLY_CONFIG_FILE.to_string())?;
+
+    assert_eq!(
+        config.target_devices,
+        Some(vec![
+            "xbox-elite".to_string(),
+            "mouse".to_string(),
+            "keyboard".to_string(),
+        ])
+    );
 
     Ok(())
 }
