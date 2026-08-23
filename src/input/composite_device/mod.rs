@@ -1142,14 +1142,8 @@ impl CompositeDevice {
         let cap = event.as_capability();
         if self.translated_recent_events.contains(&cap) {
             log::debug!("Event emitted too quickly. Delaying emission.");
-            let tx = self.tx.clone();
-            tokio::task::spawn(async move {
-                tokio::time::sleep(sleep_time).await;
-                if let Err(e) = tx.send(CompositeCommand::WriteEvent(event)).await {
-                    log::error!("Failed to send delayed event command: {:?}", e);
-                }
-            });
-
+            self.wait_for_translated_event(&cap, sleep_time).await;
+            self.tx.send(CompositeCommand::WriteEvent(event)).await?;
             return Ok(());
         }
 
@@ -1441,14 +1435,8 @@ impl CompositeDevice {
             let cap = event.as_capability();
             if self.translated_recent_events.contains(&cap) {
                 log::debug!("Event emitted too quickly. Delaying emission.");
-                let tx = self.tx.clone();
-                tokio::task::spawn(async move {
-                    tokio::time::sleep(sleep_time).await;
-                    if let Err(e) = tx.send(CompositeCommand::HandleEvent(event)).await {
-                        log::error!("Failed to send delayed event command: {:?}", e);
-                    }
-                });
-
+                self.wait_for_translated_event(&cap, sleep_time).await;
+                self.tx.send(CompositeCommand::HandleEvent(event)).await?;
                 continue;
             }
 
@@ -1469,6 +1457,14 @@ impl CompositeDevice {
         }
 
         Ok(())
+    }
+
+    /// Wait for a recently translated capability before emitting its next
+    /// event. This stays in the composite-device command loop so event
+    /// ordering cannot race the debounce-expiry command.
+    async fn wait_for_translated_event(&mut self, cap: &Capability, delay: Duration) {
+        tokio::time::sleep(delay).await;
+        self.translated_recent_events.remove(cap);
     }
 
     /// Translates the given event into a Vec of events based on the currently loaded
