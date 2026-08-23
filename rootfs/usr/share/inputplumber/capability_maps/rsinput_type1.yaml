@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+version: 2
+kind: CapabilityMap
+name: RSInput Type 1
+id: rsinput1
+
+mapping:
+  - name: D-Pad Up
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_DPAD_UP
+          value_type: button
+    target_event:
+      gamepad:
+        button: DPadUp
+
+  - name: D-Pad Down
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_DPAD_DOWN
+          value_type: button
+    target_event:
+      gamepad:
+        button: DPadDown
+
+  - name: D-Pad Left
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_DPAD_LEFT
+          value_type: button
+    target_event:
+      gamepad:
+        button: DPadLeft
+
+  - name: D-Pad Right
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_DPAD_RIGHT
+          value_type: button
+    target_event:
+      gamepad:
+        button: DPadRight
+
+  - name: Back Button
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_BACK
+          value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+  - name: Left Back Paddle
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_Z
+          value_type: button
+    target_event:
+      gamepad:
+        button: LeftPaddle1
+
+  - name: Right Back Paddle
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_C
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightPaddle1
+
+  # Kernel reports NORTH/WEST by physical position, but Xbox layout 
+  # relies on these swapped. This results in NORTH/WEST swapped in
+  # evtest, but produces expected behaviour in games.
+
+  - name: West Button
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_NORTH
+          value_type: button
+    target_event:
+      gamepad:
+        button: West
+
+  - name: North Button
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_WEST
+          value_type: button
+    target_event:
+      gamepad:
+        button: North
+
+filtered_events: []
