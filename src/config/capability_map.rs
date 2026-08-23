@@ -88,6 +88,43 @@ impl CapabilityMapConfig {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::CapabilityMapConfig;
+
+    #[test]
+    fn ally_type2_armory_button_maps_to_quick_access() {
+        let config = CapabilityMapConfig::from_yaml_file(
+            "./rootfs/usr/share/inputplumber/capability_maps/ally_type2.yaml",
+        )
+        .expect("Ally Type 2 capability map should parse");
+
+        let CapabilityMapConfig::V1(config) = config else {
+            panic!("Ally Type 2 capability map must use schema version 1");
+        };
+
+        let mapping = config
+            .mapping
+            .iter()
+            .find(|mapping| {
+                mapping
+                    .source_events
+                    .iter()
+                    .any(|source| source.keyboard.as_deref() == Some("KeyF16"))
+            })
+            .expect("Ally Type 2 map should contain a KeyF16 mapping");
+
+        assert_eq!(
+            mapping
+                .target_event
+                .gamepad
+                .as_ref()
+                .and_then(|gamepad| gamepad.button.as_deref()),
+            Some("QuickAccess")
+        );
+    }
+}
+
 /// [CapabilityMapConfigHeader] is used to check the version/kind to determine which
 /// capability map schema to use.
 #[derive(Debug, Deserialize, Serialize, Clone)]

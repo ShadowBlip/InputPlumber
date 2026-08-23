@@ -13,12 +13,12 @@ id: aly2
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  - name: Control Center (Short)
+  - name: Armory Crate (Short)
     source_events:
       - keyboard: KeyF16
     target_event:
       gamepad:
-        button: Keyboard
+        button: QuickAccess
   - name: Control Center (Long)
     source_events:
       - keyboard: KeyF21
