@@ -39,13 +39,13 @@ mapping:
         button: RightTop
   - name: Left Paddle
     source_events:
-      - keyboard: KeyF14
+      - keyboard: KeyF15
     target_event:
       gamepad:
         button: LeftPaddle2
   - name: Right Paddle
     source_events:
-      - keyboard: KeyF15
+      - keyboard: KeyF14
     target_event:
       gamepad:
         button: RightPaddle2

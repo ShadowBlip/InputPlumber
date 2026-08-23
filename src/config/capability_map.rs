@@ -123,6 +123,35 @@ mod tests {
             Some("QuickAccess")
         );
     }
+
+    #[test]
+    fn ally_type2_rear_buttons_preserve_m1_m2_direction() {
+        let config = CapabilityMapConfig::from_yaml_file(
+            "./rootfs/usr/share/inputplumber/capability_maps/ally_type2.yaml",
+        )
+        .expect("Ally Type 2 capability map should parse");
+
+        let CapabilityMapConfig::V1(config) = config else {
+            panic!("Ally Type 2 capability map must use schema version 1");
+        };
+
+        let target_for_key = |key: &str| {
+            config
+                .mapping
+                .iter()
+                .find(|mapping| {
+                    mapping
+                        .source_events
+                        .iter()
+                        .any(|source| source.keyboard.as_deref() == Some(key))
+                })
+                .and_then(|mapping| mapping.target_event.gamepad.as_ref())
+                .and_then(|gamepad| gamepad.button.as_deref())
+        };
+
+        assert_eq!(target_for_key("KeyF15"), Some("LeftPaddle2"));
+        assert_eq!(target_for_key("KeyF14"), Some("RightPaddle2"));
+    }
 }
 
 /// [CapabilityMapConfigHeader] is used to check the version/kind to determine which
