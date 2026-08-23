@@ -62,7 +62,7 @@ options:
 
 # The target input device(s) to emulate by default
 target_devices:
-  - xbox-elite
+  - deck-uhid
   - mouse
   - keyboard
 

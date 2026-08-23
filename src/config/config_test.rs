@@ -11,6 +11,7 @@ use crate::config::CompositeDeviceConfig;
 
 const AUTOSTART_HWDB_FILE: &str = "./rootfs/usr/lib/udev/hwdb.d/60-inputplumber-autostart.hwdb";
 const DEVICE_CONFIG_DIR: &str = "./rootfs/usr/share/inputplumber/devices";
+const XBOX_ALLY_CONFIG: &str = "./rootfs/usr/share/inputplumber/devices/50-rog_xbox_ally.yaml";
 
 const RED: &str = "\x1b[31m";
 const YELLOW: &str = "\x1b[33m";
@@ -144,4 +145,19 @@ async fn check_autostart_rules() -> Result<(), Box<dyn Error>> {
     assert_eq!(failures.len(), 0);
 
     Ok(())
+}
+
+#[test]
+fn xbox_ally_uses_steam_deck_target_for_quick_access() {
+    let config = CompositeDeviceConfig::from_yaml_file(XBOX_ALLY_CONFIG.to_string())
+        .expect("ROG Xbox Ally profile should parse");
+
+    assert_eq!(
+        config.target_devices,
+        Some(vec![
+            "deck-uhid".to_string(),
+            "mouse".to_string(),
+            "keyboard".to_string(),
+        ])
+    );
 }
