@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
+version: 1
+kind: CapabilityMap
+name: AYANEO Type 10
+id: aya10
+
+mapping:
+  - name: LC
+    source_events:
+      - keyboard: KeyF21
+    target_event:
+      gamepad:
+        button: LeftTop
+  - name: RC
+    source_events:
+      - keyboard: KeyF22
+    target_event:
+      gamepad:
+        button: RightTop
+  - name: LC1
+    source_events:
+      - keyboard: KeyF19
+    target_event:
+      gamepad:
+        button: LeftPaddle1
+  - name: LC2
+    source_events:
+      - keyboard: KeyF17
+    target_event:
+      gamepad:
+        button: LeftPaddle2
+  - name: RC1
+    source_events:
+      - keyboard: KeyF20
+    target_event:
+      gamepad:
+        button: RightPaddle1
+  - name: RC2
+    source_events:
+      - keyboard: KeyF18
+    target_event:
+      gamepad:
+        button: RightPaddle2
+  - name: Ayaneo Button
+    source_events:
+      - keyboard: KeyF23
+    target_event:
+      gamepad:
+        button: QuickAccess
+  - name: T Button
+    source_events:
+      - keyboard: KeyF16
+    target_event:
+      gamepad:
+        button: QuickAccess2
+
+filtered_events: []
