@@ -122,6 +122,26 @@ mod tests {
                 .and_then(|gamepad| gamepad.button.as_deref()),
             Some("QuickAccess")
         );
+
+        let library_mapping = config
+            .mapping
+            .iter()
+            .find(|mapping| {
+                mapping
+                    .source_events
+                    .iter()
+                    .any(|source| source.keyboard.as_deref() == Some("KeyProg1"))
+            })
+            .expect("Ally Type 2 map should contain a KeyProg1 mapping");
+
+        assert_eq!(
+            library_mapping
+                .target_event
+                .gamepad
+                .as_ref()
+                .and_then(|gamepad| gamepad.button.as_deref()),
+            Some("Guide")
+        );
     }
 
     #[test]

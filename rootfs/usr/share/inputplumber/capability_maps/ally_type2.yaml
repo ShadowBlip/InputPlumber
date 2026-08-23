@@ -30,7 +30,7 @@ mapping:
       - keyboard: KeyProg1
     target_event:
       gamepad:
-        button: QuickAccess
+        button: Guide
   - name: Armory Crate (Long)
     source_events:
       - keyboard: KeyF22
