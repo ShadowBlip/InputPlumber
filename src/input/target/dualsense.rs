@@ -2,7 +2,7 @@
 //! The DualSense implementation is based on the great work done by NeroReflex
 //! and the ROGueENEMY project:
 //! https://github.com/NeroReflex/ROGueENEMY/
-use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
+use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File};
 
 use packed_struct::prelude::*;
 use rand::Rng;
@@ -44,7 +44,9 @@ use crate::{
     },
 };
 
-use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
+use super::{
+    quick_access::QuickAccessChord, InputError, OutputError, TargetInputDevice, TargetOutputDevice,
+};
 
 /// The type of DualSense device to emulate. Currently two models are supported:
 /// DualSense and DualSense Edge.
@@ -124,6 +126,7 @@ pub struct DualSenseDevice {
     context: u8,
     hardware: DualSenseHardware,
     queued_events: Vec<ScheduledNativeEvent>,
+    quick_access_chord: QuickAccessChord,
     /// Last report written, used to skip re-emitting identical reports.
     last_written: Option<Vec<u8>>,
     /// Whether a consumer has the device open, writes are skipped while closed.
@@ -141,6 +144,7 @@ impl DualSenseDevice {
             context: Default::default(),
             hardware,
             queued_events: Vec::new(),
+            quick_access_chord: QuickAccessChord::default(),
             last_written: None,
             is_open: false,
         })
@@ -199,7 +203,7 @@ impl DualSenseDevice {
 
     /// Write the current device state to the device
     fn write_state(&mut self) -> Result<(), Box<dyn Error>> {
-        // No consumer so don't bother emitting. 
+        // No consumer so don't bother emitting.
         if !self.is_open {
             return Ok(());
         }
@@ -934,27 +938,8 @@ impl TargetInputDevice for DualSenseDevice {
         let cap = event.as_capability();
         if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
             let pressed = event.pressed();
-            let guide = NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-                event.get_value(),
-            );
-            let south = NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-                event.get_value(),
-            );
-
-            let (guide, south) = if pressed {
-                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
-                (guide, south)
-            } else {
-                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(240));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
-                (guide, south)
-            };
-
-            self.queued_events.push(guide);
-            self.queued_events.push(south);
+            let events = self.quick_access_chord.schedule(pressed, event.get_value());
+            self.queued_events.extend(events);
             return Ok(());
         }
         self.update_state(event);

@@ -20,13 +20,16 @@ use crate::input::event::value::InputValue;
 use crate::input::output_capability::OutputCapability;
 use crate::input::output_event::{OutputEvent, UinputOutputEvent};
 
-use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
+use super::{
+    quick_access::QuickAccessChord, InputError, OutputError, TargetInputDevice, TargetOutputDevice,
+};
 
 #[derive(Debug)]
 pub struct XBoxController {
     device: VirtualDevice,
     axis_map: HashMap<AbsoluteAxisCode, AbsInfo>,
     queued_events: Vec<ScheduledNativeEvent>,
+    quick_access_chord: QuickAccessChord,
     capabilities: Vec<Capability>,
 }
 
@@ -39,6 +42,7 @@ impl XBoxController {
             device,
             axis_map,
             queued_events: Vec::new(),
+            quick_access_chord: QuickAccessChord::default(),
             capabilities,
         })
     }
@@ -240,27 +244,8 @@ impl TargetInputDevice for XBoxController {
         let cap = event.as_capability();
         if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
             let pressed = event.pressed();
-            let guide = NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-                event.get_value(),
-            );
-            let south = NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-                event.get_value(),
-            );
-
-            let (guide, south) = if pressed {
-                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
-                (guide, south)
-            } else {
-                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(240));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
-                (guide, south)
-            };
-
-            self.queued_events.push(guide);
-            self.queued_events.push(south);
+            let events = self.quick_access_chord.schedule(pressed, event.get_value());
+            self.queued_events.extend(events);
             return Ok(());
         }
         // Check for Screenshot

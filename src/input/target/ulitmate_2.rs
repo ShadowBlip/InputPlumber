@@ -29,7 +29,9 @@ use crate::{
     },
 };
 
-use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
+use super::{
+    quick_access::QuickAccessChord, InputError, OutputError, TargetInputDevice, TargetOutputDevice,
+};
 
 const GRAVITY: f64 = 9.80665;
 
@@ -37,6 +39,7 @@ pub struct Ultimate2WirelessDevice {
     device: UHIDDevice<File>,
     state: PackedInputDataReport,
     queued_events: Vec<ScheduledNativeEvent>,
+    quick_access_chord: QuickAccessChord,
 }
 
 impl Ultimate2WirelessDevice {
@@ -56,6 +59,7 @@ impl Ultimate2WirelessDevice {
             device,
             state: PackedInputDataReport::default(),
             queued_events: Vec::new(),
+            quick_access_chord: QuickAccessChord::default(),
         })
     }
 
@@ -279,27 +283,8 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
         if event.as_capability() == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess))
         {
             let pressed = event.pressed();
-            let guide = NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-                event.get_value(),
-            );
-            let south = NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-                event.get_value(),
-            );
-            let (guide, south) = if pressed {
-                (
-                    ScheduledNativeEvent::new(guide, Duration::from_millis(0)),
-                    ScheduledNativeEvent::new(south, Duration::from_millis(160)),
-                )
-            } else {
-                (
-                    ScheduledNativeEvent::new(guide, Duration::from_millis(240)),
-                    ScheduledNativeEvent::new(south, Duration::from_millis(160)),
-                )
-            };
-            self.queued_events.push(guide);
-            self.queued_events.push(south);
+            let events = self.quick_access_chord.schedule(pressed, event.get_value());
+            self.queued_events.extend(events);
             return Ok(());
         }
 
