@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: AYANEO NEXT 2
+
+single_source: false
+
+matches:
+  - dmi_data:
+      product_name: AB09
+      sys_vendor: AYA
+
+source_devices:
+  # Xinput mode
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c6:00.0-4/input0
+      handler: event*
+  # Dinput mode
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c6:00.0-4/input0
+      handler: event*
+    capability_map_id: dinput_generic
+  - group: gamepad
+    evdev:
+      name: AYANEO COMPOSITE DEVICE
+      handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyF16
+        - Keyboard:KeyF17
+        - Keyboard:KeyF18
+        - Keyboard:KeyF19
+        - Keyboard:KeyF20
+        - Keyboard:KeyF21
+        - Keyboard:KeyF22
+        - Keyboard:KeyF23
+        - Keyboard:KeyLeftMeta
+  - group: imu
+    iio:
+      name: bmi323-imu
+      mount_matrix:
+        x: [-1, 0, 0]
+        y: [0, -1, 0]
+        z: [0, 0, 1]
+
+  # RGB
+  - group: led
+    udev:
+      sys_name: "*:rgb:joystick_rings"
+      subsystem: leds
+
+options:
+  auto_manage: true
+
+target_devices:
+  - xbox-elite
+  - mouse
+  - keyboard
+
+capability_map_id: aya10
