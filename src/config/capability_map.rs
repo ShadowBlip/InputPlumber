@@ -149,8 +149,8 @@ mod tests {
                 .and_then(|gamepad| gamepad.button.as_deref())
         };
 
-        assert_eq!(target_for_key("KeyF15"), Some("LeftPaddle2"));
-        assert_eq!(target_for_key("KeyF14"), Some("RightPaddle2"));
+        assert_eq!(target_for_key("KeyF14"), Some("LeftPaddle2"));
+        assert_eq!(target_for_key("KeyF15"), Some("RightPaddle2"));
     }
 }
 
