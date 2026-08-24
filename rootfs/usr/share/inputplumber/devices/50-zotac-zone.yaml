@@ -27,13 +27,31 @@ source_devices:
       vendor_id: 0x1ee9
       product_id: 0x1590
       interface_num: 3
+  # This name matches identically-named evdev nodes on interfaces 1.2 and 1.3
+  # in addition to the real gamepad node on interface 1.1, so phys_path pins
+  # the match to interface 1.1 only. Without it, InputPlumber creates three
+  # duplicate CompositeDevices (and three duplicate virtual gamepads) for one
+  # physical controller.
   - group: gamepad
     evdev:
       name: Zotac Technology Limited ZOTAC GAMING ZONE
       vendor_id: "1ee9"
       product_id: "1590"
+      phys_path: "*/input1"
       handler: event*
     capability_map_id: zone1
+  # Raw XInput-compatible joystick node exposed by the kernel's xpad driver
+  # (interface 1.0). Carries the real face buttons/sticks/triggers/Select
+  # (View)/Start/Guide. Grabbing it here hides it from Steam so those inputs
+  # go through the translated virtual gamepad instead of a second, untranslated
+  # raw controller.
+  - group: gamepad
+    evdev:
+      name: ZOTAC Gaming Zone
+      vendor_id: "1ee9"
+      product_id: "1590"
+      phys_path: "*/input0"
+      handler: event*
   - group: keyboard
     evdev:
       name: Zotac Technology Limited ZOTAC GAMING ZONE Keyboard
@@ -50,7 +68,7 @@ source_devices:
   #    handler: event*
   - group: mouse
     evdev:
-      name: ZOTAC Gaming Zone Dials
+      name: Zotac Technology Limited ZOTAC GAMING ZONE Mouse
       vendor_id: "1ee9"
       product_id: "1590"
       handler: event*
