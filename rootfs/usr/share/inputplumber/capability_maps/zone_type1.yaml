@@ -22,6 +22,9 @@ mapping:
       target_event:
           gamepad:
               button: Guide
+    # Plain Guide press opens the main Steam menu. QuickAccess2 has no evdev
+    # output on the xbox-elite target (see event_codes_from_capability in
+    # src/input/event/evdev.rs), so binding this button to it was a no-op.
     - name: MORE
       source_events:
           - evdev:
@@ -30,7 +33,10 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: QuickAccess
+              button: Guide
+    # QuickAccess triggers the Guide+South chord that gamescope recognizes
+    # as "open Quick Access Menu" (see write_event's QuickAccess special case
+    # in src/input/target/xpad.rs).
     - name: HOME (shortpress)
       source_events:
           - evdev:
@@ -39,7 +45,7 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: QuickAccess2
+              button: QuickAccess
     - name: HOME (longpress)
       source_events:
           - evdev:
