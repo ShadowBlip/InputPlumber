@@ -29,14 +29,14 @@ source_devices:
       interface_num: 3
   - group: gamepad
     evdev:
-      name: ZOTAC Gaming Zone Gamepad
+      name: Zotac Technology Limited ZOTAC GAMING ZONE
       vendor_id: "1ee9"
       product_id: "1590"
       handler: event*
     capability_map_id: zone1
   - group: keyboard
     evdev:
-      name: ZOTAC Gaming Zone Keyboard
+      name: Zotac Technology Limited ZOTAC GAMING ZONE Keyboard
       vendor_id: "1ee9"
       product_id: "1590"
       handler: event*
