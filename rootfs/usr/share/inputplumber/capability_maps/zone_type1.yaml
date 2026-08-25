@@ -73,26 +73,17 @@ mapping:
       target_event:
           gamepad:
               button: RightPaddle1
-    - name: Left Dial
-      source_events:
-          - evdev:
-                event_type: REL
-                event_code: REL_HWHEEL
-                value_type: joystick_x
-      target_event:
-          gamepad:
-              dial:
-                  name: LeftStickDial
-    - name: Right Dial
-      source_events:
-          - evdev:
-                event_code: REL_WHEEL
-                event_type: REL
-                value_type: joystick_x
-      target_event:
-          gamepad:
-              dial:
-                  name: RightStickDial
+    # The dials are deliberately not mapped here. They reach no evdev node at
+    # all - their HID usages are declared on the Generic Desktop page but hold
+    # Consumer page codes, so the kernel translates none of them - which means
+    # a REL_WHEEL/REL_HWHEEL mapping never fired for the dials it was written
+    # for.
+    #
+    # It claimed events all the same: capability maps are applied per composite
+    # device rather than per source, so the wheel events of the left touchpad -
+    # which is a scroll surface, not a pointer one - were turned into a dial
+    # capability that none of this device's targets consume, leaving that
+    # touchpad dead.
 
 # List of events to filter from the source devices
 filtered_events: []
