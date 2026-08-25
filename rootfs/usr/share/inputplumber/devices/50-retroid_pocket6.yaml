@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: Retroid Pocket 6
+
+options:
+  auto_manage: true
+
+matches:
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: retroidpocket,rp6
+
+source_devices:
+  - group: gamepad
+    evdev:
+      name: AYN Odin2 Gamepad
+      phys_path: rsinput-gamepad/input0
+      vendor_id: "2020"
+      product_id: "3001"
+      handler: event*
+    capability_map_id: rsinput1
+
+  - group: gamepad
+    evdev:
+      name: gpio-keys
+      phys_path: gpio-keys/input0
+      handler: event*
+    capability_map_id: rsinput1
+
+target_devices:
+  - xbox-elite
+  # gpio-keys node is shared between gamepad and volume up key,
+  # we need keyboard target here for volume up to work
+  - keyboard
