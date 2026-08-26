@@ -87,9 +87,8 @@ fn configure_via_sysfs(udevice: &UdevDevice) -> bool {
     true
 }
 
-/// Configure the device over hidraw. This is a one-shot, uncommitted
-/// configuration, so it doesn't override the user's saved device settings and
-/// lasts only until the device is power cycled.
+/// Configure the device over hidraw. Oneshot config prevents overriding user
+/// set config.
 fn configure_via_hidraw(udevice: &UdevDevice) -> Result<(), Box<dyn Error + Send + Sync>> {
     let path = CString::new(udevice.devnode())?;
     let api = hidapi::HidApi::new()?;
