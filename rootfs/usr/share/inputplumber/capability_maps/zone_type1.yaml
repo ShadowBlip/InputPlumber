@@ -55,6 +55,52 @@ mapping:
       target_event:
           gamepad:
               button: Keyboard
+    # The physical HOME button sends these chords on its own (not through the
+    # F16-F19 scheme above - see the vendor driver reasoning in
+    # devices/50-zotac-zone.yaml). Screenshot and Guide are the only two
+    # buttons in this file with real evdev output on the xbox-elite target
+    # (see event_codes_from_capability in src/input/event/evdev.rs and the
+    # special-cased write_event handling in src/input/target/xpad.rs) that
+    # also matches what these chords already did by accident: consuming the
+    # keys stops them from leaking through to the desktop session's own
+    # Meta+D ("show desktop") / Ctrl+Alt+KP. bindings, which is what produced
+    # a screenshot/Steam-menu-like effect before this mapping existed.
+    # Note: this trades away that desktop-mode "show desktop" shortcut, since
+    # capability_map translation applies regardless of session type.
+    - name: HOME (shortpress, real)
+      mapping_type:
+          evdev: chord
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: KEY_LEFTMETA
+                value_type: button
+          - evdev:
+                event_type: KEY
+                event_code: KEY_D
+                value_type: button
+      target_event:
+          gamepad:
+              button: Screenshot
+    - name: HOME (longpress, real)
+      mapping_type:
+          evdev: chord
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: KEY_LEFTCTRL
+                value_type: button
+          - evdev:
+                event_type: KEY
+                event_code: KEY_LEFTALT
+                value_type: button
+          - evdev:
+                event_type: KEY
+                event_code: KEY_KPDOT
+                value_type: button
+      target_event:
+          gamepad:
+              button: Guide
     - name: Left Paddle
       source_events:
           - evdev:
