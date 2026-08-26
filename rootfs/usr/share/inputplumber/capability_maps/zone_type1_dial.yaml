@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: Zotac Zone Type 1 Dial
+
+# Unique identifier of the capability mapping
+id: zone1_dial
+
+# Not attached to any source_devices entry in 50-zotac-zone.yaml yet: the
+# dials only reach a hidraw report (interface 1, report ID 3) with no evdev
+# node at all, and no source driver reads it. Kept here, scoped to its own
+# id, for whichever evdev-producing source ends up carrying REL_WHEEL /
+# REL_HWHEEL for the dials (e.g. once a vendor kernel driver or a hidraw
+# parser is in place) so it can be attached without also catching the
+# unrelated left touchpad, which emits the same REL_WHEEL/REL_HWHEEL codes
+# on its own source and does not want them translated.
+mapping:
+    - name: Left Dial
+      source_events:
+          - evdev:
+                event_type: REL
+                event_code: REL_HWHEEL
+                value_type: joystick_x
+      target_event:
+          gamepad:
+              dial:
+                  name: LeftStickDial
+    - name: Right Dial
+      source_events:
+          - evdev:
+                event_code: REL_WHEEL
+                event_type: REL
+                value_type: joystick_x
+      target_event:
+          gamepad:
+              dial:
+                  name: RightStickDial
+
+# List of events to filter from the source devices
+filtered_events: []
