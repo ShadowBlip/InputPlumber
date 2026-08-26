@@ -3,13 +3,13 @@ use std::ffi::CString;
 use std::time::Duration;
 
 use hidapi::HidDevice;
+use packed_struct::PrimitiveEnum;
 use udev::Device;
 
 use crate::udev::device::{AttributeSetter, UdevDevice};
 
 use super::hid_report::{
-    mapping_status, set_keyboard_mapping, BUTTON_M1, BUTTON_M2, HID_KEY_END, HID_KEY_HOME,
-    REPORT_SIZE,
+    ButtonId, ButtonMappingRequest, ButtonMappingResponse, HID_KEY_END, HID_KEY_HOME, REPORT_SIZE,
 };
 
 // Hardware ID's
@@ -48,10 +48,8 @@ impl Driver {
 /// Bind the rear macro buttons to Home and End, which the `zone1` capability
 /// map translates into the paddle capabilities.
 ///
-/// The buttons ship with an empty mapping, so the firmware sends nothing at all
-/// while they're unbound - they show up on no evdev node and in no HID report.
-/// The vendor kernel driver binds them through sysfs; where that driver isn't
-/// loaded, the same thing can be asked of the device directly over hidraw.
+/// Attempts first to bind with the vendor kernel driver and falls back to
+/// raw HID commands over hidraw.
 fn configure_macro_buttons(udevice: &UdevDevice) {
     if configure_via_sysfs(udevice) {
         return;
@@ -89,11 +87,9 @@ fn configure_via_sysfs(udevice: &UdevDevice) -> bool {
     true
 }
 
-/// Configure the device by speaking the vendor protocol over hidraw.
-///
-/// The mapping is deliberately not committed with the protocol's save command,
-/// so it lasts only until the device is power cycled and the user's stored
-/// configuration is left untouched.
+/// Configure the device over hidraw. This is a one-shot, uncommitted
+/// configuration, so it doesn't override the user's saved device settings and
+/// lasts only until the device is power cycled.
 fn configure_via_hidraw(udevice: &UdevDevice) -> Result<(), Box<dyn Error + Send + Sync>> {
     let path = CString::new(udevice.devnode())?;
     let api = hidapi::HidApi::new()?;
@@ -101,9 +97,12 @@ fn configure_via_hidraw(udevice: &UdevDevice) -> Result<(), Box<dyn Error + Send
 
     // M2 is the left paddle, M1 the right one. Each button is mapped
     // independently so that one of them failing still leaves the other bound.
-    for (sequence, button_id, key) in [(0, BUTTON_M2, HID_KEY_HOME), (1, BUTTON_M1, HID_KEY_END)] {
-        if let Err(e) = send_mapping(&device, sequence, button_id, key) {
-            log::warn!("Could not map Zotac Zone button {button_id:#04x}: {e}");
+    for (button_id, key) in [(ButtonId::M2, HID_KEY_HOME), (ButtonId::M1, HID_KEY_END)] {
+        if let Err(e) = send_mapping(&device, button_id, key) {
+            log::warn!(
+                "Could not map Zotac Zone button {:#04x}: {e}",
+                button_id.to_primitive()
+            );
         }
     }
 
@@ -113,11 +112,10 @@ fn configure_via_hidraw(udevice: &UdevDevice) -> Result<(), Box<dyn Error + Send
 /// Send a single button mapping command and wait for the device to accept it.
 fn send_mapping(
     device: &HidDevice,
-    sequence: u8,
-    button_id: u8,
+    button_id: ButtonId,
     key: u8,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    device.write(&set_keyboard_mapping(sequence, button_id, key))?;
+    device.write(&ButtonMappingRequest::new(button_id, key).to_bytes()?)?;
 
     // The device also emits unsolicited status frames on this interface, so
     // read until its answer to *this* command turns up.
@@ -125,23 +123,29 @@ fn send_mapping(
     loop {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
         if remaining.is_zero() {
-            return Err(format!("Timed out mapping button {button_id:#04x}").into());
+            return Err(
+                format!("Timed out mapping button {:#04x}", button_id.to_primitive()).into(),
+            );
         }
 
         let mut buf = [0; REPORT_SIZE];
         let bytes_read = device.read_timeout(&mut buf, remaining.as_millis() as i32)?;
-        let Some(status) = mapping_status(&buf[..bytes_read]) else {
+        let Some(status) = ButtonMappingResponse::status(&buf[..bytes_read]) else {
             continue;
         };
 
         if status != 0 {
             return Err(format!(
-                "Device rejected mapping for button {button_id:#04x}: {status:#04x}"
+                "Device rejected mapping for button {:#04x}: {status:#04x}",
+                button_id.to_primitive()
             )
             .into());
         }
 
-        log::debug!("Mapped Zotac Zone button {button_id:#04x} to key {key:#04x}");
+        log::debug!(
+            "Mapped Zotac Zone button {:#04x} to key {key:#04x}",
+            button_id.to_primitive()
+        );
         return Ok(());
     }
 }
