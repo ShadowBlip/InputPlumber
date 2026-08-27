@@ -7,7 +7,7 @@
 //! clause. Values were verified against live captures from a Zotac Zone
 //! running firmware 1.3.9.
 
-use packed_struct::prelude::*;
+use packed_struct::prelude::{PackedStruct, PackingError, PrimitiveEnum_u8};
 
 /// Size of a command frame, excluding the leading hidraw report number.
 pub const REPORT_SIZE: usize = 64;
