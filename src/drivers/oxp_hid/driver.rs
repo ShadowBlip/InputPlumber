@@ -4,20 +4,11 @@ use std::ffi::CString;
 use hidapi::HidDevice;
 use packed_struct::prelude::*;
 
-use super::event::{BinaryInput, ButtonEvent, Event};
-use super::hid_report::{ButtonId, InputDataReport};
-
-pub const VID: u16 = 0x1a86;
-pub const PID: u16 = 0xfe00;
-pub const IID: i32 = 0x02;
-
-const PACKET_SIZE: usize = 64;
-
-// HID buffer read timeout
-const HID_TIMEOUT: i32 = 10;
-
-// HID command IDs
-const CMD_BUTTON: u8 = 0xB2;
+use super::{
+    event::{BinaryInput, ButtonEvent, Event},
+    hid_report::{ButtonId, InputDataReport},
+    CMD_BUTTON, HID_TIMEOUT, PACKET_SIZE, PID, VID,
+};
 
 pub struct Driver {
     device: HidDevice,
