@@ -17,7 +17,7 @@ matches:
 source_devices:
     # AYANEO/DInput mode
     - group: gamepad
-      capability_map_id: pocket_fit_dinput
+      capability_map_id: konkr2
       evdev:
           name: AYANEO Controller
           vendor_id: 4001
@@ -38,7 +38,7 @@ source_devices:
           handler: event*
     # Auxiliary buttons and the upper pair of back buttons
     - group: keyboard
-      capability_map_id: pocket_fit_type9
+      capability_map_id: konkr2
       evdev:
           name: AYANEO DEVICE
           vendor_id: 1c4f
