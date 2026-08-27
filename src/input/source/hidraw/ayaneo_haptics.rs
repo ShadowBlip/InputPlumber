@@ -2,7 +2,7 @@ use std::{collections::HashMap, error::Error, ffi::CString, fmt::Debug};
 
 use evdev::{FFEffectData, FFEffectKind};
 use hidapi::HidDevice;
-use packed_struct::types::SizedInteger;
+use packed_struct::prelude::*;
 
 use crate::{
     input::{
@@ -19,7 +19,26 @@ use crate::{
 pub const VID: u16 = 0x4001;
 pub const PID: u16 = 0x0428;
 
-const REPORT_SIZE: usize = 8;
+#[derive(PackedStruct, Debug, Default, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "8")]
+struct AyaneoRumbleReport {
+    #[packed_field(bytes = "0")]
+    reserved_0: u8,
+    #[packed_field(bytes = "1")]
+    reserved_1: u8,
+    #[packed_field(bytes = "2")]
+    reserved_2: u8,
+    #[packed_field(bytes = "3")]
+    reserved_3: u8,
+    #[packed_field(bytes = "4")]
+    left_motor: u8,
+    #[packed_field(bytes = "5")]
+    right_motor: u8,
+    #[packed_field(bytes = "6")]
+    reserved_6: u8,
+    #[packed_field(bytes = "7")]
+    reserved_7: u8,
+}
 
 /// Output-only source for the rumble motors exposed by AYANEO DirectInput mode.
 ///
@@ -60,17 +79,12 @@ impl AyaneoHaptics {
             .unwrap_or(-1)
     }
 
-    fn build_rumble_report(left_magnitude: u16, right_magnitude: u16) -> [u8; REPORT_SIZE] {
-        [
-            0,
-            0,
-            0,
-            0,
-            (left_magnitude >> 8) as u8,
-            (right_magnitude >> 8) as u8,
-            0,
-            0,
-        ]
+    fn build_rumble_report(left_magnitude: u16, right_magnitude: u16) -> AyaneoRumbleReport {
+        AyaneoRumbleReport {
+            left_motor: (left_magnitude >> 8) as u8,
+            right_motor: (right_magnitude >> 8) as u8,
+            ..Default::default()
+        }
     }
 
     fn rumble(
@@ -78,7 +92,7 @@ impl AyaneoHaptics {
         left_magnitude: u16,
         right_magnitude: u16,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let report = Self::build_rumble_report(left_magnitude, right_magnitude);
+        let report = Self::build_rumble_report(left_magnitude, right_magnitude).pack()?;
         let written = self.device.write(&report)?;
         if written != report.len() {
             return Err(format!(
@@ -206,12 +220,16 @@ impl SourceOutputDevice for AyaneoHaptics {
 
 #[cfg(test)]
 mod tests {
+    use packed_struct::PackedStruct;
+
     use super::AyaneoHaptics;
 
     #[test]
     fn builds_left_and_right_motor_report() {
         assert_eq!(
-            AyaneoHaptics::build_rumble_report(0x8000, 0x6000),
+            AyaneoHaptics::build_rumble_report(0x8000, 0x6000)
+                .pack()
+                .unwrap(),
             [0x00, 0x00, 0x00, 0x00, 0x80, 0x60, 0x00, 0x00]
         );
     }
@@ -219,13 +237,18 @@ mod tests {
     #[test]
     fn uses_high_byte_of_each_evdev_magnitude() {
         assert_eq!(
-            AyaneoHaptics::build_rumble_report(0x12ff, 0xab01),
+            AyaneoHaptics::build_rumble_report(0x12ff, 0xab01)
+                .pack()
+                .unwrap(),
             [0x00, 0x00, 0x00, 0x00, 0x12, 0xab, 0x00, 0x00]
         );
     }
 
     #[test]
     fn builds_stop_report() {
-        assert_eq!(AyaneoHaptics::build_rumble_report(0, 0), [0x00; 8]);
+        assert_eq!(
+            AyaneoHaptics::build_rumble_report(0, 0).pack().unwrap(),
+            [0x00; 8]
+        );
     }
 }

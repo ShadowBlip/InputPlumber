@@ -5,7 +5,7 @@ name: KONKR Pocket FIT Auxiliary Buttons
 id: pocket_fit_type9
 
 mapping:
-    - name: Side button to Quick Access
+    - name: Right-side Menu Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -14,7 +14,7 @@ mapping:
       target_event:
           gamepad:
               button: QuickAccess
-    - name: Front button to virtual keyboard (Steam)
+    - name: Equals Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -22,17 +22,8 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: Guide
-    - name: Front button to virtual keyboard (X)
-      source_events:
-          - evdev:
-                event_type: KEY
-                event_code: BTN6
-                value_type: button
-      target_event:
-          gamepad:
-              button: North
-    - name: AYANEO button 2 to screenshot
+              button: Keyboard
+    - name: K Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -40,8 +31,8 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: Screenshot
-    - name: Upper left back button
+              button: QuickAccess2
+    - name: Left Upper Back Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -49,8 +40,8 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: LeftTop
-    - name: Upper right back button
+              button: LeftPaddle1
+    - name: Right Upper Back Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -58,4 +49,4 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: RightTop
+              button: RightPaddle1

@@ -46,6 +46,6 @@ source_devices:
           handler: event*
 
 target_devices:
-    - deck-uhid
+    - xbox-elite
     - keyboard
     - mouse
