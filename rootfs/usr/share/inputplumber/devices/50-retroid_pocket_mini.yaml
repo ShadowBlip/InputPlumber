@@ -12,6 +12,11 @@ matches:
       attributes:
         - name: compatible
           value: retroidpocket,rpmini
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: retroidpocket,rpminiv2
 
 source_devices:
   - group: gamepad
