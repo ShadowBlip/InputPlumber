@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: Retroid Pocket Flip 2
+
+options:
+  auto_manage: true
+
+matches:
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: retroidpocket,rpflip2
+
+source_devices:
+  - group: gamepad
+    capability_map_id: ret2
+    evdev:
+      name: Retroid Pocket Gamepad
+      phys_path: retroid-pocket-gamepad/input0
+      vendor_id: "2020"
+      product_id: "3001"
+      handler: event*
+
+target_devices:
+  - xbox-elite
