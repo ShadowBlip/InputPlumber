@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: Retroid Pocket Mini
+
+options:
+  auto_manage: true
+
+matches:
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: retroidpocket,rpmini
+
+source_devices:
+  - group: gamepad
+    capability_map_id: ret1
+    evdev:
+      name: Retroid Pocket Gamepad
+      phys_path: retroid-pocket-gamepad/input0
+      vendor_id: "2020"
+      product_id: "3001"
+      handler: event*
+
+target_devices:
+  - xbox-elite
