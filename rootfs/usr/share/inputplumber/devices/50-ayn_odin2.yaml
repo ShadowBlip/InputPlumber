@@ -12,6 +12,11 @@ matches:
       attributes:
         - name: compatible 
           value: ayn,odin2
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: ayn,odin2portal
 
 source_devices:
   - group: gamepad
