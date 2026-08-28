@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: AYN Odin 2 Mini
+
+options:
+  auto_manage: true
+
+matches:
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: ayn,odin2mini
+
+source_devices:
+  - group: gamepad
+    capability_map_id: ayn3
+    evdev:
+      name: AYN Odin2 Gamepad
+      phys_path: rsinput-gamepad/input0
+      vendor_id: "2020"
+      product_id: "3001"
+      handler: event*
+
+target_devices:
+  - xbox-elite
