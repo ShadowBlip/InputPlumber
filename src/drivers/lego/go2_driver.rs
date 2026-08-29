@@ -5,6 +5,7 @@ use hidapi::HidDevice;
 use packed_struct::PackedStruct;
 use tokio::time::Instant;
 
+use crate::dmi::get_dmi_data;
 use crate::input::capability::{Capability, Source};
 use crate::udev::device::UdevDevice;
 
@@ -91,7 +92,16 @@ impl Driver {
             return Ok(HashSet::from(DEFAULT_EVENT_FILTER));
         };
 
+        let is_legion_go_1 = get_dmi_data().product_name == "83E1";
         let filtered_events = match driver {
+            // Updated Go 1 controller firmware uses Go 2-format reports. Use the right handle IMU
+            // so gyro and acceleration continue to work while the controllers are detached.
+            "hid-lenovo-go" if is_legion_go_1 => HashSet::from([
+                Capability::Accelerometer(Source::Left),
+                Capability::Accelerometer(Source::Center),
+                Capability::Gyroscope(Source::Left),
+                Capability::Gyroscope(Source::Center),
+            ]),
             "hid-lenovo-go" => HashSet::from([
                 Capability::Accelerometer(Source::Left),
                 Capability::Accelerometer(Source::Right),
