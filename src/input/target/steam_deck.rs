@@ -23,7 +23,6 @@ use virtual_usb::{
 };
 
 use crate::{
-    config::CompositeDeviceConfig,
     drivers::steam_deck::{
         hid_report::{
             PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
@@ -804,109 +803,19 @@ impl TargetInputDevice for SteamDeckDevice {
     /// Start the driver when attached to a composite device.
     fn on_composite_device_attached(
         &mut self,
-        composite_device: CompositeDeviceClient,
+        _composite_device: CompositeDeviceClient,
     ) -> Result<(), InputError> {
         let (tx, rx) = channel();
         let mut device_config = self.config.clone();
 
-        // Spawn a task to wait for the composite device config. This is done
-        // to prevent potential deadlocks if the composite device and target
-        // device are both waiting for a response from each other.
-        tokio::task::spawn(async move {
-            // Get the config for this composite_device.
-            let cd_config: CompositeDeviceConfig = match composite_device.get_config().await {
-                Ok(config) => config,
-                Err(e) => {
-                    log::error!("Failed to get composite device config. Got error: {e:?}");
-                    return;
-                }
-            };
+        // For the Deck target, always emulate a real Steam Deck
+        device_config.vendor = "Valve Corporation".to_string();
+        device_config.name = "Steam Controller".to_string();
+        device_config.product_id = ProductId::SteamDeck;
 
-            match cd_config.name.as_str() {
-                "Lenovo Legion Go" => {
-                    device_config.vendor = "Lenovo".to_string();
-                    device_config.name = "Legion Go Controller".to_string();
-                    device_config.product_id = ProductId::LenovoLegionGo;
-                }
-                "Lenovo Legion Go 2" => {
-                    device_config.vendor = "Lenovo".to_string();
-                    device_config.name = "Legion Go 2 Controller".to_string();
-                    device_config.product_id = ProductId::LenovoLegionGo2;
-                }
-                "Lenovo Legion Go S" => {
-                    device_config.vendor = "Lenovo".to_string();
-                    device_config.name = "Legion Go S Controller".to_string();
-                    device_config.product_id = ProductId::LenovoLegionGoS;
-                }
-                "ASUS ROG Ally" => {
-                    device_config.vendor = "ASUS".to_string();
-                    device_config.name = "ROG Ally Controller".to_string();
-                    device_config.product_id = ProductId::AsusRogAlly;
-                }
-                "ASUS ROG Ally X" => {
-                    device_config.vendor = "ASUS".to_string();
-                    device_config.name = "ROG Ally X Controller".to_string();
-                    device_config.product_id = ProductId::AsusRogAlly;
-                }
-                "ASUS ROG Xbox Ally" => {
-                    device_config.vendor = "ASUS".to_string();
-                    device_config.name = "ROG Xbox Ally Controller".to_string();
-                    device_config.product_id = ProductId::AsusRogAlly;
-                }
-                "ASUS ROG Xbox Ally X" => {
-                    device_config.vendor = "ASUS".to_string();
-                    device_config.name = "ROG Xbox Ally X Controller".to_string();
-                    device_config.product_id = ProductId::AsusRogAlly;
-                }
-                "Zotac Zone" => {
-                    device_config.vendor = "Zotac".to_string();
-                    device_config.name = "Zone Controller".to_string();
-                    device_config.product_id = ProductId::ZotacZone;
-                }
-                "Steam Deck" => {
-                    device_config.vendor = "Valve Corporation".to_string();
-                    device_config.name = "Steam Controller".to_string();
-                    device_config.product_id = ProductId::SteamDeck;
-                }
-                "MSI Claw" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                "MSI Claw 7 AI+ A2VM" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                "MSI Claw 8 AI+ A2VM" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                "MSI Claw 8 EX AI+ CG3EM" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                "MSI Claw A8 BZ2EM" => {
-                    device_config.vendor = "MSI".to_string();
-                    device_config.name = "Claw Controller".to_string();
-                    device_config.product_id = ProductId::MsiClaw;
-                }
-                _ => {}
-            };
-
-            log::debug!(
-                "Found Steam Deck target config: {} {} PID: {:?}",
-                device_config.vendor,
-                device_config.name,
-                device_config.product_id.to_u16(),
-            );
-
-            if let Err(e) = tx.send(device_config) {
-                log::error!("Failed to send device config to target device. Got error: {e:?}");
-            };
-        });
+        if let Err(e) = tx.send(device_config) {
+            log::error!("Failed to send device config to target device. Got error: {e:?}");
+        };
 
         self.config_rx = Some(rx);
         Ok(())
