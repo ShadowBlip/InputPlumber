@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: SuiPlay 0X1
+single_source: false
+
+matches:
+  - dmi_data:
+      product_name: SuiPlay0X1
+      sys_vendor: Mysten Labs, Inc.
+
+source_devices:
+  - group: gamepad
+    evdev:
+      name: Nintendo Co., Ltd. Pro Controller
+      phys_path: usb-0000:c4:00.3-4/input0
+      handler: event*
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c4:00.3-4/input0
+      handler: event*
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
+      handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyF21
+        - Keyboard:KeyF22
+        - Keyboard:KeyF23
+        - Keyboard:KeyF24
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
+  - group: imu
+    iio:
+      name: "{i2c-BMI0160:00,bmi260}"
+      mount_matrix:
+        x: [0, -1, 0]
+        y: [-1, 0, 0]
+        z: [0, 0, -1]
+  - group: led
+    udev: # Legacy
+      sys_name: multicolor:chassis
+      subsystem: leds
+  - group: led
+    udev: # Updated
+      sys_name: ayaneo:rgb:joystick_rings
+      subsystem: leds
+
+options:
+  auto_manage: true
+
+target_devices:
+  - xbox-elite
+  - mouse
+  - keyboard
+
+# SuiPlay uses the same unmodified F21-F24 buttons as AYANEO Type 7.
+capability_map_id: aya7
