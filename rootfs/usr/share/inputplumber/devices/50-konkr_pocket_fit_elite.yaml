@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: KONKR Pocket FIT Elite
+
+maximum_sources: 0
+options:
+    auto_manage: true
+
+matches:
+    - udev:
+          sys_path: /sys/firmware/devicetree/base
+          attributes:
+              - name: compatible
+                value: konkr,pocket-fit-elite
+
+source_devices:
+    - group: gamepad
+      evdev:
+          name: AYANEO MCU Gamepad
+          handler: event*
+    - group: keyboard
+      capability_map_id: konkr3
+      evdev:
+          name: KONKR System Buttons
+          handler: event*
+
+target_devices:
+    - xbox-elite
+    - keyboard
+    - mouse
