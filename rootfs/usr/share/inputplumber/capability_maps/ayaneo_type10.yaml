@@ -5,7 +5,7 @@ name: AYANEO Type 10
 id: aya10
 
 mapping:
-    - name: South Button
+    - name: A Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -14,7 +14,7 @@ mapping:
       target_event:
           gamepad:
               button: South
-    - name: East Button
+    - name: B Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -23,7 +23,7 @@ mapping:
       target_event:
           gamepad:
               button: East
-    - name: West Button
+    - name: X Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -32,7 +32,7 @@ mapping:
       target_event:
           gamepad:
               button: West
-    - name: North Button
+    - name: Y Button
       source_events:
           - evdev:
                 event_type: KEY
@@ -70,7 +70,7 @@ mapping:
       target_event:
           gamepad:
               button: Guide
-    - name: Quick Access Button
+    - name: Home Button
       source_events:
           - evdev:
                 event_type: KEY
