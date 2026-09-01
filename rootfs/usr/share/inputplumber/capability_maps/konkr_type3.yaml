@@ -32,6 +32,8 @@ mapping:
       target_event:
           gamepad:
               button: QuickAccess2
+    # This device class has a dedicated QuickAccess2/K button, so LC/RC map
+    # directly to paddles instead of the AYANEO LeftTop/RightTop convention.
     - name: LC
       source_events:
           - evdev:
@@ -40,7 +42,7 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: LeftTop
+              button: LeftPaddle1
     - name: RC
       source_events:
           - evdev:
@@ -49,4 +51,4 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: RightTop
+              button: RightPaddle1
