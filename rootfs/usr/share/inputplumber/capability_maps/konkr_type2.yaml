@@ -40,7 +40,7 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: LeftPaddle1
+              button: LeftTop
     - name: RC
       source_events:
           - evdev:
@@ -49,7 +49,7 @@ mapping:
                 value_type: button
       target_event:
           gamepad:
-              button: RightPaddle1
+              button: RightTop
     - name: Right Trigger
       source_events:
           - evdev:

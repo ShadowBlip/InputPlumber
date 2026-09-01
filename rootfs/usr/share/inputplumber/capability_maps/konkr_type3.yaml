@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+version: 2
+kind: CapabilityMap
+name: KONKR Type 3
+id: konkr3
+
+mapping:
+    - name: Right-side Menu Button
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN_TRIGGER_HAPPY5
+                value_type: button
+      target_event:
+          gamepad:
+              button: QuickAccess
+    - name: Equals Button
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN_TRIGGER_HAPPY2
+                value_type: button
+      target_event:
+          gamepad:
+              button: Keyboard
+    - name: K Button
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN_TRIGGER_HAPPY1
+                value_type: button
+      target_event:
+          gamepad:
+              button: QuickAccess2
+    - name: LC
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN_TRIGGER_HAPPY3
+                value_type: button
+      target_event:
+          gamepad:
+              button: LeftTop
+    - name: RC
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN_TRIGGER_HAPPY4
+                value_type: button
+      target_event:
+          gamepad:
+              button: RightTop
