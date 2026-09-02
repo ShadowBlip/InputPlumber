@@ -25,6 +25,7 @@ matches:
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
 source_devices:
+  # 8840U
   - group: gamepad
     evdev:
       name: Microsoft X-Box 360 pad
@@ -32,14 +33,31 @@ source_devices:
       handler: event*
   - group: keyboard
     evdev:
-      name: AT Translated Set 2 keyboard
-      phys_path: isa0060/serio0/input0
-      handler: event*
-  - group: keyboard
-    evdev:
       name: AMIRA-KEYBOAR USB KEYBOARD
       phys_path: usb-0000:00:14.0-6/input0
       handler: event*
+
+  # HX 370
+  - group: gamepad
+    evdev:
+      name: Microsoft X-Box 360 pad
+      phys_path: usb-0000:c5:00.4-1/input0
+      handler: event*
+  - group: keyboard
+    evdev:
+      name: "{YJX-CHIP USB KEYBOARD Keyboard,AMIRA-KEYBOAR USB KEYBOARD}"
+      phys_path: usb-0000:c7:00.0-3.3/input0
+      handler: event*
+
+  # All Units
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
+      handler: event*
+  - group: imu
+    iio:
+      name: "{i2c-BMI0160:00,bmi260}"
 
 # Optional configuration for the composite device
 options:
