@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v1.json
+
+version: 1
+kind: CapabilityMap
+
+name: CEC Remote
+id: cec_remote
+
+mapping:
+  - name: Ok
+    source_events:
+      - keyboard: KeyOk
+    target_event:
+      gamepad:
+        button: South
+  - name: Exit
+    source_events:
+      - keyboard: KeyExit
+    target_event:
+      gamepad:
+        button: East
+  - name: Guide
+    source_events:
+      - keyboard: KeyRootMenu
+    target_event:
+      gamepad:
+        button: Guide
+  - name: QAM
+    source_events:
+      - keyboard: KeyInfo
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+  - name: Up
+    source_events:
+      - keyboard: KeyUp
+    target_event:
+      gamepad:
+        button: DPadUp
+  - name: Down
+    source_events:
+      - keyboard: KeyDown
+    target_event:
+      gamepad:
+        button: DPadDown
+  - name: Left
+    source_events:
+      - keyboard: KeyLeft
+    target_event:
+      gamepad:
+        button: DPadLeft
+  - name: Right
+    source_events:
+      - keyboard: KeyRight
+    target_event:
+      gamepad:
+        button: DPadRight
+
+  - name: Red
+    source_events:
+      - keyboard: Select
+    target_event:
+      gamepad:
+        button: DPadUp
+  - name: Green
+    source_events:
+      - keyboard: KeyGreen
+    target_event:
+      gamepad:
+        button: Start
+  - name: Yellow
+    source_events:
+      - keyboard: KeyYellow
+    target_event:
+      gamepad:
+        button: North
+  - name: Blue
+    source_events:
+      - keyboard: KeyBlue
+    target_event:
+      gamepad:
+        button: West
+
+
+
+filtered_events: []

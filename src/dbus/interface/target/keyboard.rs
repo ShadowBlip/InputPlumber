@@ -232,6 +232,14 @@ fn capability_from_key_string(key: &str) -> Capability {
         "KEY_PROG2" => Capability::Keyboard(Keyboard::KeyProg2),
         "KEY_PROG3" => Capability::Keyboard(Keyboard::KeyProg3),
         "KEY_PROG4" => Capability::Keyboard(Keyboard::KeyProg4),
+        "KEY_OK" => Capability::Keyboard(Keyboard::KeyOk),
+        "KEY_EXIT" => Capability::Keyboard(Keyboard::KeyExit),
+        "KEY_INFO" => Capability::Keyboard(Keyboard::KeyInfo),
+        "KEY_ROOT_MENU" => Capability::Keyboard(Keyboard::KeyRootMenu),
+        "KEY_RED" => Capability::Keyboard(Keyboard::KeyRed),
+        "KEY_GREEN" => Capability::Keyboard(Keyboard::KeyGreen),
+        "KEY_YELLOW" => Capability::Keyboard(Keyboard::KeyYellow),
+        "KEY_BLUE" => Capability::Keyboard(Keyboard::KeyBlue),        
         _ => Capability::NotImplemented,
     }
 }

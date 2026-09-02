@@ -234,7 +234,15 @@
             "KeyProg1",
             "KeyProg2",
             "KeyProg3",
-            "KeyProg4"
+            "KeyProg4",
+            "KeyOk",
+            "KeyExit",
+            "KeyInfo",
+            "KeyRootMenu",
+            "KeyRed",
+            "KeyGreen",
+            "KeyYellow",
+            "KeyBlue"
           ]
         },
         "mouse": {
