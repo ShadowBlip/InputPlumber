@@ -16,11 +16,9 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: ONEXPLAYER G1 i
-      sys_vendor: ONE-NETBOOK
-  - dmi_data:
       product_name: ONEXPLAYER G1 A
       sys_vendor: ONE-NETBOOK
+      cpu_model: AMD Ryzen 7 8840U w/ Radeon 780M Graphics
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -32,14 +30,17 @@ source_devices:
       handler: event*
   - group: keyboard
     evdev:
-      name: AT Translated Set 2 keyboard
-      phys_path: isa0060/serio0/input0
-      handler: event*
-  - group: keyboard
-    evdev:
       name: AMIRA-KEYBOAR USB KEYBOARD
       phys_path: usb-0000:00:14.0-6/input0
       handler: event*
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
+      handler: event*
+  - group: imu
+    iio:
+      name: "{i2c-BMI0160:00,bmi260}"
 
 # Optional configuration for the composite device
 options:

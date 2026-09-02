@@ -85,6 +85,8 @@
             "KeyMinus",
             "KeyEqual",
             "KeyBackspace",
+            "KeyBrightnessDown",
+            "KeyBrightnessUp",
             "KeyTab",
             "KeyQ",
             "KeyW",
