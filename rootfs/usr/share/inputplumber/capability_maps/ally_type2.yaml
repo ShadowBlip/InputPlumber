@@ -13,42 +13,42 @@ id: aly2
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  - name: Control Center (Short)
+  - name: Armoury Crate (Left Short)
     source_events:
       - keyboard: KeyF16
     target_event:
       gamepad:
         button: Keyboard
-  - name: Control Center (Long)
+  - name: Armoury Crate (Left Long)
     source_events:
       - keyboard: KeyF21
     target_event:
       gamepad:
-        button: LeftTop
-  - name: Armory Crate (Short)
+        button: LeftPaddle2
+  - name: Library (Right Short)
     source_events:
       - keyboard: KeyProg1
     target_event:
       gamepad:
         button: QuickAccess
-  - name: Armory Crate (Long)
+  - name: Library (Right Long)
     source_events:
       - keyboard: KeyF22
     target_event:
       gamepad:
-        button: RightTop
+        button: QuickAccess2
   - name: Left Paddle
     source_events:
       - keyboard: KeyF14
     target_event:
       gamepad:
-        button: LeftPaddle2
+        button: LeftPaddle1
   - name: Right Paddle
     source_events:
       - keyboard: KeyF15
     target_event:
       gamepad:
-        button: RightPaddle2
+        button: RightPaddle1
 
 # List of events to filter from the source devices
 filtered_events: []
