@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: CEC Remote
+
+matches: []
+
+maximum_sources: 1
+
+source_devices:
+  - group: keyboard
+    udev:
+      subsystem: input
+      attributes:
+        - name: name
+          value: "DP-*"
+
+target_devices:
+  - gamepad
+  - keyboard
+
+capability_map_id: cec_remote
+
+options:
+  auto_manage: false
