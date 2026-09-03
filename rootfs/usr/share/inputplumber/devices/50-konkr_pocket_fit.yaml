@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: KONKR Pocket FIT
+
+maximum_sources: 0
+options:
+    auto_manage: true
+
+matches:
+    - udev:
+          sys_path: /sys/firmware/devicetree/base
+          attributes:
+              - name: compatible
+                value: konkr,pocket-fit
+
+source_devices:
+    # AYANEO/DInput mode
+    - group: gamepad
+      capability_map_id: konkr2
+      evdev:
+          name: AYANEO Controller
+          vendor_id: 4001
+          product_id: 0428
+          handler: event*
+    # The same physical HID carries AYANEO/DInput force-feedback output.
+    - group: gamepad
+      hidraw:
+          vendor_id: 0x4001
+          product_id: 0x0428
+          interface_num: 0
+    # XInput mode
+    - group: gamepad
+      evdev:
+          phys_path: usb-0001:01:00.0-1/input0
+          vendor_id: 045e
+          product_id: 028e
+          handler: event*
+    # Auxiliary buttons and the upper pair of back buttons
+    - group: keyboard
+      capability_map_id: konkr2
+      evdev:
+          name: AYANEO DEVICE
+          vendor_id: 1c4f
+          product_id: 0002
+          handler: event*
+
+target_devices:
+    - xbox-elite
+    - keyboard
+    - mouse

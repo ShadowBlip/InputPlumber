@@ -1,0 +1,106 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+version: 2
+kind: CapabilityMap
+name: KONKR Type 2
+id: konkr2
+
+mapping:
+    - name: Right-side Menu Button
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN7
+                value_type: button
+      target_event:
+          gamepad:
+              button: QuickAccess
+    - name: Equals Button
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN6
+                value_type: button
+      target_event:
+          gamepad:
+              button: Keyboard
+    - name: K Button
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN5
+                value_type: button
+      target_event:
+          gamepad:
+              button: QuickAccess2
+    # This device class has a dedicated QuickAccess2/K button, so LC/RC map
+    # directly to paddles instead of the AYANEO LeftTop/RightTop convention.
+    - name: LC
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN3
+                value_type: button
+      target_event:
+          gamepad:
+              button: LeftPaddle1
+    - name: RC
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN4
+                value_type: button
+      target_event:
+          gamepad:
+              button: RightPaddle1
+    - name: Right Trigger
+      source_events:
+          - evdev:
+                event_type: ABS
+                event_code: ABS_GAS
+                value_type: trigger
+      target_event:
+          gamepad:
+              trigger:
+                  name: RightTrigger
+    - name: Left Trigger
+      source_events:
+          - evdev:
+                event_type: ABS
+                event_code: ABS_BRAKE
+                value_type: trigger
+      target_event:
+          gamepad:
+              trigger:
+                  name: LeftTrigger
+    - name: Left Lower Back Button
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN_Z
+                value_type: button
+      target_event:
+          gamepad:
+              button: LeftPaddle2
+    - name: Right Lower Back Button
+      source_events:
+          - evdev:
+                event_type: KEY
+                event_code: BTN_C
+                value_type: button
+      target_event:
+          gamepad:
+              button: RightPaddle2
+    - name: Right Stick
+      source_events:
+          - evdev:
+                event_type: ABS
+                event_code: ABS_Z
+                value_type: joystick_x
+          - evdev:
+                event_type: ABS
+                event_code: ABS_RZ
+                value_type: joystick_y
+      target_event:
+          gamepad:
+              axis:
+                  name: RightStick

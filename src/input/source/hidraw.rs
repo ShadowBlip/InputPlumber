@@ -1,3 +1,4 @@
+pub mod ayaneo_haptics;
 pub mod blocked;
 pub mod dualsense;
 pub mod flydigi_vader_4_pro;
@@ -36,8 +37,9 @@ use crate::{
 };
 
 use self::{
-    blocked::BlockedHidrawDevice, dualsense::DualSenseController, flydigi_vader_4_pro::Vader4Pro,
-    fts3528::Fts3528Touchscreen, gpd_win_mini_macro_keyboard::GpdWinMiniMacroKeyboard,
+    ayaneo_haptics::AyaneoHaptics, blocked::BlockedHidrawDevice, dualsense::DualSenseController,
+    flydigi_vader_4_pro::Vader4Pro, fts3528::Fts3528Touchscreen,
+    gpd_win_mini_macro_keyboard::GpdWinMiniMacroKeyboard,
     gpd_win_mini_touchpad::GpdWinMiniTouchpad, horipad_steam::HoripadSteam,
     legion_go::LegionGoController, legion_go2::LegionGo2Controller,
     legos_imu::LegionSImuController, legos_touchpad::LegionSTouchpadController,
@@ -48,6 +50,7 @@ use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver, Sourc
 
 /// List of available drivers
 enum DriverType {
+    AyaneoHaptics,
     Blocked,
     DualSense,
     Fts3528Touchscreen,
@@ -74,6 +77,7 @@ enum DriverType {
 /// [HidRawDevice] represents an input device using the hidraw subsystem.
 #[derive(Debug)]
 pub enum HidRawDevice {
+    AyaneoHaptics(SourceDriver<AyaneoHaptics>),
     Blocked(SourceDriver<BlockedHidrawDevice>),
     DualSense(SourceDriver<DualSenseController>),
     Fts3528Touchscreen(SourceDriver<Fts3528Touchscreen>),
@@ -99,6 +103,7 @@ pub enum HidRawDevice {
 impl SourceDeviceCompatible for HidRawDevice {
     fn get_device_ref(&self) -> DeviceInfoRef<'_> {
         match self {
+            HidRawDevice::AyaneoHaptics(source_driver) => source_driver.info_ref(),
             HidRawDevice::Blocked(source_driver) => source_driver.info_ref(),
             HidRawDevice::DualSense(source_driver) => source_driver.info_ref(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.info_ref(),
@@ -124,6 +129,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_id(&self) -> String {
         match self {
+            HidRawDevice::AyaneoHaptics(source_driver) => source_driver.get_id(),
             HidRawDevice::Blocked(source_driver) => source_driver.get_id(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_id(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_id(),
@@ -149,6 +155,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn client(&self) -> super::client::SourceDeviceClient {
         match self {
+            HidRawDevice::AyaneoHaptics(source_driver) => source_driver.client(),
             HidRawDevice::Blocked(source_driver) => source_driver.client(),
             HidRawDevice::DualSense(source_driver) => source_driver.client(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.client(),
@@ -174,6 +181,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
+            HidRawDevice::AyaneoHaptics(source_driver) => source_driver.run().await,
             HidRawDevice::Blocked(source_driver) => source_driver.run().await,
             HidRawDevice::DualSense(source_driver) => source_driver.run().await,
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.run().await,
@@ -199,6 +207,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
+            HidRawDevice::AyaneoHaptics(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_capabilities(),
@@ -226,6 +235,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
         match self {
+            HidRawDevice::AyaneoHaptics(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::Blocked(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => {
@@ -261,6 +271,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_device_path(&self) -> String {
         match self {
+            HidRawDevice::AyaneoHaptics(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Blocked(source_driver) => source_driver.get_device_path(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Fts3528Touchscreen(source_driver) => source_driver.get_device_path(),
@@ -299,6 +310,21 @@ impl HidRawDevice {
 
         match driver_type {
             DriverType::Unknown => Err("No driver for hidraw interface found".into()),
+            DriverType::AyaneoHaptics => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(10),
+                    buffer_size: 1024,
+                };
+                let device = AyaneoHaptics::new(device_info.clone())?;
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
+                Ok(Self::AyaneoHaptics(source_device))
+            }
             DriverType::Blocked => {
                 let options = SourceDriverOptions {
                     poll_rate: Duration::from_millis(200),
@@ -513,6 +539,12 @@ impl HidRawDevice {
         let vid = device.id_vendor();
         let pid = device.id_product();
         let iid = device.interface_number();
+
+        // AYANEO DirectInput controller haptics
+        if vid == ayaneo_haptics::VID && pid == ayaneo_haptics::PID {
+            log::info!("Detected AYANEO DirectInput haptics");
+            return DriverType::AyaneoHaptics;
+        }
 
         // Sony DualSense
         if vid == dualsense::VID && dualsense::PIDS.contains(&pid) {
