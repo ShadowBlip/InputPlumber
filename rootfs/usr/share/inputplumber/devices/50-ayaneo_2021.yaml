@@ -20,6 +20,9 @@ matches:
       sys_vendor: AYA NEO
   - dmi_data:
       product_name: AYA NEO 2021
+      sys_vendor: AYADEVICE
+  - dmi_data:
+      product_name: AYA NEO 2021
       sys_vendor: AYANEO
   - dmi_data:
       product_name: AYANEO 2021
