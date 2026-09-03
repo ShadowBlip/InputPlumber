@@ -6,6 +6,7 @@ pub mod dualsense;
 pub mod horipad_steam;
 pub mod keyboard;
 pub mod mouse;
+mod quick_access;
 pub mod steam_deck;
 pub mod steam_deck_uhid;
 pub mod touchpad;
