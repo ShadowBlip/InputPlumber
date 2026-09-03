@@ -114,6 +114,10 @@ impl Default for DualSenseHardware {
     }
 }
 
+// The minimum interval between button events must wait between
+// each other for chords.
+const MIN_CHORD_TIME: Duration = Duration::from_millis(80);
+
 /// The [DualSenseDevice] is a target input device implementation that emulates
 /// a Playstation DualSense controller using uhid.
 pub struct DualSenseDevice {
@@ -199,7 +203,7 @@ impl DualSenseDevice {
 
     /// Write the current device state to the device
     fn write_state(&mut self) -> Result<(), Box<dyn Error>> {
-        // No consumer so don't bother emitting. 
+        // No consumer so don't bother emitting.
         if !self.is_open {
             return Ok(());
         }
@@ -930,8 +934,9 @@ impl DualSenseDevice {
 impl TargetInputDevice for DualSenseDevice {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
-        // Check for QuickAccess, create chord for event.
         let cap = event.as_capability();
+        // Check for QuickAccess, create chord for event.
+        // TODO: Remove this once we add target device profiles
         if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
             let pressed = event.pressed();
             let guide = NativeEvent::new(
@@ -945,11 +950,11 @@ impl TargetInputDevice for DualSenseDevice {
 
             let (guide, south) = if pressed {
                 let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
+                let south = ScheduledNativeEvent::new(south, MIN_CHORD_TIME);
                 (guide, south)
             } else {
-                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(240));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
+                let guide = ScheduledNativeEvent::new(guide, MIN_CHORD_TIME * 3);
+                let south = ScheduledNativeEvent::new(south, MIN_CHORD_TIME * 2);
                 (guide, south)
             };
 

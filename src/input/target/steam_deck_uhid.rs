@@ -1,11 +1,10 @@
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     error::Error,
     fmt::Debug,
     fs::File,
     sync::mpsc::{channel, Receiver, TryRecvError},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use packed_struct::{
@@ -45,9 +44,9 @@ use super::{
     InputError, OutputError, TargetInputDevice, TargetOutputDevice,
 };
 
-// The minimum amount of time that button up events must wait after
-// a button down event.
-const MIN_FRAME_TIME: Duration = Duration::from_millis(8);
+// The minimum interval between button events must wait between
+// each other for chords.
+const MIN_CHORD_TIME: Duration = Duration::from_millis(80);
 
 pub struct SteamDeckUhidDevice {
     chip_id: [u8; 15],
@@ -58,7 +57,6 @@ pub struct SteamDeckUhidDevice {
     current_report: ReportType,
     device: Option<UHIDDevice<File>>,
     lizard_mode_enabled: bool,
-    pressed_events: HashMap<Capability, Instant>,
     queued_events: Vec<ScheduledNativeEvent>,
     serial_number: String,
     state: PackedInputDataReport,
@@ -78,7 +76,6 @@ impl SteamDeckUhidDevice {
             current_report: ReportType::InputData,
             device: None,
             lizard_mode_enabled: false,
-            pressed_events: HashMap::new(),
             queued_events: vec![],
             serial_number: "1NPU7PLUMB3R".to_string(),
             state: PackedInputDataReport::default(),
@@ -152,6 +149,7 @@ impl SteamDeckUhidDevice {
                     GamepadButton::RightStickTouch => self.state.r_stick_touch = event.pressed(),
                     // TODO: Remove this once we add target device profiles
                     GamepadButton::Screenshot => {
+                        let pressed = event.pressed();
                         let guide = NativeEvent::new(
                             Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
                             event.get_value(),
@@ -161,10 +159,13 @@ impl SteamDeckUhidDevice {
                             event.get_value(),
                         );
 
-                        let (guide, bumper) = {
+                        let (guide, bumper) = if pressed {
                             let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                            let bumper =
-                                ScheduledNativeEvent::new(bumper, Duration::from_millis(8));
+                            let bumper = ScheduledNativeEvent::new(bumper, MIN_CHORD_TIME);
+                            (guide, bumper)
+                        } else {
+                            let guide = ScheduledNativeEvent::new(guide, MIN_CHORD_TIME * 3);
+                            let bumper = ScheduledNativeEvent::new(bumper, MIN_CHORD_TIME * 2);
                             (guide, bumper)
                         };
 
@@ -720,53 +721,10 @@ impl TargetInputDevice for SteamDeckUhidDevice {
         Ok(())
     }
 
+    /// Update device state with input events
+    /// Update device state with input events
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
-
-        // Check to see if this is a button event
-        // In some cases, a button down and button up event can happen within
-        // the same "frame", which would result in no net state change. This
-        // allows us to process up events at a later time.
-        let cap = event.as_capability();
-        if let Capability::Gamepad(Gamepad::Button(_)) = cap {
-            if event.pressed() {
-                log::trace!("Button down: {cap:?}");
-                // Keep track of button down events
-                self.pressed_events.insert(cap.clone(), Instant::now());
-                // Clear any stale up events for this capability
-                self.queued_events.retain(|scheduled| {
-                    let found = scheduled.as_capability() == cap;
-                    if found {
-                        log::trace!("Found stale queued release for {cap:?}, Clearing.");
-                    }
-                    !found
-                });
-            } else {
-                log::trace!("Button up: {cap:?}");
-                // If the event is a button up event, check to
-                // see if we received a down event in the same
-                // frame.
-                if let Some(last_pressed) = self.pressed_events.get(&cap) {
-                    log::trace!("Button was pressed {:?} ago", last_pressed.elapsed());
-                    if last_pressed.elapsed() < MIN_FRAME_TIME {
-                        log::trace!("Button up & down event received in the same frame. Queueing event for the next frame.");
-                        let scheduled_event = ScheduledNativeEvent::new_with_time(
-                            event,
-                            *last_pressed,
-                            MIN_FRAME_TIME,
-                        );
-                        self.queued_events.push(scheduled_event);
-                        return Ok(());
-                    } else {
-                        log::trace!("Removing button from pressed");
-                        // Button up event should be processed now
-                        self.pressed_events.remove(&cap);
-                    }
-                }
-            }
-        }
-
-        // Update device state with input events
         self.update_state(event);
 
         Ok(())
@@ -998,7 +956,6 @@ impl Debug for SteamDeckUhidDevice {
             .field("lizard_mode_enabled", &self.lizard_mode_enabled)
             .field("serial_number", &self.serial_number)
             .field("queued_events", &self.queued_events)
-            .field("pressed_events", &self.pressed_events)
             .finish()
     }
 }
