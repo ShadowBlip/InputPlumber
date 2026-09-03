@@ -1,3 +1,4 @@
+use industrial_io::Channel;
 use std::{error::Error, fmt};
 
 /// The [MountMatrix] is used to define how sensors are oriented inside a device
@@ -80,4 +81,15 @@ pub struct AxisInfo {
     pub sample_rates_avail: Vec<f64>,
     pub scale: f64,
     pub scales_avail: Vec<f64>,
+}
+
+pub struct Axis {
+    pub channel: Channel,
+    pub info: AxisInfo,
+}
+
+pub struct ImuGroup {
+    pub x: Axis,
+    pub y: Axis,
+    pub z: Axis,
 }
