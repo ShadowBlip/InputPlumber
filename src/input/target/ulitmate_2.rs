@@ -33,6 +33,10 @@ use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
 const GRAVITY: f64 = 9.80665;
 
+// The minimum interval between button events must wait between
+// each other for chords.
+const MIN_CHORD_TIME: Duration = Duration::from_millis(80);
+
 pub struct Ultimate2WirelessDevice {
     device: UHIDDevice<File>,
     state: PackedInputDataReport,
@@ -274,11 +278,11 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
 
-        // QuickAccess maps to Guide+South combo (press: Guide@0ms South@160ms,
-        // release: South@160ms Guide@240ms), same timing as xpad target.
-        if event.as_capability() == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess))
-        {
-            let pressed = event.pressed();
+        let cap = event.as_capability();
+        let pressed = event.pressed();
+
+        // TODO: Remove once we implement target device profiles
+        if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
             let guide = NativeEvent::new(
                 Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
                 event.get_value(),
@@ -287,17 +291,17 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
                 Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
                 event.get_value(),
             );
+
             let (guide, south) = if pressed {
-                (
-                    ScheduledNativeEvent::new(guide, Duration::from_millis(0)),
-                    ScheduledNativeEvent::new(south, Duration::from_millis(160)),
-                )
+                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
+                let south = ScheduledNativeEvent::new(south, MIN_CHORD_TIME);
+                (guide, south)
             } else {
-                (
-                    ScheduledNativeEvent::new(guide, Duration::from_millis(240)),
-                    ScheduledNativeEvent::new(south, Duration::from_millis(160)),
-                )
+                let guide = ScheduledNativeEvent::new(guide, MIN_CHORD_TIME * 3);
+                let south = ScheduledNativeEvent::new(south, MIN_CHORD_TIME * 2);
+                (guide, south)
             };
+
             self.queued_events.push(guide);
             self.queued_events.push(south);
             return Ok(());
@@ -315,12 +319,17 @@ impl TargetInputDevice for Ultimate2WirelessDevice {
                 Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
                 InputValue::Float(trigger_value),
             );
-            let (guide, trigger) = {
-                (
-                    ScheduledNativeEvent::new(guide, Duration::from_millis(0)),
-                    ScheduledNativeEvent::new(trigger, Duration::from_millis(1)),
-                )
+
+            let (guide, trigger) = if pressed {
+                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
+                let trigger = ScheduledNativeEvent::new(trigger, MIN_CHORD_TIME);
+                (guide, trigger)
+            } else {
+                let guide = ScheduledNativeEvent::new(guide, MIN_CHORD_TIME * 3);
+                let trigger = ScheduledNativeEvent::new(trigger, MIN_CHORD_TIME * 2);
+                (guide, trigger)
             };
+
             self.queued_events.push(guide);
             self.queued_events.push(trigger);
             return Ok(());
