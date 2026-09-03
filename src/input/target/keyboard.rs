@@ -212,6 +212,14 @@ impl KeyboardDevice {
         keys.insert(KeyCode::KEY_PROG2);
         keys.insert(KeyCode::KEY_PROG3);
         keys.insert(KeyCode::KEY_PROG4);
+        keys.insert(KeyCode::KEY_OK);
+        keys.insert(KeyCode::KEY_EXIT);
+        keys.insert(KeyCode::KEY_INFO);
+        keys.insert(KeyCode::KEY_ROOT_MENU);
+        keys.insert(KeyCode::KEY_RED);
+        keys.insert(KeyCode::KEY_GREEN);
+        keys.insert(KeyCode::KEY_YELLOW);
+        keys.insert(KeyCode::KEY_BLUE);
 
         let device = VirtualDeviceBuilder::new()?
             .name("InputPlumber Keyboard")
@@ -411,6 +419,14 @@ impl TargetInputDevice for KeyboardDevice {
             Capability::Keyboard(Keyboard::KeyProg2),
             Capability::Keyboard(Keyboard::KeyProg3),
             Capability::Keyboard(Keyboard::KeyProg4),
+            Capability::Keyboard(Keyboard::KeyOk),
+            Capability::Keyboard(Keyboard::KeyExit),
+            Capability::Keyboard(Keyboard::KeyInfo),
+            Capability::Keyboard(Keyboard::KeyRootMenu),
+            Capability::Keyboard(Keyboard::KeyRed),
+            Capability::Keyboard(Keyboard::KeyGreen),
+            Capability::Keyboard(Keyboard::KeyYellow),
+            Capability::Keyboard(Keyboard::KeyBlue),
         ])
     }
 }
