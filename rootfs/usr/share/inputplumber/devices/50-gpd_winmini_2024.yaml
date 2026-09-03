@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: GPD Win Mini 2023
+name: GPD Win Mini 2024
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -18,11 +18,19 @@ matches:
   - dmi_data:
       product_name: G1617-01
       sys_vendor: GPD
-      cpu_model: AMD Ryzen 7 7840U
+      cpu_model: AMD Ryzen 7 8840U
   - dmi_data:
       product_name: G1617-01
       sys_vendor: GPD
-      cpu_model: AMD Ryzen 5 7640U
+      cpu_model: AMD Ryzen 7 8840U w/ Radeon 780M Graphics
+  - dmi_data:
+      product_name: G1617-01
+      sys_vendor: GPD
+      cpu_model: AMD Ryzen 5 8640U
+  - dmi_data:
+      product_name: G1617-01
+      sys_vendor: GPD
+      cpu_model: AMD Ryzen 5 8640U w/ Radeon 760M Graphics
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -36,7 +44,7 @@ source_devices:
     blocked: true
     evdev:
       name: "  Mouse for Windows"
-      phys_path: usb-0000:63:00.3-3/input1
+      phys_path: "{usb-0000:63:00.3-3/input1,usb-0000:c3:00.3-3/input1}"
       handler: event*
   # All devices
   - group: mouse
@@ -51,11 +59,13 @@ source_devices:
       vendor_id: 0x2f24
       product_id: 0x0135
       interface_num: 1
-  # Touchpad
+  # Touchpad - Shares VID/PID with the Orange Pi Neo, so it must be
+  # matched by name. (E.g. "HTIX5288:00")
   - group: mouse
     hidraw:
-      vendor_id: 0x093A
-      product_id: 0x0255
+      name: "{HTIX5288:00*}"
+      vendor_id: 0x0911
+      product_id: 0x5288
       interface_num: 0
   - group: imu
     iio:

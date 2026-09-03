@@ -3,7 +3,8 @@ use std::{error::Error, fmt::Debug};
 use crate::{
     drivers::gpd_device::{
         event,
-        touchpad_driver::{self, TouchpadDriver},
+        touchpad_driver_2024::TouchpadDriver2024,
+        TOUCHPAD_2024_PAD_FORCE_MAX, TOUCHPAD_2024_X_MAX, TOUCHPAD_2024_Y_MAX,
     },
     input::{
         capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
@@ -16,19 +17,19 @@ use crate::{
     udev::device::UdevDevice,
 };
 
-/// GPD Win Mini source device implementation
-pub struct GpdTouchpad {
-    driver: TouchpadDriver,
+/// GPD Win Mini (2024+) source device implementation
+pub struct GpdTouchpad2024 {
+    driver: TouchpadDriver2024,
 }
 
-impl GpdTouchpad {
+impl GpdTouchpad2024 {
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = TouchpadDriver::new(device_info)?;
+        let driver = TouchpadDriver2024::new(device_info)?;
         Ok(Self { driver })
     }
 }
 
-impl SourceInputDevice for GpdTouchpad {
+impl SourceInputDevice for GpdTouchpad2024 {
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
@@ -40,24 +41,24 @@ impl SourceInputDevice for GpdTouchpad {
     }
 }
 
-impl SourceOutputDevice for GpdTouchpad {}
+impl SourceOutputDevice for GpdTouchpad2024 {}
 
-impl Debug for GpdTouchpad {
+impl Debug for GpdTouchpad2024 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GpdWinMiniTouchpad").finish()
+        f.debug_struct("GpdWinMiniTouchpad2024").finish()
     }
 }
 
-/// Normalize the value to something between -1.0 and 1.0 based on the Deck's
-/// minimum and maximum axis ranges.
+/// Normalize the value to something between -1.0 and 1.0 based on the
+/// touchpad's minimum and maximum axis ranges.
 fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
     let x = event.x;
     let y = event.y;
     log::trace!("Got axis to normalize: {x}, {y}");
-    let max = touchpad_driver::TOUCHPAD_X_MAX;
+    let max = TOUCHPAD_2024_X_MAX;
     let x = normalize_unsigned_value(x as f64, max);
 
-    let max = touchpad_driver::TOUCHPAD_Y_MAX;
+    let max = TOUCHPAD_2024_Y_MAX;
     let y = normalize_unsigned_value(y as f64, max);
 
     // If this is an UP event, don't override the position of X/Y
@@ -83,7 +84,7 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
     match event {
         event::TriggerEvent::PadForce(value) => InputValue::Float(normalize_unsigned_value(
             value.value as f64,
-            touchpad_driver::PAD_FORCE_MAX,
+            TOUCHPAD_2024_PAD_FORCE_MAX,
         )),
     }
 }
@@ -120,7 +121,8 @@ fn translate_event(event: event::Event) -> NativeEvent {
     }
 }
 
-/// List of all input capabilities that the GPD Win Mini touchpad driver implements
+/// List of all input capabilities that the GPD Win Mini (2024+) touchpad
+/// driver implements
 pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
