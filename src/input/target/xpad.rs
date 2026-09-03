@@ -1,6 +1,4 @@
-use std::os::fd::AsFd;
-use std::time::Duration;
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, os::fd::AsFd, time::Duration};
 
 use evdev::{
     uinput::{VirtualDevice, VirtualDeviceBuilder},
@@ -21,6 +19,10 @@ use crate::input::output_capability::OutputCapability;
 use crate::input::output_event::{OutputEvent, UinputOutputEvent};
 
 use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
+
+// The minimum interval between button events must wait between
+// each other for chords.
+const MIN_CHORD_TIME: Duration = Duration::from_millis(80);
 
 #[derive(Debug)]
 pub struct XBoxController {
@@ -235,9 +237,10 @@ impl TargetInputDevice for XBoxController {
     fn write_event(&mut self, event: NativeEvent) -> Result<(), InputError> {
         log::trace!("Received event: {event:?}");
 
+        let cap = event.as_capability();
+
         //TODO: Remove these once we add target device profiles
         // Check for QuickAccess
-        let cap = event.as_capability();
         if cap == Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)) {
             let pressed = event.pressed();
             let guide = NativeEvent::new(
@@ -251,11 +254,11 @@ impl TargetInputDevice for XBoxController {
 
             let (guide, south) = if pressed {
                 let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
+                let south = ScheduledNativeEvent::new(south, MIN_CHORD_TIME);
                 (guide, south)
             } else {
-                let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(240));
-                let south = ScheduledNativeEvent::new(south, Duration::from_millis(160));
+                let guide = ScheduledNativeEvent::new(guide, MIN_CHORD_TIME * 3);
+                let south = ScheduledNativeEvent::new(south, MIN_CHORD_TIME * 2);
                 (guide, south)
             };
 

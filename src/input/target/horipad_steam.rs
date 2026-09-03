@@ -25,6 +25,10 @@ use crate::{
 
 use super::{InputError, OutputError, TargetInputDevice, TargetOutputDevice};
 
+// The minimum interval between button events must wait between
+// each other for chords.
+const MIN_CHORD_TIME: Duration = Duration::from_millis(80);
+
 /// The [HoripadSteamDevice] is a target input device implementation that emulates
 /// a Horipad Steam Controller using uhid.
 pub struct HoripadSteamDevice {
@@ -128,10 +132,13 @@ impl HoripadSteamDevice {
                             InputValue::Float(trigger_value),
                         );
 
-                        let (guide, trigger) = {
+                        let (guide, trigger) = if pressed {
                             let guide = ScheduledNativeEvent::new(guide, Duration::from_millis(0));
-                            let trigger =
-                                ScheduledNativeEvent::new(trigger, Duration::from_millis(8));
+                            let trigger = ScheduledNativeEvent::new(trigger, MIN_CHORD_TIME);
+                            (guide, trigger)
+                        } else {
+                            let guide = ScheduledNativeEvent::new(guide, MIN_CHORD_TIME * 3);
+                            let trigger = ScheduledNativeEvent::new(trigger, MIN_CHORD_TIME * 2);
                             (guide, trigger)
                         };
 
