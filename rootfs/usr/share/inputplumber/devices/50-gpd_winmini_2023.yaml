@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: GPD Win5
+name: GPD Win Mini 2023
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -16,8 +16,13 @@ single_source: false
 # /sys/class/dmi/id/product_name
 matches:
   - dmi_data:
-      product_name: G1618-05
+      product_name: G1617-01
       sys_vendor: GPD
+      cpu_model: AMD Ryzen 7 7840U
+  - dmi_data:
+      product_name: G1617-01
+      sys_vendor: GPD
+      cpu_model: AMD Ryzen 5 7640U
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -25,47 +30,40 @@ source_devices:
   - group: gamepad
     evdev:
       name: "Microsoft X-Box 360 pad"
-      phys_path: usb-0000:66:00.0-5.1/input0
+      phys_path: "{usb-0000:63:00.3-5/input0,usb-0000:c3:00.3-5/input0}"
       handler: event*
-    capability_map_id: gpd_menu
   - group: keyboard
+    blocked: true
     evdev:
-      name: "  Keyboard for Windows"
+      name: "  Mouse for Windows"
+      phys_path: usb-0000:63:00.3-3/input1
       handler: event*
-      phys_path: usb-0000:66:00.0-5.3/input0
-    events:
-      exclude:
-        - "*"
-      include:
-        - Keyboard:KeyF14
-        - Keyboard:KeyF15
-        - Keyboard:KeyF3
-        - Keyboard:KeyLeftCtrl
-        - Keyboard:KeyLeftShift
+  # All devices
+  - group: mouse
+    unique: false
+    blocked: true
+    evdev:
+      name: "{HTIX5288:00*}"
+      handler: event*
+  # Back Paddles
   - group: keyboard
-    evdev:
-      name: AT Translated Set 2 keyboard
-      phys_path: isa0060/serio0/input0
-      handler: event*
-    events:
-      exclude:
-        - "*"
-      include:
-        - Keyboard:KeyD
-        - Keyboard:KeyDelete
-        - Keyboard:KeyLeftCtrl
-        - Keyboard:KeyLeftMeta
-        - Keyboard:KeyO
-        - Keyboard:KeyTab
-        - Keyboard:KeyVolumeDown
-        - Keyboard:KeyVolumeUp
+    hidraw:
+      vendor_id: 0x2f24
+      product_id: 0x0135
+      interface_num: 1
+  # Touchpad
+  - group: mouse
+    hidraw:
+      vendor_id: 0x093A
+      product_id: 0x0255
+      interface_num: 0
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
       mount_matrix:
-        x: [0, 1, 0]
-        y: [1, 0, 0]
-        z: [0, 0, -1]
+        x: [1, 0, 0]
+        y: [0, 0, -1]
+        z: [0, 1, 0]
 
 # Optional configuration for the composite device
 options:
@@ -79,6 +77,4 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
-
-# The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: gpd2
+  - touchpad
