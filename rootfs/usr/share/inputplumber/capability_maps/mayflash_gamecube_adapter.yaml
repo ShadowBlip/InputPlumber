@@ -1,0 +1,182 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: Mayflash GameCube Controller Adapter
+
+# Unique identifier of the capability mapping
+id: mayflash_gamecube_adapter
+
+# Root cause: this adapter's HID report descriptor declares its top-level
+# collection as Usage(Joystick) [0x04] rather than Usage(Gamepad) [0x05], with
+# its 16 face/shoulder buttons reported under the generic Button usage page
+# (0x09, usages 1-16) as a single 16-bit bitmask - not under a labeled gamepad
+# usage. Because of this, Linux's kernel HID input core (drivers/hid/hid-input.c)
+# assigns the legacy joystick-era evdev codes BTN_TRIGGER (0x120) through
+# BTN_DEAD (0x12f) sequentially to these 16 buttons, instead of the modern
+# gamepad codes BTN_SOUTH (0x130) etc. that InputPlumber's generic evdev
+# translation (src/input/event/evdev.rs) recognizes. Every one of these codes
+# currently falls through to the catch-all `_ => Capability::NotImplemented`
+# arm, so none of this adapter's face/shoulder buttons produce any usable
+# input via the generic gamepad profile.
+#
+# Bit-to-button mapping below is EMPIRICALLY CONFIRMED against real hardware
+# (adapter set to PC/DInput mode - it also has separate Wii U and Pokken
+# Tournament modes, selected via button combos, which likely use a
+# completely different report layout; this mapping is PC-mode-specific), one
+# physical button pressed in complete isolation at a time while watching the
+# translated xb360 target device's raw evdev output.
+#
+# An earlier version of this file assumed the raw bit order followed the
+# original Nintendo console-to-controller protocol layout naively (A/B/X/Y
+# in that literal order at bits 0-3, Z/R-click/L-click at bits 12-14, and
+# Start unambiguous at bit 4). That assumption was WRONG on multiple counts,
+# each caught by isolated single-button testing after initial batch tests
+# gave misleading results:
+#   - A/B/X/Y are NOT in that order on the raw bitmask (confirmed by
+#     isolated presses of each one individually - this actually matches an
+#     initially-doubted community SDL gamecontrollerdb.txt entry for this
+#     same adapter, which turned out to be correct after all).
+#   - Z/R-click/L-click are NOT at bits 12-14 at all - those bits never
+#     fire no matter what is pressed.
+#   - Start is NOT at bit 4 - an earlier version of this file concluded
+#     bit 4 was "shared" between Start and L's digital click because every
+#     "isolated" Start test up to that point still triggered bit 4, but
+#     that was because pressing the real Start button on this particular
+#     unit never actually produced any signal at all through THAT bit -
+#     what fired was consistently L (confirmed via L's own analog trigger
+#     axis ramping in lockstep with the bit 4 signal). The real Start
+#     button was eventually found on bit 9, confirmed by watching the
+#     DPadDown-diagnostic-mapped ABS_HAT0Y axis move in the positive
+#     direction exactly when Start (and only Start) was pressed. Once bit 9
+#     was identified as the true Start bit, bit 4 became unambiguously just
+#     L's digital click, free to map to LeftBumper like R does to
+#     RightBumper - there was never a real hardware bit-sharing limitation,
+#     just a mapping bug in an earlier version of this file.
+#
+# Complete confirmed bit layout (all 16 bits tested, either directly
+# identified or confirmed to produce no signal for anything pressed):
+#
+#   bit 0  (BTN_TRIGGER)  = X            bit 8  (BTN_BASE3)     = unused
+#   bit 1  (BTN_THUMB)    = A            bit 9  (BTN_BASE4)     = Start
+#   bit 2  (BTN_THUMB2)   = B            bit 10 (BTN_BASE5)     = unused
+#   bit 3  (BTN_TOP)      = Y            bit 11 (BTN_BASE6)     = unused
+#   bit 4  (BTN_TOP2)     = L (click)    bit 12 (BTN_EXTRA_ONE) = unused
+#   bit 5  (BTN_PINKIE)   = R (click)    bit 13 (BTN_EXTRA_TWO) = unused
+#   bit 6  (BTN_BASE)     = unused       bit 14 (BTN_EXTRA_THR) = unused
+#   bit 7  (BTN_BASE2)    = Z            bit 15 (BTN_DEAD)      = unused
+#
+# L and R are analog triggers (evdev ABS_RX/ABS_RY on this adapter, not the
+# more conventional ABS_Z/ABS_RZ) with a mechanical digital click only at
+# full travel - a light press produces analog motion only, no KEY event.
+# Confirmed by watching each trigger's own axis ramp to max in lockstep
+# with its click firing right at the top and releasing right as it comes
+# back down.
+#
+# GameCube button -> InputPlumber's South/East/North/West follows the usual
+# cross-platform convention of matching by *function* (South = primary
+# confirm, East = secondary/cancel, etc.), not by exact physical diamond
+# position, since GameCube's face buttons aren't laid out symmetrically like
+# an Xbox pad. Z has no clean Xbox-pad equivalent, so it's mapped to Select
+# (unclaimed on this profile's "xb360" target model and present on every
+# xb360 model, unlike RightPaddle1/2 which are xbox-elite-only and were
+# confirmed to silently produce no output when targeted here).
+mapping:
+  # Physical GameCube A (confirmed via isolated press) is raw bit 1.
+  - name: South Button (GameCube A)
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_THUMB
+          value_type: button
+    target_event:
+      gamepad:
+        button: South
+
+  # Physical GameCube B (confirmed via isolated press) is raw bit 2.
+  - name: East Button (GameCube B)
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_THUMB2
+          value_type: button
+    target_event:
+      gamepad:
+        button: East
+
+  # Physical GameCube X (confirmed via isolated press) is raw bit 0.
+  - name: West Button (GameCube X)
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TRIGGER
+          value_type: button
+    target_event:
+      gamepad:
+        button: West
+
+  # Physical GameCube Y (confirmed via isolated press) is raw bit 3.
+  - name: North Button (GameCube Y)
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TOP
+          value_type: button
+    target_event:
+      gamepad:
+        button: North
+
+  # Confirmed via isolated press to be raw bit 9 - see the detailed
+  # investigation notes above for why this took multiple rounds to find.
+  - name: Start Button (GameCube Start)
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_BASE4
+          value_type: button
+    target_event:
+      gamepad:
+        button: Start
+
+  # L's digital click, raw bit 4 - confirmed via axis-correlated isolated
+  # press to be exclusively L, not shared with anything else.
+  - name: Left Bumper (GameCube L digital click)
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_TOP2
+          value_type: button
+    target_event:
+      gamepad:
+        button: LeftBumper
+
+  # R's digital click, raw bit 5 - confirmed via axis-correlated isolated
+  # press, no ambiguity.
+  - name: Right Bumper (GameCube R digital click)
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_PINKIE
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightBumper
+
+  # Physical GameCube Z (confirmed via isolated press) is raw bit 7.
+  - name: Z Button (GameCube Z)
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_BASE2
+          value_type: button
+    target_event:
+      gamepad:
+        button: Select
+
+  # Bits 6, 8, 10-15 confirmed to produce no signal for any button pressed
+  # during testing - left unmapped. The D-pad is already handled correctly
+  # via the normal ABS_HAT0X/Y translation path, unrelated to this bitmask.
