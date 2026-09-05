@@ -1,0 +1,25 @@
+version: 2
+kind: CapabilityMap
+name: AYANEO Type 11
+id: aya11
+
+mapping:
+  - name: Start Button to Guide
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_START
+          value_type: button
+    target_event:
+      gamepad:
+        button: Guide
+
+  - name: 3 dots to RightPaddle2
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_MODE
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightPaddle2
