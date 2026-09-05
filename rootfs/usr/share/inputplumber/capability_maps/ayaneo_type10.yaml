@@ -1,0 +1,122 @@
+version: 2
+kind: CapabilityMap
+name: AYANEO Type 10
+id: aya10
+
+mapping:
+  - name: LC
+    source_events:
+      - evdev:
+            event_type: KEY
+            event_code: BTN3
+            value_type: button
+    target_event:
+      gamepad:
+        button: LeftPaddle1
+
+  - name: RC
+    source_events:
+      - evdev:
+            event_type: KEY
+            event_code: BTN4
+            value_type: button
+    target_event:
+      gamepad:
+        button: RightPaddle1
+
+  - name: Start Button to Guide
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_START
+          value_type: button
+    target_event:
+      gamepad:
+        button: Guide
+
+  - name: Share looking icon to LeftPaddle2
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN2
+          value_type: button
+    target_event:
+      gamepad:
+        button: LeftPaddle2
+
+  - name: 3 dots to RightPaddle2
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN_MODE
+          value_type: button
+    target_event:
+      gamepad:
+        button: RightPaddle2
+
+  - name: Evil secondary start to QAM2
+    source_events:
+      - evdev:
+            event_type: KEY
+            event_code: BTN7
+            value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess2
+
+  - name: AYANEO to QAM
+    source_events:
+      - evdev:
+            event_type: KEY
+            event_code: BTN5
+            value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+  - name: Slanted lines to Start
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: BTN6
+          value_type: button
+    target_event:
+      gamepad:
+        button: Start
+
+  - name: Right Trigger
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_GAS
+          value_type: trigger
+    target_event:
+      gamepad:
+        trigger:
+          name: RightTrigger
+
+  - name: Left Trigger
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_BRAKE
+          value_type: trigger
+    target_event:
+      gamepad:
+        trigger:
+          name: LeftTrigger
+
+  - name: Right Stick
+    source_events:
+      - evdev:
+          event_type: ABS
+          event_code: ABS_Z
+          value_type: joystick_x
+      - evdev:
+          event_type: ABS
+          event_code: ABS_RZ
+          value_type: joystick_y
+    target_event:
+      gamepad:
+        axis:
+          name: RightStick
