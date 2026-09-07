@@ -114,6 +114,15 @@ source_devices:
       product_id: 0x61ee
       interface_num: 2
 
+  # IMU
+  - group: imu
+    blocked: true
+    iio:
+      name: gyro_3d
+  - group: imu
+    blocked: true
+    iio:
+      name: accel_3d
 # Optional configuration for the composite device
 options:
   # If true, InputPlumber will automatically try to manage the input device. If
