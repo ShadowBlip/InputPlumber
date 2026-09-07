@@ -1,60 +1,53 @@
 use core::panic;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::error::Error;
-use std::path::PathBuf;
-use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    path::PathBuf,
+    time::Duration,
+};
 
 use ::procfs::CpuInfo;
 use ::udev::MonitorBuilder;
 use mio::{Events, Interest, Poll, Token};
 use thiserror::Error;
-use tokio::sync::mpsc;
-use tokio::task;
-use tokio::task::JoinHandle;
-use zbus::fdo::ManagedObjects;
-use zbus::zvariant::ObjectPath;
-use zbus::Connection;
-
-use crate::bluetooth::device1::Device1Proxy;
-use crate::config::capability_map::load_capability_mappings;
-use crate::config::path::get_devices_paths;
-use crate::config::path::get_multidir_sorted_files;
-use crate::config::CompositeDeviceConfig;
-use crate::config::SourceDevice;
-use crate::constants::BUS_PREFIX;
-use crate::constants::BUS_SOURCES_PREFIX;
-use crate::constants::BUS_TARGETS_PREFIX;
-use crate::dbus::interface::manager::ManagerInterface;
-use crate::dbus::interface::source::evdev::SourceEventDeviceInterface;
-use crate::dbus::interface::source::hidraw::SourceHIDRawInterface;
-use crate::dbus::interface::source::iio_imu::SourceIioImuInterface;
-use crate::dbus::interface::source::led::SourceLedInterface;
-use crate::dbus::interface::source::tty::SourceTtyInterface;
-use crate::dbus::interface::source::udev::SourceUdevDeviceInterface;
-use crate::dbus::interface::DBusInterfaceManager;
-use crate::dmi::data::DMIData;
-use crate::dmi::get_cpu_info;
-use crate::dmi::get_dmi_data;
-use crate::input::composite_device::CompositeDevice;
-use crate::input::source::evdev;
-use crate::input::source::hidraw;
-use crate::input::source::iio;
-use crate::input::source::led;
-use crate::input::source::tty;
-use crate::input::target::TargetDevice;
-use crate::input::target::TargetDeviceTypeId;
-use crate::udev;
-use crate::udev::device::AttributeGetter;
-use crate::udev::device::UdevDevice;
+use tokio::{
+    sync::mpsc,
+    task::{self, JoinHandle},
+};
+use zbus::{fdo::ManagedObjects, zvariant::ObjectPath, Connection};
 
 use super::composite_device::client::CompositeDeviceClient;
 use super::info::DeviceInfo;
-use super::target::client::TargetDeviceClient;
-use super::target::TargetDeviceClass;
-
-use crate::watcher;
-use crate::watcher::WatchEvent;
+use super::target::{client::TargetDeviceClient, TargetDeviceClass};
+use crate::bluetooth::device1::Device1Proxy;
+use crate::config::{
+    capability_map::load_capability_mappings,
+    path::{get_devices_paths, get_multidir_sorted_files},
+    CompositeDeviceConfig, SourceDevice,
+};
+use crate::dbus::interface::{
+    source::{
+        evdev::SourceEventDeviceInterface, hidraw::SourceHIDRawInterface,
+        iio_imu::SourceIioImuInterface, led::SourceLedInterface, tty::SourceTtyInterface,
+        udev::SourceUdevDeviceInterface,
+    },
+    DBusInterfaceManager,
+};
+use crate::dmi::{data::DMIData, get_cpu_info};
+use crate::input::{
+    source::{evdev, hidraw, iio, led, tty},
+    target::{TargetDevice, TargetDeviceTypeId},
+};
+use crate::udev::{
+    self,
+    device::{AttributeGetter, UdevDevice},
+};
+use crate::watcher::{self, WatchEvent};
+use crate::{
+    constants::{BUS_PREFIX, BUS_SOURCES_PREFIX, BUS_TARGETS_PREFIX},
+    dbus::interface::manager::ManagerInterface,
+};
+use crate::{dmi::get_dmi_data, input::composite_device::CompositeDevice};
 
 const DEV_PATH: &str = "/dev";
 const INPUT_PATH: &str = "/dev/input";
