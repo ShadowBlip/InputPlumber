@@ -11,42 +11,29 @@ matches:
       sys_vendor: AYA
 
 source_devices:
-  # Xinput mode
+  # XInput mode
   - group: gamepad
+    unique: false
     evdev:
       name: Microsoft X-Box 360 pad
       phys_path: usb-0000:c6:00.0-4/input0
       handler: event*
-  # Dinput mode
-  - group: gamepad
-    evdev:
-      name: Microsoft X-Box 360 pad
-      phys_path: usb-0000:c6:00.0-4/input0
-      handler: event*
-    capability_map_id: dinput_generic
-  - group: gamepad
+
+  # AYANEO special/back buttons
+  - group: keyboard
+    unique: false
     evdev:
       name: AYANEO COMPOSITE DEVICE
+      phys_path: usb-0000:c6:00.0-1/input1
       handler: event*
-    events:
-      exclude:
-        - "*"
-      include:
-        - Keyboard:KeyF16
-        - Keyboard:KeyF17
-        - Keyboard:KeyF18
-        - Keyboard:KeyF19
-        - Keyboard:KeyF20
-        - Keyboard:KeyF21
-        - Keyboard:KeyF22
-        - Keyboard:KeyF23
-        - Keyboard:KeyLeftMeta
+
+  # IMU
   - group: imu
     iio:
       name: bmi323-imu
       mount_matrix:
-        x: [-1, 0, 0]
-        y: [0, -1, 0]
+        x: [0, 1, 0]
+        y: [-1, 0, 0]
         z: [0, 0, 1]
 
   # RGB
@@ -59,7 +46,7 @@ options:
   auto_manage: true
 
 target_devices:
-  - xbox-elite
+  - ds5-edge
   - mouse
   - keyboard
 
