@@ -26,6 +26,19 @@ source_devices:
       name: AYANEO COMPOSITE DEVICE
       phys_path: usb-0000:c6:00.0-1/input1
       handler: event*
+      events:
+        exclude:
+          - "*"
+        include:
+          - Keyboard:KeyF16
+          - Keyboard:KeyF17
+          - Keyboard:KeyF18
+          - Keyboard:KeyF19
+          - Keyboard:KeyF20
+          - Keyboard:KeyF21
+          - Keyboard:KeyF22
+          - Keyboard:KeyF23
+          - Keyboard:KeyLeftMeta
 
   # IMU
   - group: imu
@@ -46,7 +59,7 @@ options:
   auto_manage: true
 
 target_devices:
-  - ds5-edge
+  - xbox-elite
   - mouse
   - keyboard
 
