@@ -439,7 +439,7 @@ impl HidRawDevice {
             }
             DriverType::LegionGoTouchpad => {
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(4),
+                    poll_rate: Duration::from_millis(2),
                     buffer_size: 2048,
                 };
                 let device = LegionGoTouchpad::new(device_info.clone())?;
