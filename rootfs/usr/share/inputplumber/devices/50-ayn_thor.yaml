@@ -27,7 +27,7 @@ source_devices:
     capability_map_id: ayn2
     evdev:
       name: gpio-keys-ayn
-      phys_path: gpio-keys-ayn/input0
+      phys_path: gpio-keys/input0
       handler: event*
 
 target_devices:
