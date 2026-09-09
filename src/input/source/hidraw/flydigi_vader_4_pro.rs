@@ -6,11 +6,10 @@ use crate::{
         event,
     },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source},
         event::{
             native::NativeEvent,
-            value::InputValue,
-            value::{normalize_signed_value, normalize_unsigned_value},
+            value::{normalize_signed_value, normalize_unsigned_value, InputValue},
         },
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -236,19 +235,19 @@ fn translate_event(event: event::Event) -> NativeEvent {
         },
         event::Event::Inertia(accel_event) => match accel_event {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Accelerometer),
+                Capability::Accelerometer(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(value.x),
+                    y: Some(value.y),
+                    z: Some(value.z),
                 },
             ),
-            event::InertialEvent::Gyro(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Gyro),
+            event::InertialEvent::Gyroscope(value) => NativeEvent::new(
+                Capability::Gyroscope(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(value.x),
+                    y: Some(value.y),
+                    z: Some(value.z),
                 },
             ),
         },
@@ -257,7 +256,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
 
 /// List of all capabilities that the driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
+    Capability::Accelerometer(Source::Center),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -284,7 +283,7 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-    Capability::Gamepad(Gamepad::Gyro),
+    Capability::Gyroscope(Source::Center),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
 ];
