@@ -6,7 +6,7 @@ use packed_struct::PackedStruct;
 use super::{
     event::{AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, TriggerEvent, TriggerInput},
     hid_report::{InputDataReport, RumbleOutputDataReport},
-    HID_TIMEOUT, INPUT_PACKET_SIZE, PID, VID,
+    GAMEPAD_TIMEOUT, INPUT_PACKET_SIZE, PID, VID,
 };
 
 pub struct Driver {
@@ -37,7 +37,7 @@ impl Driver {
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; INPUT_PACKET_SIZE];
-        let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
+        let bytes_read = self.device.read_timeout(&mut buf[..], GAMEPAD_TIMEOUT)?;
 
         if bytes_read != INPUT_PACKET_SIZE {
             return Ok(vec![]);

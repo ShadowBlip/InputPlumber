@@ -8,7 +8,7 @@ use super::{
         AxisEvent, BinaryInput, ButtonEvent, Event, TouchAxisInput, TriggerEvent, TriggerInput,
     },
     hid_report::TouchpadDataReport,
-    HID_TIMEOUT, PAD_FORCE_NORMAL, PIDS, TOUCH_PACKET_SIZE, TOUCH_REPORT_ID, TP_IID, VID,
+    PAD_FORCE_NORMAL, PIDS, TOUCHPAD_TIMEOUT, TOUCH_PACKET_SIZE, TOUCH_REPORT_ID, TP_IID, VID,
 };
 
 pub struct TouchpadDriver {
@@ -43,7 +43,7 @@ impl TouchpadDriver {
         // Read data from the device into a buffer
         let mut events = vec![];
         let mut buf = [0; TOUCH_PACKET_SIZE];
-        let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
+        let bytes_read = self.device.read_timeout(&mut buf[..], TOUCHPAD_TIMEOUT)?;
         let report_id = buf[0];
 
         if bytes_read == TOUCH_PACKET_SIZE && report_id == TOUCH_REPORT_ID {

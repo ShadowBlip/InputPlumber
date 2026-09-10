@@ -6,9 +6,9 @@ use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
     drivers::horipad_steam::{
-        driver::{JOY_AXIS_MAX, JOY_AXIS_MIN, PIDS, TRIGGER_AXIS_MAX, VID},
         hid_report::{Direction, PackedInputDataReport},
         report_descriptor::REPORT_DESCRIPTOR,
+        JOY_AXIS_MAX, JOY_AXIS_MIN, PIDS, TRIGGER_AXIS_MAX, VID,
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},

@@ -14,7 +14,7 @@ use super::{
     hid_report::TouchpadDataReport,
     DRAG_TIMEOUT_DINPUT, DRAG_TIMEOUT_XINPUT, GO_TOUCHPAD_D_PIDS, GO_TOUCHPAD_X_PIDS,
     PAD_FORCE_NORMAL, RELEASE_TIMEOUT_DINPUT, RELEASE_TIMEOUT_XINPUT, TAP_MAX_DISTANCE_SQ,
-    TOUCHPAD_DATA, TOUCHPAD_PACKET_SIZE, TP_IID, TP_TIMEOUT, VID,
+    TOUCHPAD_DATA, TOUCHPAD_PACKET_SIZE, TOUCHPAD_TIMEOUT, TP_IID, VID,
 };
 
 pub struct Driver {
@@ -83,7 +83,7 @@ impl Driver {
 
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let mut buf = [0; TOUCHPAD_PACKET_SIZE];
-        let bytes_read = self.device.read_timeout(&mut buf[..], TP_TIMEOUT)?;
+        let bytes_read = self.device.read_timeout(&mut buf[..], TOUCHPAD_TIMEOUT)?;
 
         if bytes_read == 0 {
             // In XInput mode data only flows when the touchpad is touched.

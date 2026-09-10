@@ -13,4 +13,4 @@ const INPUT_PACKET_SIZE: usize = 64;
 pub const AXIS_MAX: f64 = 255.0;
 
 // Timeouts
-const HID_TIMEOUT: i32 = 10;
+const GAMEPAD_TIMEOUT: i32 = 8;
