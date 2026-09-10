@@ -13,7 +13,7 @@ pub mod legos_imu;
 pub mod legos_touchpad;
 pub mod legos_xinput;
 pub mod msi_claw;
-pub mod opineo;
+pub mod opineo_touchpad;
 pub mod oxp_hid;
 pub mod rog_ally;
 pub mod steam_deck;
@@ -42,8 +42,8 @@ use self::{
     legion_go::LegionGoController, legion_go2::LegionGo2Controller, legion_go_tp::LegionGoTouchpad,
     legos_imu::LegionSImuController, legos_touchpad::LegionSTouchpadController,
     legos_xinput::LegionSXInputController, msi_claw::MsiClawController,
-    opineo::OrangePiNeoTouchpad, oxp_hid::OxpHid, rog_ally::RogAlly, steam_deck::DeckController,
-    ultimate_2::Ultimate2, xpad_uhid::XpadUhid, zotac_zone::ZotacZone,
+    opineo_touchpad::OrangePiNeoTouchpad, oxp_hid::OxpHid, rog_ally::RogAlly,
+    steam_deck::DeckController, ultimate_2::Ultimate2, xpad_uhid::XpadUhid, zotac_zone::ZotacZone,
 };
 use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 
@@ -63,7 +63,7 @@ enum DriverType {
     LegionGoSXInput,
     LegionGoTouchpad,
     MsiClaw,
-    OrangePiNeo,
+    OrangePiNeoTouchpad,
     OxpHid,
     RogAlly,
     SteamDeck,
@@ -381,20 +381,38 @@ impl HidRawDevice {
                 Ok(Self::SteamDeck(source_device))
             }
             DriverType::LegionGo => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(8),
+                    buffer_size: 2048,
+                };
                 let device = LegionGoController::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
                 Ok(Self::LegionGo(source_device))
             }
             DriverType::LegionGo2 => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(8),
+                    buffer_size: 2048,
+                };
                 let device = LegionGo2Controller::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
                 Ok(Self::LegionGo2(source_device))
             }
             DriverType::LegionGoSImu => {
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(4),
+                    poll_rate: Duration::from_millis(5),
                     buffer_size: 2048,
                 };
                 let device = LegionSImuController::new(device_info.clone())?;
@@ -409,7 +427,7 @@ impl HidRawDevice {
             }
             DriverType::LegionGoSTouchpad => {
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(8),
+                    poll_rate: Duration::from_millis(16),
                     buffer_size: 2048,
                 };
                 let device = LegionSTouchpadController::new(device_info.clone())?;
@@ -424,7 +442,7 @@ impl HidRawDevice {
             }
             DriverType::LegionGoSXInput => {
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(4),
+                    poll_rate: Duration::from_millis(8),
                     buffer_size: 2048,
                 };
                 let device = LegionSXInputController::new(device_info.clone())?;
@@ -439,7 +457,7 @@ impl HidRawDevice {
             }
             DriverType::LegionGoTouchpad => {
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(2),
+                    poll_rate: Duration::from_millis(4),
                     buffer_size: 2048,
                 };
                 let device = LegionGoTouchpad::new(device_info.clone())?;
@@ -453,15 +471,33 @@ impl HidRawDevice {
                 Ok(Self::LegionGoTouchpad(source_device))
             }
             DriverType::MsiClaw => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(8),
+                    buffer_size: 2048,
+                };
                 let device = MsiClawController::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
                 Ok(Self::MsiClawController(source_device))
             }
-            DriverType::OrangePiNeo => {
+            DriverType::OrangePiNeoTouchpad => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(8),
+                    buffer_size: 2048,
+                };
                 let device = OrangePiNeoTouchpad::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
                 Ok(Self::OrangePiNeo(source_device))
             }
             DriverType::Fts3528Touchscreen => {
@@ -492,9 +528,18 @@ impl HidRawDevice {
                 Ok(Self::RogAlly(source_device))
             }
             DriverType::HoripadSteam => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(4),
+                    buffer_size: 2048,
+                };
                 let device = HoripadSteam::new(device_info.clone())?;
-                let source_device =
-                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
                 Ok(Self::HoripadSteam(source_device))
             }
             DriverType::Vader4Pro => {
@@ -647,11 +692,11 @@ impl HidRawDevice {
             return DriverType::MsiClaw;
         }
 
-        // OrangePi NEO
-        if vid == drivers::opineo::driver::VID && pid == drivers::opineo::driver::PID {
-            log::info!("Detected OrangePi NEO");
+        // OrangePi NEO Touchpad
+        if vid == drivers::opineo::VID && pid == drivers::opineo::PID {
+            log::info!("Detected OrangePi NEO Touchpad");
 
-            return DriverType::OrangePiNeo;
+            return DriverType::OrangePiNeoTouchpad;
         }
 
         // FTS3528 Touchscreen
@@ -677,9 +722,7 @@ impl HidRawDevice {
         }
 
         // Horipad Steam Controller
-        if vid == drivers::horipad_steam::driver::VID
-            && drivers::horipad_steam::driver::PIDS.contains(&pid)
-        {
+        if vid == drivers::horipad_steam::VID && drivers::horipad_steam::PIDS.contains(&pid) {
             log::info!("Detected Horipad Steam Controller");
             return DriverType::HoripadSteam;
         }

@@ -457,14 +457,13 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                         break;
                     }
 
+                    let poll_time = poll_time_start.elapsed();
                     // Sleep up to the configured duration after polling timeout
-                    if let Some(remaining) = self
-                        .options
-                        .poll_rate
-                        .checked_sub(poll_time_start.elapsed())
-                    {
-                        log::trace!("Remaining sleep time: {remaining:?}");
+                    if let Some(remaining) = self.options.poll_rate.checked_sub(poll_time) {
+                        log::trace!("{:?}: Sleep time remaining: {remaining:?}", device_id);
                         thread::sleep(remaining);
+                    } else {
+                        log::trace!("{:?}: Total poll time: {poll_time:?} ", device_id);
                     }
                 }
 

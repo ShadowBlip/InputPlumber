@@ -34,4 +34,6 @@ pub const TRIGG_MAX: f64 = 255.0;
 const TOUCH_REPORT_ID: u8 = 0x31;
 
 // Timeouts
-const HID_TIMEOUT: i32 = 10;
+const IMU_TIMEOUT: i32 = 5;
+const GAMEPAD_TIMEOUT: i32 = 8;
+const TOUCHPAD_TIMEOUT: i32 = 16;

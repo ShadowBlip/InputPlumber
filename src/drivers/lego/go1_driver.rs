@@ -13,7 +13,7 @@ use super::{
         TriggerEvent, TriggerInput,
     },
     hid_report::{GamepadMode, XInputDataReport},
-    GO1_PIDS, GP_IID, GP_TIMEOUT, VID, XINPUT_COMMAND_ID, XINPUT_DATA, XINPUT_PACKET_SIZE,
+    GAMEPAD_TIMEOUT, GO1_PIDS, GP_IID, VID, XINPUT_COMMAND_ID, XINPUT_DATA, XINPUT_PACKET_SIZE,
 };
 
 pub struct Driver {
@@ -59,7 +59,9 @@ impl Driver {
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; XINPUT_PACKET_SIZE];
-        let bytes_read = self.hid_device.read_timeout(&mut buf[..], GP_TIMEOUT)?;
+        let bytes_read = self
+            .hid_device
+            .read_timeout(&mut buf[..], GAMEPAD_TIMEOUT)?;
 
         if bytes_read > XINPUT_PACKET_SIZE {
             return Err("Invalid packet size for X-Input Data.".into());

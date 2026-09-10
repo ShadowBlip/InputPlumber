@@ -2,12 +2,14 @@ use std::{error::Error, fmt::Debug};
 
 use crate::{
     drivers::opineo::{
-        driver::{self, Driver, LPAD_NAMES, PAD_FORCE_MAX, RPAD_NAMES},
-        event,
+        driver::Driver, event, LPAD_NAMES, PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX, RPAD_NAMES,
     },
     input::{
         capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
-        event::{native::NativeEvent, value::normalize_unsigned_value, value::InputValue},
+        event::{
+            native::NativeEvent,
+            value::{normalize_unsigned_value, InputValue},
+        },
         output_capability::OutputCapability,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -91,10 +93,10 @@ fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
     let x = event.x;
     let y = event.y;
     log::trace!("Got axis to normalize: {x}, {y}");
-    let max = driver::PAD_X_MAX;
+    let max = PAD_X_MAX;
     let x = normalize_unsigned_value(x as f64, max);
 
-    let max = driver::PAD_Y_MAX;
+    let max = PAD_Y_MAX;
     let y = normalize_unsigned_value(y as f64, max);
 
     // If this is an UP event, don't override the position of X/Y

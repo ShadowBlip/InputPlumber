@@ -6,7 +6,7 @@ use packed_struct::{types::SizedInteger, PackedStruct};
 use super::{
     event::{Event, InertialEvent, InertialInput},
     hid_report::{InertialDataReport, InputReportType},
-    GYRO_SCALE, HID_TIMEOUT, IMU_IID, INERTIAL_PACKET_SIZE, PIDS, VID,
+    GYRO_SCALE, IMU_IID, IMU_TIMEOUT, INERTIAL_PACKET_SIZE, PIDS, VID,
 };
 
 pub struct IMUDriver {
@@ -43,7 +43,7 @@ impl IMUDriver {
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; INERTIAL_PACKET_SIZE];
-        let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
+        let bytes_read = self.device.read_timeout(&mut buf[..], IMU_TIMEOUT)?;
 
         if bytes_read != INERTIAL_PACKET_SIZE {
             return Ok(vec![]);

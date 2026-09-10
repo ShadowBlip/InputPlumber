@@ -6,7 +6,7 @@ use packed_struct::PackedStruct;
 use super::{
     event::{AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, TriggerEvent, TriggerInput},
     hid_report::{RumbleOutputDataReport, XInputDataReport},
-    GP_IID, HID_TIMEOUT, PIDS, VID, XINPUT_PACKET_SIZE,
+    GAMEPAD_TIMEOUT, GP_IID, PIDS, VID, XINPUT_PACKET_SIZE,
 };
 
 pub struct XInputDriver {
@@ -40,7 +40,7 @@ impl XInputDriver {
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; XINPUT_PACKET_SIZE];
-        let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
+        let bytes_read = self.device.read_timeout(&mut buf[..], GAMEPAD_TIMEOUT)?;
 
         if bytes_read != XINPUT_PACKET_SIZE {
             return Ok(vec![]);

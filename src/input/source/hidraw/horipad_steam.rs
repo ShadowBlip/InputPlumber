@@ -1,16 +1,12 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::horipad_steam::{
-        driver::{Driver, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
-        event,
-    },
+    drivers::horipad_steam::{driver::Driver, event, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
         event::{
             native::NativeEvent,
-            value::InputValue,
-            value::{normalize_signed_value, normalize_unsigned_value},
+            value::{normalize_signed_value, normalize_unsigned_value, InputValue},
         },
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },

@@ -11,24 +11,8 @@ use super::{
         JoystickInput, TriggerEvent, TriggerInput,
     },
     hid_report::PackedInputDataReport,
+    HID_TIMEOUT, PACKET_SIZE, PIDS, REPORT_ID, VID,
 };
-
-// Report ID
-pub const REPORT_ID: u8 = 0x07;
-
-// Input report size
-const PACKET_SIZE: usize = 287;
-
-// HID buffer read timeout
-const HID_TIMEOUT: i32 = 10;
-
-// Input report axis ranges
-pub const JOY_AXIS_MAX: f64 = 255.0;
-pub const JOY_AXIS_MIN: f64 = 0.0;
-pub const TRIGGER_AXIS_MAX: f64 = 255.0;
-
-pub const VID: u16 = 0x0F0D;
-pub const PIDS: [u16; 2] = [0x0196, 0x01AB];
 
 #[derive(Debug, Clone, Default)]
 struct DPadState {

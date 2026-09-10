@@ -61,8 +61,8 @@ pub const XINPUT_DATA: u8 = 0x04;
 const TOUCHPAD_PACKET_SIZE: usize = 20;
 const XINPUT_PACKET_SIZE: usize = 60;
 
-const GP_TIMEOUT: i32 = 10;
-const TP_TIMEOUT: i32 = 5;
+const GAMEPAD_TIMEOUT: i32 = 8;
+const TOUCHPAD_TIMEOUT: i32 = 4;
 
 // HID Command ID's
 const XINPUT_COMMAND_ID: u8 = 0x74;
