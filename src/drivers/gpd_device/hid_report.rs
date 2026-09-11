@@ -131,6 +131,89 @@ pub struct TouchpadDataReport {
     pub scan_time: u16,
 }
 
+// TouchpadData2024 (GPD Win Mini 2024+, HTIX5288)
+//
+// 29-byte HID report with 4 finger slots. Each slot: status byte
+// (bit0=Confidence, bit1=TipSwitch, bits2-7=ContactId, LSB-first)
+// + X/Y 16-bit LE. The status bits are LSB-first in the wire format,
+// so within packed_struct's msb0 numbering the bit positions within
+// each status byte are reversed (confidence=bit7, tip_switch=bit6,
+// contact_id=bits2..5 of the byte → msb0 bits N*8+2..N*8+5).
+//
+// Example (two-finger touch):
+// E: 04 03 12 08 a8 02 07 f8 03 b9 03 00 ... e8 fe 02 03 00 00 40 4c
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq, Default)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "29")]
+pub struct TouchpadDataReport2024 {
+    // BYTE 0
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+
+    // BYTE 1-5: Finger 0 (status byte1: confidence=bit7, tip_switch=bit6, contact_id=bits2..5)
+    #[packed_field(bits = "10..=13")]
+    pub contact_id0: u8,
+    #[packed_field(bits = "14")]
+    pub tip_switch0: bool,
+    #[packed_field(bits = "15")]
+    pub confidence0: bool,
+    #[packed_field(bytes = "2..=3", endian = "lsb")]
+    pub touch_x0: u16,
+    #[packed_field(bytes = "4..=5", endian = "lsb")]
+    pub touch_y0: u16,
+
+    // BYTE 6-10: Finger 1
+    #[packed_field(bits = "50..=53")]
+    pub contact_id1: u8,
+    #[packed_field(bits = "54")]
+    pub tip_switch1: bool,
+    #[packed_field(bits = "55")]
+    pub confidence1: bool,
+    #[packed_field(bytes = "7..=8", endian = "lsb")]
+    pub touch_x1: u16,
+    #[packed_field(bytes = "9..=10", endian = "lsb")]
+    pub touch_y1: u16,
+
+    // BYTE 11-15: Finger 2
+    #[packed_field(bits = "90..=93")]
+    pub contact_id2: u8,
+    #[packed_field(bits = "94")]
+    pub tip_switch2: bool,
+    #[packed_field(bits = "95")]
+    pub confidence2: bool,
+    #[packed_field(bytes = "12..=13", endian = "lsb")]
+    pub touch_x2: u16,
+    #[packed_field(bytes = "14..=15", endian = "lsb")]
+    pub touch_y2: u16,
+
+    // BYTE 16-20: Finger 3
+    #[packed_field(bits = "130..=133")]
+    pub contact_id3: u8,
+    #[packed_field(bits = "134")]
+    pub tip_switch3: bool,
+    #[packed_field(bits = "135")]
+    pub confidence3: bool,
+    #[packed_field(bytes = "17..=18", endian = "lsb")]
+    pub touch_x3: u16,
+    #[packed_field(bytes = "19..=20", endian = "lsb")]
+    pub touch_y3: u16,
+
+    // BYTE 21-22: Scan time
+    #[packed_field(bytes = "21..=22", endian = "lsb")]
+    pub scan_time: u16,
+
+    // BYTE 23: Contact count
+    #[packed_field(bytes = "23")]
+    pub contact_count: u8,
+
+    // BYTE 24: Frame counter
+    #[packed_field(bytes = "24")]
+    pub frame_counter: u8,
+
+    // BYTES 25-28: Vendor-specific
+    #[packed_field(bytes = "25..=28")]
+    pub vendor_data: [u8; 4],
+}
+
 // MacroKeyboardData
 //
 // L4 only
