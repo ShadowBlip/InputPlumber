@@ -165,6 +165,8 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
     let Some(parent) = device.get_parent() else {
         return Err("Unable to determine parent for device".into());
     };
+
+    // Remove all created udev rules
     let rule_path = format!(
         "{RULES_PREFIX}/{RULE_HIDE_DEVICE_EARLY_PRIORITY}-inputplumber-hide-{name}-early.rules"
     );
@@ -181,6 +183,7 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
         let _ = fs::remove_file(&hidden_symlink);
     }
 
+    // Move the device back
     let src_path = format!("/dev/inputplumber/sources/{name}");
     let dst_path = if name.starts_with("event") || name.starts_with("js") {
         format!("/dev/input/{name}")
@@ -206,6 +209,7 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
         }
     }
 
+    // Reload udev
     reload_children(parent).await?;
 
     Ok(())
@@ -213,6 +217,7 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
 
 /// Unhide all devices hidden by InputPlumber
 pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
+    // Remove all created udev rules
     if let Ok(entries) = fs::read_dir(RULES_PREFIX) {
         for entry in entries.flatten() {
             let filename = entry.file_name().to_string_lossy().to_string();
@@ -249,6 +254,7 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
         let _ = fs::remove_dir("/dev/inputplumber/by-hidden");
     }
 
+    // Move all devices back
     if Path::new("/dev/inputplumber/sources").is_dir() {
         if let Ok(entries) = fs::read_dir("/dev/inputplumber/sources") {
             for entry in entries.flatten() {
@@ -286,6 +292,7 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
 
     let _ = fs::remove_dir("/dev/inputplumber");
 
+    // Reload udev rules
     reload_all().await?;
 
     Ok(())
