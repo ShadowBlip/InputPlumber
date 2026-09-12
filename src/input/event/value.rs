@@ -498,7 +498,7 @@ impl InputValue {
                         // Touchpad Motion -> Accelerometer ...
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
-                    Touch::Button(_) => Err(TranslationError::NotImplemented),
+                    Touch::Button(_) => self.translate_touch_button(target_cap, target_config),
                 },
                 // RightPad -> ...
                 Touchpad::RightPad(touch) => match touch {
@@ -558,7 +558,7 @@ impl InputValue {
                         // Touchpad Motion -> Accelerometer ...
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
-                    Touch::Button(_) => Err(TranslationError::NotImplemented),
+                    Touch::Button(_) => self.translate_touch_button(target_cap, target_config),
                 },
                 // CenterPad -> ...
                 Touchpad::CenterPad(touch) => match touch {
@@ -618,7 +618,7 @@ impl InputValue {
                         // Touchpad Motion -> Accelerometer ...
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
-                    Touch::Button(_) => Err(TranslationError::NotImplemented),
+                    Touch::Button(_) => self.translate_touch_button(target_cap, target_config),
                 },
             },
 
@@ -684,7 +684,7 @@ impl InputValue {
                     Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                 },
                 // Touchscreen Button -> ...
-                Touch::Button(_) => Err(TranslationError::NotImplemented),
+                Touch::Button(_) => self.translate_touch_button(target_cap, target_config),
             },
             Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
             Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
@@ -1180,5 +1180,101 @@ impl InputValue {
                 "Incomplete dial config".to_string(),
             )),
         }
+    }
+
+    fn translate_touch_button(
+        &self,
+        target_cap: &Capability,
+        target_config: &CapabilityConfig,
+    ) -> Result<InputValue, TranslationError> {
+        match target_cap {
+            Capability::None => Ok(InputValue::None),
+            Capability::NotImplemented => Ok(InputValue::None),
+            Capability::Sync => Ok(InputValue::Bool(false)),
+            Capability::DBus(_) => Ok(self.clone()),
+            Capability::Gamepad(gamepad) => match gamepad {
+                Gamepad::Button(_) => Ok(self.clone()),
+                Gamepad::Axis(_) => self.translate_button_to_axis(target_config),
+                Gamepad::Trigger(_) => Ok(self.translate_button_to_trigger()),
+                Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
+                Gamepad::Gyro => Err(TranslationError::NotImplemented),
+                Gamepad::Dial(_) => Ok(self.clone()),
+            },
+            Capability::Mouse(mouse) => match mouse {
+                Mouse::Motion => Err(TranslationError::NotImplemented),
+                Mouse::Button(_) => Ok(self.clone()),
+                Mouse::Wheel => self.translate_button_to_wheel(target_config),
+            },
+            Capability::Keyboard(_) => Ok(self.clone()),
+            Capability::Touchpad(touchpad) => match touchpad {
+                Touchpad::LeftPad(touch) => match touch {
+                    Touch::Motion => Err(TranslationError::NotImplemented),
+                    Touch::Button(_) => Ok(self.clone()),
+                },
+                Touchpad::RightPad(touch) => match touch {
+                    Touch::Motion => Err(TranslationError::NotImplemented),
+                    Touch::Button(_) => Ok(self.clone()),
+                },
+                Touchpad::CenterPad(touch) => match touch {
+                    Touch::Motion => Err(TranslationError::NotImplemented),
+                    Touch::Button(_) => Ok(self.clone()),
+                },
+            },
+            Capability::Touchscreen(touch) => match touch {
+                Touch::Motion => Err(TranslationError::NotImplemented),
+                Touch::Button(_) => Ok(self.clone()),
+            },
+            Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
+            Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::input::capability::{
+        Gamepad, GamepadButton, Keyboard, Mouse, MouseButton, Touch, TouchButton, Touchpad,
+    };
+
+    #[test]
+    fn test_touchpad_button_translations() {
+        let source_cap = Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press)));
+        let source_config = CapabilityConfig::default();
+        let target_config = CapabilityConfig::default();
+
+        let input_val = InputValue::Bool(true);
+
+        let target_cap = Capability::Mouse(Mouse::Button(MouseButton::Left));
+        let res = input_val
+            .translate(&source_cap, &source_config, &target_cap, &target_config)
+            .expect("should translate touchpad button to mouse button");
+        assert!(res.pressed());
+
+        let target_cap = Capability::Gamepad(Gamepad::Button(GamepadButton::South));
+        let res = input_val
+            .translate(&source_cap, &source_config, &target_cap, &target_config)
+            .expect("should translate touchpad button to gamepad button");
+        assert!(res.pressed());
+
+        let target_cap = Capability::Keyboard(Keyboard::KeyA);
+        let res = input_val
+            .translate(&source_cap, &source_config, &target_cap, &target_config)
+            .expect("should translate touchpad button to keyboard key");
+        assert!(res.pressed());
+
+        let target_cap =
+            Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Touch)));
+        let res = input_val
+            .translate(&source_cap, &source_config, &target_cap, &target_config)
+            .expect("should translate touchpad button to touchpad button");
+        assert!(res.pressed());
+
+        let source_cap = Capability::Touchscreen(Touch::Button(TouchButton::Press));
+        let target_cap = Capability::Mouse(Mouse::Button(MouseButton::Right));
+        let res = input_val
+            .translate(&source_cap, &source_config, &target_cap, &target_config)
+            .expect("should translate touchscreen button to mouse button");
+        assert!(res.pressed());
     }
 }

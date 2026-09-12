@@ -180,7 +180,7 @@ pub struct NativeCapabilityMapping {
     pub target_event: CapabilityConfig,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct CapabilityConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
