@@ -7,10 +7,12 @@ pub mod device_test;
 pub mod device;
 
 use std::{
+    collections::HashMap,
     error::Error,
     fs,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
+    sync::{LazyLock, Mutex},
 };
 
 use tokio::process::Command;
@@ -21,6 +23,9 @@ use self::device::Device;
 const RULE_HIDE_DEVICE_EARLY_PRIORITY: &str = "50";
 const RULE_HIDE_DEVICE_LATE_PRIORITY: &str = "96";
 const RULES_PREFIX: &str = "/run/udev/rules.d";
+
+static SAVED_PERMISSIONS: LazyLock<Mutex<HashMap<String, u32>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// HideFlags can be used to change the behavior of how devices are hidden.
 #[derive(Debug, PartialEq, Eq)]
@@ -41,6 +46,24 @@ pub async fn hide_device(path: &str, flags: &[HideFlag]) -> Result<(), Box<dyn E
     let Some(match_rule) = device.get_match_rule() else {
         return Err("Unable to create match rule for device".into());
     };
+
+    let dst_path = if name.starts_with("event") || name.starts_with("js") {
+        format!("/dev/input/{name}")
+    } else {
+        format!("/dev/{name}")
+    };
+
+    if let Ok(metadata) = fs::metadata(&dst_path).or_else(|_| fs::metadata(path)) {
+        let mode = metadata.permissions().mode() & 0o7777;
+        if mode != 0 {
+            if let Ok(mut saved) = SAVED_PERMISSIONS.lock() {
+                saved.insert(dst_path.clone(), mode);
+                if path != dst_path {
+                    saved.insert(path.to_string(), mode);
+                }
+            }
+        }
+    }
 
     // Create the udev rule content to update permissions on the source node.
     let mut chmod_early_rule = String::new();
@@ -170,10 +193,17 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
             log::warn!("Failed to move device node from {src_path} to {dst_path}: {e}");
         }
     }
-    if let Ok(metadata) = fs::metadata(&dst_path) {
-        let mut permissions = metadata.permissions();
-        permissions.set_mode(0o660);
-        let _ = fs::set_permissions(&dst_path, permissions);
+
+    let saved_mode = SAVED_PERMISSIONS
+        .lock()
+        .ok()
+        .and_then(|mut m| m.remove(&dst_path).or_else(|| m.remove(&path)));
+    if let Some(mode) = saved_mode {
+        if let Ok(metadata) = fs::metadata(&dst_path) {
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(mode);
+            let _ = fs::set_permissions(&dst_path, permissions);
+        }
     }
 
     reload_children(parent).await?;
@@ -200,10 +230,17 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
             for entry in entries.flatten() {
                 let symlink_path = entry.path();
                 if let Ok(target) = fs::canonicalize(&symlink_path) {
-                    if let Ok(metadata) = fs::metadata(&target) {
-                        let mut permissions = metadata.permissions();
-                        permissions.set_mode(0o660);
-                        let _ = fs::set_permissions(&target, permissions);
+                    let target_str = target.to_string_lossy().to_string();
+                    let saved_mode = SAVED_PERMISSIONS
+                        .lock()
+                        .ok()
+                        .and_then(|mut m| m.remove(&target_str));
+                    if let Some(mode) = saved_mode {
+                        if let Ok(metadata) = fs::metadata(&target) {
+                            let mut permissions = metadata.permissions();
+                            permissions.set_mode(mode);
+                            let _ = fs::set_permissions(&target, permissions);
+                        }
                     }
                 }
                 let _ = fs::remove_file(symlink_path);
@@ -227,14 +264,24 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
                 if let Err(e) = fs::rename(&path, &dst_path) {
                     log::warn!("Failed to move device node from {path:?} to {dst_path}: {e}");
                 }
-                if let Ok(metadata) = fs::metadata(&dst_path) {
-                    let mut permissions = metadata.permissions();
-                    permissions.set_mode(0o660);
-                    let _ = fs::set_permissions(&dst_path, permissions);
+                let saved_mode = SAVED_PERMISSIONS
+                    .lock()
+                    .ok()
+                    .and_then(|mut m| m.remove(&dst_path));
+                if let Some(mode) = saved_mode {
+                    if let Ok(metadata) = fs::metadata(&dst_path) {
+                        let mut permissions = metadata.permissions();
+                        permissions.set_mode(mode);
+                        let _ = fs::set_permissions(&dst_path, permissions);
+                    }
                 }
             }
         }
         let _ = fs::remove_dir("/dev/inputplumber/sources");
+    }
+
+    if let Ok(mut saved) = SAVED_PERMISSIONS.lock() {
+        saved.clear();
     }
 
     let _ = fs::remove_dir("/dev/inputplumber");
