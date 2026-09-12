@@ -7,9 +7,12 @@ pub mod device_test;
 pub mod device;
 
 use std::{
+    collections::HashMap,
     error::Error,
     fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
+    sync::{LazyLock, Mutex},
 };
 
 use tokio::process::Command;
@@ -20,6 +23,9 @@ use self::device::Device;
 const RULE_HIDE_DEVICE_EARLY_PRIORITY: &str = "50";
 const RULE_HIDE_DEVICE_LATE_PRIORITY: &str = "96";
 const RULES_PREFIX: &str = "/run/udev/rules.d";
+
+static SAVED_PERMISSIONS: LazyLock<Mutex<HashMap<String, u32>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// HideFlags can be used to change the behavior of how devices are hidden.
 #[derive(Debug, PartialEq, Eq)]
@@ -40,6 +46,24 @@ pub async fn hide_device(path: &str, flags: &[HideFlag]) -> Result<(), Box<dyn E
     let Some(match_rule) = device.get_match_rule() else {
         return Err("Unable to create match rule for device".into());
     };
+
+    let dst_path = if name.starts_with("event") || name.starts_with("js") {
+        format!("/dev/input/{name}")
+    } else {
+        format!("/dev/{name}")
+    };
+
+    if let Ok(metadata) = fs::metadata(&dst_path).or_else(|_| fs::metadata(path)) {
+        let mode = metadata.permissions().mode() & 0o7777;
+        if mode != 0 {
+            if let Ok(mut saved) = SAVED_PERMISSIONS.lock() {
+                saved.insert(dst_path.clone(), mode);
+                if path != dst_path {
+                    saved.insert(path.to_string(), mode);
+                }
+            }
+        }
+    }
 
     // Create the udev rule content to update permissions on the source node.
     let mut chmod_early_rule = String::new();
@@ -141,28 +165,47 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
     let Some(parent) = device.get_parent() else {
         return Err("Unable to determine parent for device".into());
     };
+
+    // Remove all created udev rules
     let rule_path = format!(
         "{RULES_PREFIX}/{RULE_HIDE_DEVICE_EARLY_PRIORITY}-inputplumber-hide-{name}-early.rules"
     );
     log::debug!("Removing hide rule: {rule_path}");
-    fs::remove_file(rule_path)?;
+    let _ = fs::remove_file(&rule_path);
     let rule_path = format!(
         "{RULES_PREFIX}/{RULE_HIDE_DEVICE_LATE_PRIORITY}-inputplumber-hide-{name}-late.rules"
     );
     log::debug!("Removing hide rule: {rule_path}");
-    fs::remove_file(rule_path)?;
+    let _ = fs::remove_file(&rule_path);
+
+    let hidden_symlink = format!("/dev/inputplumber/by-hidden/{name}");
+    if Path::new(&hidden_symlink).exists() {
+        let _ = fs::remove_file(&hidden_symlink);
+    }
 
     // Move the device back
     let src_path = format!("/dev/inputplumber/sources/{name}");
-    if PathBuf::from(&src_path).exists() {
-        let dst_path = if name.starts_with("event") || name.starts_with("js") {
-            format!("/dev/input/{name}")
-        } else {
-            format!("/dev/{name}")
-        };
+    let dst_path = if name.starts_with("event") || name.starts_with("js") {
+        format!("/dev/input/{name}")
+    } else {
+        format!("/dev/{name}")
+    };
+    if Path::new(&src_path).exists() {
         log::debug!("Restoring device node path '{src_path}' to '{dst_path}'");
         if let Err(e) = fs::rename(&src_path, &dst_path) {
             log::warn!("Failed to move device node from {src_path} to {dst_path}: {e}");
+        }
+    }
+
+    let saved_mode = SAVED_PERMISSIONS
+        .lock()
+        .ok()
+        .and_then(|mut m| m.remove(&dst_path).or_else(|| m.remove(&path)));
+    if let Some(mode) = saved_mode {
+        if let Ok(metadata) = fs::metadata(&dst_path) {
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(mode);
+            let _ = fs::set_permissions(&dst_path, permissions);
         }
     }
 
@@ -175,44 +218,79 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
 /// Unhide all devices hidden by InputPlumber
 pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
     // Remove all created udev rules
-    let entries = fs::read_dir(RULES_PREFIX)?;
-    for entry in entries {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        let filename = entry.file_name().to_string_lossy().to_string();
-        if !filename.contains("-inputplumber-hide-") {
-            continue;
+    if let Ok(entries) = fs::read_dir(RULES_PREFIX) {
+        for entry in entries.flatten() {
+            let filename = entry.file_name().to_string_lossy().to_string();
+            if !filename.contains("-inputplumber-hide-") {
+                continue;
+            }
+            let path = entry.path();
+            log::debug!("Removing hide rule: {:?}", path);
+            let _ = fs::remove_file(path);
         }
-        let path = entry.path().to_string_lossy().to_string();
-        log::debug!("Removing hide rule: {path}");
-        fs::remove_file(path)?;
     }
 
-    if !Path::new("/dev/inputplumber/sources").is_dir() {
-        reload_all().await?;
-        return Ok(());
+    if Path::new("/dev/inputplumber/by-hidden").is_dir() {
+        if let Ok(entries) = fs::read_dir("/dev/inputplumber/by-hidden") {
+            for entry in entries.flatten() {
+                let symlink_path = entry.path();
+                if let Ok(target) = fs::canonicalize(&symlink_path) {
+                    let target_str = target.to_string_lossy().to_string();
+                    let saved_mode = SAVED_PERMISSIONS
+                        .lock()
+                        .ok()
+                        .and_then(|mut m| m.remove(&target_str));
+                    if let Some(mode) = saved_mode {
+                        if let Ok(metadata) = fs::metadata(&target) {
+                            let mut permissions = metadata.permissions();
+                            permissions.set_mode(mode);
+                            let _ = fs::set_permissions(&target, permissions);
+                        }
+                    }
+                }
+                let _ = fs::remove_file(symlink_path);
+            }
+        }
+        let _ = fs::remove_dir("/dev/inputplumber/by-hidden");
     }
 
     // Move all devices back
-    let entries = fs::read_dir("/dev/inputplumber/sources")?;
-    for entry in entries {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        let name = name.as_str();
-        let dst_path = if name.starts_with("event") || name.starts_with("js") {
-            format!("/dev/input/{name}")
-        } else {
-            format!("/dev/{name}")
-        };
-        log::debug!("Restoring device node path {path:?} to '{dst_path}'");
-        if let Err(e) = fs::rename(&path, &dst_path) {
-            log::warn!("Failed to move device node from {path:?} to {dst_path}: {e}");
+    if Path::new("/dev/inputplumber/sources").is_dir() {
+        if let Ok(entries) = fs::read_dir("/dev/inputplumber/sources") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                let name = name.as_str();
+                let dst_path = if name.starts_with("event") || name.starts_with("js") {
+                    format!("/dev/input/{name}")
+                } else {
+                    format!("/dev/{name}")
+                };
+                log::debug!("Restoring device node path {path:?} to '{dst_path}'");
+                if let Err(e) = fs::rename(&path, &dst_path) {
+                    log::warn!("Failed to move device node from {path:?} to {dst_path}: {e}");
+                }
+                let saved_mode = SAVED_PERMISSIONS
+                    .lock()
+                    .ok()
+                    .and_then(|mut m| m.remove(&dst_path));
+                if let Some(mode) = saved_mode {
+                    if let Ok(metadata) = fs::metadata(&dst_path) {
+                        let mut permissions = metadata.permissions();
+                        permissions.set_mode(mode);
+                        let _ = fs::set_permissions(&dst_path, permissions);
+                    }
+                }
+            }
         }
+        let _ = fs::remove_dir("/dev/inputplumber/sources");
     }
+
+    if let Ok(mut saved) = SAVED_PERMISSIONS.lock() {
+        saved.clear();
+    }
+
+    let _ = fs::remove_dir("/dev/inputplumber");
 
     // Reload udev rules
     reload_all().await?;
@@ -247,8 +325,15 @@ async fn reload_all() -> Result<(), Box<dyn Error>> {
         .output()
         .await?;
 
-    log::debug!("Retriggering udev rules: udevadm trigger");
-    let _ = Command::new("udevadm").arg("trigger").output().await?;
+    for action in ["remove", "add"] {
+        for subsystem in ["input", "hidraw"] {
+            log::debug!("Retriggering udev rules: udevadm trigger --action {action} -s {subsystem}");
+            let _ = Command::new("udevadm")
+                .args(["trigger", "--action", action, "-s", subsystem])
+                .output()
+                .await?;
+        }
+    }
 
     Ok(())
 }
