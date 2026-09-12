@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: AYANEO Pocket S Mini
+
+maximum_sources: 0
+options:
+    auto_manage: true
+
+matches:
+    - udev:
+          sys_path: /sys/firmware/devicetree/base
+          attributes:
+              - name: compatible
+                value: ayaneo,pocket-s-mini
+
+source_devices:
+    # AYANEO/DirectInput mode
+    - group: gamepad
+      capability_map_id: aya10
+      evdev:
+          name: AYANEO Controller
+          vendor_id: "4001"
+          product_id: "0428"
+          handler: event*
+    # XInput mode
+    - group: gamepad
+      capability_map_id: aya10
+      evdev:
+          phys_path: usb-0001:01:00.0-1/input0
+          vendor_id: "045e"
+          product_id: "028e"
+          handler: event*
+    # Dedicated AYANEO and quick-access GPIO buttons
+    - group: keyboard
+      capability_map_id: aya10
+      evdev:
+          name: gpio-keys-pocket-s-mini
+          handler: event*
+
+target_devices:
+    - xbox-elite
+    - keyboard
+    - mouse
