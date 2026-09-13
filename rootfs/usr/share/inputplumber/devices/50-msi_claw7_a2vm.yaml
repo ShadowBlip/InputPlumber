@@ -41,9 +41,8 @@ source_devices:
         - Keyboard:KeyVolumeDown
         - Keyboard:KeyVolumeUp
 
-  # Conflicts, block
+  # Capture the left extra key for Guide input.
   - group: keyboard
-    blocked: true
     udev:
       attributes:
         - name: name
