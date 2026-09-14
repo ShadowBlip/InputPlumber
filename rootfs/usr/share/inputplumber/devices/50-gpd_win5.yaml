@@ -30,19 +30,35 @@ source_devices:
     capability_map_id: gpd_menu
   - group: keyboard
     evdev:
-      name: "  Mouse for Windows"
-      handler: event*
-      phys_path: usb-0000:66:00.0-5.2/input0
-  - group: keyboard
-    evdev:
       name: "  Keyboard for Windows"
       handler: event*
       phys_path: usb-0000:66:00.0-5.3/input0
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyF14
+        - Keyboard:KeyF15
+        - Keyboard:KeyF3
+        - Keyboard:KeyLeftCtrl
+        - Keyboard:KeyLeftShift
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyD
+        - Keyboard:KeyDelete
+        - Keyboard:KeyLeftCtrl
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyO
+        - Keyboard:KeyTab
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
@@ -65,4 +81,4 @@ target_devices:
   - keyboard
 
 # The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: gpd4
+capability_map_id: gpd2
