@@ -61,7 +61,7 @@ options:
 
 # The target input device(s) to emulate by default
 target_devices:
-  - xbox-elite
+  - deck
   - mouse
   - keyboard
   #- touchscreen
