@@ -222,6 +222,8 @@ pub struct DMIMatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sys_vendor: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_vendor: Option<String>,
 }
 
@@ -1050,6 +1052,15 @@ impl CompositeDeviceConfig {
                     if !glob_match(
                         cpu_vendor.as_str(),
                         cpu_info.vendor_id(0).unwrap_or_default(),
+                    ) {
+                        continue;
+                    }
+                    has_matches = true;
+                }
+                if let Some(cpu_model) = dmi_config.cpu_model {
+                    if !glob_match(
+                        cpu_model.as_str(),
+                        cpu_info.model_name(0).unwrap_or_default(),
                     ) {
                         continue;
                     }
