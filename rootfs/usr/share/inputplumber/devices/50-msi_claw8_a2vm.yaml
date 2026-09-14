@@ -41,9 +41,8 @@ source_devices:
         - Keyboard:KeyVolumeDown
         - Keyboard:KeyVolumeUp
 
-  # Conflicts, block
+  # Face Guide
   - group: keyboard
-    blocked: true
     udev:
       attributes:
         - name: name
