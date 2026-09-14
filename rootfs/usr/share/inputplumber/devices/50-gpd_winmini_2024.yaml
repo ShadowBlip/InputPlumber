@@ -6,7 +6,7 @@ version: 1
 kind: CompositeDevice
 
 # Name of the composite device mapping
-name: GPD WinMini
+name: GPD Win Mini 2024
 
 # Only allow a single source device per composite device of this type.
 single_source: false
@@ -18,6 +18,11 @@ matches:
   - dmi_data:
       product_name: G1617-01
       sys_vendor: GPD
+      cpu_model: AMD Ryzen 7 8840U w/ Radeon 780M Graphics
+  - dmi_data:
+      product_name: G1617-01
+      sys_vendor: GPD
+      cpu_model: AMD Ryzen 5 8640U w/ Radeon 760M Graphics
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -25,30 +30,38 @@ source_devices:
   - group: gamepad
     evdev:
       name: "Microsoft X-Box 360 pad"
-      phys_path: "{usb-0000:63:00.3-5/input0,usb-0000:c3:00.3-5/input0}"
+      phys_path: usb-0000:c3:00.3-5/input0
       handler: event*
+  - group: keyboard
+    evdev:
+      name: "  Mouse for Windows"
+      phys_path: usb-0000:c3:00.3-3/input1
+      handler: event*
+    events:
+      exclude:
+        - keyboard:KeySysrq
+        - keyboard:KeyPause
+  # All devices
+  - group: mouse
+    unique: false
+    blocked: true
+    evdev:
+      name: "{HTIX5288:00*}"
+      handler: event*
+  # Back Paddles
   - group: keyboard
     hidraw:
       vendor_id: 0x2f24
       product_id: 0x0135
       interface_num: 1
-  - group: keyboard
-    blocked: true
-    evdev:
-      name: "  Mouse for Windows"
-      phys_path: usb-0000:63:00.3-3/input1
-      handler: event*
+  # Touchpad - Shares VID/PID with the Orange Pi Neo, so it must be
+  # matched by name. (E.g. "HTIX5288:00")
   - group: mouse
     hidraw:
-      vendor_id: 0x093A
-      product_id: 0x0255
+      name: "{HTIX5288:00*}"
+      vendor_id: 0x0911
+      product_id: 0x5288
       interface_num: 0
-  - group: mouse
-    unique: false
-    blocked: true
-    evdev:
-      name: "{HTIX5288:00 093A:0255 Mouse,HTIX5288:00 093A:0255 Touchpad}"
-      handler: event*
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
@@ -70,6 +83,3 @@ target_devices:
   - mouse
   - keyboard
   - touchpad
-
-# The ID of a device event mapping in the 'event_maps' folder
-capability_map_id: gpd3
