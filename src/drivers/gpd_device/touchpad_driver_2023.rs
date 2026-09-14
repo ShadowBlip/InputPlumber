@@ -7,19 +7,15 @@ use crate::{udev::device::UdevDevice};
 
 use super::{
     event::{BinaryInput, Event, TouchAxisEvent, TouchButtonEvent, TriggerEvent, TriggerInput},
-    hid_report::TouchpadDataReport
+    hid_report::TouchpadDataReport,
+    TOUCHPAD_2023_PAD_FORCE_NORMAL as PAD_FORCE_NORMAL,
+    TOUCHPAD_2023_TOUCH_DATA as TOUCH_DATA,
+    TOUCHPAD_2023_VID as VID, TOUCHPAD_2023_PID as PID,
 };
-
-pub const VID: u16 = 0x093A;
-pub const PID: u16 = 0x0255;
-pub const IID: i32 = 0x00;
 
 const CLICK_DELAY: Duration = Duration::from_millis(150);
 const RELEASE_DELAY: Duration = Duration::from_millis(50);
 const MAX_TAP_DISTANCE_SQ: u32 = 10000;
-
-// Report ID
-pub const TOUCH_DATA: u8 = 0x01;
 
 // Input report size
 const TOUCHPAD_PACKET_SIZE: usize = 30;
@@ -27,14 +23,7 @@ const TOUCHPAD_PACKET_SIZE: usize = 30;
 // HID buffer read timeout
 const HID_TIMEOUT: i32 = 10;
 
-// Axis ranges
-pub const TOUCHPAD_X_MAX: f64 = 2559.0;
-pub const TOUCHPAD_Y_MAX: f64 = 1535.0;
-
-pub const PAD_FORCE_MAX: f64 = 127.0;
-pub const PAD_FORCE_NORMAL: u8 = 32; /* Simulated average */
-
-pub struct TouchpadDriver {
+pub struct TouchpadDriver2023 {
     /// HIDRAW device instance
     device: HidDevice,
     /// Timestamp of the first touch event.
@@ -57,7 +46,7 @@ pub struct TouchpadDriver {
     touchpad_state: Option<TouchpadDataReport>,
 }
 
-impl TouchpadDriver {
+impl TouchpadDriver2023 {
     pub fn new(udevice: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = udevice.devnode();
         let cs_path = CString::new(path.clone())?;
