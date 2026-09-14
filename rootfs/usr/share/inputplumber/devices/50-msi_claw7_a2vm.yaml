@@ -41,7 +41,7 @@ source_devices:
         - Keyboard:KeyVolumeDown
         - Keyboard:KeyVolumeUp
 
-  # Capture the left extra key for Guide input.
+  # Face Guide
   - group: keyboard
     udev:
       attributes:
