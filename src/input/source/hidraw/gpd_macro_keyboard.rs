@@ -1,30 +1,28 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::gpd_win_mini::{
-        event, macro_keyboard_driver::MacroKeyboardDriver
-    },
+    drivers::gpd_device::{event, macro_keyboard_driver::MacroKeyboardDriver},
     input::{
         capability::{Capability, Gamepad, GamepadButton},
         event::{native::NativeEvent, value::InputValue},
-        source::{InputError, SourceInputDevice, SourceOutputDevice}
+        source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
 
 /// GPD Win Mini macro keyboard source device implementation
-pub struct GpdWinMiniMacroKeyboard {
+pub struct GpdMacroKeyboard {
     driver: MacroKeyboardDriver,
 }
 
-impl GpdWinMiniMacroKeyboard {
+impl GpdMacroKeyboard {
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = MacroKeyboardDriver::new(device_info)?;
         Ok(Self { driver })
     }
 }
 
-impl SourceInputDevice for GpdWinMiniMacroKeyboard {
+impl SourceInputDevice for GpdMacroKeyboard {
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
@@ -36,9 +34,9 @@ impl SourceInputDevice for GpdWinMiniMacroKeyboard {
     }
 }
 
-impl SourceOutputDevice for GpdWinMiniMacroKeyboard {}
+impl SourceOutputDevice for GpdMacroKeyboard {}
 
-impl Debug for GpdWinMiniMacroKeyboard {
+impl Debug for GpdMacroKeyboard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GpdWinMiniMacroKeyboard").finish()
     }
@@ -57,18 +55,14 @@ fn translate_events(events: Vec<event::Event>) -> Vec<NativeEvent> {
 fn translate_event(event: event::Event) -> NativeEvent {
     match event {
         event::Event::GamepadButton(button) => match button {
-            event::GamepadButtonEvent::L4(value) => {
-                NativeEvent::new(
-                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
-                    InputValue::Bool(value.pressed)
-                )
-            },
-            event::GamepadButtonEvent::R4(value) => {
-                NativeEvent::new(
-                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
-                    InputValue::Bool(value.pressed)
-                )
-            },
+            event::GamepadButtonEvent::L4(value) => NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
+                InputValue::Bool(value.pressed),
+            ),
+            event::GamepadButtonEvent::R4(value) => NativeEvent::new(
+                Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
+                InputValue::Bool(value.pressed),
+            ),
         },
         _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
     }
