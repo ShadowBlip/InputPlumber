@@ -17,7 +17,6 @@ source_devices:
 
 target_devices:
   - gamepad
-  - keyboard
 
 capability_map_id: cec_remote
 
