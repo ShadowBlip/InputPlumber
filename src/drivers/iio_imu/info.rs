@@ -1,4 +1,5 @@
-use std::{error::Error, fmt};
+use industrial_io::Channel;
+use std::{error::Error, fmt, time::Duration};
 
 /// The [MountMatrix] is used to define how sensors are oriented inside a device
 /// https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/mount-matrix.txt
@@ -80,4 +81,16 @@ pub struct AxisInfo {
     pub sample_rates_avail: Vec<f64>,
     pub scale: f64,
     pub scales_avail: Vec<f64>,
+}
+
+pub struct Axis {
+    pub channel: Channel,
+    pub info: AxisInfo,
+}
+
+pub struct ImuGroup {
+    pub x: Axis,
+    pub y: Axis,
+    pub z: Axis,
+    pub sample_rate: Duration,
 }

@@ -1,10 +1,10 @@
-use std::{collections::HashSet, error::Error, f64::consts::PI, fmt::Debug};
+use std::{collections::HashSet, error::Error, fmt::Debug};
 
 use crate::{
     config,
-    drivers::iio_imu::{self, driver::Driver, info::MountMatrix},
+    drivers::iio_imu::{self, bmi_driver::Driver, info::MountMatrix},
     input::{
-        capability::{Capability, Gamepad},
+        capability::{Capability, Source},
         event::{native::NativeEvent, value::InputValue},
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -42,8 +42,7 @@ impl BmiImu {
         let sample_rate = config.as_ref().and_then(|c| c.sample_rate);
 
         let id = device_info.sysname();
-        let name = device_info.name();
-        let driver = Driver::new(id, name, mount_matrix, sample_rate)?;
+        let driver = Driver::new(id, mount_matrix, sample_rate)?;
 
         Ok(Self { driver })
     }
@@ -68,14 +67,7 @@ impl SourceInputDevice for BmiImu {
     }
 
     fn get_default_event_filter(&self) -> Result<HashSet<Capability>, InputError> {
-        let filtered_events = self.driver.get_default_event_filter();
-        let filtered_events = match filtered_events {
-            Ok(events) => events,
-            Err(e) => {
-                return Err(format!("Failed to get default event filter: {:?}", e).into());
-            }
-        };
-        Ok(filtered_events)
+        Ok(HashSet::new())
     }
 }
 
@@ -100,7 +92,7 @@ fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {
 fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
     match event {
         iio_imu::event::Event::Accelerometer(data) => {
-            let cap = Capability::Gamepad(Gamepad::Accelerometer);
+            let cap = Capability::Accelerometer(Source::Center);
             let value = InputValue::Vector3 {
                 x: Some(data.roll),
                 y: Some(data.pitch),
@@ -109,16 +101,11 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
             NativeEvent::new(cap, value)
         }
         iio_imu::event::Event::Gyro(data) => {
-            // Translate gyro values into the expected units of degrees per sec
-            // We apply a 12x scale so the lowest (default) value feels like natural 1:1 motion.
-            // Adjusting the scale will increase the granularity of the motion by slowing
-            // incrementing closer to 2:1 motion. From testing this is the highest scale we can
-            // apply before noise is amplified to the point the gyro cannot calibrate.
-            let cap = Capability::Gamepad(Gamepad::Gyro);
+            let cap = Capability::Gyroscope(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * (180.0 / PI) * 12.0),
-                y: Some(data.pitch * (180.0 / PI) * 12.0),
-                z: Some(data.yaw * (180.0 / PI) * 12.0),
+                x: Some(data.roll),
+                y: Some(data.pitch),
+                z: Some(data.yaw),
             };
             NativeEvent::new(cap, value)
         }
@@ -127,6 +114,6 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
 
 /// List of all capabilities that the driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
-    Capability::Gamepad(Gamepad::Gyro),
+    Capability::Accelerometer(Source::Center),
+    Capability::Gyroscope(Source::Center),
 ];

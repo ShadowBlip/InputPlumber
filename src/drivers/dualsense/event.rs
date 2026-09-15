@@ -2,7 +2,7 @@
 #[derive(Clone, Debug)]
 pub enum Event {
     Button(ButtonEvent),
-    Accelerometer(AccelerometerEvent),
+    Accelerometer(IntertialEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
 }
@@ -78,18 +78,18 @@ pub enum TriggerEvent {
     R2(TriggerInput),
 }
 
-/// AccelerometerInput represents the state of the accelerometer (x, y, z) values
+/// InertialInput represents the state of the IMU (x, y, z) values
 #[derive(Clone, Debug)]
-pub struct AccelerometerInput {
-    pub x: i16,
-    pub y: i16,
-    pub z: i16,
+pub struct InertialInput {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 /// AccelerometerEvent has data from the accelerometer
 #[derive(Clone, Debug)]
-pub enum AccelerometerEvent {
-    Accelerometer(AccelerometerInput),
+pub enum IntertialEvent {
+    Accelerometer(InertialInput),
     /// Pitch, yaw, roll
-    Gyro(AccelerometerInput),
+    Gyroscope(InertialInput),
 }

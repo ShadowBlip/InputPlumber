@@ -1,6 +1,8 @@
 use std::{error::Error, ffi::CString};
 
-use crate::drivers::steam_deck::{hid_report::PackedInputDataReport, ProductId, VID};
+use crate::drivers::steam_deck::{
+    hid_report::PackedInputDataReport, ProductId, DECK_ACCEL_TO_SI, DECK_GYRO_TO_RADS, VID,
+};
 use hidapi::HidDevice;
 use packed_struct::{
     types::{Integer, SizedInteger},
@@ -9,16 +11,12 @@ use packed_struct::{
 
 use super::{
     event::{
-        AccelerometerEvent, AccelerometerInput, AxisEvent, AxisInput, BinaryInput, ButtonEvent,
-        Event, TouchAxisInput, TriggerEvent, TriggerInput,
+        AxisEvent, AxisInput, BinaryInput, ButtonEvent, Event, IntertialEvent, IntertialInput,
+        TouchAxisInput, TriggerEvent, TriggerInput,
     },
     hid_report::{PackedMappingsReport, PackedRumbleReport, Register, ReportType, TrackpadMode},
 };
 
-/// Scale to multiply accelerometer values to get in units of meters per second
-pub const ACCEL_SCALE: f64 = 0.0006125;
-/// Scale to multiply gyro values to get in units of degrees per second
-//pub const GYRO_SCALE: f64 = 0.0625;
 /// Size of the HID packet
 const PACKET_SIZE: usize = 64;
 /// Timeout in milliseconds for reading an HID packet
@@ -407,18 +405,20 @@ impl Driver {
             }
 
             // Accelerometer events
-            events.push(Event::Accelerometer(AccelerometerEvent::Accelerometer(
-                AccelerometerInput {
-                    x: state.accel_x.to_primitive(),
-                    y: state.accel_y.to_primitive(),
-                    z: state.accel_z.to_primitive(),
+            events.push(Event::Accelerometer(IntertialEvent::Accelerometer(
+                IntertialInput {
+                    // Convert to Intermediate SI units for NativeEvent handling
+                    x: state.accel_x.to_primitive() as f64 * DECK_ACCEL_TO_SI,
+                    y: state.accel_y.to_primitive() as f64 * DECK_ACCEL_TO_SI,
+                    z: state.accel_z.to_primitive() as f64 * DECK_ACCEL_TO_SI,
                 },
             )));
-            events.push(Event::Accelerometer(AccelerometerEvent::Attitude(
-                AccelerometerInput {
-                    x: state.pitch.to_primitive(),
-                    y: state.yaw.to_primitive(),
-                    z: state.roll.to_primitive(),
+            events.push(Event::Accelerometer(IntertialEvent::Gyroscope(
+                IntertialInput {
+                    // Convert to Intermediate SI units for NativeEvent handling
+                    x: state.pitch.to_primitive() as f64 * DECK_GYRO_TO_RADS,
+                    y: state.yaw.to_primitive() as f64 * DECK_GYRO_TO_RADS,
+                    z: state.roll.to_primitive() as f64 * DECK_GYRO_TO_RADS,
                 },
             )));
         };
