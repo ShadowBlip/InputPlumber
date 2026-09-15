@@ -59,10 +59,10 @@ mapping:
 
   - name: Red
     source_events:
-      - keyboard: Select
+      - keyboard: KeyRed
     target_event:
       gamepad:
-        button: DPadUp
+        button: Select
   - name: Green
     source_events:
       - keyboard: KeyGreen
