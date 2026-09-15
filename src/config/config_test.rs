@@ -145,3 +145,50 @@ async fn check_autostart_rules() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+/// Quick validation test for the new Mayflash GameCube Controller Adapter
+/// capability map and device profile added to fix legacy joystick-range
+/// evdev button codes (BTN_TRIGGER/0x120 through BTN_DEAD/0x12f) not being
+/// recognized as gamepad buttons.
+#[test]
+fn check_mayflash_gamecube_adapter_configs_parse() {
+    use crate::config::capability_map::CapabilityMapConfig;
+
+    let map = CapabilityMapConfig::from_yaml_file(
+        "./rootfs/usr/share/inputplumber/capability_maps/mayflash_gamecube_adapter.yaml",
+    )
+    .expect("capability map should parse");
+    assert_eq!(map.id(), "mayflash_gamecube_adapter");
+
+    let device_config = CompositeDeviceConfig::from_yaml_file(
+        "./rootfs/usr/share/inputplumber/devices/55-mayflash_gamecube_adapter.yaml".to_string(),
+    )
+    .expect("device profile should parse");
+    assert_eq!(device_config.name, "Mayflash GameCube Controller Adapter");
+    assert_eq!(
+        device_config.capability_map_id.as_deref(),
+        Some("mayflash_gamecube_adapter"),
+        "capability_map_id must be set at the CompositeDeviceConfig level to actually apply"
+    );
+    assert_eq!(device_config.source_devices.len(), 1);
+    let evdev = device_config.source_devices[0]
+        .evdev
+        .as_ref()
+        .expect("source device should have an evdev matcher");
+    assert_eq!(evdev.vendor_id.as_deref(), Some("0079"));
+    assert_eq!(evdev.product_id.as_deref(), Some("1844"));
+    // Setting capability_map_id only at the CompositeDeviceConfig level (as
+    // asserted above) is NOT sufficient to actually translate events - only
+    // the SourceDevice-level field wires up the EventTranslator that
+    // performs real-time evdev KEY -> Capability translation
+    // (src/input/source/evdev.rs EventDevice::new). Confirmed live: without
+    // this field set here, axis/D-pad events passed through fine but every
+    // face-button press produced zero output events.
+    assert_eq!(
+        device_config.source_devices[0].capability_map_id.as_deref(),
+        Some("mayflash_gamecube_adapter"),
+        "capability_map_id must ALSO be set on the source_devices entry itself \
+         (not just at the CompositeDeviceConfig level) or button translation \
+         silently does nothing at runtime"
+    );
+}
