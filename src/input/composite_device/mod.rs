@@ -69,6 +69,10 @@ pub enum InterceptMode {
     GamepadOnly,
 }
 
+/// The minimum time permitted between DOWN and UP button events for
+/// userspace to see a valid input.
+const MIN_EVENT_TIME: Duration = Duration::from_millis(16);
+
 /// A [CompositeDevice] represents any number source input devices that
 /// can translate input to any target devices
 #[derive(Debug)]
@@ -1138,13 +1142,12 @@ impl CompositeDevice {
         self.is_new_active_event(&cap, event.pressed());
         // Check to see if the event is in recently translated.
         // If it is, spawn a task to delay emit the event.
-        let sleep_time = Duration::from_millis(4);
         let cap = event.as_capability();
-        if self.translated_recent_events.contains(&cap) {
+        if self.translated_recent_events.contains(&cap) && !event.pressed() {
             log::debug!("Event emitted too quickly. Delaying emission.");
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
-                tokio::time::sleep(sleep_time).await;
+                tokio::time::sleep(MIN_EVENT_TIME).await;
                 if let Err(e) = tx.send(CompositeCommand::WriteEvent(event)).await {
                     log::error!("Failed to send delayed event command: {:?}", e);
                 }
@@ -1159,7 +1162,7 @@ impl CompositeDevice {
         // Spawn a task to remove the event from recent translated
         let tx = self.tx.clone();
         tokio::task::spawn(async move {
-            tokio::time::sleep(sleep_time).await;
+            tokio::time::sleep(MIN_EVENT_TIME).await;
             if let Err(e) = tx.send(CompositeCommand::RemoveRecentEvent(cap)).await {
                 log::error!("Failed to send remove recent event command: {:?}", e);
             }
@@ -1434,16 +1437,15 @@ impl CompositeDevice {
 
         // Emit the translated events. If this translated event has been emitted
         // very recently, delay sending subsequent events of the same type.
-        let sleep_time = Duration::from_millis(4);
         for event in emit_queue {
             // Check to see if the event is in recently translated.
             // If it is, spawn a task to delay emit the event.
             let cap = event.as_capability();
-            if self.translated_recent_events.contains(&cap) {
+            if self.translated_recent_events.contains(&cap) && !event.pressed() {
                 log::debug!("Event emitted too quickly. Delaying emission.");
                 let tx = self.tx.clone();
                 tokio::task::spawn(async move {
-                    tokio::time::sleep(sleep_time).await;
+                    tokio::time::sleep(MIN_EVENT_TIME).await;
                     if let Err(e) = tx.send(CompositeCommand::HandleEvent(event)).await {
                         log::error!("Failed to send delayed event command: {:?}", e);
                     }
@@ -1458,7 +1460,7 @@ impl CompositeDevice {
             // Spawn a task to remove the event from recent translated
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
-                tokio::time::sleep(sleep_time).await;
+                tokio::time::sleep(MIN_EVENT_TIME).await;
                 if let Err(e) = tx.send(CompositeCommand::RemoveRecentEvent(cap)).await {
                     log::error!("Failed to send remove recent event command: {:?}", e);
                 }
