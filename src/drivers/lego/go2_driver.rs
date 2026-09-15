@@ -448,7 +448,7 @@ impl Driver {
                 events.push(Event::Axis(AxisEvent::MultiAccel(ImuAxisInput {
                     pitch: -(state.left_accel_x + state.right_accel_x) / 2,
                     roll: (state.left_accel_y + state.right_accel_y) / 2,
-                    yaw: (state.left_accel_z + state.right_accel_z) / 2,
+                    yaw: -(state.left_accel_z + state.right_accel_z) / 2,
                 })))
             }
             if !self
@@ -491,7 +491,7 @@ impl Driver {
                 events.push(Event::Axis(AxisEvent::MultiGyro(ImuAxisInput {
                     pitch: -(state.left_gyro_x + state.right_gyro_x) / 2,
                     roll: (state.left_gyro_y + state.right_gyro_y) / 2,
-                    yaw: (state.left_gyro_z + state.right_gyro_z) / 2,
+                    yaw: -(state.left_gyro_z + state.right_gyro_z) / 2,
                 })))
             }
         }

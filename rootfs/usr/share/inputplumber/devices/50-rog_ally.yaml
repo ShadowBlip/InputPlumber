@@ -44,7 +44,7 @@ source_devices:
       name: bmi323-imu
       mount_matrix:
         x: [1, 0, 0]
-        y: [0, -1, 0]
+        y: [0, 1, 0]
         z: [0, 0, -1]
   - group: led
     udev:
