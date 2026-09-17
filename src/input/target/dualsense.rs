@@ -2,7 +2,13 @@
 //! The DualSense implementation is based on the great work done by NeroReflex
 //! and the ROGueENEMY project:
 //! https://github.com/NeroReflex/ROGueENEMY/
-use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
+use std::{
+    cmp::Ordering,
+    error::Error,
+    fmt::Debug,
+    fs::File,
+    time::{Duration, Instant},
+};
 
 use packed_struct::prelude::*;
 use rand::Rng;
@@ -123,7 +129,8 @@ pub struct DualSenseDevice {
     device: UHIDDevice<File>,
     state: PackedInputDataReport,
     timestamp: u8,
-    sensor_timestamp: u32,
+    /// Start time used to derive `sensor_timestamp`.
+    sensor_timestamp_start: Instant,
     context: u8,
     hardware: DualSenseHardware,
     queued_events: Vec<ScheduledNativeEvent>,
@@ -140,7 +147,7 @@ impl DualSenseDevice {
             device,
             state: PackedInputDataReport::Usb(USBPackedInputDataReport::new()),
             timestamp: Default::default(),
-            sensor_timestamp: Default::default(),
+            sensor_timestamp_start: Instant::now(),
             context: Default::default(),
             hardware,
             queued_events: Vec::new(),
@@ -857,11 +864,14 @@ impl DualSenseDevice {
                 // TODO: Can we define this somewhere as a const?
                 let data = vec![
                     FEATURE_REPORT_CALIBRATION,
-                    0xff,
-                    0xfc,
-                    0xff,
-                    0xfe,
-                    0xff,
+                    // 6-byte gyro bias block; zeroed since this virtual
+                    // device reports bias-free data.
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
                     0x83,
                     0x22,
                     0x78,
@@ -891,7 +901,7 @@ impl DualSenseDevice {
                     0xdf,
                     0xdf,
                     0x0b,
-                    0x00,
+                    // Reserved; total report is DS_FEATURE_REPORT_CALIBRATION_SIZE (41 bytes).
                     0x00,
                     0x00,
                     0x00,
@@ -961,9 +971,11 @@ impl TargetInputDevice for DualSenseDevice {
             self.state.state_mut().touch_data.timestamp = self.timestamp;
         }
 
-        // Update the gyro timestamp
-        self.sensor_timestamp = self.sensor_timestamp.wrapping_add(3);
-        self.state.state_mut().sensor_timestamp = self.sensor_timestamp.into();
+        // SDL diffs consecutive values of this field (1/3 us units) to get
+        // the motion integration dt, so it must track real elapsed time.
+        let elapsed_us = self.sensor_timestamp_start.elapsed().as_micros();
+        let sensor_timestamp = (elapsed_us.wrapping_mul(3)) as u32;
+        self.state.state_mut().sensor_timestamp = sensor_timestamp.into();
 
         Ok(())
     }
