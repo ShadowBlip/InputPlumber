@@ -755,14 +755,14 @@ impl SteamDeckDevice {
                         ));
                     }
                     if let Some(y) = y {
-                        self.state.yaw = Integer::from_primitive(denormalize_gyro_value_i16(
+                        self.state.roll = Integer::from_primitive(denormalize_gyro_value_i16(
                             y,
                             DECK_RAD_S_TO_GYRO_RAW,
                         ));
                     }
                     if let Some(z) = z {
-                        self.state.roll = Integer::from_primitive(denormalize_gyro_value_i16(
-                            z,
+                        self.state.yaw = Integer::from_primitive(denormalize_gyro_value_i16(
+                            -z,
                             DECK_RAD_S_TO_GYRO_RAW,
                         ));
                     }
@@ -777,14 +777,14 @@ impl SteamDeckDevice {
                         ));
                     }
                     if let Some(y) = y {
-                        self.state.accel_y = Integer::from_primitive(denormalize_accel_value_i16(
+                        self.state.accel_z = Integer::from_primitive(denormalize_accel_value_i16(
                             y,
                             DECK_MPS2_TO_ACCEL_RAW,
                         ));
                     }
                     if let Some(z) = z {
-                        self.state.accel_z = Integer::from_primitive(denormalize_accel_value_i16(
-                            z,
+                        self.state.accel_y = Integer::from_primitive(denormalize_accel_value_i16(
+                            -z,
                             DECK_MPS2_TO_ACCEL_RAW,
                         ));
                     }

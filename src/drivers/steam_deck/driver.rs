@@ -405,21 +405,18 @@ impl Driver {
                 })));
             }
 
-            // Accelerometer events
             events.push(Event::Accelerometer(IntertialEvent::Accelerometer(
                 IntertialInput {
-                    // Convert to Intermediate SI units for NativeEvent handling
                     x: state.accel_x.to_primitive() as f64 * DECK_ACCEL_RAW_TO_MPS2,
-                    y: state.accel_y.to_primitive() as f64 * DECK_ACCEL_RAW_TO_MPS2,
-                    z: state.accel_z.to_primitive() as f64 * DECK_ACCEL_RAW_TO_MPS2,
+                    y: state.accel_z.to_primitive() as f64 * DECK_ACCEL_RAW_TO_MPS2,
+                    z: -state.accel_y.to_primitive() as f64 * DECK_ACCEL_RAW_TO_MPS2,
                 },
             )));
             events.push(Event::Accelerometer(IntertialEvent::Gyroscope(
                 IntertialInput {
-                    // Convert to Intermediate SI units for NativeEvent handling
                     x: state.pitch.to_primitive() as f64 * DECK_GYRO_RAW_TO_RAD_S,
-                    y: state.yaw.to_primitive() as f64 * DECK_GYRO_RAW_TO_RAD_S,
-                    z: state.roll.to_primitive() as f64 * DECK_GYRO_RAW_TO_RAD_S,
+                    y: state.roll.to_primitive() as f64 * DECK_GYRO_RAW_TO_RAD_S,
+                    z: -state.yaw.to_primitive() as f64 * DECK_GYRO_RAW_TO_RAD_S,
                 },
             )));
         };
