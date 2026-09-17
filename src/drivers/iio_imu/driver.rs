@@ -1,63 +1,63 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     error::Error,
-    fs::File,
-    io::{self, BufRead, BufReader},
+    fmt, fs,
+    path::PathBuf,
+    thread,
+    time::{Duration, Instant},
 };
 
-use industrial_io::{Channel, ChannelType, Device, Direction};
-
-use crate::{
-    drivers::iio_imu::info::MountMatrix,
-    input::capability::{Capability, Source},
-};
+use crate::input::capability::{Capability, Source};
 
 use super::{
     event::{AxisData, Event},
-    info::AxisInfo,
+    info::{
+        compute_layout, configure_buffer, decode_group, discover_group, discover_timestamp,
+        read_mount_matrix, BlockingFdSource, HrtimerTriggerGuard, MountMatrix, RecordLayout,
+        RecordSource, TriggerStrategy,
+    },
 };
 
-const DEFAULT_SAMPLE_RATE: f64 = 200.0;
-
-/// Driver for reading IIO IMU data
 pub struct Driver {
-    _device: Device, // must outlive Channel raw pointers
     mount_matrix: MountMatrix,
-    accel: HashMap<String, Channel>,
-    accel_info: HashMap<String, AxisInfo>,
-    gyro: HashMap<String, Channel>,
-    gyro_info: HashMap<String, AxisInfo>,
-    /// List of events that should not be generated
+    layout: RecordLayout,
+    source: Box<dyn RecordSource>,
+    record_buf: Vec<u8>,
     filtered_events: HashSet<Capability>,
+    poll_interval: Duration,
+    accel_state: Option<AxisData>,
+    gyro_state: Option<AxisData>,
+    // Kept alive only so its Drop unbinds/removes the hrtimer trigger.
+    _trigger_guard: Option<HrtimerTriggerGuard>,
+}
+
+impl fmt::Debug for Driver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Driver")
+            .field("layout", &self.layout)
+            .finish()
+    }
 }
 
 impl Driver {
+    /// Create a new IIO IMU driver instance bound to the given trigger strategy.
     pub fn new(
-        id: String,
         name: String,
         matrix: Option<MountMatrix>,
         sample_rate: Option<f64>,
+        trigger: TriggerStrategy,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         log::debug!("Creating IIO IMU driver instance for {name}");
 
-        // Create an IIO local context used to query for devices
-        let ctx = industrial_io::context::Context::new()?;
-        log::debug!("IIO context version: {}", ctx.version());
+        let base = PathBuf::from(format!("/sys/bus/iio/devices/{name}"));
+        if !base.is_dir() {
+            return Err(format!("IIO device path not found: {}", base.display()).into());
+        }
+        let devnode = PathBuf::from(format!("/dev/{name}"));
 
-        // Find the IMU device
-        let Some(device) = ctx.find_device(id.as_str()) else {
-            return Err("Failed to find device".into());
-        };
-
-        // Try finding the mount matrix to determine how sensors were mounted inside
-        // the device.
-        // https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/iio/mount-matrix.txt
         let mount_matrix = if let Some(matrix) = matrix {
-            // Use the provided mount matrix if it is defined
             matrix
-        } else if let Some(mount) = device.find_channel("mount", Direction::Input) {
-            // Read from the matrix
-            let matrix_str = mount.attr_read_str("matrix")?;
+        } else if let Some(matrix_str) = read_mount_matrix(&base) {
             log::debug!("Found mount matrix: {matrix_str}");
             let matrix = MountMatrix::new(matrix_str)?;
             log::debug!("Decoded mount matrix: {matrix}");
@@ -66,52 +66,46 @@ impl Driver {
             MountMatrix::default()
         };
 
-        // Find all accelerometer and gyro channels and insert them into a hashmap
-        let (accel, accel_info) = get_channels_with_type(&device, ChannelType::Accel);
-        for attr in &accel_info {
-            log::debug!("Found accel_info: {:?}", attr);
-        }
-        let (gyro, gyro_info) = get_channels_with_type(&device, ChannelType::AnglVel);
-        for attr in &gyro_info {
-            log::debug!("Found gyro_info: {:?}", attr);
-        }
+        let accel = discover_group(&base, "accel")?;
+        let gyro = discover_group(&base, "anglvel")?;
+        let timestamp = discover_timestamp(&base)?;
 
-        // Log device attributes
-        for attr in device.attributes() {
-            log::trace!("Found device attribute: {:?}", attr)
-        }
+        log::debug!("accel present: {}", !accel.is_empty());
+        log::debug!("gyro present: {}", !gyro.is_empty());
+        log::debug!("timestamp present: {}", timestamp.is_some());
 
-        // Log all found channels
-        for channel in device.channels() {
-            log::trace!("Found channel: {:?} {:?}", channel.id(), channel.name());
-            log::trace!("  Is output: {}", channel.is_output());
-            log::trace!("  Is scan element: {}", channel.is_scan_element());
-            for attr in channel.attrs() {
-                log::trace!("  Found attribute: {:?}", attr);
-            }
-        }
+        // Devices bound via TriggerStrategy::FindExisting (e.g. HID sensor
+        // hub devices) don't reliably push samples on their own; reading
+        // their `_raw` attribute nudges the kernel into producing one.
+        let kick_path = match &trigger {
+            TriggerStrategy::FindExisting => accel
+                .first()
+                .or(gyro.first())
+                .map(|chan| base.join(format!("{}_raw", chan.id))),
+            TriggerStrategy::Hrtimer(_) => None,
+        };
 
-        // Request a higher sampling rate
-        for (channels, ch_type) in [(&accel, ChannelType::Accel), (&gyro, ChannelType::AnglVel)] {
-            if channels.is_empty() {
-                continue;
-            }
-            if let Err(err) =
-                set_sample_rate_or_default(&device, channels, ch_type, sample_rate)
-            {
-                log::warn!("Failed to set sample rate: {err}, falling back to max available");
-                set_sample_rate_max(&device, channels, ch_type);
-            }
-        }
+        let buffer_config = configure_buffer(&base, &accel, &gyro, sample_rate, trigger)?;
+        let poll_interval = Duration::from_secs_f64(1.0 / buffer_config.rate);
+
+        let layout = compute_layout(accel, gyro, timestamp);
+        log::debug!("Computed record layout: {layout:?}");
+
+        let source = BlockingFdSource::open(&devnode, kick_path)
+            .map_err(|e| format!("failed to open {}: {e}", devnode.display()))?;
+
+        let record_buf = vec![0u8; layout.record_len];
 
         Ok(Self {
-            _device: device,
             mount_matrix,
-            accel,
-            accel_info,
-            gyro,
-            gyro_info,
+            layout,
+            source: Box::new(source),
+            record_buf,
             filtered_events: Default::default(),
+            poll_interval,
+            accel_state: None,
+            gyro_state: None,
+            _trigger_guard: buffer_config.trigger_guard,
         })
     }
 
@@ -126,114 +120,57 @@ impl Driver {
     pub fn get_default_event_filter(
         &self,
     ) -> Result<HashSet<Capability>, Box<dyn Error + Send + Sync>> {
-        let filtered_events = match is_driver_loaded("hid_lenovo_go") {
-            Ok(true) => {
-                log::debug!("Found hid-lenovo-go driver. Disabling internal gyroscope.");
-                HashSet::from([
-                    Capability::Accelerometer(Source::Center),
-                    Capability::Gyroscope(Source::Center),
-                ])
-            }
-            Ok(false) => {
-                log::debug!("Did not find hid-lenovo-go driver. Enabling internal gyroscope.");
-                HashSet::new()
-            }
-            Err(e) => {
-                return Err(format!("Failed to read '/proc/modules': {e:?}").into());
-            }
-        };
-        Ok(filtered_events)
+        match fs::read_to_string("/proc/modules") {
+            Ok(modules) if modules.contains("hid_lenovo_go") => Ok(HashSet::from([
+                Capability::Accelerometer(Source::Center),
+                Capability::Gyroscope(Source::Center),
+            ])),
+            Ok(_) => Ok(HashSet::new()),
+            Err(e) => Err(format!("Failed to read '/proc/modules': {e:?}").into()),
+        }
     }
 
-    /// Poll the device for data
-    pub fn poll(&self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
-        let mut events = vec![];
+    /// Skips a group's event if unchanged since the last poll; paces total call time to poll_interval.
+    pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
+        let start = Instant::now();
 
-        // Read from the accelerometer
-        if !self
-            .filtered_events
-            .contains(&Capability::Accelerometer(Source::Center))
+        self.source.read_one(&mut self.record_buf)?;
+
+        let mut events = Vec::new();
+
+        if !self.layout.accel.is_empty()
+            && !self
+                .filtered_events
+                .contains(&Capability::Accelerometer(Source::Center))
         {
-            if let Some(event) = self.poll_accel()? {
-                events.push(event);
+            let mut data = decode_group(&self.layout.accel, &self.record_buf);
+            self.rotate_value(&mut data);
+            if self.accel_state.as_ref() != Some(&data) {
+                self.accel_state = Some(data.clone());
+                events.push(Event::Accelerometer(data));
             }
         }
 
-        // Read from the gyro
-        if !self
-            .filtered_events
-            .contains(&Capability::Gyroscope(Source::Center))
+        if !self.layout.gyro.is_empty()
+            && !self
+                .filtered_events
+                .contains(&Capability::Gyroscope(Source::Center))
         {
-            if let Some(event) = self.poll_gyro()? {
-                events.push(event);
+            let mut data = decode_group(&self.layout.gyro, &self.record_buf);
+            self.rotate_value(&mut data);
+            if self.gyro_state.as_ref() != Some(&data) {
+                self.gyro_state = Some(data.clone());
+                events.push(Event::Gyro(data));
             }
+        }
+
+        log::trace!("Got IIO IMU events: {:?}", events);
+
+        if let Some(remaining) = self.poll_interval.checked_sub(start.elapsed()) {
+            thread::sleep(remaining);
         }
 
         Ok(events)
-    }
-
-    /// Polls all the channels from the accelerometer
-    fn poll_accel(&self) -> Result<Option<Event>, Box<dyn Error + Send + Sync>> {
-        if self.accel.is_empty() {
-            return Ok(None);
-        }
-
-        // Read from each accel channel
-        let mut accel_input = AxisData::default();
-        for (id, channel) in self.accel.iter() {
-            // Get the info for the axis and read the data
-            let Some(info) = self.accel_info.get(id) else {
-                continue;
-            };
-            let data = channel.attr_read_int("raw")?;
-
-            // processed_value = (raw + offset) * scale
-            let value = (data + info.offset) as f64 * info.scale;
-            if id.ends_with('x') {
-                accel_input.roll = value;
-            }
-            if id.ends_with('y') {
-                accel_input.pitch = value;
-            }
-            if id.ends_with('z') {
-                accel_input.yaw = value;
-            }
-        }
-        self.rotate_value(&mut accel_input);
-
-        Ok(Some(Event::Accelerometer(accel_input)))
-    }
-
-    /// Polls all the channels from the gyro
-    fn poll_gyro(&self) -> Result<Option<Event>, Box<dyn Error + Send + Sync>> {
-        if self.gyro.is_empty() {
-            return Ok(None);
-        }
-
-        let mut gyro_input = AxisData::default();
-        for (id, channel) in self.gyro.iter() {
-            // Get the info for the axis and read the data
-            let Some(info) = self.gyro_info.get(id) else {
-                continue;
-            };
-            let data = channel.attr_read_int("raw")?;
-
-            // processed_value = (raw + offset) * scale
-            let value = (data + info.offset) as f64 * info.scale;
-
-            if id.ends_with('x') {
-                gyro_input.roll = value;
-            }
-            if id.ends_with('y') {
-                gyro_input.pitch = value;
-            }
-            if id.ends_with('z') {
-                gyro_input.yaw = value;
-            }
-        }
-        self.rotate_value(&mut gyro_input);
-
-        Ok(Some(Event::Gyro(gyro_input)))
     }
 
     /// Rotate the given axis data according to the mount matrix. This is used
@@ -259,238 +196,4 @@ impl Driver {
         value.pitch = mxy * x + myy * y + mzy * z;
         value.yaw = mxz * x + myz * y + mzz * z;
     }
-}
-
-/// Returns all channels and channel information from the given device matching
-/// the given channel type.
-fn get_channels_with_type(
-    device: &Device,
-    channel_type: ChannelType,
-) -> (HashMap<String, Channel>, HashMap<String, AxisInfo>) {
-    let mut channels = HashMap::new();
-    let mut channel_info = HashMap::new();
-    device
-        .channels()
-        .filter(|channel| channel.channel_type() == channel_type)
-        .for_each(|channel| {
-            let Some(id) = channel.id() else {
-                log::warn!("Unable to get channel id for channel: {:?}", channel);
-                return;
-            };
-            log::debug!("Found channel: {id}");
-
-            // Get the offset of the axis
-            let offset = match channel.attr_read_int("offset") {
-                Ok(v) => v,
-                Err(e) => {
-                    log::debug!("Unable to read offset for channel {id}: {:?}", e);
-                    0
-                }
-            };
-
-            // Get the sample rate of the axis
-            let sample_rate = match channel.attr_read_float("sampling_frequency") {
-                Ok(v) => v,
-                Err(e) => {
-                    log::warn!("Unable to read sample rate for channel {id}: {:?}", e);
-                    4.0
-                }
-            };
-
-            let sample_rates_avail = match channel.attr_read_str("sampling_frequency_available") {
-                Ok(v) => {
-                    let mut all_scales = Vec::new();
-                    for val in v.split_whitespace() {
-                        // convert the string into f64
-                        all_scales.push(val.parse::<f64>().unwrap());
-                    }
-                    all_scales
-                }
-                Err(e) => {
-                    log::warn!(
-                        "Unable to read available sample rates for channel {id}: {:?}",
-                        e
-                    );
-                    vec![4.0]
-                }
-            };
-
-            // Get the scale of the axis to normalize values to meters per second or rads per
-            // second
-            let scale = match channel.attr_read_float("scale") {
-                Ok(v) => v,
-                Err(e) => {
-                    log::warn!("Unable to read scale for channel {id}: {:?}", e);
-                    1.0
-                }
-            };
-
-            let scales_avail = match channel.attr_read_str("scale_available") {
-                Ok(v) => {
-                    let mut all_scales = Vec::new();
-                    for val in v.split_whitespace() {
-                        // convert the string into f64
-                        all_scales.push(val.parse::<f64>().unwrap());
-                    }
-                    all_scales
-                }
-                Err(e) => {
-                    log::warn!("Unable to read available scales for channel {id}: {:?}", e);
-                    vec![1.0]
-                }
-            };
-
-            let info = AxisInfo {
-                offset,
-                sample_rate,
-                sample_rates_avail,
-                scale,
-                scales_avail,
-            };
-            channel_info.insert(id.clone(), info);
-            channels.insert(id, channel);
-        });
-
-    (channels, channel_info)
-}
-
-fn is_driver_loaded(driver_name: &str) -> io::Result<bool> {
-    let file = File::open("/proc/modules")?;
-    let reader = BufReader::new(file);
-
-    for line in reader.lines() {
-        let line = line?;
-        if line.starts_with(driver_name) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-/// Try to set a specific or default sampling rate. Returns Err if the
-/// requested rate is not in the hardware's available list.
-fn set_sample_rate_or_default(
-    device: &Device,
-    channels: &HashMap<String, Channel>,
-    channel_type: ChannelType,
-    target_rate: Option<f64>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let rate = target_rate.unwrap_or(DEFAULT_SAMPLE_RATE);
-    let avail = read_sample_rates_available(device, channels, &channel_type);
-
-    if !avail.is_empty() && !avail.contains(&rate) {
-        return Err(format!(
-            "Requested {rate} Hz not in available rates: {avail:?}"
-        )
-        .into());
-    }
-
-    write_sample_rate(device, channels, channel_type, rate)
-}
-
-/// Set sampling rate to the maximum reported by the hardware.
-/// Falls back to DEFAULT_SAMPLE_RATE if no available rates are reported.
-fn set_sample_rate_max(
-    device: &Device,
-    channels: &HashMap<String, Channel>,
-    channel_type: ChannelType,
-) {
-    let avail = read_sample_rates_available(device, channels, &channel_type);
-    let rate = if avail.is_empty() {
-        log::warn!(
-            "No available sample rates reported, using default {DEFAULT_SAMPLE_RATE} Hz"
-        );
-        DEFAULT_SAMPLE_RATE
-    } else {
-        let max = avail.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        log::info!("Using max available sample rate: {max} Hz");
-        max
-    };
-
-    if let Err(err) = write_sample_rate(device, channels, channel_type, rate) {
-        log::warn!("Failed to set max sample rate: {err}");
-    }
-}
-
-/// Write a sampling rate to the device. Tries per-channel first (BMI-style),
-/// then falls back to device-level attribute (HID Sensor Hub).
-fn write_sample_rate(
-    device: &Device,
-    channels: &HashMap<String, Channel>,
-    channel_type: ChannelType,
-    rate: f64,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    for (id, channel) in channels.iter() {
-        match channel.attr_write_float("sampling_frequency", rate) {
-            Ok(_) => {
-                match channel.attr_read_float("sampling_frequency") {
-                    Ok(actual) => {
-                        log::info!("Set sampling_frequency to {actual} Hz via channel {id}")
-                    }
-                    Err(err) => log::warn!(
-                        "Set sampling_frequency for {id} but read-back failed: {err}, assuming {rate} Hz"
-                    ),
-                }
-                return Ok(());
-            }
-            Err(err) => {
-                log::warn!(
-                    "Per-channel sampling_frequency write failed for {id}: {err}"
-                );
-            }
-        }
-    }
-
-    let attr = match channel_type {
-        ChannelType::Accel => "in_accel_sampling_frequency",
-        ChannelType::AnglVel => "in_anglvel_sampling_frequency",
-        _ => return Err("Unknown channel type".into()),
-    };
-
-    device.attr_write_float(attr, rate)?;
-    match device.attr_read_float(attr) {
-        Ok(actual) => log::info!("Set device-level {attr} to {actual} Hz"),
-        Err(err) => log::warn!(
-            "Set {attr} but read-back failed: {err}, assuming {rate} Hz"
-        ),
-    }
-    Ok(())
-}
-
-/// Read the list of supported sampling rates from the hardware.
-/// Tries per-channel attribute first, then device-level global attribute.
-fn read_sample_rates_available(
-    device: &Device,
-    channels: &HashMap<String, Channel>,
-    channel_type: &ChannelType,
-) -> Vec<f64> {
-    for channel in channels.values() {
-        if let Ok(val) = channel.attr_read_str("sampling_frequency_available") {
-            let rates: Vec<f64> = val
-                .split_whitespace()
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            if !rates.is_empty() {
-                return rates;
-            }
-        }
-    }
-
-    let attr = match channel_type {
-        ChannelType::Accel => "in_accel_sampling_frequency_available",
-        ChannelType::AnglVel => "in_anglvel_sampling_frequency_available",
-        _ => return vec![],
-    };
-
-    if let Ok(val) = device.attr_read_str(attr) {
-        let rates: Vec<f64> = val
-            .split_whitespace()
-            .filter_map(|s| s.parse().ok())
-            .collect();
-        if !rates.is_empty() {
-            return rates;
-        }
-    }
-
-    vec![]
 }

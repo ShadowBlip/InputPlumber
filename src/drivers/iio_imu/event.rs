@@ -10,7 +10,7 @@ pub enum Event {
 }
 
 /// AxisData represents the state of the accelerometer or gyro (x, y, z) values
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct AxisData {
     pub roll: f64,
     pub pitch: f64,
