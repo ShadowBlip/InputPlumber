@@ -4,7 +4,7 @@ use crate::{
     config,
     drivers::iio_imu::{self, driver::Driver, info::MountMatrix},
     input::{
-        capability::{Capability, Gamepad},
+        capability::{Capability, Source},
         event::{native::NativeEvent, value::InputValue},
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -100,7 +100,7 @@ fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {
 fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
     match event {
         iio_imu::event::Event::Accelerometer(data) => {
-            let cap = Capability::Gamepad(Gamepad::Accelerometer);
+            let cap = Capability::Accelerometer(Source::Center);
             let value = InputValue::Vector3 {
                 x: Some(data.roll),
                 y: Some(data.pitch),
@@ -114,7 +114,7 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
             // Adjusting the scale will increase the granularity of the motion by slowing
             // incrementing closer to 2:1 motion. From testing this is the highest scale we can
             // apply before noise is amplified to the point the gyro cannot calibrate.
-            let cap = Capability::Gamepad(Gamepad::Gyro);
+            let cap = Capability::Gyroscope(Source::Center);
             let value = InputValue::Vector3 {
                 x: Some(data.roll * (180.0 / PI) * 12.0),
                 y: Some(data.pitch * (180.0 / PI) * 12.0),
@@ -127,6 +127,6 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
 
 /// List of all capabilities that the driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
-    Capability::Gamepad(Gamepad::Gyro),
+    Capability::Accelerometer(Source::Center),
+    Capability::Gyroscope(Source::Center),
 ];

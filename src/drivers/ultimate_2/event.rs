@@ -86,9 +86,9 @@ pub enum TriggerEvent {
 /// [InertialInput] represents the state of the IMU (x, y, z) values
 #[derive(Clone, Debug)]
 pub struct InertialInput {
-    pub x: i16,
-    pub y: i16,
-    pub z: i16,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
 /// [InertialEvent] has data from the IMU

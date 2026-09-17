@@ -22,17 +22,20 @@ use crate::{
             STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
         report_descriptor::CONTROLLER_DESCRIPTOR,
-        ProductId, VID,
+        ProductId, DECK_MPS2_TO_ACCEL_RAW, DECK_RAD_S_TO_GYRO_RAW, VID,
     },
     input::{
         capability::{
-            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
-            Touchpad,
+            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source, Touch,
+            TouchButton, Touchpad,
         },
         composite_device::client::CompositeDeviceClient,
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
-            value::{denormalize_signed_value_i16, denormalize_unsigned_value_u16, InputValue},
+            value::{
+                denormalize_accel_value_i16, denormalize_gyro_value_i16,
+                denormalize_signed_value_i16, denormalize_unsigned_value_u16, InputValue,
+            },
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
@@ -283,32 +286,6 @@ impl SteamDeckUhidDevice {
                         }
                     }
                 },
-                Gamepad::Accelerometer => {
-                    if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            self.state.accel_x = Integer::from_primitive(x as i16);
-                        }
-                        if let Some(y) = y {
-                            self.state.accel_y = Integer::from_primitive(y as i16);
-                        }
-                        if let Some(z) = z {
-                            self.state.accel_z = Integer::from_primitive(z as i16);
-                        }
-                    }
-                }
-                Gamepad::Gyro => {
-                    if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            self.state.pitch = Integer::from_primitive(x as i16);
-                        }
-                        if let Some(y) = y {
-                            self.state.yaw = Integer::from_primitive(y as i16);
-                        }
-                        if let Some(z) = z {
-                            self.state.roll = Integer::from_primitive(z as i16);
-                        }
-                    }
-                }
                 _ => (),
             },
             Capability::Touchpad(touch) => match touch {
@@ -377,26 +354,44 @@ impl SteamDeckUhidDevice {
             Capability::Gyroscope(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        self.state.pitch = Integer::from_primitive(x as i16);
+                        self.state.pitch = Integer::from_primitive(denormalize_gyro_value_i16(
+                            x,
+                            DECK_RAD_S_TO_GYRO_RAW,
+                        ));
                     }
                     if let Some(y) = y {
-                        self.state.yaw = Integer::from_primitive(y as i16);
+                        self.state.yaw = Integer::from_primitive(denormalize_gyro_value_i16(
+                            y,
+                            DECK_RAD_S_TO_GYRO_RAW,
+                        ));
                     }
                     if let Some(z) = z {
-                        self.state.roll = Integer::from_primitive(z as i16);
+                        self.state.roll = Integer::from_primitive(denormalize_gyro_value_i16(
+                            z,
+                            DECK_RAD_S_TO_GYRO_RAW,
+                        ));
                     }
                 }
             }
             Capability::Accelerometer(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        self.state.accel_x = Integer::from_primitive(x as i16);
+                        self.state.accel_x = Integer::from_primitive(denormalize_accel_value_i16(
+                            x,
+                            DECK_MPS2_TO_ACCEL_RAW,
+                        ));
                     }
                     if let Some(y) = y {
-                        self.state.accel_y = Integer::from_primitive(y as i16);
+                        self.state.accel_y = Integer::from_primitive(denormalize_accel_value_i16(
+                            y,
+                            DECK_MPS2_TO_ACCEL_RAW,
+                        ));
                     }
                     if let Some(z) = z {
-                        self.state.accel_z = Integer::from_primitive(z as i16);
+                        self.state.accel_z = Integer::from_primitive(denormalize_accel_value_i16(
+                            z,
+                            DECK_MPS2_TO_ACCEL_RAW,
+                        ));
                     }
                 }
             }
@@ -732,7 +727,7 @@ impl TargetInputDevice for SteamDeckUhidDevice {
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(vec![
-            Capability::Gamepad(Gamepad::Accelerometer),
+            Capability::Accelerometer(Source::Center),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -760,13 +755,13 @@ impl TargetInputDevice for SteamDeckUhidDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-            Capability::Gamepad(Gamepad::Gyro),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftStickForce)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTouchpadForce)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightStickForce)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+            Capability::Gyroscope(Source::Center),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Touch))),
             Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),

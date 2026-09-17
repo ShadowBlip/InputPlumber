@@ -8,7 +8,8 @@ use crate::{
     drivers::ultimate_2::{
         event::{InertialEvent, InertialInput},
         hid_report::{DPadDirection, PackedInputDataReport, PackedRumbleOutputReport},
-        PID, REPORT_ID_INPUT, REPORT_ID_RUMBLE, VID,
+        PID, REPORT_ID_INPUT, REPORT_ID_RUMBLE, ULTIMATE_2_ACCEL_RAW_TO_MPS2,
+        ULTIMATE_2_GYRO_RAW_TO_RAD_S, VID,
     },
     udev::device::UdevDevice,
 };
@@ -323,9 +324,9 @@ impl Driver {
         {
             events.push(Event::Inertia(InertialEvent::Accelerometer(
                 InertialInput {
-                    x: i16::from(state.accel_x),
-                    y: i16::from(state.accel_y),
-                    z: i16::from(state.accel_z),
+                    x: i16::from(state.accel_x) as f64 * ULTIMATE_2_ACCEL_RAW_TO_MPS2,
+                    y: i16::from(state.accel_y) as f64 * ULTIMATE_2_ACCEL_RAW_TO_MPS2,
+                    z: i16::from(state.accel_z) as f64 * ULTIMATE_2_ACCEL_RAW_TO_MPS2,
                 },
             )))
         };
@@ -335,9 +336,9 @@ impl Driver {
             || state.gyro_z != old_state.gyro_z
         {
             events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-                x: i16::from(state.gyro_x),
-                y: i16::from(state.gyro_y),
-                z: i16::from(state.gyro_z),
+                x: i16::from(state.gyro_x) as f64 * ULTIMATE_2_GYRO_RAW_TO_RAD_S,
+                y: i16::from(state.gyro_y) as f64 * ULTIMATE_2_GYRO_RAW_TO_RAD_S,
+                z: i16::from(state.gyro_z) as f64 * ULTIMATE_2_GYRO_RAW_TO_RAD_S,
             })))
         };
 

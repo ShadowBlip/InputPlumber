@@ -11,6 +11,7 @@ use super::{
         JoystickInput, TriggerEvent, TriggerInput,
     },
     hid_report::PackedInputDataReport,
+    VADER_ACCEL_RAW_TO_MPS2, VADER_GYRO_XY_RAW_TO_RAD_S, VADER_GYRO_Z_RAW_TO_RAD_S,
 };
 
 // Report ID
@@ -284,16 +285,16 @@ impl Driver {
         // Accelerometer events
         events.push(Event::Inertia(InertialEvent::Accelerometer(
             InertialInput {
-                x: -state.accel_x.to_primitive(),
-                y: state.accel_y.to_primitive(),
-                z: state.accel_z.to_primitive(),
+                x: -state.accel_x.to_primitive() as f64 * VADER_ACCEL_RAW_TO_MPS2,
+                y: state.accel_y.to_primitive() as f64 * VADER_ACCEL_RAW_TO_MPS2,
+                z: state.accel_z.to_primitive() as f64 * VADER_ACCEL_RAW_TO_MPS2,
             },
         )));
         // Gyro events. They need to be rotated in order for them to be read properly
-        events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-            x: -(state.gyro_x.to_primitive() as i32 * 1143239 / i16::MAX as i32) as i16,
-            y: -(state.get_y() as i32 * 1143239 / i16::MAX as i32) as i16,
-            z: -(state.gyro_z.to_primitive() as i32 * 17873 / i16::MAX as i32) as i16,
+        events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
+            x: -(state.gyro_x.to_primitive() as f64 * VADER_GYRO_XY_RAW_TO_RAD_S),
+            y: -(state.get_y() as f64 * VADER_GYRO_XY_RAW_TO_RAD_S),
+            z: -(state.gyro_z.to_primitive() as f64 * VADER_GYRO_Z_RAW_TO_RAD_S),
         })));
         events
     }
