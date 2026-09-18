@@ -59,9 +59,10 @@ source_devices:
     iio:
       name: "{i2c-BMI0260:00,i2c-BOSC0260:00,bmi260}"
       mount_matrix:
+        # TODO: Verify on actual hardware
         x: [0, 1, 0]
-        y: [1, 0, 0]
-        z: [0, 0, -1]
+        y: [0, 0, 1]
+        z: [-1, 0, 0]
 
   # External / docked controllers: joined dock supplies power and 2.4 GHz to the
   # handheld. The gamepad entry is the receiver's XInput-style device; the fe02

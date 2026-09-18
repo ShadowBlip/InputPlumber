@@ -49,10 +49,30 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyD
+        - Keyboard:KeyDelete
+        - Keyboard:KeyG
+        - Keyboard:KeyLeftAlt
+        - Keyboard:KeyLeftCtrl
+        - Keyboard:KeyLeftMeta
+        - Keyboard:KeyO
+        - Keyboard:KeyRightAlt
+        - Keyboard:KeyRightCtrl
+        - Keyboard:KeySysrq
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
 
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
+      mount_matrix:
+        x: [0, -1, 0]
+        y: [0, 0, 1]
+        z: [-1, 0, 0]
 
 # Optional configuration for the composite device
 options:
