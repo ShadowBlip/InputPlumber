@@ -85,7 +85,6 @@
     InputPlumber requires the following system dependencies:
     
     - `libevdev`
-    - `libiio`
     - `rust`
     
     To install the package, first visit the [release page](https://github.com/ShadowBlip/InputPlumber/releases) and download

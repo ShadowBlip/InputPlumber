@@ -3,7 +3,12 @@ use std::{error::Error, ffi::CString};
 use hidapi::HidDevice;
 use packed_struct::{types::SizedInteger, PackedStruct};
 
-use crate::{drivers::horipad_steam::hid_report::Direction, udev::device::UdevDevice};
+use crate::{
+    drivers::horipad_steam::{
+        hid_report::Direction, HORIPAD_ACCEL_RAW_TO_MPS2, HORIPAD_GYRO_RAW_TO_RAD_S,
+    },
+    udev::device::UdevDevice,
+};
 
 use super::{
     event::{
@@ -273,15 +278,15 @@ impl Driver {
         // Accelerometer events
         events.push(Event::Inertia(InertialEvent::Accelerometer(
             InertialInput {
-                x: -state.accel_x.to_primitive(),
-                y: state.accel_y.to_primitive(),
-                z: -state.accel_z.to_primitive(),
+                x: -state.accel_x.to_primitive() as f64 * HORIPAD_ACCEL_RAW_TO_MPS2,
+                y: state.accel_y.to_primitive() as f64 * HORIPAD_ACCEL_RAW_TO_MPS2,
+                z: -state.accel_z.to_primitive() as f64 * HORIPAD_ACCEL_RAW_TO_MPS2,
             },
         )));
-        events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-            x: -state.pitch.to_primitive(),
-            y: state.yaw.to_primitive(),
-            z: -state.roll.to_primitive(),
+        events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
+            x: -state.pitch.to_primitive() as f64 * HORIPAD_GYRO_RAW_TO_RAD_S,
+            y: state.yaw.to_primitive() as f64 * HORIPAD_GYRO_RAW_TO_RAD_S,
+            z: -state.roll.to_primitive() as f64 * HORIPAD_GYRO_RAW_TO_RAD_S,
         })));
 
         log::trace!("Got events: {events:?}");

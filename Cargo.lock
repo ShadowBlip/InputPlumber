@@ -1014,17 +1014,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "industrial-io"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "348ab060d6e63ff76337f57d7646fc3bd38d7abc0ac8c98b7acedecf2262e90f"
-dependencies = [
- "libiio-sys",
- "nix 0.29.0",
- "thiserror 2.0.17",
-]
-
-[[package]]
 name = "inotify"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1057,7 +1046,6 @@ dependencies = [
  "futures",
  "glob-match",
  "hidapi",
- "industrial-io",
  "inotify",
  "log",
  "mio",
@@ -1225,12 +1213,6 @@ name = "libc"
 version = "0.2.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37c93d8daa9d8a012fd8ab92f088405fb202ea0b6ab73ee2482ae66af4f42091"
-
-[[package]]
-name = "libiio-sys"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f643b99b21452dd9bb6cb5a517cfa8342e90c6e9427a2b6274d5331dfb9ad98"
 
 [[package]]
 name = "libudev"

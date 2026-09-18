@@ -1,4 +1,4 @@
-use std::{error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, time::Duration};
 
 use futures::StreamExt;
 use packed_struct::PackedStruct;
@@ -39,6 +39,27 @@ use crate::{
 
 use super::MenuWidget;
 
+/// Strips one capability-family prefix from a capability's debug name to
+/// get a display label (e.g. "GamepadButtonKeyboard" -> "Keyboard").
+fn capability_label(capability: InputCapability) -> String {
+    let debug_label = format!("{capability:?}");
+    for prefix in [
+        "GamepadButton",
+        "GamepadAxis",
+        "GamepadTrigger",
+        "Gamepad",
+        "Touchpad",
+        "Touchscreen",
+        "Mouse",
+        "Keyboard",
+    ] {
+        if let Some(stripped) = debug_label.strip_prefix(prefix) {
+            return stripped.to_string();
+        }
+    }
+    debug_label
+}
+
 /// Menu for testing an input device
 #[derive(Debug)]
 pub struct DeviceTestMenu {
@@ -52,6 +73,7 @@ pub struct DeviceTestMenu {
     profile_path: Option<String>,
     target_device_types: Vec<TargetDeviceTypeId>,
     intercept_mode: u32,
+    filtered_events: HashMap<String, Vec<String>>,
     ui_buttons: Vec<ButtonGauge>,
     ui_triggers: Vec<TriggerGauge>,
     ui_axes: Vec<AxisGauge>,
@@ -100,6 +122,11 @@ impl DeviceTestMenu {
 
         // Save the current intercept mode so it can be restored
         let intercept_mode = device.intercept_mode().await?;
+
+        // Save the current event filters so they can be restored, then clear
+        // them so every source's raw capabilities are visible during testing
+        let filtered_events = device.filtered_events().await?;
+        device.set_filtered_events(HashMap::new()).await?;
 
         // Add the debug target device if it does not exist
         if !target_device_types.iter().any(|t| t.as_str() == "debug") {
@@ -153,6 +180,7 @@ impl DeviceTestMenu {
             capability_report: None,
             target_device_types,
             intercept_mode,
+            filtered_events,
             ui_buttons: Default::default(),
             ui_triggers: Default::default(),
             ui_axes: Default::default(),
@@ -170,6 +198,7 @@ impl DeviceTestMenu {
         let intercept_mode = self.intercept_mode;
         let profile = self.profile.clone();
         let profile_path = self.profile_path.clone();
+        let filtered_events = self.filtered_events.clone();
         tokio::task::spawn(async move {
             // Create a reference to the composite device
             let device = CompositeDeviceInterfaceProxy::builder(&conn)
@@ -196,6 +225,9 @@ impl DeviceTestMenu {
 
             // Restore the intercept mode
             let _ = device.set_intercept_mode(intercept_mode).await;
+
+            // Restore the event filters
+            let _ = device.set_filtered_events(filtered_events).await;
         });
 
         // Wait a beat for the target devices to be restored
@@ -362,11 +394,8 @@ impl DeviceTestMenu {
         let inside_block = block.inner(area);
         block.render(area, buf);
 
-        // Calculate the number of rows/columns based on the number of
-        // ui elements.
-        let (columns, rows) = calculate_rows_columns(self.ui_gyro.len(), 2.0, 1.0);
-
-        let cells = create_grid(inside_block, rows, columns);
+        // Gyro has full panel width, so keep every gauge in a single row.
+        let cells = create_grid(inside_block, 1, self.ui_gyro.len() as u16);
 
         // Render each gauge
         for (widget, area) in self.ui_gyro.iter().zip(cells.iter()) {
@@ -439,29 +468,20 @@ impl MenuWidget for DeviceTestMenu {
             };
 
             for cap in capability_report.get_capabilities() {
-                let label = format!("{:?}", cap.capability);
-                let label = label
-                    .trim_start_matches("GamepadButton")
-                    .trim_start_matches("GamepadAxis")
-                    .trim_start_matches("GamepadTrigger")
-                    .trim_start_matches("Gamepad")
-                    .trim_start_matches("Touchpad")
-                    .trim_start_matches("Touchscreen")
-                    .trim_start_matches("Mouse")
-                    .trim_start_matches("Keyboard");
+                let label = capability_label(cap.capability);
 
                 match cap.value_type {
                     ValueType::None => (),
                     ValueType::Bool => {
-                        let button = ButtonGauge::new(cap.capability, label);
+                        let button = ButtonGauge::new(cap.capability, &label);
                         self.ui_buttons.push(button);
                     }
                     ValueType::UInt8 => {
-                        let trigger = TriggerGauge::new(cap.capability, label);
+                        let trigger = TriggerGauge::new(cap.capability, &label);
                         self.ui_triggers.push(trigger);
                     }
                     ValueType::UInt16 => {
-                        let trigger = TriggerGauge::new(cap.capability, label);
+                        let trigger = TriggerGauge::new(cap.capability, &label);
                         self.ui_triggers.push(trigger);
                     }
                     ValueType::UInt32 => (),
@@ -474,12 +494,12 @@ impl MenuWidget for DeviceTestMenu {
                     ValueType::UInt16Vector2 => match cap.capability {
                         InputCapability::GamepadAxisLeftStick
                         | InputCapability::GamepadAxisRightStick => {
-                            let gauge = AxisGauge::new(cap.capability, label);
+                            let gauge = AxisGauge::new(cap.capability, &label);
                             self.ui_axes.push(gauge);
                         }
                         // Assume touch for everything else
                         _ => {
-                            let gauge = TouchGauge::new(cap.capability, label);
+                            let gauge = TouchGauge::new(cap.capability, &label);
                             self.ui_touch.push(gauge);
                         }
                     },
@@ -495,13 +515,13 @@ impl MenuWidget for DeviceTestMenu {
                     ValueType::UInt64Vector3 => (),
                     ValueType::Int8Vector3 => (),
                     ValueType::Int16Vector3 => {
-                        let gauge = GyroGauge::new(cap.capability, label);
+                        let gauge = GyroGauge::new(cap.capability, &label);
                         self.ui_gyro.push(gauge);
                     }
                     ValueType::Int32Vector3 => (),
                     ValueType::Int64Vector3 => (),
                     ValueType::Touch => {
-                        let gauge = TouchGauge::new(cap.capability, label);
+                        let gauge = TouchGauge::new(cap.capability, &label);
                         self.ui_touch.push(gauge);
                     }
                 }
@@ -546,38 +566,29 @@ impl MenuWidget for DeviceTestMenu {
         // Update the interface with the values
         let capabilities = capability_report.get_capabilities();
         for (cap, value) in capabilities.iter().zip(values.iter()) {
-            let label = format!("{:?}", cap.capability);
-            let label = label
-                .trim_start_matches("GamepadButton")
-                .trim_start_matches("GamepadAxis")
-                .trim_start_matches("GamepadTrigger")
-                .trim_start_matches("Gamepad")
-                .trim_start_matches("Touchpad")
-                .trim_start_matches("Touchscreen")
-                .trim_start_matches("Mouse")
-                .trim_start_matches("Keyboard");
+            let label = capability_label(cap.capability);
 
             match value {
                 Value::None => (),
                 Value::Bool(value) => {
-                    let mut button = ButtonGauge::new(cap.capability, label);
+                    let mut button = ButtonGauge::new(cap.capability, &label);
                     button.set_value(value.value);
                     self.ui_buttons.push(button);
                 }
                 Value::UInt8(value) => {
-                    let mut trigger = TriggerGauge::new(cap.capability, label);
+                    let mut trigger = TriggerGauge::new(cap.capability, &label);
                     trigger.set_value(value.value as f64 / u8::MAX as f64);
                     self.ui_triggers.push(trigger);
                 }
                 Value::UInt16(value) => {
-                    let mut trigger = TriggerGauge::new(cap.capability, label);
+                    let mut trigger = TriggerGauge::new(cap.capability, &label);
                     trigger.set_value(value.value as f64 / u16::MAX as f64);
                     self.ui_triggers.push(trigger);
                 }
                 Value::UInt16Vector2(value) => match cap.capability {
                     InputCapability::GamepadAxisLeftStick
                     | InputCapability::GamepadAxisRightStick => {
-                        let mut gauge = AxisGauge::new(cap.capability, label);
+                        let mut gauge = AxisGauge::new(cap.capability, &label);
                         let (x, y) = {
                             let x = value.x as f64 / u16::MAX as f64;
                             // Convert from 0.0 - 1.0 to -1.0 - 1.0
@@ -593,7 +604,7 @@ impl MenuWidget for DeviceTestMenu {
                     }
                     // Assume touch for everything else
                     _ => {
-                        let mut gauge = TouchGauge::new(cap.capability, label);
+                        let mut gauge = TouchGauge::new(cap.capability, &label);
                         let (x, y) = {
                             let x = value.x as f64 / u16::MAX as f64;
                             let y = value.y as f64 / u16::MAX as f64;
@@ -604,7 +615,7 @@ impl MenuWidget for DeviceTestMenu {
                     }
                 },
                 Value::Int16Vector3(value) => {
-                    let mut gauge = GyroGauge::new(cap.capability, label);
+                    let mut gauge = GyroGauge::new(cap.capability, &label);
                     //let x = value.x / i16::MAX;
                     //let y = value.y / i16::MAX;
                     //let z = value.z / i16::MAX;
@@ -613,7 +624,7 @@ impl MenuWidget for DeviceTestMenu {
                     self.ui_gyro.push(gauge);
                 }
                 Value::Touch(value) => {
-                    let mut gauge = TouchGauge::new(cap.capability, label);
+                    let mut gauge = TouchGauge::new(cap.capability, &label);
                     let (x, y) = {
                         let x = value.x as f64 / u16::MAX as f64;
                         let y = value.y as f64 / u16::MAX as f64;
@@ -666,29 +677,27 @@ impl Widget for &DeviceTestMenu {
         self.render_buttons(top_layout, buf);
 
         // Bottom layout
-        // Split into 2 parts
+        // Split vertically: top row (axes/triggers/touch) and gyro at full width
         let bottom_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(vec![Constraint::Percentage(65), Constraint::Percentage(35)])
-            .split(outer_layout[1]);
-
-        // Bottom-left
-        // Split vertically
-        let bottom_left_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(bottom_layout[0]);
-        let axes_triggers_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(bottom_left_layout[0]);
-        self.render_axes(axes_triggers_layout[0], buf);
-        self.render_triggers(axes_triggers_layout[1], buf);
-        self.render_gyro(bottom_left_layout[1], buf);
+            .split(outer_layout[1]);
 
-        // Bottom-right
-        let bottom_right_layout = bottom_layout[1];
-        self.render_touch(bottom_right_layout, buf);
+        // Top row: axes, triggers, and touch share the same height
+        let top_row_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+                Constraint::Percentage(34),
+            ])
+            .split(bottom_layout[0]);
+        self.render_axes(top_row_layout[0], buf);
+        self.render_triggers(top_row_layout[1], buf);
+        self.render_touch(top_row_layout[2], buf);
+
+        // Gyro at full width
+        self.render_gyro(bottom_layout[1], buf);
     }
 }
 
@@ -722,25 +731,15 @@ fn create_grid(area: Rect, rows: u16, columns: u16) -> Vec<Rect> {
 /// two floats that describe the aspect ratio; i.e. (4.0, 3.0) would be a 4:3
 /// aspect ratio. Returns the width and height of the grid: (w, h).
 fn calculate_rows_columns(element_count: usize, width_ratio: f64, height_ratio: f64) -> (u16, u16) {
-    // Calculate the number of rows and columns as if we were going to fit them
-    // into a square grid.
-    let rows_columns = (element_count as f64).sqrt().ceil();
-
-    // Scale the width/height of the square grid based on the aspect ratio.
-    let mut width = (rows_columns * (width_ratio / height_ratio))
-        .ceil()
-        .max(1.0);
-    let mut height = (rows_columns * (height_ratio / width_ratio))
-        .ceil()
-        .max(1.0);
-
-    // Fit the exact number of elements, if possible
-    if width == 1.0 {
-        height = element_count as f64;
-    }
-    if height == 1.0 {
-        width = element_count as f64;
+    if element_count == 0 {
+        return (1, 1);
     }
 
-    (width as u16, height as u16)
+    // Pick a row count that keeps the grid close to the target aspect ratio,
+    // then use just enough columns to fit every element with minimal waste.
+    let target_ratio = width_ratio / height_ratio;
+    let rows = ((element_count as f64 / target_ratio).sqrt().round() as usize).max(1);
+    let columns = element_count.div_ceil(rows);
+
+    (columns as u16, rows as u16)
 }

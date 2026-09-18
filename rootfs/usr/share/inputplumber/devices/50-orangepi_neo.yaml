@@ -61,10 +61,9 @@ source_devices:
     iio:
       name: "{i2c-BOSC0260:00,i2c-BMI0260:00,bmi260}"
       mount_matrix:
-        # TODO: Reverify on actual hardware
         x: [1, 0, 0]
-        y: [0, -1, 0]
-        z: [0, 0, -1]
+        y: [0, 0, 1]
+        z: [0, -1, 0]
 
 # Optional configuration for the composite device
 options:

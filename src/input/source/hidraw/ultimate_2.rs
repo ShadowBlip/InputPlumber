@@ -352,17 +352,17 @@ fn translate_event(event: event::Event) -> NativeEvent {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
                 Capability::Accelerometer(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(value.x),
+                    y: Some(value.y),
+                    z: Some(value.z),
                 },
             ),
             event::InertialEvent::Gyro(value) => NativeEvent::new(
                 Capability::Gyroscope(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(value.x),
+                    y: Some(value.y),
+                    z: Some(value.z),
                 },
             ),
         },

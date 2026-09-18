@@ -28,11 +28,10 @@ assets = [
 auto-req = "no"
 
 [package.metadata.generate-rpm.requires]
-libiio = "*"
 libevdev = "*"
 
-# debian package needs pkg-config, libclang-dev, libiio-dev and libudev-dev to build
-# while runtime dependencies are libiio0 and libudev1
+# debian package needs pkg-config, libclang-dev, and libudev-dev to build
+# while runtime dependencies are libudev1
 # libevdev2 and libevdev-dev are listed but not needed
 [package.metadata.deb]
 license-file = ["LICENSE", "4"]
@@ -63,6 +62,11 @@ assets = [
   [
     "rootfs/usr/share/polkit-1/rules.d/org.shadowblip.InputPlumber.rules",
     "usr/share/polkit-1/rules.d/org.shadowblip.InputPlumber.rules",
+    "644",
+  ],
+  [
+    "rootfs/usr/lib/modules-load.d/*",
+    "usr/lib/modules-load.d/",
     "644",
   ],
   [
@@ -116,7 +120,6 @@ evdev = { git = "https://github.com/emberian/evdev.git", features = [
 futures = "0.3.31"
 glob-match = "0.2.1"
 hidapi = "2.6.4"
-industrial-io = "0.6.1"
 #evdev = { version = "0.12.1", features = ["tokio"] }
 inotify = "0.11.0"
 # Omit trace logging for release builds

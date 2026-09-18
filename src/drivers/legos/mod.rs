@@ -1,3 +1,5 @@
+use std::f64::consts::PI;
+
 pub mod event;
 pub mod hid_report;
 pub mod imu_driver;
@@ -20,7 +22,9 @@ const TOUCH_PACKET_SIZE: usize = 10;
 const XINPUT_PACKET_SIZE: usize = 32;
 
 // Input report axis ranges
-pub const GYRO_SCALE: i16 = 2;
+pub const ACCEL_RAW_TO_MPS2: f64 = 0.0980665;
+// Raw gyro counts are in units of 0.1 degrees/second.
+pub const GYRO_RAW_TO_RAD_S: f64 = 0.1 * (PI / 180.0);
 pub const PAD_FORCE_MAX: f64 = 127.0;
 pub const PAD_FORCE_NORMAL: u8 = 32; /* Simulated average pressure */
 pub const PAD_MOTION_MAX: f64 = 400.0;

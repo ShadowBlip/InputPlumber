@@ -39,9 +39,10 @@ source_devices:
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
       mount_matrix:
+        # TODO: Verify on actual hardware
         x: [0, -1, 0]
-        y: [-1, 0, 0]
-        z: [0, 0, -1]
+        y: [0, 0, 1]
+        z: [-1, 0, 0]
   - group: led
     udev: # Legacy
       sys_name: multicolor:chassis
