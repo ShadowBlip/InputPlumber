@@ -5,7 +5,10 @@ use std::{error::Error, fmt::Display};
 
 use packed_struct::prelude::*;
 
-use super::driver::*;
+use super::{
+    DS5_CALIB_ACCEL_PLUS, DS5_CALIB_GYRO_PLUS, DS5_CALIB_GYRO_SPEED, FEATURE_REPORT_CALIBRATION,
+    INPUT_REPORT_BT, INPUT_REPORT_BT_SIZE, INPUT_REPORT_USB, INPUT_REPORT_USB_SIZE,
+};
 
 /// DualSense input report for USB and Bluetooth
 #[derive(Debug, Copy, Clone)]
@@ -792,6 +795,98 @@ impl Default for UsbPackedOutputReportShort {
         Self {
             report_id: 0x02,
             state: Default::default(),
+        }
+    }
+}
+
+/// DualSense calibration feature report (0x05). A calibration-aware client
+/// (Linux `hid-playstation`, SDL) derives its raw-to-physical scale from this
+/// report instead of a fixed constant. See dualsense_get_calibration_data() in
+/// https://github.com/torvalds/linux/blob/master/drivers/hid/hid-playstation.c
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "41")]
+pub struct CalibrationReport {
+    // byte 0
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+
+    // byte 1-6
+    #[packed_field(bytes = "1..=2", endian = "lsb")]
+    pub gyro_pitch_bias: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "3..=4", endian = "lsb")]
+    pub gyro_yaw_bias: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "5..=6", endian = "lsb")]
+    pub gyro_roll_bias: Integer<i16, packed_bits::Bits<16>>,
+
+    // byte 7-18
+    #[packed_field(bytes = "7..=8", endian = "lsb")]
+    pub gyro_pitch_plus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "9..=10", endian = "lsb")]
+    pub gyro_pitch_minus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "11..=12", endian = "lsb")]
+    pub gyro_yaw_plus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "13..=14", endian = "lsb")]
+    pub gyro_yaw_minus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "15..=16", endian = "lsb")]
+    pub gyro_roll_plus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "17..=18", endian = "lsb")]
+    pub gyro_roll_minus: Integer<i16, packed_bits::Bits<16>>,
+
+    // byte 19-22
+    #[packed_field(bytes = "19..=20", endian = "lsb")]
+    pub gyro_speed_plus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "21..=22", endian = "lsb")]
+    pub gyro_speed_minus: Integer<i16, packed_bits::Bits<16>>,
+
+    // byte 23-34
+    #[packed_field(bytes = "23..=24", endian = "lsb")]
+    pub acc_x_plus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "25..=26", endian = "lsb")]
+    pub acc_x_minus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "27..=28", endian = "lsb")]
+    pub acc_y_plus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "29..=30", endian = "lsb")]
+    pub acc_y_minus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "31..=32", endian = "lsb")]
+    pub acc_z_plus: Integer<i16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "33..=34", endian = "lsb")]
+    pub acc_z_minus: Integer<i16, packed_bits::Bits<16>>,
+
+    // byte 35-40
+    #[packed_field(bytes = "35..=40")]
+    pub _reserved: [u8; 6],
+}
+
+impl Default for CalibrationReport {
+    /// The identity calibration this crate's emulated DualSense target
+    /// reports.
+    fn default() -> Self {
+        let gyro_plus = Integer::from_primitive(DS5_CALIB_GYRO_PLUS);
+        let gyro_minus = Integer::from_primitive(-DS5_CALIB_GYRO_PLUS);
+        let gyro_speed = Integer::from_primitive(DS5_CALIB_GYRO_SPEED);
+        let acc_plus = Integer::from_primitive(DS5_CALIB_ACCEL_PLUS);
+        let acc_minus = Integer::from_primitive(-DS5_CALIB_ACCEL_PLUS);
+        let zero = Integer::from_primitive(0);
+        Self {
+            report_id: FEATURE_REPORT_CALIBRATION,
+            gyro_pitch_bias: zero,
+            gyro_yaw_bias: zero,
+            gyro_roll_bias: zero,
+            gyro_pitch_plus: gyro_plus,
+            gyro_pitch_minus: gyro_minus,
+            gyro_yaw_plus: gyro_plus,
+            gyro_yaw_minus: gyro_minus,
+            gyro_roll_plus: gyro_plus,
+            gyro_roll_minus: gyro_minus,
+            gyro_speed_plus: gyro_speed,
+            gyro_speed_minus: gyro_speed,
+            acc_x_plus: acc_plus,
+            acc_x_minus: acc_minus,
+            acc_y_plus: acc_plus,
+            acc_y_minus: acc_minus,
+            acc_z_plus: acc_plus,
+            acc_z_minus: acc_minus,
+            _reserved: [0; 6],
         }
     }
 }

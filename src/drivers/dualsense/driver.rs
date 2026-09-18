@@ -9,48 +9,132 @@ use crate::drivers::dualsense::{
 };
 
 use super::{
-    event::{AccelerometerEvent, AccelerometerInput, AxisEvent, AxisInput, Event, TouchAxisInput},
-    hid_report::{PackedInputDataReport, SetStatePackedOutputData, UsbPackedOutputReport},
+    event::{AxisEvent, AxisInput, Event, InertialInput, IntertialEvent, TouchAxisInput},
+    hid_report::{
+        CalibrationReport, PackedInputDataReport, SetStatePackedOutputData, UsbPackedOutputReport,
+    },
+    DS5_ACCEL_RAW_TO_MPS2, DS5_GYRO_RAW_TO_RAD_S, DS5_VID, DS_FEATURE_REPORT_CALIBRATION_SIZE,
+    FEATURE_REPORT_CALIBRATION, INPUT_REPORT_BT_SIZE, PIDS,
 };
 
-// Source: https://github.com/torvalds/linux/blob/master/drivers/hid/hid-playstation.c
-pub const DS5_EDGE_NAME: &str = "Sony Interactive Entertainment DualSense Edge Wireless Controller";
-pub const DS5_EDGE_VERSION: u16 = 256;
-pub const DS5_EDGE_VID: u16 = 0x054c;
-pub const DS5_EDGE_PID: u16 = 0x0df2;
+/// Linear per-axis calibration: `physical = (raw - bias) * scale`.
+#[derive(Debug, Clone, Copy)]
+pub struct AxisCalibration {
+    pub bias: f64,
+    pub scale: f64,
+}
 
-pub const DS5_NAME: &str = "Sony Interactive Entertainment DualSense Wireless Controller";
-pub const DS5_VERSION: u16 = 0x8111;
-pub const DS5_VID: u16 = 0x054c;
-pub const DS5_PID: u16 = 0x0ce6;
+impl AxisCalibration {
+    pub fn apply(&self, raw: i16) -> f64 {
+        (raw as f64 - self.bias) * self.scale
+    }
+}
 
-pub const PIDS: [u16; 2] = [DS5_EDGE_PID, DS5_PID];
+/// Computes a gyroscope axis's bias and raw-to-rad/s scale from its
+/// calibration report fields, using the same formula as hid-playstation.c.
+pub fn gyro_axis_calibration(
+    plus: i16,
+    minus: i16,
+    bias: i16,
+    speed_2x: i32,
+) -> AxisCalibration {
+    let plus = plus as i32;
+    let minus = minus as i32;
+    let bias = bias as i32;
+    let denom = (plus - bias).abs() + (minus - bias).abs();
+    let (numer, denom) = if denom == 0 {
+        (2048 * 1024, i16::MAX as i32)
+    } else {
+        (speed_2x * 1024, denom)
+    };
+    AxisCalibration {
+        bias: 0.0, // kernel always reports gyro bias-corrected to 0
+        scale: numer as f64 / denom as f64 / 1024.0 * std::f64::consts::PI / 180.0,
+    }
+}
 
-pub const FEATURE_REPORT_PAIRING_INFO: u8 = 0x09;
-pub const FEATURE_REPORT_FIRMWARE_INFO: u8 = 0x20;
-pub const FEATURE_REPORT_CALIBRATION: u8 = 0x05;
+/// Computes an accelerometer axis's bias and raw-to-m/s² scale from its
+/// calibration report fields, using the same formula as hid-playstation.c.
+pub fn accel_axis_calibration(plus: i16, minus: i16) -> AxisCalibration {
+    let plus = plus as i32;
+    let minus = minus as i32;
+    let range = plus - minus;
+    let (numer, denom, bias) = if range == 0 {
+        (4 * 8192, i16::MAX as i32, 0.0)
+    } else {
+        (2 * 8192, range, plus as f64 - range as f64 / 2.0)
+    };
+    AxisCalibration {
+        bias,
+        scale: numer as f64 / denom as f64 / 8192.0 * 9.80665,
+    }
+}
 
-pub const INPUT_REPORT_USB: u8 = 0x01;
-pub const INPUT_REPORT_USB_SIZE: usize = 64;
-pub const INPUT_REPORT_BT: u8 = 0x31;
-pub const INPUT_REPORT_BT_SIZE: usize = 78;
-pub const OUTPUT_REPORT_USB: u8 = 0x02;
-pub const OUTPUT_REPORT_USB_SIZE: usize = 63;
-pub const OUTPUT_REPORT_USB_SHORT_SIZE: usize = 48;
-pub const OUTPUT_REPORT_BT: u8 = 0x31;
-pub const OUTPUT_REPORT_BT_SIZE: usize = 78;
+/// Reads the calibration report and derives per-axis gyro (pitch/yaw/roll)
+/// and accel (x/y/z) calibration from it. Falls back to a nominal scale if
+/// the report can't be read or parsed.
+fn read_calibration(device: &HidDevice) -> ([AxisCalibration; 3], [AxisCalibration; 3]) {
+    let fallback_gyro = [AxisCalibration {
+        bias: 0.0,
+        scale: DS5_GYRO_RAW_TO_RAD_S,
+    }; 3];
+    let fallback_accel = [AxisCalibration {
+        bias: 0.0,
+        scale: DS5_ACCEL_RAW_TO_MPS2,
+    }; 3];
 
-// Input report axis ranges
-pub const STICK_X_MIN: f64 = u8::MIN as f64;
-pub const STICK_X_MAX: f64 = u8::MAX as f64;
-pub const STICK_Y_MIN: f64 = u8::MIN as f64;
-pub const STICK_Y_MAX: f64 = u8::MAX as f64;
-pub const TRIGGER_MAX: f64 = u8::MAX as f64;
+    let mut buf = [0u8; DS_FEATURE_REPORT_CALIBRATION_SIZE];
+    buf[0] = FEATURE_REPORT_CALIBRATION;
+    if let Err(e) = device.get_feature_report(&mut buf) {
+        log::warn!("Failed to read DualSense calibration report, using nominal scale: {e}");
+        return (fallback_gyro, fallback_accel);
+    }
+    let report = match CalibrationReport::unpack(&buf) {
+        Ok(report) => report,
+        Err(e) => {
+            log::warn!("Failed to parse DualSense calibration report, using nominal scale: {e}");
+            return (fallback_gyro, fallback_accel);
+        }
+    };
 
-// DualSense hardware limits
-pub const DS5_ACC_RES_PER_G: u32 = 8192;
-pub const DS5_TOUCHPAD_WIDTH: f64 = 1919.0;
-pub const DS5_TOUCHPAD_HEIGHT: f64 = 1079.0;
+    let speed_2x = report.gyro_speed_plus.to_primitive() as i32
+        + report.gyro_speed_minus.to_primitive() as i32;
+    let gyro = [
+        gyro_axis_calibration(
+            report.gyro_pitch_plus.to_primitive(),
+            report.gyro_pitch_minus.to_primitive(),
+            report.gyro_pitch_bias.to_primitive(),
+            speed_2x,
+        ),
+        gyro_axis_calibration(
+            report.gyro_yaw_plus.to_primitive(),
+            report.gyro_yaw_minus.to_primitive(),
+            report.gyro_yaw_bias.to_primitive(),
+            speed_2x,
+        ),
+        gyro_axis_calibration(
+            report.gyro_roll_plus.to_primitive(),
+            report.gyro_roll_minus.to_primitive(),
+            report.gyro_roll_bias.to_primitive(),
+            speed_2x,
+        ),
+    ];
+    let accel = [
+        accel_axis_calibration(
+            report.acc_x_plus.to_primitive(),
+            report.acc_x_minus.to_primitive(),
+        ),
+        accel_axis_calibration(
+            report.acc_y_plus.to_primitive(),
+            report.acc_y_minus.to_primitive(),
+        ),
+        accel_axis_calibration(
+            report.acc_z_plus.to_primitive(),
+            report.acc_z_minus.to_primitive(),
+        ),
+    ];
+    (gyro, accel)
+}
 
 /// PS5 Dualsense controller driver for reading gamepad input
 pub struct Driver {
@@ -60,6 +144,10 @@ pub struct Driver {
     last_touch: Instant,
     device: HidDevice,
     leds_initialized: bool,
+    /// Pitch, yaw, roll.
+    gyro_calibration: [AxisCalibration; 3],
+    /// X, y, z.
+    accel_calibration: [AxisCalibration; 3],
 }
 
 impl Driver {
@@ -76,13 +164,29 @@ impl Driver {
             );
         }
 
+        let (gyro_calibration, accel_calibration) = read_calibration(&device);
+
         Ok(Self {
             device,
             state: None,
             touch_state: [false, false],
             last_touch: Instant::now(),
             leds_initialized: false,
+            gyro_calibration,
+            accel_calibration,
         })
+    }
+
+    /// Returns the per-axis (pitch, yaw, roll) gyroscope calibration derived
+    /// from the device's calibration report.
+    pub fn gyro_calibration(&self) -> [AxisCalibration; 3] {
+        self.gyro_calibration
+    }
+
+    /// Returns the per-axis (x, y, z) accelerometer calibration derived from
+    /// the device's calibration report.
+    pub fn accel_calibration(&self) -> [AxisCalibration; 3] {
+        self.accel_calibration
     }
 
     /// Poll the device and read input reports
@@ -420,15 +524,15 @@ impl Driver {
         }
 
         // Accelerometer events
-        events.push(Event::Accelerometer(AccelerometerEvent::Accelerometer(
-            AccelerometerInput {
+        events.push(Event::Accelerometer(IntertialEvent::Accelerometer(
+            InertialInput {
                 x: state.accel_x.to_primitive(),
                 y: state.accel_y.to_primitive(),
                 z: state.accel_z.to_primitive(),
             },
         )));
-        events.push(Event::Accelerometer(AccelerometerEvent::Gyro(
-            AccelerometerInput {
+        events.push(Event::Accelerometer(IntertialEvent::Gyroscope(
+            InertialInput {
                 x: state.pitch.to_primitive(),
                 y: state.yaw.to_primitive(),
                 z: state.roll.to_primitive(),
