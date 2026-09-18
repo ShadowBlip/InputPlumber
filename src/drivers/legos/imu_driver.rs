@@ -133,8 +133,8 @@ impl IMUDriver {
             events.push(Event::Inertia(InertialEvent::Accelerometer(
                 InertialInput {
                     x: -state.x.to_primitive() as f64 * ACCEL_RAW_TO_MPS2,
-                    y: -state.y.to_primitive() as f64 * ACCEL_RAW_TO_MPS2,
-                    z: -state.z.to_primitive() as f64 * ACCEL_RAW_TO_MPS2,
+                    y: state.z.to_primitive() as f64 * ACCEL_RAW_TO_MPS2,
+                    z: -state.y.to_primitive() as f64 * ACCEL_RAW_TO_MPS2,
                 },
             )))
         };
@@ -157,8 +157,8 @@ impl IMUDriver {
         if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
             events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
                 x: -state.x.to_primitive() as f64 * GYRO_RAW_TO_RAD_S,
-                y: -state.y.to_primitive() as f64 * GYRO_RAW_TO_RAD_S,
-                z: -state.z.to_primitive() as f64 * GYRO_RAW_TO_RAD_S,
+                y: -state.z.to_primitive() as f64 * GYRO_RAW_TO_RAD_S,
+                z: -state.y.to_primitive() as f64 * GYRO_RAW_TO_RAD_S,
             })))
         };
 
