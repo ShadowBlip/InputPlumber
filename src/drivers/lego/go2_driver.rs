@@ -27,10 +27,15 @@ pub struct Driver {
     filtered_events: HashSet<Capability>,
     /// State for the internal gamepad controller
     state: Option<XInputDataReport>,
+    ///  True if this is a Legion Go 2
+    is_legion_go_2: bool,
 }
 
 impl Driver {
-    pub fn new(udev_device: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        udev_device: UdevDevice,
+        is_legion_go_2: bool,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let fmtpath = udev_device.devnode().clone();
         let path = CString::new(fmtpath.clone())?;
         let api = hidapi::HidApi::new()?;
@@ -48,6 +53,7 @@ impl Driver {
             udev_device,
             hid_device,
             filtered_events: Default::default(),
+            is_legion_go_2,
             state: None,
         })
     }
@@ -58,6 +64,10 @@ impl Driver {
     //Capability->Event/Event->Capability in the SourceDriver implementation.
     pub fn update_filtered_events(&mut self, events: HashSet<Capability>) {
         self.filtered_events = events;
+    }
+
+    pub fn is_legion_go_2(&self) -> bool {
+        self.is_legion_go_2
     }
 
     pub fn get_default_event_filter(
@@ -418,8 +428,8 @@ impl Driver {
             {
                 events.push(Event::Axis(AxisEvent::LeftAccel(ImuAxisInput {
                     pitch: -state.left_accel_x,
-                    roll: state.left_accel_y,
-                    yaw: state.left_accel_z,
+                    roll: -state.left_accel_y,
+                    yaw: -state.left_accel_z,
                 })))
             }
             if !self
@@ -447,8 +457,8 @@ impl Driver {
             {
                 events.push(Event::Axis(AxisEvent::MultiAccel(ImuAxisInput {
                     pitch: -(state.left_accel_x + state.right_accel_x) / 2,
-                    roll: (state.left_accel_y + state.right_accel_y) / 2,
-                    yaw: (state.left_accel_z + state.right_accel_z) / 2,
+                    roll: -(state.left_accel_y + state.right_accel_y) / 2,
+                    yaw: (-state.left_accel_z + state.right_accel_z) / 2,
                 })))
             }
             if !self
@@ -460,8 +470,12 @@ impl Driver {
             {
                 events.push(Event::Axis(AxisEvent::LeftGyro(ImuAxisInput {
                     pitch: -state.left_gyro_x,
-                    roll: state.left_gyro_y,
-                    yaw: state.left_gyro_z,
+                    roll: -state.left_gyro_y,
+                    yaw: if self.is_legion_go_2 {
+                        -state.left_gyro_z
+                    } else {
+                        state.left_gyro_z
+                    },
                 })))
             }
             if !self
@@ -473,8 +487,8 @@ impl Driver {
             {
                 events.push(Event::Axis(AxisEvent::RightGyro(ImuAxisInput {
                     pitch: -state.right_gyro_x,
-                    roll: state.right_gyro_y,
-                    yaw: state.right_gyro_z,
+                    roll: -state.right_gyro_y,
+                    yaw: -state.right_gyro_z,
                 })))
             }
 
@@ -490,8 +504,12 @@ impl Driver {
             {
                 events.push(Event::Axis(AxisEvent::MultiGyro(ImuAxisInput {
                     pitch: -(state.left_gyro_x + state.right_gyro_x) / 2,
-                    roll: (state.left_gyro_y + state.right_gyro_y) / 2,
-                    yaw: (state.left_gyro_z + state.right_gyro_z) / 2,
+                    roll: -(state.left_gyro_y + state.right_gyro_y) / 2,
+                    yaw: if self.is_legion_go_2 {
+                        -(state.left_gyro_z + state.right_gyro_z) / 2
+                    } else {
+                        (state.left_gyro_z - state.right_gyro_z) / 2
+                    },
                 })))
             }
         }

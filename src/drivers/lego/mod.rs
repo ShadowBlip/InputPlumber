@@ -78,6 +78,9 @@ pub const STICK_Y_MAX: f64 = 255.0;
 pub const STICK_Y_MIN: f64 = 0.0;
 pub const TRIGG_MAX: f64 = 255.0;
 
+pub const GO2_ACCEL_RAW_TO_MPS2: f64 = 0.00212;
+pub const GO2_GYRO_RAW_TO_RAD_S: f64 = 0.001065;
+
 const DEFAULT_EVENT_FILTER: [Capability; 6] = [
     Capability::Accelerometer(Source::Center),
     Capability::Accelerometer(Source::Left),

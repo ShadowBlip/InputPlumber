@@ -273,29 +273,29 @@ pub struct XInputDataReport {
     pub left_imu_timestamp: u8,
     #[packed_field(bytes = "35..=36", endian = "msb")]
     pub left_accel_x: i16,
-    #[packed_field(bytes = "37..=38", endian = "msb")]
-    pub left_accel_y: i16,
     #[packed_field(bytes = "39..=40", endian = "msb")]
+    pub left_accel_y: i16,
+    #[packed_field(bytes = "37..=38", endian = "msb")]
     pub left_accel_z: i16,
     #[packed_field(bytes = "41..=42", endian = "msb")]
     pub left_gyro_x: i16,
-    #[packed_field(bytes = "43..=44", endian = "msb")]
-    pub left_gyro_y: i16,
     #[packed_field(bytes = "45..=46", endian = "msb")]
+    pub left_gyro_y: i16,
+    #[packed_field(bytes = "43..=44", endian = "msb")]
     pub left_gyro_z: i16,
     #[packed_field(bytes = "47")]
     pub right_imu_timestamp: u8,
     #[packed_field(bytes = "50..=51", endian = "msb")]
     pub right_accel_x: i16,
-    #[packed_field(bytes = "48..=49", endian = "msb")]
-    pub right_accel_y: i16,
     #[packed_field(bytes = "52..=53", endian = "msb")]
+    pub right_accel_y: i16,
+    #[packed_field(bytes = "48..=49", endian = "msb")]
     pub right_accel_z: i16,
     #[packed_field(bytes = "56..=57", endian = "msb")]
     pub right_gyro_x: i16,
-    #[packed_field(bytes = "54..=55", endian = "msb")]
-    pub right_gyro_y: i16,
     #[packed_field(bytes = "58..=59", endian = "msb")]
+    pub right_gyro_y: i16,
+    #[packed_field(bytes = "54..=55", endian = "msb")]
     pub right_gyro_z: i16,
 }
 
