@@ -27,7 +27,7 @@ pub trait MenuWidget {
 /// Enumeration of all available menus
 #[derive(Debug)]
 pub enum Menu {
-    DeviceTest(DeviceTestMenu),
+    DeviceTest(Box<DeviceTestMenu>),
     DevicePerformance(DevicePerformanceMenu),
 }
 
@@ -61,7 +61,7 @@ impl MenuWidget for Menu {
 
 impl From<DeviceTestMenu> for Menu {
     fn from(value: DeviceTestMenu) -> Self {
-        Self::DeviceTest(value)
+        Self::DeviceTest(Box::new(value))
     }
 }
 
