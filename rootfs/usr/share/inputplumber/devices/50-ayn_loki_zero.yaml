@@ -32,14 +32,15 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
-  #- group: imu #TODO:reenable after we switch from polling
-  #  iio:
-  #    name: "{i2c-BMI0160:00,bmi260}"
-  #    mount_matrix:
-  #      # TODO: Reverify on actual hardware
-  #      x: [1, 0, 0]
-  #      y: [0, 1, 0]
-  #      z: [0, 0, -1]
+  - group: imu
+    iio:
+      name: "{i2c-BMI0160:00,bmi260}"
+    config:
+      imu:
+        mount_matrix: # TODO: Verify on actual hardware
+          x: [1, 0, 0]
+          y: [0, 0, 1]
+          z: [0, 1, 0]
 
   #RGB
   - group: led

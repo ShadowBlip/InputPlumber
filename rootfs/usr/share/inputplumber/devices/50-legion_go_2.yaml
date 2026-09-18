@@ -149,10 +149,18 @@ source_devices:
     blocked: true
     iio:
       name: gyro_3d
+    config:
+      imu:
+        accel_correction: 10.0 # adm_sfh rdesktop scale compensation
+        gyro_correction: 100.0
   - group: imu
     blocked: true
     iio:
       name: accel_3d
+    config:
+      imu:
+        accel_correction: 10.0 # adm_sfh rdesktop scale compensation
+        gyro_correction: 100.0
 # Optional configuration for the composite device
 options:
   # If true, InputPlumber will automatically try to manage the input device. If

@@ -25,6 +25,7 @@ source_devices:
   # Face Extra Buttons
   - group: keyboard
     udev:
+      dev_node: "/dev/input/event*"
       attributes:
         - name: name
           value: "AT Translated Set 2 keyboard"
@@ -43,6 +44,7 @@ source_devices:
   # Face Guide
   - group: keyboard
     udev:
+      dev_node: "/dev/input/event*"
       attributes:
         - name: name
           value: "MSI WMI hotkeys"
@@ -57,6 +59,7 @@ source_devices:
   # Xinput Gamepad
   - group: gamepad
     udev:
+      dev_node: "/dev/input/event*"
       properties:
         - name: ID_INPUT_JOYSTICK
           value: "1"
@@ -71,6 +74,7 @@ source_devices:
   # Xinput Mkey Extra Buttons
   - group: gamepad
     udev:
+      dev_node: "/dev/input/event*"
       properties:
         - name: ID_INPUT_KEYBOARD
           value: "1"
@@ -92,6 +96,7 @@ source_devices:
   - group: gamepad
     blocked: true
     udev:
+      dev_node: "/dev/input/event*"
       properties:
         - name: ID_INPUT_JOYSTICK
           value: "1"
@@ -112,6 +117,7 @@ source_devices:
   # Dinput Mkey Extra Buttons
   - group: gamepad
     udev:
+      dev_node: "/dev/input/event*"
       properties:
         - name: ID_INPUT_KEYBOARD
           value: "1"
