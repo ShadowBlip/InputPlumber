@@ -41,13 +41,46 @@ source_devices:
       vendor_id: 0b05
       product_id: 1b4c
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyProg1
+        - Keyboard:KeyF14
+        - Keyboard:KeyF15
+        - Keyboard:KeyF16
+        - Keyboard:KeyF21
+        - Keyboard:KeyF22
+        - Gamepad:Button:South
+        - Gamepad:Button:East
+        - Gamepad:Button:North
+        - Gamepad:Button:West
+        - Gamepad:Button:LeftBumper
+        - Gamepad:Button:RightBumper
+        - Gamepad:Button:Select
+        - Gamepad:Button:Start
+        - Gamepad:Button:Guide
+        - Gamepad:Button:LeftStick
+        - Gamepad:Button:RightStick
+        - Gamepad:Button:DPadUp
+        - Gamepad:Button:DPadDown
+        - Gamepad:Button:DPadLeft
+        - Gamepad:Button:DPadRight
+        - Gamepad:Axis:LeftStick
+        - Gamepad:Axis:RightStick
+        - Gamepad:Trigger:LeftTrigger
+        - Gamepad:Trigger:RightTrigger
+
   - group: imu
     iio:
       name: bmi323-imu
-      mount_matrix:
-        x: [1, 0, 0]
-        y: [0, -1, 0]
-        z: [0, 0, -1]
+    config:
+      imu:
+        mount_matrix:
+          # TODO: Verify on actual hardware
+          x: [1, 0, 0]
+          y: [0, 0, 1]
+          z: [0, 1, 0]
   - group: led
     udev:
       sys_name: ally:rgb:joystick_rings
