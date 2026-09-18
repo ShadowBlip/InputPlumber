@@ -4,7 +4,7 @@ pub mod fts3528;
 pub mod gpd_device;
 pub mod horipad_steam;
 pub mod iio_imu;
-pub mod lego;
+pub mod legion_go;
 pub mod legion_go_s;
 pub mod msi_claw;
 pub mod opineo;
