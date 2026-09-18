@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::lego::{
+    drivers::legion_go::{
         event::{self, AxisEvent},
         go1_driver::Driver,
         STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,

@@ -1,7 +1,7 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::lego::{event, go_touchpad_driver::Driver, PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX},
+    drivers::legion_go::{event, go_touchpad_driver::Driver, PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX},
     input::{
         capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
         event::{native::NativeEvent, value::InputValue},

@@ -4,6 +4,7 @@ pub mod go2_driver;
 pub mod go_touchpad_driver;
 pub mod hid_report;
 
+use std::f64::consts::PI;
 use std::time::Duration;
 
 use crate::input::capability::{Capability, Source};
@@ -14,38 +15,38 @@ pub const TP_IID: i32 = 0x01;
 pub const GP_IID: i32 = 0x02;
 
 // Go 1
-const LEGO_1_XINPUT_PID: u16 = 0x6182;
-const LEGO_1_DINPUT_ATTACHED_PID: u16 = 0x6183;
-const LEGO_1_DINPUT_DETACHED_PID: u16 = 0x6184;
-const LEGO_1_FPS_PID: u16 = 0x6185;
+const LEGION_GO_1_XINPUT_PID: u16 = 0x6182;
+const LEGION_GO_1_DINPUT_ATTACHED_PID: u16 = 0x6183;
+const LEGION_GO_1_DINPUT_DETACHED_PID: u16 = 0x6184;
+const LEGION_GO_1_FPS_PID: u16 = 0x6185;
 
 pub const GO1_PIDS: [u16; 4] = [
-    LEGO_1_XINPUT_PID,
-    LEGO_1_DINPUT_ATTACHED_PID,
-    LEGO_1_DINPUT_DETACHED_PID,
-    LEGO_1_FPS_PID,
+    LEGION_GO_1_XINPUT_PID,
+    LEGION_GO_1_DINPUT_ATTACHED_PID,
+    LEGION_GO_1_DINPUT_DETACHED_PID,
+    LEGION_GO_1_FPS_PID,
 ];
 
 // Go 2
-const LEGO_2_XINPUT_PID: u16 = 0x61eb;
-const LEGO_2_DINPUT_ATTACHED_PID: u16 = 0x61ec;
-const LEGO_2_DINPUT_DETACHED_PID: u16 = 0x61ed;
-const LEGO_2_FPS_PID: u16 = 0x61ee;
+const LEGION_GO_2_XINPUT_PID: u16 = 0x61eb;
+const LEGION_GO_2_DINPUT_ATTACHED_PID: u16 = 0x61ec;
+const LEGION_GO_2_DINPUT_DETACHED_PID: u16 = 0x61ed;
+const LEGION_GO_2_FPS_PID: u16 = 0x61ee;
 
 pub const GO2_PIDS: [u16; 4] = [
-    LEGO_2_XINPUT_PID,
-    LEGO_2_DINPUT_ATTACHED_PID,
-    LEGO_2_DINPUT_DETACHED_PID,
-    LEGO_2_FPS_PID,
+    LEGION_GO_2_XINPUT_PID,
+    LEGION_GO_2_DINPUT_ATTACHED_PID,
+    LEGION_GO_2_DINPUT_DETACHED_PID,
+    LEGION_GO_2_FPS_PID,
 ];
 
 pub const GO_TOUCHPAD_D_PIDS: [u16; 4] = [
-    LEGO_1_DINPUT_ATTACHED_PID,
-    LEGO_1_DINPUT_DETACHED_PID,
-    LEGO_2_DINPUT_ATTACHED_PID,
-    LEGO_2_DINPUT_DETACHED_PID,
+    LEGION_GO_1_DINPUT_ATTACHED_PID,
+    LEGION_GO_1_DINPUT_DETACHED_PID,
+    LEGION_GO_2_DINPUT_ATTACHED_PID,
+    LEGION_GO_2_DINPUT_DETACHED_PID,
 ];
-pub const GO_TOUCHPAD_X_PIDS: [u16; 2] = [LEGO_1_XINPUT_PID, LEGO_2_XINPUT_PID];
+pub const GO_TOUCHPAD_X_PIDS: [u16; 2] = [LEGION_GO_1_XINPUT_PID, LEGION_GO_2_XINPUT_PID];
 
 const DRAG_TIMEOUT_DINPUT: Duration = Duration::from_millis(100);
 const DRAG_TIMEOUT_XINPUT: Duration = Duration::from_millis(50);
@@ -77,6 +78,11 @@ pub const STICK_X_MIN: f64 = 0.0;
 pub const STICK_Y_MAX: f64 = 255.0;
 pub const STICK_Y_MIN: f64 = 0.0;
 pub const TRIGG_MAX: f64 = 255.0;
+
+// Accel scale is 4096 LSB/g (±2 g)
+pub const GO2_ACCEL_RAW_TO_MPS2: f64 = 9.80665 / 4096.0;
+// Gyro scale is 32768 LSB full scale over +/-2000 deg/s (16.384 LSB/(deg/s))
+pub const GO2_GYRO_RAW_TO_RAD_S: f64 = (2000.0 / 32768.0) * (PI / 180.0);
 
 const DEFAULT_EVENT_FILTER: [Capability; 6] = [
     Capability::Accelerometer(Source::Center),

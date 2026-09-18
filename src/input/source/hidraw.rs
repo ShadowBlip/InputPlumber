@@ -698,28 +698,28 @@ impl HidRawDevice {
         }
 
         // Legion Go
-        if vid == drivers::lego::VID
-            && drivers::lego::GO1_PIDS.contains(&pid)
-            && iid == drivers::lego::GP_IID
+        if vid == drivers::legion_go::VID
+            && drivers::legion_go::GO1_PIDS.contains(&pid)
+            && iid == drivers::legion_go::GP_IID
         {
             log::info!("Detected Legion Go Controller");
             return DriverType::LegionGo;
         }
 
         // Legion Go 2
-        if vid == drivers::lego::VID
-            && drivers::lego::GO2_PIDS.contains(&pid)
-            && iid == drivers::lego::GP_IID
+        if vid == drivers::legion_go::VID
+            && drivers::legion_go::GO2_PIDS.contains(&pid)
+            && iid == drivers::legion_go::GP_IID
         {
             log::info!("Detected Legion Go 2 Controller");
             return DriverType::LegionGo2;
         }
 
         // Legion Go Touchpad
-        if vid == drivers::lego::VID
-            && (drivers::lego::GO_TOUCHPAD_D_PIDS.contains(&pid)
-                || drivers::lego::GO_TOUCHPAD_X_PIDS.contains(&pid))
-            && iid == drivers::lego::TP_IID
+        if vid == drivers::legion_go::VID
+            && (drivers::legion_go::GO_TOUCHPAD_D_PIDS.contains(&pid)
+                || drivers::legion_go::GO_TOUCHPAD_X_PIDS.contains(&pid))
+            && iid == drivers::legion_go::TP_IID
         {
             log::info!("Detected Legion Go Touchpad");
             return DriverType::LegionGoTouchpad;
