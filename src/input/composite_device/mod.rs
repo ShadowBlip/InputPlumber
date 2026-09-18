@@ -1723,8 +1723,12 @@ impl CompositeDevice {
                     }
                     "hidraw" => {
                         log::debug!("Adding HIDRAW source device: {:?}", device.name());
-                        let device =
-                            HidRawDevice::new(device, self.client(), source_config.clone())?;
+                        let device = HidRawDevice::new(
+                            device,
+                            self.client(),
+                            source_config.clone(),
+                            self.config.name.clone(),
+                        )?;
                         SourceDevice::HidRaw(device)
                     }
                     "iio" => {

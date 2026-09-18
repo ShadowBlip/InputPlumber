@@ -321,6 +321,7 @@ impl HidRawDevice {
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
         conf: Option<config::SourceDevice>,
+        composite_device_name: String,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let is_blocked = conf.as_ref().and_then(|c| c.blocked).unwrap_or(false);
         let driver_type = HidRawDevice::get_driver_type(&device_info, is_blocked);
@@ -407,7 +408,8 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionGo2Controller::new(device_info.clone())?;
+                let is_legion_go_2 = composite_device_name == "Lenovo Legion Go 2";
+                let device = LegionGo2Controller::new(device_info.clone(), is_legion_go_2)?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
