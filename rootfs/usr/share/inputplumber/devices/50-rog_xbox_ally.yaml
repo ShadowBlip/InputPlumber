@@ -45,9 +45,10 @@ source_devices:
     iio:
       name: bmi323-imu
       mount_matrix:
+        # TODO: Verify on actual hardware
         x: [1, 0, 0]
-        y: [0, -1, 0]
-        z: [0, 0, -1]
+        y: [0, 0, 1]
+        z: [0, 1, 0]
   - group: led
     udev:
       sys_name: ally:rgb:joystick_rings

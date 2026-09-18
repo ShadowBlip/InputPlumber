@@ -32,13 +32,24 @@ source_devices:
       name: AT Translated Set 2 keyboard
       phys_path: isa0060/serio0/input0
       handler: event*
+    events:
+      exclude:
+        - "*"
+      include:
+        - Keyboard:KeyDelete
+        - Keyboard:KeyLeftAlt
+        - Keyboard:KeyLeftCtrl
+        - Keyboard:KeyLeftShift
+        - Keyboard:KeyT
+        - Keyboard:KeyVolumeDown
+        - Keyboard:KeyVolumeUp
   - group: imu
     iio:
       name: "{i2c-BMI0160:00,bmi260}"
       mount_matrix:
         x: [1, 0, 0]
-        y: [0, -1, 0]
-        z: [0, 0, -1]
+        y: [0, 0, 1]
+        z: [0, -1, 0]
 
   #RGB
   - group: led
