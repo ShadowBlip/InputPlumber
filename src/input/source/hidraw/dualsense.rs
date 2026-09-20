@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::time::Instant;
 use std::{collections::HashMap, error::Error};
 
 use evdev::{FFEffectData, FFEffectKind};
@@ -6,7 +7,7 @@ use packed_struct::types::SizedInteger;
 
 use crate::drivers::dualsense::driver::{DS5_EDGE_PID, DS5_PID, DS5_VID};
 use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
-use crate::input::output_capability::{OutputCapability, LED};
+use crate::input::output_capability::{Haptic, OutputCapability, LED};
 use crate::{
     drivers::dualsense::{self, driver::Driver},
     input::{
@@ -34,6 +35,7 @@ pub const PIDS: [u16; 2] = [DS5_EDGE_PID, DS5_PID];
 pub struct DualSenseController {
     driver: Driver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    haptic_timeout: Option<Instant>,
 }
 
 impl DualSenseController {
@@ -44,6 +46,7 @@ impl DualSenseController {
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
+            haptic_timeout: None,
         })
     }
 
@@ -147,6 +150,13 @@ impl DualSenseController {
 impl SourceInputDevice for DualSenseController {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        if let Some(stop_at) = self.haptic_timeout {
+            if Instant::now() >= stop_at {
+                self.haptic_timeout = None;
+                let _ = self.driver.rumble(0, 0);
+            }
+        }
+
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
 
@@ -179,6 +189,12 @@ impl SourceOutputDevice for DualSenseController {
             }
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::SteamDeckHaptics(_report) => Ok(()),
+            OutputEvent::SteamDeckHapticPulse(report) => {
+                let (weak, strong) = report.magnitudes();
+                self.driver.rumble((strong / 256) as u8, (weak / 256) as u8)?;
+                self.haptic_timeout = Some(Instant::now() + report.capped_duration());
+                Ok(())
+            }
             OutputEvent::SteamDeckRumble(report) => {
                 log::debug!("Received Steam Deck FFB Output Report");
                 if let Err(e) = self.process_deck_ff(report) {
@@ -487,4 +503,6 @@ pub const CAPABILITIES: &[Capability] = &[
 pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[
     OutputCapability::ForceFeedback,
     OutputCapability::LED(LED::Color),
+    OutputCapability::Haptics(Haptic::TrackpadLeft),
+    OutputCapability::Haptics(Haptic::TrackpadRight),
 ];
