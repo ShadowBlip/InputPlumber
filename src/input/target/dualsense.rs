@@ -2,13 +2,20 @@
 //! The DualSense implementation is based on the great work done by NeroReflex
 //! and the ROGueENEMY project:
 //! https://github.com/NeroReflex/ROGueENEMY/
-use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
+use std::{
+    cmp::Ordering,
+    error::Error,
+    fmt::Debug,
+    fs::File,
+    sync::atomic::{AtomicU16, Ordering as AtomicOrdering},
+    time::Duration,
+};
 
 use packed_struct::prelude::*;
-use rand::Rng;
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
+    drivers::hash_id,
     drivers::dualsense::{
         driver::{
             DS5_ACC_RES_PER_G, DS5_EDGE_NAME, DS5_EDGE_PID, DS5_EDGE_VERSION, DS5_EDGE_VID,
@@ -61,31 +68,58 @@ pub enum BusType {
     Bluetooth,
 }
 
+/// Model-specific prefixes; locally-administered bit set so neither
+/// resembles a real Sony device.
+pub const DS5_BASE_MAC: [u8; 3] = [0x02, 0x05, 0xd5];
+pub const DS5_EDGE_BASE_MAC: [u8; 3] = [0x02, 0x0e, 0xd6];
+
+static NORMAL_MAC_COUNT: AtomicU16 = AtomicU16::new(0);
+static EDGE_MAC_COUNT: AtomicU16 = AtomicU16::new(0);
+
+/// Returns the address to use for a new device of the given model. Prefers
+/// deriving it from `persistent_id`; falls back to the next address in that
+/// model's counter sequence when no persistent id is available.
+pub fn generate_mac(model: ModelType, persistent_id: Option<&str>) -> [u8; 6] {
+    match persistent_id.filter(|id| !id.is_empty()) {
+        Some(id) => mac_from_persistent_id(model, id),
+        None => next_mac(model),
+    }
+}
+
+/// Derives an address from the model's prefix and a hash of `persistent_id`.
+fn mac_from_persistent_id(model: ModelType, persistent_id: &str) -> [u8; 6] {
+    let prefix = match model {
+        ModelType::Normal => DS5_BASE_MAC,
+        ModelType::Edge => DS5_EDGE_BASE_MAC,
+    };
+    let hash = hash_id(persistent_id.as_bytes()).to_be_bytes();
+    [prefix[0], prefix[1], prefix[2], hash[5], hash[6], hash[7]]
+}
+
+/// Returns the next address in the given model's counter sequence, starting
+/// from that model's prefix. Used when no persistent id is available.
+fn next_mac(model: ModelType) -> [u8; 6] {
+    let (prefix, counter) = match model {
+        ModelType::Normal => (DS5_BASE_MAC, &NORMAL_MAC_COUNT),
+        ModelType::Edge => (DS5_EDGE_BASE_MAC, &EDGE_MAC_COUNT),
+    };
+    let index = counter.fetch_add(1, AtomicOrdering::Relaxed);
+    let [hi, lo] = index.to_be_bytes();
+    [prefix[0], prefix[1], prefix[2], 0, hi, lo]
+}
+
 /// The [DualSenseHardware] defines the kind of DualSense controller to emulate
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct DualSenseHardware {
-    model: ModelType,
-    bus_type: BusType,
-    mac_addr: [u8; 6],
+    pub model: ModelType,
+    pub bus_type: BusType,
+    pub mac_addr: [u8; 6],
 }
 
 impl DualSenseHardware {
-    pub fn new(model: ModelType, bus_type: BusType) -> Self {
-        // "e8:47:3a:d6:e7:74"
-        //let mac_addr = [0x74, 0xe7, 0xd6, 0x3a, 0x47, 0xe8];
-        let mut rng = rand::rng();
-        let mac_addr: [u8; 6] = [
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-        ];
-        log::debug!(
-            "Creating new DualSense Edge device using MAC Address: {:?}",
-            mac_addr
-        );
+    pub fn new(model: ModelType, bus_type: BusType, persistent_id: Option<String>) -> Self {
+        let mac_addr = generate_mac(model, persistent_id.as_deref());
+        log::debug!("Creating new DualSense device using MAC Address: {mac_addr:?}");
 
         Self {
             model,
@@ -97,19 +131,10 @@ impl DualSenseHardware {
 
 impl Default for DualSenseHardware {
     fn default() -> Self {
-        let mut rng = rand::rng();
-        let mac_addr: [u8; 6] = [
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-        ];
         Self {
             model: ModelType::Normal,
             bus_type: BusType::Usb,
-            mac_addr,
+            mac_addr: next_mac(ModelType::Normal),
         }
     }
 }

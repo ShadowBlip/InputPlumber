@@ -3,6 +3,8 @@ pub mod command;
 pub mod dbus;
 pub mod debug;
 pub mod dualsense;
+#[cfg(test)]
+mod dualsense_test;
 pub mod horipad_steam;
 pub mod keyboard;
 pub mod mouse;
@@ -810,7 +812,7 @@ impl TargetDevice {
     pub fn from_type_id(
         id: TargetDeviceTypeId,
         dbus: DBusInterfaceManager,
-        #[allow(unused_variables)] persistent_id: Option<String>,
+        persistent_id: Option<String>,
     ) -> Result<Self, Box<dyn Error>> {
         match id.as_str() {
             "dbus" => {
@@ -846,17 +848,22 @@ impl TargetDevice {
                     "ds5" | "ds5-usb" => DualSenseHardware::new(
                         dualsense::ModelType::Normal,
                         dualsense::BusType::Usb,
+                        persistent_id,
                     ),
                     "ds5-bt" => DualSenseHardware::new(
                         dualsense::ModelType::Normal,
                         dualsense::BusType::Bluetooth,
+                        persistent_id,
                     ),
-                    "ds5-edge" | "ds5-edge-usb" => {
-                        DualSenseHardware::new(dualsense::ModelType::Edge, dualsense::BusType::Usb)
-                    }
+                    "ds5-edge" | "ds5-edge-usb" => DualSenseHardware::new(
+                        dualsense::ModelType::Edge,
+                        dualsense::BusType::Usb,
+                        persistent_id,
+                    ),
                     "ds5-edge-bt" => DualSenseHardware::new(
                         dualsense::ModelType::Edge,
                         dualsense::BusType::Bluetooth,
+                        persistent_id,
                     ),
                     _ => DualSenseHardware::default(),
                 };
