@@ -10,9 +10,9 @@ pub mod horipad_steam;
 pub mod legion_go;
 pub mod legion_go2;
 pub mod legion_go_tp;
-pub mod legos_imu;
-pub mod legos_touchpad;
-pub mod legos_xinput;
+pub mod legion_go_s_imu;
+pub mod legion_go_s_touchpad;
+pub mod legion_go_s_xinput;
 pub mod msi_claw;
 pub mod opineo_touchpad;
 pub mod oxp_hid;
@@ -41,8 +41,8 @@ use self::{
     flydigi_vader_4_pro::Vader4Pro, fts3528::Fts3528Touchscreen,
     gpd_macro_keyboard::GpdMacroKeyboard, gpd_touchpad_2023::GpdTouchpad2023,
     gpd_touchpad_2024::GpdTouchpad2024, horipad_steam::HoripadSteam, legion_go::LegionGoController,
-    legion_go2::LegionGo2Controller, legos_imu::LegionSImuController,
-    legos_touchpad::LegionSTouchpadController, legos_xinput::LegionSXInputController,
+    legion_go2::LegionGo2Controller, legion_go_s_imu::LegionGoSImuController,
+    legion_go_s_touchpad::LegionGoSTouchpadController, legion_go_s_xinput::LegionGoSXInputController,
     msi_claw::MsiClawController, opineo_touchpad::OrangePiNeoTouchpad, oxp_hid::OxpHid,
     rog_ally::RogAlly, steam_deck::DeckController, ultimate_2::Ultimate2, xpad_uhid::XpadUhid,
     zotac_zone::ZotacZone,
@@ -90,9 +90,9 @@ pub enum HidRawDevice {
     HoripadSteam(SourceDriver<HoripadSteam>),
     LegionGo(SourceDriver<LegionGoController>),
     LegionGo2(SourceDriver<LegionGo2Controller>),
-    LegionGoSImu(SourceDriver<LegionSImuController>),
-    LegionGoSTouchpad(SourceDriver<LegionSTouchpadController>),
-    LegionGoSXInput(SourceDriver<LegionSXInputController>),
+    LegionGoSImu(SourceDriver<LegionGoSImuController>),
+    LegionGoSTouchpad(SourceDriver<LegionGoSTouchpadController>),
+    LegionGoSXInput(SourceDriver<LegionGoSXInputController>),
     LegionGoTouchpad(SourceDriver<LegionGoTouchpad>),
     MsiClawController(SourceDriver<MsiClawController>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
@@ -422,7 +422,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionSImuController::new(device_info.clone())?;
+                let device = LegionGoSImuController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -437,7 +437,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionSTouchpadController::new(device_info.clone())?;
+                let device = LegionGoSTouchpadController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -452,7 +452,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionSXInputController::new(device_info.clone())?;
+                let device = LegionGoSXInputController::new(device_info.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -726,27 +726,27 @@ impl HidRawDevice {
         }
 
         // Legion Go S IMU
-        if vid == drivers::legos::VID
-            && drivers::legos::PIDS.contains(&pid)
-            && iid == drivers::legos::IMU_IID
+        if vid == drivers::legion_go_s::VID
+            && drivers::legion_go_s::PIDS.contains(&pid)
+            && iid == drivers::legion_go_s::IMU_IID
         {
             log::info!("Detected Legion Go S IMU");
             return DriverType::LegionGoSImu;
         }
 
         // Legion Go S Touchpad
-        if vid == drivers::legos::VID
-            && drivers::legos::PIDS.contains(&pid)
-            && iid == drivers::legos::TP_IID
+        if vid == drivers::legion_go_s::VID
+            && drivers::legion_go_s::PIDS.contains(&pid)
+            && iid == drivers::legion_go_s::TP_IID
         {
             log::info!("Detected Legion Go S Touchpad");
             return DriverType::LegionGoSTouchpad;
         }
 
         // Legion Go S XInput
-        if vid == drivers::legos::VID
-            && drivers::legos::PIDS.contains(&pid)
-            && iid == drivers::legos::GP_IID
+        if vid == drivers::legion_go_s::VID
+            && drivers::legion_go_s::PIDS.contains(&pid)
+            && iid == drivers::legion_go_s::GP_IID
         {
             log::info!("Detected Legion Go S Controller");
             return DriverType::LegionGoSXInput;

@@ -6,7 +6,7 @@ use packed_struct::{types::SizedInteger, PrimitiveEnum};
 use crate::{
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
-        legos::{
+        legion_go_s::{
             event, xinput_driver::XInputDriver, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
             TRIGG_MAX,
         },
@@ -27,13 +27,13 @@ use crate::{
 };
 
 /// Legion Go Controller source device implementation
-pub struct LegionSXInputController {
+pub struct LegionGoSXInputController {
     driver: XInputDriver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
     haptic_timeout: Option<Instant>,
 }
 
-impl LegionSXInputController {
+impl LegionGoSXInputController {
     /// Create a new Legion controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -151,7 +151,7 @@ impl LegionSXInputController {
     }
 }
 
-impl SourceInputDevice for LegionSXInputController {
+impl SourceInputDevice for LegionGoSXInputController {
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         if let Some(stop_at) = self.haptic_timeout {
@@ -172,7 +172,7 @@ impl SourceInputDevice for LegionSXInputController {
     }
 }
 
-impl SourceOutputDevice for LegionSXInputController {
+impl SourceOutputDevice for LegionGoSXInputController {
     fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
         Ok(vec![
             OutputCapability::ForceFeedback,
@@ -223,9 +223,9 @@ impl SourceOutputDevice for LegionSXInputController {
     }
 }
 
-impl Debug for LegionSXInputController {
+impl Debug for LegionGoSXInputController {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LegionSController").finish()
+        f.debug_struct("LegionGoSController").finish()
     }
 }
 
@@ -398,7 +398,6 @@ fn translate_event(event: event::Event) -> NativeEvent {
 
 /// List of all capabilities that the Legion Go driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -421,7 +420,6 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-    Capability::Gamepad(Gamepad::Gyro),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
 ];

@@ -5,7 +5,7 @@ pub mod gpd_device;
 pub mod horipad_steam;
 pub mod iio_imu;
 pub mod lego;
-pub mod legos;
+pub mod legion_go_s;
 pub mod msi_claw;
 pub mod opineo;
 pub mod oxp_hid;

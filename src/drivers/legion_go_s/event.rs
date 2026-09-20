@@ -96,7 +96,7 @@ pub struct InertialInput {
 #[derive(Clone, Debug)]
 pub enum InertialEvent {
     Accelerometer(InertialInput),
-    Gyro(InertialInput),
+    Gyroscope(InertialInput),
 }
 
 /// Trigger input contains non-negative integars
