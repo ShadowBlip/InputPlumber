@@ -314,6 +314,17 @@ pub struct TouchscreenConfig {
 pub struct ImuConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mount_matrix: Option<MountMatrix>,
+    /// Desired sampling rate in Hz.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<f64>,
+    /// Multiplier applied to the kernel-reported accelerometer scale.
+    /// Defaults to 1.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accel_correction: Option<f64>,
+    /// Multiplier applied to the kernel-reported gyroscope scale.
+    /// Defaults to 1.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gyro_correction: Option<f64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -397,6 +408,10 @@ pub struct IIO {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Desired sampling rate in Hz.
+    #[deprecated(
+        since = "0.81.0",
+        note = "please use `<SourceDevice>.config.imu.sample_rate` instead"
+    )]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_rate: Option<f64>,
     #[deprecated(

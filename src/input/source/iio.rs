@@ -1,7 +1,8 @@
 pub mod accel_gyro_3d;
 pub mod bmi_imu;
+mod common;
 
-use std::error::Error;
+use std::{error::Error, time::Duration};
 
 use glob_match::glob_match;
 
@@ -10,7 +11,7 @@ use crate::{
     constants::BUS_SOURCES_PREFIX,
     input::{
         capability::Capability, composite_device::client::CompositeDeviceClient,
-        info::DeviceInfoRef, output_capability::OutputCapability,
+        info::DeviceInfoRef, output_capability::OutputCapability, source::SourceDriverOptions,
     },
     udev::device::UdevDevice,
 };
@@ -91,20 +92,37 @@ impl IioDevice {
         conf: Option<config::SourceDevice>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver_type = IioDevice::get_driver_type(&device_info);
-        let iio_config = conf.as_ref().and_then(|c| c.iio.clone());
 
         match driver_type {
             DriverType::Unknown => Err("No driver for iio interface found".into()),
             DriverType::BmiImu => {
-                let device = BmiImu::new(device_info.clone(), iio_config)?;
-                let source_device =
-                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(0),
+                    buffer_size: 2048,
+                };
+                let device = BmiImu::new(device_info.clone(), conf.clone())?;
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
                 Ok(Self::BmiImu(source_device))
             }
             DriverType::AccelGryo3D => {
-                let device = AccelGyro3dImu::new(device_info.clone(), iio_config)?;
-                let source_device =
-                    SourceDriver::new(composite_device, device, device_info.into(), conf);
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(0),
+                    buffer_size: 2048,
+                };
+                let device = AccelGyro3dImu::new(device_info.clone(), conf.clone())?;
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
                 Ok(Self::AccelGryo3D(source_device))
             }
         }
@@ -116,7 +134,10 @@ impl IioDevice {
         let name = device_name.as_str();
         log::debug!("Finding driver for IIO interface: {name}");
         // BMI_IMU (Bosch BMI160/260/323 and InvenSense ICM42xxx)
-        if glob_match("{i2c-10EC5280*,i2c-BOSC*,i2c-BMI*,bmi*-imu,bmi260,icm4*}", name) {
+        if glob_match(
+            "{i2c-10EC5280*,i2c-BOSC*,i2c-BMI*,bmi*-imu,bmi260,icm4*}",
+            name,
+        ) {
             log::info!("Detected IMU: {name}");
             return DriverType::BmiImu;
         }

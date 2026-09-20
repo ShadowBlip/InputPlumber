@@ -277,6 +277,18 @@
       "properties": {
         "mount_matrix": {
           "$ref": "#/definitions/MountMatrix"
+        },
+        "sample_rate": {
+          "description": "Desired sampling rate in Hz.",
+          "type": "number"
+        },
+        "accel_correction": {
+          "description": "Multiplier applied to the kernel-reported accelerometer scale. Defaults to 1.0.",
+          "type": "number"
+        },
+        "gyro_correction": {
+          "description": "Multiplier applied to the kernel-reported gyroscope scale. Defaults to 1.0.",
+          "type": "number"
         }
       }
     },
