@@ -1,11 +1,15 @@
-use std::{collections::HashMap, error::Error, fmt::Debug};
+use std::{collections::HashMap, error::Error, fmt::Debug, time::Instant};
 
 use evdev::{FFEffectData, FFEffectKind};
+use packed_struct::types::SizedInteger;
 
 use crate::{
-    drivers::xpad_uhid::{
-        driver::{Driver, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
-        event,
+    drivers::{
+        dualsense::hid_report::SetStatePackedOutputData,
+        xpad_uhid::{
+            driver::{Driver, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
+            event,
+        },
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
@@ -14,7 +18,7 @@ use crate::{
             value::InputValue,
             value::{normalize_signed_value, normalize_unsigned_value},
         },
-        output_capability::OutputCapability,
+        output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -25,6 +29,7 @@ use crate::{
 pub struct XpadUhid {
     driver: Driver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    haptic_timeout: Option<Instant>,
 }
 
 impl XpadUhid {
@@ -35,6 +40,7 @@ impl XpadUhid {
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
+            haptic_timeout: None,
         })
     }
 
@@ -51,6 +57,19 @@ impl XpadUhid {
                 return -1;
             }
         }
+    }
+
+    /// Process the given DualSense-format force feedback report.
+    fn process_dualsense_ff(
+        &mut self,
+        report: SetStatePackedOutputData,
+    ) -> Result<(), Box<dyn Error>> {
+        let left_speed = report.rumble_emulation_left;
+        let right_speed = report.rumble_emulation_right;
+        if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+            return Err(format!("Failed to do rumble: {e:?}").into());
+        }
+        Ok(())
     }
 
     /// Process the given evdev force feedback event.
@@ -130,6 +149,13 @@ impl XpadUhid {
 impl SourceInputDevice for XpadUhid {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        if let Some(stop_at) = self.haptic_timeout {
+            if Instant::now() >= stop_at {
+                self.haptic_timeout = None;
+                let _ = self.driver.rumble(0, 0);
+            }
+        }
+
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
@@ -155,11 +181,29 @@ impl SourceOutputDevice for XpadUhid {
         log::trace!("Received output event: {:?}", event);
         match event {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
-            OutputEvent::DualSense(_) => Ok(()),
+            OutputEvent::DualSense(report) => Ok(self.process_dualsense_ff(report)?),
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::SteamDeckHaptics(_packed_haptic_report) => Ok(()),
-            OutputEvent::SteamDeckRumble(_packed_rumble_report) => Ok(()),
-            OutputEvent::GenericRumble { .. } => Ok(()),
+            OutputEvent::SteamDeckHapticPulse(report) => {
+                let (weak, strong) = report.magnitudes();
+                self.driver
+                    .rumble((strong / 256) as u8, (weak / 256) as u8)?;
+                self.haptic_timeout = Some(Instant::now() + report.capped_duration());
+                Ok(())
+            }
+            OutputEvent::SteamDeckRumble(report) => {
+                let left_speed = (report.left_speed.to_primitive() / 256) as u8;
+                let right_speed = (report.right_speed.to_primitive() / 256) as u8;
+                Ok(self.driver.rumble(left_speed, right_speed)?)
+            }
+            OutputEvent::GenericRumble {
+                weak_magnitude,
+                strong_magnitude,
+            } => {
+                let left_speed = (strong_magnitude / 256) as u8;
+                let right_speed = (weak_magnitude / 256) as u8;
+                Ok(self.driver.rumble(left_speed, right_speed)?)
+            }
         }
     }
 
@@ -368,4 +412,8 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
 ];
 
-pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[OutputCapability::ForceFeedback];
+pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[
+    OutputCapability::ForceFeedback,
+    OutputCapability::Haptics(Haptic::TrackpadLeft),
+    OutputCapability::Haptics(Haptic::TrackpadRight),
+];

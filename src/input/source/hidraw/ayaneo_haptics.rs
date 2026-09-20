@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, ffi::CString, fmt::Debug};
+use std::{collections::HashMap, error::Error, ffi::CString, fmt::Debug, time::Instant};
 
 use evdev::{FFEffectData, FFEffectKind};
 use hidapi::HidDevice;
@@ -8,7 +8,7 @@ use crate::{
     input::{
         capability::Capability,
         event::native::NativeEvent,
-        output_capability::OutputCapability,
+        output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -48,6 +48,7 @@ struct AyaneoRumbleReport {
 pub struct AyaneoHaptics {
     device: HidDevice,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    haptic_timeout: Option<Instant>,
 }
 
 impl AyaneoHaptics {
@@ -69,6 +70,7 @@ impl AyaneoHaptics {
         Ok(Self {
             device,
             ff_evdev_effects: HashMap::new(),
+            haptic_timeout: None,
         })
     }
 
@@ -154,6 +156,12 @@ impl Drop for AyaneoHaptics {
 
 impl SourceInputDevice for AyaneoHaptics {
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        if let Some(stop_at) = self.haptic_timeout {
+            if Instant::now() >= stop_at {
+                self.haptic_timeout = None;
+                let _ = self.rumble(0, 0);
+            }
+        }
         Ok(vec![])
     }
 
@@ -164,7 +172,11 @@ impl SourceInputDevice for AyaneoHaptics {
 
 impl SourceOutputDevice for AyaneoHaptics {
     fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
-        Ok(vec![OutputCapability::ForceFeedback])
+        Ok(vec![
+            OutputCapability::ForceFeedback,
+            OutputCapability::Haptics(Haptic::TrackpadLeft),
+            OutputCapability::Haptics(Haptic::TrackpadRight),
+        ])
     }
 
     fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
@@ -187,6 +199,12 @@ impl SourceOutputDevice for AyaneoHaptics {
                 weak_magnitude,
                 strong_magnitude,
             } => Ok(self.rumble(strong_magnitude, weak_magnitude)?),
+            OutputEvent::SteamDeckHapticPulse(report) => {
+                let (weak, strong) = report.magnitudes();
+                self.rumble(strong, weak)?;
+                self.haptic_timeout = Some(Instant::now() + report.capped_duration());
+                Ok(())
+            }
             OutputEvent::Uinput(_) | OutputEvent::SteamDeckHaptics(_) => Ok(()),
         }
     }

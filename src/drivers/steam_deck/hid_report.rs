@@ -1,6 +1,8 @@
 //! Source: https://gitlab.com/open-sd/opensd/-/blob/main/src/opensdd/drivers/gamepad/hid_reports.hpp
 //! Source: https://github.com/torvalds/linux/blob/master/drivers/hid/hid-steam.c
 #![allow(warnings)]
+use std::time::Duration;
+
 use packed_struct::prelude::*;
 
 // Input report axis ranges
@@ -611,23 +613,46 @@ pub struct PackedHapticPulseReport {
     #[packed_field(bytes = "2", ty = "enum")]
     pub side: PadSide,
     #[packed_field(bytes = "3..=4", endian = "lsb")]
-    pub amplitude: Integer<u16, packed_bits::Bits<16>>,
+    pub duration_us: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "5..=6", endian = "lsb")]
-    pub period: Integer<u16, packed_bits::Bits<16>>,
+    pub interval_us: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "7..=8", endian = "lsb")]
-    pub count: Integer<u16, packed_bits::Bits<16>>,
+    pub repeat_count: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "9")]
+    pub gain: i8,
 }
 
 impl PackedHapticPulseReport {
     pub fn new() -> Self {
         Self {
             report_id: ReportType::TriggerHapticPulse as u8,
-            report_size: 9,
+            report_size: 8,
             side: PadSide::Both,
-            amplitude: Integer::from_primitive(0),
-            period: Integer::from_primitive(0),
-            count: Integer::from_primitive(0),
+            duration_us: Integer::from_primitive(0),
+            interval_us: Integer::from_primitive(0),
+            repeat_count: Integer::from_primitive(0),
+            gain: 0,
         }
+    }
+
+    /// (weak, strong) rumble magnitudes for devices that must fake this pulse
+    /// with a plain on/off motor, derived from side and gain (dB, -24 to +6).
+    pub fn magnitudes(&self) -> (u16, u16) {
+        let normalized_gain = (self.gain as i16 + 24).clamp(0, 30) as f64 / 30.0;
+        let magnitude = (normalized_gain * u16::MAX as f64) as u16;
+        match self.side {
+            PadSide::Left => (0, magnitude),
+            PadSide::Right => (magnitude, 0),
+            PadSide::Both => (magnitude, magnitude),
+        }
+    }
+
+    /// Capped duration for devices that must schedule their own stop, since
+    /// duration_us * repeat_count can be huge or bogus.
+    pub fn capped_duration(&self) -> Duration {
+        let total_us =
+            self.duration_us.to_primitive() as u64 * self.repeat_count.to_primitive() as u64;
+        Duration::from_micros(total_us.clamp(50_000, 500_000))
     }
 }
 

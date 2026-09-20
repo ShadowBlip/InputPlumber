@@ -17,8 +17,8 @@ use crate::{
     config::CompositeDeviceConfig,
     drivers::steam_deck::{
         hid_report::{
-            PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
-            PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX,
+            PackedHapticPulseReport, PackedHapticReport, PackedInputDataReport, PackedRumbleReport,
+            ReportType, PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX,
             STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
         report_descriptor::CONTROLLER_DESCRIPTOR,
@@ -569,6 +569,21 @@ impl SteamDeckUhidDevice {
                 log::trace!("Got PackedHapticReport: {packed_haptic_report}");
                 let event = OutputEvent::SteamDeckHaptics(packed_haptic_report);
                 vec![event]
+            }
+            ReportType::TriggerHapticPulse => {
+                let buf = data
+                    .get(..10)
+                    .ok_or("Buffer too short for PackedHapticPulseReport")?
+                    .try_into()?;
+                let report = match PackedHapticPulseReport::unpack(buf) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("Got error unpacking buffer as PackedHapticPulseReport {e:?}");
+                        return Ok(vec![]);
+                    }
+                };
+                log::debug!("Got PackedHapticPulseReport: {report:?}");
+                vec![OutputEvent::SteamDeckHapticPulse(report)]
             }
             ReportType::TriggerRumbleCommand => {
                 let buf = data.as_slice().try_into()?;

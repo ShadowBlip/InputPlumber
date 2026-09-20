@@ -81,7 +81,7 @@ impl DPadDirection {
             Self::DownLeft => 0x0c,  // 00001100
             Self::Left => 0x08,      // 00001000
             Self::UpLeft => 0x09,    // 00001001
-            Self::None => 0x0f,      // 00000000
+            Self::None => 0x00,      // 00000000
         }
     }
 
