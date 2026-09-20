@@ -4,7 +4,7 @@ use ::evdev::{FFEffectData, InputEvent};
 
 use crate::drivers::{
     dualsense::hid_report::SetStatePackedOutputData,
-    steam_deck::hid_report::{PackedHapticReport, PackedRumbleReport, PadSide},
+    steam_deck::hid_report::{PackedHapticPulseReport, PackedHapticReport, PackedRumbleReport, PadSide},
 };
 
 use super::output_capability::{Haptic, OutputCapability};
@@ -16,6 +16,7 @@ pub enum OutputEvent {
     Uinput(UinputOutputEvent),
     DualSense(SetStatePackedOutputData),
     SteamDeckHaptics(PackedHapticReport),
+    SteamDeckHapticPulse(PackedHapticPulseReport),
     SteamDeckRumble(PackedRumbleReport),
     GenericRumble {
         weak_magnitude: u16,
@@ -74,6 +75,14 @@ impl OutputEvent {
                     ],
                 }
             }
+            OutputEvent::SteamDeckHapticPulse(report) => match report.side {
+                PadSide::Left => vec![OutputCapability::Haptics(Haptic::TrackpadLeft)],
+                PadSide::Right => vec![OutputCapability::Haptics(Haptic::TrackpadRight)],
+                PadSide::Both => vec![
+                    OutputCapability::Haptics(Haptic::TrackpadLeft),
+                    OutputCapability::Haptics(Haptic::TrackpadRight),
+                ],
+            },
             OutputEvent::SteamDeckRumble(_) => vec![OutputCapability::ForceFeedback],
             OutputEvent::GenericRumble { .. } => vec![OutputCapability::ForceFeedback],
         }
@@ -89,6 +98,7 @@ impl OutputEvent {
             OutputEvent::Uinput(_) => true,
             OutputEvent::DualSense(report) => report.use_rumble_not_haptics,
             OutputEvent::SteamDeckHaptics(_) => true,
+            OutputEvent::SteamDeckHapticPulse(_) => true,
             OutputEvent::SteamDeckRumble(_) => true,
             OutputEvent::GenericRumble { .. } => true,
         }
