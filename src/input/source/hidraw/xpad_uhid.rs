@@ -1,11 +1,15 @@
 use std::{collections::HashMap, error::Error, fmt::Debug};
 
 use evdev::{FFEffectData, FFEffectKind};
+use packed_struct::types::SizedInteger;
 
 use crate::{
-    drivers::xpad_uhid::{
-        driver::{Driver, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
-        event,
+    drivers::{
+        dualsense::hid_report::SetStatePackedOutputData,
+        xpad_uhid::{
+            driver::{Driver, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
+            event,
+        },
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
@@ -51,6 +55,19 @@ impl XpadUhid {
                 return -1;
             }
         }
+    }
+
+    /// Process the given DualSense-format force feedback report.
+    fn process_dualsense_ff(
+        &mut self,
+        report: SetStatePackedOutputData,
+    ) -> Result<(), Box<dyn Error>> {
+        let left_speed = report.rumble_emulation_left;
+        let right_speed = report.rumble_emulation_right;
+        if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+            return Err(format!("Failed to do rumble: {e:?}").into());
+        }
+        Ok(())
     }
 
     /// Process the given evdev force feedback event.
@@ -155,11 +172,22 @@ impl SourceOutputDevice for XpadUhid {
         log::trace!("Received output event: {:?}", event);
         match event {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
-            OutputEvent::DualSense(_) => Ok(()),
+            OutputEvent::DualSense(report) => Ok(self.process_dualsense_ff(report)?),
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::SteamDeckHaptics(_packed_haptic_report) => Ok(()),
-            OutputEvent::SteamDeckRumble(_packed_rumble_report) => Ok(()),
-            OutputEvent::GenericRumble { .. } => Ok(()),
+            OutputEvent::SteamDeckRumble(report) => {
+                let left_speed = (report.left_speed.to_primitive() / 256) as u8;
+                let right_speed = (report.right_speed.to_primitive() / 256) as u8;
+                Ok(self.driver.rumble(left_speed, right_speed)?)
+            }
+            OutputEvent::GenericRumble {
+                weak_magnitude,
+                strong_magnitude,
+            } => {
+                let left_speed = (strong_magnitude / 256) as u8;
+                let right_speed = (weak_magnitude / 256) as u8;
+                Ok(self.driver.rumble(left_speed, right_speed)?)
+            }
         }
     }
 
