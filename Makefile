@@ -58,6 +58,8 @@ install: build ## Install inputplumber to the given prefix (default: PREFIX=/usr
 		rootfs/usr/share/polkit-1/actions/*
 	install -D -m 644 -t $(PREFIX)/share/polkit-1/rules.d/ \
 		rootfs/usr/share/polkit-1/rules.d/*
+	install -D -m 644 -t $(PREFIX)/lib/modules-load.d/ \
+		rootfs/usr/lib/modules-load.d/*
 	install -D -m 644 -t $(PREFIX)/lib/systemd/system/ \
 		rootfs/usr/lib/systemd/system/*
 	install -D -m 644 -t $(PREFIX)/lib/udev/hwdb.d/ \
@@ -83,6 +85,7 @@ uninstall: ## Uninstall inputplumber
 	rm $(PREFIX)/share/dbus-1/system.d/$(DBUS_NAME).conf
 	rm $(PREFIX)/share/polkit-1/actions/$(DBUS_NAME).policy
 	rm $(PREFIX)/share/polkit-1/rules.d/$(DBUS_NAME).rules
+	rm $(PREFIX)/lib/modules-load.d/inputplumber-hrtimer.conf
 	rm $(PREFIX)/lib/systemd/system/$(NAME).service
 	rm $(PREFIX)/lib/systemd/system/$(NAME)-suspend.service
 	rm $(PREFIX)/lib/udev/hwdb.d/59-inputplumber.hwdb

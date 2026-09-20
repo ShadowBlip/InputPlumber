@@ -66,6 +66,11 @@ assets = [
     "644",
   ],
   [
+    "rootfs/usr/lib/modules-load.d/*",
+    "usr/lib/modules-load.d/",
+    "644",
+  ],
+  [
     "rootfs/usr/lib/systemd/system/*",
     "usr/lib/systemd/system/",
     "644",

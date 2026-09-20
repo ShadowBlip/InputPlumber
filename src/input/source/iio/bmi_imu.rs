@@ -1,14 +1,18 @@
-use std::{collections::HashSet, error::Error, f64::consts::PI, fmt::Debug};
+use std::{collections::HashSet, error::Error, fmt::Debug};
 
 use crate::{
     config,
-    drivers::iio_imu::{self, driver::Driver, info::MountMatrix},
+    drivers::iio_imu::{driver::Driver, info::TriggerStrategy},
     input::{
-        capability::{Capability, Gamepad},
-        event::{native::NativeEvent, value::InputValue},
+        capability::Capability,
+        event::native::NativeEvent,
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
+};
+
+use super::common::{
+    mount_matrix_from_config, sample_rate_from_config, translate_events, CAPABILITIES,
 };
 
 pub struct BmiImu {
@@ -20,30 +24,19 @@ impl BmiImu {
     /// device information
     pub fn new(
         device_info: UdevDevice,
-        config: Option<config::IIO>,
+        config: Option<config::SourceDevice>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        // Override the mount matrix if one is defined in the config
-        let mount_matrix = if let Some(config) = config.as_ref() {
-            #[allow(deprecated)]
-            if let Some(matrix_config) = config.mount_matrix.as_ref() {
-                let matrix = MountMatrix {
-                    x: (matrix_config.x[0], matrix_config.x[1], matrix_config.x[2]),
-                    y: (matrix_config.y[0], matrix_config.y[1], matrix_config.y[2]),
-                    z: (matrix_config.z[0], matrix_config.z[1], matrix_config.z[2]),
-                };
-                Some(matrix)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let sample_rate = config.as_ref().and_then(|c| c.sample_rate);
+        let mount_matrix = mount_matrix_from_config(config.as_ref());
+        let sample_rate = sample_rate_from_config(config.as_ref());
 
         let id = device_info.sysname();
-        let name = device_info.name();
-        let driver = Driver::new(id, name, mount_matrix, sample_rate)?;
+        let trigger_name = format!("inputplumber-{}", id.replace(':', "_"));
+        let driver = Driver::new(
+            id,
+            mount_matrix,
+            sample_rate,
+            TriggerStrategy::Hrtimer(trigger_name),
+        )?;
 
         Ok(Self { driver })
     }
@@ -53,8 +46,7 @@ impl SourceInputDevice for BmiImu {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
-        let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_events(events, 1.0, 1.0))
     }
 
     /// Returns the possible input events this device is capable of emitting
@@ -68,14 +60,7 @@ impl SourceInputDevice for BmiImu {
     }
 
     fn get_default_event_filter(&self) -> Result<HashSet<Capability>, InputError> {
-        let filtered_events = self.driver.get_default_event_filter();
-        let filtered_events = match filtered_events {
-            Ok(events) => events,
-            Err(e) => {
-                return Err(format!("Failed to get default event filter: {:?}", e).into());
-            }
-        };
-        Ok(filtered_events)
+        Ok(self.driver.get_default_event_filter()?)
     }
 }
 
@@ -90,43 +75,3 @@ impl Debug for BmiImu {
 // NOTE: Mark this struct as thread-safe as it will only ever be called from
 // a single thread.
 unsafe impl Send for BmiImu {}
-
-/// Translate the given driver events into native events
-fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {
-    events.into_iter().map(translate_event).collect()
-}
-
-/// Translate the given driver event into a native event
-fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
-    match event {
-        iio_imu::event::Event::Accelerometer(data) => {
-            let cap = Capability::Gamepad(Gamepad::Accelerometer);
-            let value = InputValue::Vector3 {
-                x: Some(data.roll),
-                y: Some(data.pitch),
-                z: Some(data.yaw),
-            };
-            NativeEvent::new(cap, value)
-        }
-        iio_imu::event::Event::Gyro(data) => {
-            // Translate gyro values into the expected units of degrees per sec
-            // We apply a 12x scale so the lowest (default) value feels like natural 1:1 motion.
-            // Adjusting the scale will increase the granularity of the motion by slowing
-            // incrementing closer to 2:1 motion. From testing this is the highest scale we can
-            // apply before noise is amplified to the point the gyro cannot calibrate.
-            let cap = Capability::Gamepad(Gamepad::Gyro);
-            let value = InputValue::Vector3 {
-                x: Some(data.roll * (180.0 / PI) * 12.0),
-                y: Some(data.pitch * (180.0 / PI) * 12.0),
-                z: Some(data.yaw * (180.0 / PI) * 12.0),
-            };
-            NativeEvent::new(cap, value)
-        }
-    }
-}
-
-/// List of all capabilities that the driver implements
-pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
-    Capability::Gamepad(Gamepad::Gyro),
-];
