@@ -311,7 +311,7 @@ impl Driver {
                 value: state.trigger_l,
             })));
         }
-        if state.trigger_l != old_state.trigger_r {
+        if state.trigger_r != old_state.trigger_r {
             events.push(Event::Trigger(TriggerEvent::TriggerR(TriggerInput {
                 value: state.trigger_r,
             })));
@@ -321,11 +321,13 @@ impl Driver {
             || state.accel_y != old_state.accel_y
             || state.accel_z != old_state.accel_z
         {
+            // Rotate from the sensor frame to the SDL standard frame: x=pitch,
+            // y=yaw, z=roll. See HIDAPI_Driver8BitDo in SDL_hidapi_8bitdo.c.
             events.push(Event::Inertia(InertialEvent::Accelerometer(
                 InertialInput {
-                    x: i16::from(state.accel_x),
-                    y: i16::from(state.accel_y),
-                    z: i16::from(state.accel_z),
+                    x: i16::from(state.accel_y).wrapping_neg(),
+                    y: i16::from(state.accel_z),
+                    z: i16::from(state.accel_x).wrapping_neg(),
                 },
             )))
         };
@@ -334,10 +336,11 @@ impl Driver {
             || state.gyro_y != old_state.gyro_y
             || state.gyro_z != old_state.gyro_z
         {
-            events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-                x: i16::from(state.gyro_x),
-                y: i16::from(state.gyro_y),
-                z: i16::from(state.gyro_z),
+            // Same rotation as the accelerometer, to the SDL standard frame.
+            events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
+                x: i16::from(state.gyro_y).wrapping_neg(),
+                y: i16::from(state.gyro_z),
+                z: i16::from(state.gyro_x).wrapping_neg(),
             })))
         };
 
