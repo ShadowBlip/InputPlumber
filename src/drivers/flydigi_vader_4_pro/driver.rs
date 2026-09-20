@@ -289,11 +289,11 @@ impl Driver {
                 z: state.accel_z.to_primitive(),
             },
         )));
-        // Gyro events. They need to be rotated in order for them to be read properly
-        events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
-            x: -(state.gyro_x.to_primitive() as i32 * 1143239 / i16::MAX as i32) as i16,
-            y: -(state.get_y() as i32 * 1143239 / i16::MAX as i32) as i16,
-            z: -(state.gyro_z.to_primitive() as i32 * 17873 / i16::MAX as i32) as i16,
+        // Gyro events, rotated to the SDL standard frame. See SDL_hidapi_flydigi.c
+        events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
+            x: -state.gyro_x.to_primitive(),
+            y: -state.get_y(),
+            z: -state.gyro_z.to_primitive(),
         })));
         events
     }
