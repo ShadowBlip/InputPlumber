@@ -12,7 +12,7 @@ use packed_struct::PrimitiveEnum;
 
 use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::drivers::steam_deck::hid_report::{
-    CommandType, PackedHapticReport, PackedRumbleReport, PadSide,
+    CommandType, PackedHapticPulseReport, PackedHapticReport, PackedRumbleReport, PadSide,
 };
 use crate::input::event::evdev::translator::EventTranslator;
 use crate::input::output_capability::{Haptic, OutputCapability, LED};
@@ -426,6 +426,65 @@ impl GamepadEventDevice {
 
         Ok(())
     }
+
+    // Process Steam Deck Haptic Pulse events. Real controller firmware times
+    // this itself; we approximate it with the kernel's FF replay length.
+    fn process_haptic_pulse_ff(&mut self, report: PackedHapticPulseReport) -> Result<(), Box<dyn Error>> {
+        if self.ff_effects_deck.is_none() {
+            let effect_data = FFEffectData {
+                direction: 0,
+                trigger: FFTrigger {
+                    button: 0,
+                    interval: 0,
+                },
+                replay: FFReplay {
+                    length: 50,
+                    delay: 0,
+                },
+                kind: FFEffectKind::Rumble {
+                    strong_magnitude: 0,
+                    weak_magnitude: 0,
+                },
+            };
+            let effect = self.device.upload_ff_effect(effect_data)?;
+            let id = effect.id() as i16;
+            self.ff_effects.insert(id, effect);
+            self.ff_effects_deck = Some(id);
+        }
+
+        let effect_id = self.ff_effects_deck.unwrap();
+        let effect = self.ff_effects.get_mut(&effect_id).unwrap();
+
+        // Gain is dB, -24 to +6.
+        let normalized_gain = (report.gain as i16 + 24).clamp(0, 30) as f64 / 30.0;
+        let magnitude = (normalized_gain * u16::MAX as f64) as u16;
+        let (strong_magnitude, weak_magnitude) = match report.side {
+            PadSide::Left => (0, magnitude),
+            PadSide::Right => (magnitude, 0),
+            PadSide::Both => (magnitude, magnitude),
+        };
+
+        let total_us =
+            report.duration_us.to_primitive() as u64 * report.repeat_count.to_primitive() as u64;
+        let length = (total_us.clamp(50_000, 500_000) / 1000) as u16;
+
+        let effect_data = FFEffectData {
+            direction: 0,
+            trigger: FFTrigger {
+                button: 0,
+                interval: 0,
+            },
+            replay: FFReplay { length, delay: 0 },
+            kind: FFEffectKind::Rumble {
+                strong_magnitude,
+                weak_magnitude,
+            },
+        };
+        effect.update(effect_data)?;
+        effect.play(1)?;
+
+        Ok(())
+    }
 }
 
 impl SourceInputDevice for GamepadEventDevice {
@@ -642,6 +701,13 @@ impl SourceOutputDevice for GamepadEventDevice {
                 log::trace!("Received Steam Deck Haptic Output Report");
                 if let Err(e) = self.process_haptic_ff(report) {
                     log::error!("Failed to process Steam Deck Haptic Output Report: {e:?}")
+                }
+                Ok(())
+            }
+            OutputEvent::SteamDeckHapticPulse(report) => {
+                log::trace!("Received Steam Deck Haptic Pulse Report");
+                if let Err(e) = self.process_haptic_pulse_ff(report) {
+                    log::error!("Failed to process Steam Deck Haptic Pulse Report: {e:?}")
                 }
                 Ok(())
             }

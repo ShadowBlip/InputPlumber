@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt::Debug};
+use std::{collections::HashMap, error::Error, fmt::Debug, time::Instant};
 
 use evdev::{FFEffectData, FFEffectKind};
 use packed_struct::{types::SizedInteger, PrimitiveEnum};
@@ -26,6 +26,7 @@ use crate::{
 pub struct Ultimate2 {
     driver: Driver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
+    haptic_timeout: Option<Instant>,
 }
 
 impl Ultimate2 {
@@ -36,6 +37,7 @@ impl Ultimate2 {
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
+            haptic_timeout: None,
         })
     }
 
@@ -167,6 +169,13 @@ impl Ultimate2 {
 impl SourceInputDevice for Ultimate2 {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        if let Some(stop_at) = self.haptic_timeout {
+            if Instant::now() >= stop_at {
+                self.haptic_timeout = None;
+                let _ = self.driver.rumble(0, 0);
+            }
+        }
+
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
         Ok(native_events)
@@ -201,6 +210,12 @@ impl SourceOutputDevice for Ultimate2 {
             }
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::SteamDeckHaptics(report) => Ok(self.process_haptic_ff(report)?),
+            OutputEvent::SteamDeckHapticPulse(report) => {
+                let (weak, strong) = report.magnitudes();
+                self.driver.rumble((strong / 256) as u8, (weak / 256) as u8)?;
+                self.haptic_timeout = Some(Instant::now() + report.capped_duration());
+                Ok(())
+            }
             OutputEvent::SteamDeckRumble(report) => {
                 let left_speed = (report.left_speed.to_primitive() / 256) as u8;
                 let right_speed = (report.right_speed.to_primitive() / 256) as u8;
