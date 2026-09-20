@@ -10,7 +10,7 @@ pub mod steam_deck;
 pub mod steam_deck_uhid;
 pub mod touchpad;
 pub mod touchscreen;
-pub mod ulitmate_2;
+pub mod ultimate_2;
 pub mod unified_gamepad;
 pub mod xpad;
 
@@ -65,7 +65,7 @@ use self::mouse::MouseDevice;
 use self::steam_deck::SteamDeckDevice;
 use self::touchpad::TouchpadDevice;
 use self::touchscreen::TouchscreenDevice;
-use self::ulitmate_2::Ultimate2WirelessDevice;
+use self::ultimate_2::Ultimate2WirelessDevice;
 
 /// Possible errors for a target device client
 #[derive(Error, Debug)]
