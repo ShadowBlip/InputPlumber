@@ -1,4 +1,4 @@
-use std::{error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, time::Duration};
 
 use futures::StreamExt;
 use packed_struct::PackedStruct;
@@ -73,6 +73,7 @@ pub struct DeviceTestMenu {
     profile_path: Option<String>,
     target_device_types: Vec<TargetDeviceTypeId>,
     intercept_mode: u32,
+    filtered_events: HashMap<String, Vec<String>>,
     ui_buttons: Vec<ButtonGauge>,
     ui_triggers: Vec<TriggerGauge>,
     ui_axes: Vec<AxisGauge>,
@@ -121,6 +122,11 @@ impl DeviceTestMenu {
 
         // Save the current intercept mode so it can be restored
         let intercept_mode = device.intercept_mode().await?;
+
+        // Save the current event filters so they can be restored, then clear
+        // them so every source's raw capabilities are visible during testing
+        let filtered_events = device.filtered_events().await?;
+        device.set_filtered_events(HashMap::new()).await?;
 
         // Add the debug target device if it does not exist
         if !target_device_types.iter().any(|t| t.as_str() == "debug") {
@@ -174,6 +180,7 @@ impl DeviceTestMenu {
             capability_report: None,
             target_device_types,
             intercept_mode,
+            filtered_events,
             ui_buttons: Default::default(),
             ui_triggers: Default::default(),
             ui_axes: Default::default(),
@@ -191,6 +198,7 @@ impl DeviceTestMenu {
         let intercept_mode = self.intercept_mode;
         let profile = self.profile.clone();
         let profile_path = self.profile_path.clone();
+        let filtered_events = self.filtered_events.clone();
         tokio::task::spawn(async move {
             // Create a reference to the composite device
             let device = CompositeDeviceInterfaceProxy::builder(&conn)
@@ -217,6 +225,9 @@ impl DeviceTestMenu {
 
             // Restore the intercept mode
             let _ = device.set_intercept_mode(intercept_mode).await;
+
+            // Restore the event filters
+            let _ = device.set_filtered_events(filtered_events).await;
         });
 
         // Wait a beat for the target devices to be restored
