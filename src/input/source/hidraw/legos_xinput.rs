@@ -19,6 +19,7 @@ use crate::{
             value::InputValue,
             value::{normalize_signed_value, normalize_unsigned_value},
         },
+        output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -163,6 +164,14 @@ impl SourceInputDevice for LegionSXInputController {
 }
 
 impl SourceOutputDevice for LegionSXInputController {
+    fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
+        Ok(vec![
+            OutputCapability::ForceFeedback,
+            OutputCapability::Haptics(Haptic::TrackpadLeft),
+            OutputCapability::Haptics(Haptic::TrackpadRight),
+        ])
+    }
+
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
