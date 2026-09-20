@@ -78,7 +78,7 @@ pub struct InertialInput {
 #[derive(Clone, Debug)]
 pub enum InertialEvent {
     Accelerometer(InertialInput),
-    Gyro(InertialInput),
+    Gyroscope(InertialInput),
 }
 
 /// [JoystickInput] is a double  (x, y) axis

@@ -7,7 +7,6 @@ URL:            https://github.com/ShadowBlip/InputPlumber
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz
 
 BuildRequires: libevdev-devel
-BuildRequires: libiio-devel
 BuildRequires: git
 BuildRequires: make
 BuildRequires: cargo
@@ -16,7 +15,6 @@ BuildRequires: llvm-devel
 BuildRequires: clang-devel
 BuildRequires:  systemd-rpm-macros
 Requires:       libevdev
-Requires:       libiio
 Requires:       polkit
 Recommends:     linuxconsoletools
 Provides:       inputplumber

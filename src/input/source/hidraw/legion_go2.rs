@@ -5,7 +5,8 @@ use crate::{
     drivers::lego::{
         event::{self, AxisEvent},
         go2_driver::Driver,
-        STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
+        GO2_ACCEL_RAW_TO_MPS2, GO2_GYRO_RAW_TO_RAD_S, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX,
+        STICK_Y_MIN, TRIGG_MAX,
     },
     input::{
         capability::{
@@ -15,7 +16,10 @@ use crate::{
         event::{
             native::NativeEvent,
             value::InputValue,
-            value::{normalize_signed_value, normalize_unsigned_value},
+            value::{
+                normalize_accel_value_i16, normalize_gyro_value_i16, normalize_signed_value,
+                normalize_unsigned_value,
+            },
         },
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -30,8 +34,11 @@ pub struct LegionGo2Controller {
 impl LegionGo2Controller {
     /// Create a new Legion controller source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let driver = Driver::new(device_info)?;
+    pub fn new(
+        device_info: UdevDevice,
+        is_legion_go_2: bool,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let driver = Driver::new(device_info, is_legion_go_2)?;
         Ok(Self { driver })
     }
 
@@ -235,7 +242,23 @@ impl SourceInputDevice for LegionGo2Controller {
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        if self.driver.is_legion_go_2() {
+            return Ok(CAPABILITIES.into());
+        }
+        // The original Legion Go doesn't have these.
+        let capabilities = CAPABILITIES
+            .iter()
+            .filter(|cap| {
+                !matches!(
+                    cap,
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch))
+                        | Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess2))
+                        | Capability::Gamepad(Gamepad::Button(GamepadButton::Keyboard))
+                )
+            })
+            .cloned()
+            .collect();
+        Ok(capabilities)
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
@@ -296,15 +319,15 @@ fn normalize_axis_value(event: AxisEvent) -> InputValue {
         AxisEvent::LeftAccel(value)
         | AxisEvent::RightAccel(value)
         | AxisEvent::MultiAccel(value) => InputValue::Vector3 {
-            x: Some(value.pitch as f64),
-            y: Some(value.roll as f64),
-            z: Some(value.yaw as f64),
+            x: Some(normalize_accel_value_i16(value.pitch, GO2_ACCEL_RAW_TO_MPS2)),
+            y: Some(normalize_accel_value_i16(value.roll, GO2_ACCEL_RAW_TO_MPS2)),
+            z: Some(normalize_accel_value_i16(value.yaw, GO2_ACCEL_RAW_TO_MPS2)),
         },
         AxisEvent::LeftGyro(value) | AxisEvent::RightGyro(value) | AxisEvent::MultiGyro(value) => {
             InputValue::Vector3 {
-                x: Some(value.pitch as f64),
-                y: Some(value.roll as f64),
-                z: Some(value.yaw as f64),
+                x: Some(normalize_gyro_value_i16(value.pitch, GO2_GYRO_RAW_TO_RAD_S)),
+                y: Some(normalize_gyro_value_i16(value.roll, GO2_GYRO_RAW_TO_RAD_S)),
+                z: Some(normalize_gyro_value_i16(value.yaw, GO2_GYRO_RAW_TO_RAD_S)),
             }
         }
         _ => InputValue::None,

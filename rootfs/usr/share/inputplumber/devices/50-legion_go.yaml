@@ -220,8 +220,15 @@ source_devices:
       name: gyro_3d
       mount_matrix:
         x: [0, 1, 0]
-        y: [1, 0, 0]
-        z: [0, 0, 1]
+        y: [0, 0, 1]
+        z: [-1, 0, 0]
+  - group: imu
+    iio:
+      name: accel_3d
+      mount_matrix:
+        x: [0, -1, 0]
+        y: [0, 0, 1]
+        z: [1, 0, 0]
 
 # Optional configuration for the composite device
 options:

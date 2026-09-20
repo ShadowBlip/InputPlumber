@@ -11,7 +11,7 @@ use super::{
         JoystickInput, TriggerEvent, TriggerInput,
     },
     hid_report::PackedInputDataReport,
-    HID_TIMEOUT, PACKET_SIZE, PIDS, REPORT_ID, VID,
+    HID_TIMEOUT, PACKET_SIZE, PIDS, REPORT_ID, REPORT_ID_BT, VID,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -55,15 +55,24 @@ impl Driver {
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; PACKET_SIZE];
-        let _bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
+        let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
+        if bytes_read == 0 {
+            return Ok(vec![]);
+        }
 
         let report_id = buf[0];
-        if report_id != REPORT_ID {
+        if report_id != REPORT_ID && report_id != REPORT_ID_BT {
             log::warn!("Got unhandled report_id {report_id}, someone should look into that...");
             return Ok(vec![]);
         }
 
-        let input_report = PackedInputDataReport::unpack(&buf)?;
+        let input_report = match PackedInputDataReport::unpack(&buf) {
+            Ok(input_report) => input_report,
+            Err(e) => {
+                log::warn!("Failed to unpack input report, dropping packet: {e}");
+                return Ok(vec![]);
+            }
+        };
 
         // Print input report for debugging
         //log::trace!("--- Input report ---");
@@ -273,14 +282,14 @@ impl Driver {
         // Accelerometer events
         events.push(Event::Inertia(InertialEvent::Accelerometer(
             InertialInput {
-                x: -state.accel_x.to_primitive(),
-                y: state.accel_y.to_primitive(),
-                z: -state.accel_z.to_primitive(),
+                x: state.accel_x.to_primitive(),
+                y: -state.accel_y.to_primitive(),
+                z: state.accel_z.to_primitive(),
             },
         )));
-        events.push(Event::Inertia(InertialEvent::Gyro(InertialInput {
+        events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
             x: -state.pitch.to_primitive(),
-            y: state.yaw.to_primitive(),
+            y: -state.yaw.to_primitive(),
             z: -state.roll.to_primitive(),
         })));
 

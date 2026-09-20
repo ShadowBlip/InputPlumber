@@ -17,6 +17,7 @@ use crate::{
             ReportType, ValueType, REPORT_DESCRIPTOR,
         },
         value::TouchValue,
+        UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW, UNIFIED_GAMEPAD_RAD_S_TO_GYRO_RAW,
     },
     input::{
         capability::{
@@ -24,7 +25,10 @@ use crate::{
             Source, Touch, Touchpad,
         },
         composite_device::client::CompositeDeviceClient,
-        event::{native::NativeEvent, value::InputValue},
+        event::{
+            native::NativeEvent,
+            value::{denormalize_accel_value_i16, denormalize_gyro_value_i16, InputValue},
+        },
         output_capability::OutputCapability,
         output_event::OutputEvent,
     },
@@ -405,9 +409,6 @@ impl Debug for UnifiedGamepadDevice {
 /// Implementation to convert an InputPlumber [NativeEvent] into a Unified Controller [StateUpdate]
 impl From<NativeEvent> for StateUpdate {
     fn from(event: NativeEvent) -> Self {
-        // TODO: We need a consistent way to scale small float values to integers
-        const GYRO_SCALE_FACTOR: f64 = 10.0; // amount to scale imu data
-        const ACCEL_SCALE_FACTOR: f64 = 3000.0; // amount to scale imu data
         let event_capability = event.as_capability();
         let capability = event_capability.clone().into();
         match event_capability {
@@ -460,36 +461,6 @@ impl From<NativeEvent> for StateUpdate {
                         }
                     };
                     let value = ValueUpdate::UInt8(value);
-
-                    Self { capability, value }
-                }
-                Gamepad::Accelerometer => {
-                    let value = match event.get_value() {
-                        InputValue::Vector3 { x, y, z } => Int16Vector3Update {
-                            x: x.map(|x| (x * ACCEL_SCALE_FACTOR) as i16),
-                            y: y.map(|y| (y * ACCEL_SCALE_FACTOR) as i16),
-                            z: z.map(|z| (z * ACCEL_SCALE_FACTOR) as i16),
-                        },
-                        _ => {
-                            return Self::default();
-                        }
-                    };
-                    let value = ValueUpdate::Int16Vector3(value);
-
-                    Self { capability, value }
-                }
-                Gamepad::Gyro => {
-                    let value = match event.get_value() {
-                        InputValue::Vector3 { x, y, z } => Int16Vector3Update {
-                            x: x.map(|x| (x * GYRO_SCALE_FACTOR) as i16),
-                            y: y.map(|y| (y * GYRO_SCALE_FACTOR) as i16),
-                            z: z.map(|z| (z * GYRO_SCALE_FACTOR) as i16),
-                        },
-                        _ => {
-                            return Self::default();
-                        }
-                    };
-                    let value = ValueUpdate::Int16Vector3(value);
 
                     Self { capability, value }
                 }
@@ -689,9 +660,15 @@ impl From<NativeEvent> for StateUpdate {
             Capability::Gyroscope(_) => {
                 let value = match event.get_value() {
                     InputValue::Vector3 { x, y, z } => Int16Vector3Update {
-                        x: x.map(|x| (x * GYRO_SCALE_FACTOR) as i16),
-                        y: y.map(|y| (y * GYRO_SCALE_FACTOR) as i16),
-                        z: z.map(|z| (z * GYRO_SCALE_FACTOR) as i16),
+                        x: x.map(|x| {
+                            denormalize_gyro_value_i16(x, UNIFIED_GAMEPAD_RAD_S_TO_GYRO_RAW)
+                        }),
+                        y: y.map(|y| {
+                            denormalize_gyro_value_i16(y, UNIFIED_GAMEPAD_RAD_S_TO_GYRO_RAW)
+                        }),
+                        z: z.map(|z| {
+                            denormalize_gyro_value_i16(z, UNIFIED_GAMEPAD_RAD_S_TO_GYRO_RAW)
+                        }),
                     },
                     _ => {
                         return Self::default();
@@ -704,9 +681,15 @@ impl From<NativeEvent> for StateUpdate {
             Capability::Accelerometer(_) => {
                 let value = match event.get_value() {
                     InputValue::Vector3 { x, y, z } => Int16Vector3Update {
-                        x: x.map(|x| (x * ACCEL_SCALE_FACTOR) as i16),
-                        y: y.map(|y| (y * ACCEL_SCALE_FACTOR) as i16),
-                        z: z.map(|z| (z * ACCEL_SCALE_FACTOR) as i16),
+                        x: x.map(|x| {
+                            denormalize_accel_value_i16(x, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
+                        }),
+                        y: y.map(|y| {
+                            denormalize_accel_value_i16(y, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
+                        }),
+                        z: z.map(|z| {
+                            denormalize_accel_value_i16(z, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
+                        }),
                     },
                     _ => {
                         return Self::default();
@@ -780,8 +763,6 @@ impl From<Capability> for InputCapability {
                     GamepadTrigger::RightTouchpadForce => Self::GamepadTriggerRightTouchpadForce,
                     GamepadTrigger::RightStickForce => Self::GamepadTriggerRightStickForce,
                 },
-                Gamepad::Accelerometer => Self::AccelerometerCenter,
-                Gamepad::Gyro => Self::GyroscopeCenter,
                 Gamepad::Dial(dial) => match dial {
                     GamepadDial::LeftStickDial => Self::GamepadDialLeft,
                     GamepadDial::RightStickDial => Self::GamepadDialRight,
@@ -989,9 +970,9 @@ impl From<Capability> for InputCapability {
                 Source::Center => Self::GyroscopeCenter,
             },
             Capability::Accelerometer(source) => match source {
-                Source::Left => Self::GyroscopeLeft,
-                Source::Right => Self::GyroscopeRight,
-                Source::Center => Self::GyroscopeCenter,
+                Source::Left => Self::AccelerometerLeft,
+                Source::Right => Self::AccelerometerRight,
+                Source::Center => Self::AccelerometerCenter,
             },
         }
     }
@@ -1011,8 +992,6 @@ impl From<Capability> for InputCapabilityInfo {
                 Gamepad::Button(_) => Self::new(capability, ValueType::Bool),
                 Gamepad::Axis(_) => Self::new(capability, ValueType::UInt16Vector2),
                 Gamepad::Trigger(_) => Self::new(capability, ValueType::UInt8),
-                Gamepad::Accelerometer => Self::new(capability, ValueType::Int16Vector3),
-                Gamepad::Gyro => Self::new(capability, ValueType::Int16Vector3),
                 Gamepad::Dial(_) => Self::new(capability, ValueType::Int8),
             },
             Capability::Mouse(_) => Self::default(),

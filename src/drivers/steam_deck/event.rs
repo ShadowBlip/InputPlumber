@@ -2,7 +2,7 @@
 #[derive(Clone, Debug)]
 pub enum Event {
     Button(ButtonEvent),
-    Accelerometer(AccelerometerEvent),
+    Accelerometer(IntertialEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
 }
@@ -116,9 +116,9 @@ pub enum TriggerEvent {
     RStickForce(TriggerInput),
 }
 
-/// AccelerometerInput represents the state of the accelerometer (x, y, z) values
+/// AccelerometerInput represents the raw (x, y, z) counts from the accelerometer/gyroscope
 #[derive(Clone, Debug)]
-pub struct AccelerometerInput {
+pub struct IntertialInput {
     pub x: i16,
     pub y: i16,
     pub z: i16,
@@ -126,8 +126,8 @@ pub struct AccelerometerInput {
 
 /// AccelerometerEvent has data from the accelerometer
 #[derive(Clone, Debug)]
-pub enum AccelerometerEvent {
-    Accelerometer(AccelerometerInput),
+pub enum IntertialEvent {
+    Accelerometer(IntertialInput),
     /// Pitch, yaw, roll
-    Attitude(AccelerometerInput),
+    Gyroscope(IntertialInput),
 }

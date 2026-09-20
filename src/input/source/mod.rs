@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, MutexGuard},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use ::evdev::FFEffectData;
@@ -384,7 +384,7 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                     log::error!("Failed to set default event filter for {device_id}: {e}");
                 };
                 loop {
-                    let poll_time_start = std::time::Instant::now();
+                    let poll_time_start = Instant::now();
 
                     // Create a context with performance metrics for each event
                     let mut context = if metrics_enabled {

@@ -3,12 +3,18 @@ use std::{collections::HashMap, error::Error, fmt::Debug};
 use evdev::{FFEffectData, FFEffectKind};
 
 use crate::{
-    drivers::ultimate_2::{driver::Driver, event, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
+    drivers::ultimate_2::{
+        driver::Driver, event, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX,
+        ULTIMATE_2_ACCEL_RAW_TO_MPS2, ULTIMATE_2_GYRO_RAW_TO_RAD_S,
+    },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source},
         event::{
             native::NativeEvent,
-            value::{normalize_signed_value, normalize_unsigned_value, InputValue},
+            value::{
+                normalize_accel_value_i16, normalize_gyro_value_i16, normalize_signed_value,
+                normalize_unsigned_value, InputValue,
+            },
         },
         output_capability::OutputCapability,
         output_event::OutputEvent,
@@ -352,17 +358,17 @@ fn translate_event(event: event::Event) -> NativeEvent {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
                 Capability::Accelerometer(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(normalize_accel_value_i16(value.x, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
+                    y: Some(normalize_accel_value_i16(value.y, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
+                    z: Some(normalize_accel_value_i16(value.z, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
                 },
             ),
             event::InertialEvent::Gyro(value) => NativeEvent::new(
                 Capability::Gyroscope(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(normalize_gyro_value_i16(value.x, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
+                    y: Some(normalize_gyro_value_i16(value.y, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
+                    z: Some(normalize_gyro_value_i16(value.z, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
                 },
             ),
         },
