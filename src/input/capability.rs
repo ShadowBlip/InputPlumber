@@ -49,8 +49,6 @@ impl Capability {
                 Gamepad::Button(button) => format!("Gamepad:Button:{button}"),
                 Gamepad::Axis(axis) => format!("Gamepad:Axis:{axis}"),
                 Gamepad::Trigger(trigger) => format!("Gamepad:Trigger:{trigger}"),
-                Gamepad::Accelerometer => "Gamepad:Accelerometer".to_string(),
-                Gamepad::Gyro => "Gamepad:Gyro".to_string(),
                 Gamepad::Dial(dial) => format!("Gamepad:Dial:{dial}"),
             },
             Capability::Mouse(mouse) => match mouse {
@@ -203,31 +201,6 @@ impl From<CapabilityConfig> for Capability {
                 return Capability::Gamepad(Gamepad::Trigger(trigger));
             }
 
-            // Gyro
-            if let Some(gyro_capability) = gamepad.gyro.as_ref() {
-                let gyro = Gamepad::from_str(&gyro_capability.name);
-                if gyro.is_err() {
-                    log::error!("Invalid or unimplemented gyro: {}", gyro_capability.name);
-                    return Capability::NotImplemented;
-                }
-
-                return Capability::Gamepad(Gamepad::Gyro);
-            }
-
-            // Accelerometer
-            if let Some(accelerometer_capability) = gamepad.accelerometer.as_ref() {
-                let accelerometer = Gamepad::from_str(&accelerometer_capability.name);
-                if accelerometer.is_err() {
-                    log::error!(
-                        "Invalid or unimplemented gyro: {}",
-                        accelerometer_capability.name
-                    );
-                    return Capability::NotImplemented;
-                }
-
-                return Capability::Gamepad(Gamepad::Accelerometer);
-            }
-
             // Dials/wheels
             if let Some(dial_config) = gamepad.dial.as_ref() {
                 let dial = GamepadDial::from_str(&dial_config.name);
@@ -237,6 +210,19 @@ impl From<CapabilityConfig> for Capability {
                 }
                 let dial = dial.unwrap();
                 return Capability::Gamepad(Gamepad::Dial(dial));
+            }
+
+            // The Gamepad:Gyro and Gamepad:Accelerometer capabilities were
+            // removed; warn and ignore any config that still references them.
+            if gamepad.gyro.is_some() {
+                log::warn!(
+                    "Gamepad:Gyro is no longer supported and is ignored, use Gyroscope:Left, Gyroscope:Right or Gyroscope:Center instead"
+                );
+            }
+            if gamepad.accelerometer.is_some() {
+                log::warn!(
+                    "Gamepad:Accelerometer is no longer supported and is ignored, use Accelerometer:Left, Accelerometer:Right or Accelerometer:Center instead"
+                );
             }
         }
 
@@ -385,14 +371,6 @@ pub enum Gamepad {
     /// Gamepad Trigger typically uses a single unsigned integar value that represents
     /// how far a trigger has been pulled
     Trigger(GamepadTrigger),
-    /// Accelerometer events measure the current acceleration of a device. This is
-    /// normally used to determine which way is "down" as there will be a constant
-    /// acceleration towards the center of the earth at 9.8 meters per second.
-    /// Typical will use (x, y, z) values normalized to meters per second.
-    Accelerometer,
-    /// Gyro events measure the angular velocity of a device measured
-    /// with (x, y, z) values normalized to degrees per second.
-    Gyro,
     /// Dials and wheels
     Dial(GamepadDial),
 }
@@ -403,8 +381,6 @@ impl fmt::Display for Gamepad {
             Gamepad::Button(_) => write!(f, "Button"),
             Gamepad::Axis(_) => write!(f, "Axis"),
             Gamepad::Trigger(_) => write!(f, "Trigger"),
-            Gamepad::Accelerometer => write!(f, "Accelerometer"),
-            Gamepad::Gyro => write!(f, "Gyro"),
             Gamepad::Dial(_) => write!(f, "Dial"),
         }
     }
@@ -427,8 +403,6 @@ impl FromStr for Gamepad {
             "Trigger" => Ok(Gamepad::Trigger(GamepadTrigger::from_str(
                 parts.join(":").as_str(),
             )?)),
-            "Accelerometer" => Ok(Gamepad::Accelerometer),
-            "Gyro" => Ok(Gamepad::Gyro),
             "Dial" => Ok(Gamepad::Dial(GamepadDial::from_str(
                 parts.join(":").as_str(),
             )?)),
