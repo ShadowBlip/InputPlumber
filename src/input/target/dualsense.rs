@@ -708,6 +708,7 @@ impl DualSenseDevice {
                             && !state.enable_rumble_emulation
                         {
                             state.use_rumble_not_haptics = true;
+                            state.enable_improved_rumble_emulation = true;
                         }
                         state
                     }
