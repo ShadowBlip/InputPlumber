@@ -4,13 +4,21 @@
 //! IMU scale factors are also derived from that source.
 
 use core::option::Option::None;
-use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
+use std::{
+    cmp::Ordering,
+    error::Error,
+    fmt::Debug,
+    fs::File,
+    sync::atomic::{AtomicU16, Ordering as AtomicOrdering},
+    time::Duration,
+};
 
 use packed_struct::prelude::*;
 use packed_struct::types::SizedInteger;
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
+    drivers::hash_id,
     drivers::ultimate_2::{
         hid_report::{DPadDirection, PackedInputDataReport, PackedRumbleOutputReport},
         report_descriptor::REPORT_DESCRIPTOR,
@@ -37,6 +45,39 @@ const GRAVITY: f64 = 9.80665;
 // each other for chords.
 const MIN_CHORD_TIME: Duration = Duration::from_millis(80);
 
+const ULTIMATE2_BASE_MAC: [u8; 3] = [0x02, 0x2d, 0xc8];
+
+static ULTIMATE2_MAC_COUNT: AtomicU16 = AtomicU16::new(0);
+
+/// Returns the address to use for a new device.
+fn generate_mac(persistent_id: Option<&str>) -> [u8; 6] {
+    match persistent_id.filter(|id| !id.is_empty()) {
+        Some(id) => {
+            let hash = hash_id(id.as_bytes()).to_be_bytes();
+            [
+                ULTIMATE2_BASE_MAC[0],
+                ULTIMATE2_BASE_MAC[1],
+                ULTIMATE2_BASE_MAC[2],
+                hash[5],
+                hash[6],
+                hash[7],
+            ]
+        }
+        None => {
+            let index = ULTIMATE2_MAC_COUNT.fetch_add(1, AtomicOrdering::Relaxed);
+            let [hi, lo] = index.to_be_bytes();
+            [
+                ULTIMATE2_BASE_MAC[0],
+                ULTIMATE2_BASE_MAC[1],
+                ULTIMATE2_BASE_MAC[2],
+                0,
+                hi,
+                lo,
+            ]
+        }
+    }
+}
+
 pub struct Ultimate2WirelessDevice {
     device: UHIDDevice<File>,
     state: PackedInputDataReport,
@@ -44,11 +85,16 @@ pub struct Ultimate2WirelessDevice {
 }
 
 impl Ultimate2WirelessDevice {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new(persistent_id: Option<String>) -> Result<Self, Box<dyn Error>> {
+        let mac_addr = generate_mac(persistent_id.as_deref());
+        let uniq = format!(
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            mac_addr[5], mac_addr[4], mac_addr[3], mac_addr[2], mac_addr[1], mac_addr[0],
+        );
         let device = UHIDDevice::create(CreateParams {
             name: String::from("8BitDo Ultimate 2 Wireless Controller"),
             phys: String::from(""),
-            uniq: String::from(""),
+            uniq,
             bus: Bus::USB,
             vendor: VID as u32,
             product: PID as u32,

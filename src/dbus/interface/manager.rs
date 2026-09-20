@@ -209,7 +209,11 @@ impl ManagerInterface {
         let (sender, mut receiver) = mpsc::channel(1);
         self.tx
             .send_timeout(
-                ManagerCommand::CreateTargetDevice { kind, sender },
+                ManagerCommand::CreateTargetDevice {
+                    kind,
+                    persistent_id: None,
+                    sender,
+                },
                 Duration::from_millis(500),
             )
             .await

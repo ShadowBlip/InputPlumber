@@ -383,7 +383,9 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::SetTargetDevices(target_types) => {
-                        if let Err(e) = self.targets.set_devices(target_types).await {
+                        let persistent_id = self.get_persistent_id().await;
+                        if let Err(e) = self.targets.set_devices(target_types, persistent_id).await
+                        {
                             log::error!("Failed to set target devices: {e}");
                         }
                     }
@@ -531,7 +533,8 @@ impl CompositeDevice {
                             "Preparing to resume target devices for: {}",
                             self.dbus.path()
                         );
-                        self.targets.handle_resume().await;
+                        let persistent_id = self.get_persistent_id().await;
+                        self.targets.handle_resume(persistent_id).await;
                         if let Err(e) = sender.send(()).await {
                             log::error!("Failed to send resume response: {e:?}");
                         }

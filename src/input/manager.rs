@@ -84,6 +84,7 @@ pub enum ManagerCommand {
     },
     CreateTargetDevice {
         kind: TargetDeviceTypeId,
+        persistent_id: Option<String>,
         sender: mpsc::Sender<Result<String, ManagerError>>,
     },
     StopTargetDevice {
@@ -275,10 +276,17 @@ impl Manager {
                         log::error!("Error handling stopped composite device: {:?}", e);
                     }
                 }
-                ManagerCommand::CreateTargetDevice { kind, sender } => {
+                ManagerCommand::CreateTargetDevice {
+                    kind,
+                    persistent_id,
+                    sender,
+                } => {
                     // Create the target device
                     log::debug!("Got request to create target device: {kind}");
-                    let device = match self.create_and_start_target_device(kind.as_str()).await {
+                    let device = match self
+                        .create_and_start_target_device(kind.as_str(), persistent_id)
+                        .await
+                    {
                         Ok(device) => device,
                         Err(err) => {
                             if let Err(e) = sender.send(Err(err)).await {
@@ -612,6 +620,7 @@ impl Manager {
     async fn create_target_device(
         &self,
         kind: &str,
+        persistent_id: Option<String>,
     ) -> Result<(String, TargetDevice), Box<dyn Error>> {
         log::trace!("Creating target device: {kind}");
         let Ok(target_id) = TargetDeviceTypeId::try_from(kind) else {
@@ -621,7 +630,7 @@ impl Manager {
         // Create the target device to emulate based on the kind
         let path = self.next_target_path(target_id.device_class())?;
         let dbus = DBusInterfaceManager::new(self.dbus.connection().clone(), path.clone())?;
-        let device = TargetDevice::from_type_id(target_id, dbus)?;
+        let device = TargetDevice::from_type_id(target_id, dbus, persistent_id)?;
 
         Ok((path, device))
     }
@@ -785,9 +794,10 @@ impl Manager {
     async fn create_and_start_target_device(
         &mut self,
         kind: &str,
+        persistent_id: Option<String>,
     ) -> Result<HashMap<String, TargetDeviceClient>, ManagerError> {
         // Create the target device
-        let device = match self.create_target_device(kind).await {
+        let device = match self.create_target_device(kind, persistent_id).await {
             Ok(device) => device,
             Err(e) => {
                 let err = format!("Error creating target device: {e:?}");
@@ -860,7 +870,7 @@ impl Manager {
 
         // Create a DBus target device
         log::debug!("Creating target devices for {composite_path}");
-        let dbus_device = self.create_target_device("dbus").await?;
+        let dbus_device = self.create_target_device("dbus", None).await?;
         let dbus_devices = self.start_target_devices(vec![dbus_device]).await?;
         let dbus_paths = dbus_devices.keys();
         for dbus_path in dbus_paths {

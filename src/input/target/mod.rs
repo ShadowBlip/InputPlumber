@@ -3,6 +3,8 @@ pub mod command;
 pub mod dbus;
 pub mod debug;
 pub mod dualsense;
+#[cfg(test)]
+mod dualsense_test;
 pub mod horipad_steam;
 pub mod keyboard;
 pub mod mouse;
@@ -810,6 +812,7 @@ impl TargetDevice {
     pub fn from_type_id(
         id: TargetDeviceTypeId,
         dbus: DBusInterfaceManager,
+        persistent_id: Option<String>,
     ) -> Result<Self, Box<dyn Error>> {
         match id.as_str() {
             "dbus" => {
@@ -823,7 +826,7 @@ impl TargetDevice {
                 Ok(Self::Debug(driver))
             }
             "deck" => {
-                let device = SteamDeckDevice::new()?;
+                let device = SteamDeckDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(4),
                     buffer_size: 2048,
@@ -832,7 +835,7 @@ impl TargetDevice {
                 Ok(Self::SteamDeck(driver))
             }
             "deck-uhid" => {
-                let device = SteamDeckUhidDevice::new()?;
+                let device = SteamDeckUhidDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(4),
                     buffer_size: 2048,
@@ -845,17 +848,22 @@ impl TargetDevice {
                     "ds5" | "ds5-usb" => DualSenseHardware::new(
                         dualsense::ModelType::Normal,
                         dualsense::BusType::Usb,
+                        persistent_id,
                     ),
                     "ds5-bt" => DualSenseHardware::new(
                         dualsense::ModelType::Normal,
                         dualsense::BusType::Bluetooth,
+                        persistent_id,
                     ),
-                    "ds5-edge" | "ds5-edge-usb" => {
-                        DualSenseHardware::new(dualsense::ModelType::Edge, dualsense::BusType::Usb)
-                    }
+                    "ds5-edge" | "ds5-edge-usb" => DualSenseHardware::new(
+                        dualsense::ModelType::Edge,
+                        dualsense::BusType::Usb,
+                        persistent_id,
+                    ),
                     "ds5-edge-bt" => DualSenseHardware::new(
                         dualsense::ModelType::Edge,
                         dualsense::BusType::Bluetooth,
+                        persistent_id,
                     ),
                     _ => DualSenseHardware::default(),
                 };
@@ -877,7 +885,7 @@ impl TargetDevice {
                 Ok(Self::HoripadSteam(driver))
             }
             "8bitdo-u2" => {
-                let device = Ultimate2WirelessDevice::new()?;
+                let device = Ultimate2WirelessDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(1),
                     buffer_size: 2048,
