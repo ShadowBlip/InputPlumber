@@ -138,6 +138,10 @@ pub struct CompositeDevice {
     /// List of unique identifiers for each source device.
     /// E.g. {"evdev://event0": Some("abc123")}
     source_device_persistent_ids: HashMap<String, Option<String>>,
+    /// First valid persistent id resolved from a source device. Once set,
+    /// this is used for all target device identity so it stays stable
+    /// across suspend/resume and source device changes.
+    persistent_id: Option<String>,
     /// Unique identifiers for running source devices. E.g. ["evdev://event0"]
     source_devices_used: Vec<String>,
     /// State of target devices attached to the composite device
@@ -208,6 +212,7 @@ impl CompositeDevice {
             source_device_paths: Vec::new(),
             source_device_tasks: JoinSet::new(),
             source_device_persistent_ids: HashMap::new(),
+            persistent_id: None,
             source_devices_used: Vec::new(),
             targets: CompositeDeviceTargets::new(conn, dbus_path, tx.into(), manager),
             ff_enabled: true,
@@ -387,7 +392,9 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::SetTargetDevices(target_types) => {
-                        if let Err(e) = self.targets.set_devices(target_types).await {
+                        let persistent_id = self.get_persistent_id().await;
+                        if let Err(e) = self.targets.set_devices(target_types, &persistent_id).await
+                        {
                             log::error!("Failed to set target devices: {e}");
                         }
                     }
@@ -535,7 +542,8 @@ impl CompositeDevice {
                             "Preparing to resume target devices for: {}",
                             self.dbus.path()
                         );
-                        self.targets.handle_resume().await;
+                        let persistent_id = self.get_persistent_id().await;
+                        self.targets.handle_resume(&persistent_id).await;
                         if let Err(e) = sender.send(()).await {
                             log::error!("Failed to send resume response: {e:?}");
                         }
@@ -548,8 +556,8 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::GetPersistentId(sender) => {
-                        let persist_id = self.get_persistent_id().await.unwrap_or_default();
-                        if let Err(e) = sender.send(persist_id).await {
+                        let persistent_id = self.get_persistent_id().await;
+                        if let Err(e) = sender.send(persistent_id).await {
                             log::error!("Failed to send persistent id response: {e}");
                         }
                     }
@@ -2183,7 +2191,10 @@ impl CompositeDevice {
     }
 
     /// Returns a unique id that can be used to persistently identify the device
-    async fn get_persistent_id(&self) -> Option<String> {
+    async fn get_persistent_id(&mut self) -> String {
+        if let Some(id) = self.persistent_id.as_ref() {
+            return id.clone();
+        }
         // Find a source device with a valid persistent identifier
         let mut keys: Vec<&String> = self.source_device_persistent_ids.keys().collect();
         keys.sort();
@@ -2192,14 +2203,15 @@ impl CompositeDevice {
                 continue;
             };
             log::debug!("Using persistent id from {key}: {persist_id}");
-            return Some(persist_id.clone());
+            self.persistent_id = Some(persist_id.clone());
+            return persist_id.clone();
         }
         log::debug!(
             "No valid persistent id found: {:?}",
             self.source_device_persistent_ids
         );
 
-        None
+        self.dbus.path().to_string()
     }
 
     /// Takes the provided [HashMap] and sets a filter for all matching source device ID's and
