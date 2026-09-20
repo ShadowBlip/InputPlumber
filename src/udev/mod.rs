@@ -115,7 +115,9 @@ KERNEL=="hidraw[0-9]*", SUBSYSTEM=="{subsystem}", RUN+="{mv_cmd} /dev/%k /dev/in
         mv_late_rule = mv_early_rule.clone();
     }
 
-    // Create an early udev rule to hide the device
+    // Create an early udev rule to hide the device. On a match this jumps
+    // straight to the late rule below, skipping the uaccess/seat rules in
+    // between so they never get a chance to tag the device.
     let rule = format!(
         r#"# Hides devices stemming from {name}
 # Managed by InputPlumber, this file will be autoremoved during configuration changes.
@@ -124,6 +126,7 @@ GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
 {chmod_early_rule}
 {mv_early_rule}
+GOTO="inputplumber_hide_{name}_late"
 LABEL="inputplumber_end"
 "#
     );
@@ -135,9 +138,11 @@ LABEL="inputplumber_end"
 
     // Create a late udev rule to hide the device. This is needed for devices that
     // are available at boot time because the early rule will not be applied.
+    // Its label doubles as the early rule's jump target above.
     let rule = format!(
         r#"# Hides devices stemming from {name}
 # Managed by InputPlumber, this file will be autoremoved during configuration changes.
+LABEL="inputplumber_hide_{name}_late"
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
