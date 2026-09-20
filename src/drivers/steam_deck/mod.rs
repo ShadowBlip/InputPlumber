@@ -19,6 +19,13 @@ pub enum ProductId {
 /// Vendor ID
 pub const VID: u16 = 0x28de;
 
+/// Deck's accelerometer is +/-2g over a 16-bit signed range (16384 LSB/g).
+pub const DECK_ACCEL_RAW_TO_MPS2: f64 = 9.80665 / 16384.0;
+pub const DECK_MPS2_TO_ACCEL_RAW: f64 = 1.0 / DECK_ACCEL_RAW_TO_MPS2;
+/// Deck's gyroscope is +/-2000 deg/s over a 16-bit signed range.
+pub const DECK_GYRO_RAW_TO_RAD_S: f64 = (2000.0 / 32768.0) * (std::f64::consts::PI / 180.0);
+pub const DECK_RAD_S_TO_GYRO_RAW: f64 = 1.0 / DECK_GYRO_RAW_TO_RAD_S;
+
 impl ProductId {
     pub fn to_u16(&self) -> u16 {
         match self {
