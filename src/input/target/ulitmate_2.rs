@@ -21,11 +21,11 @@ use crate::{
         composite_device::client::CompositeDeviceClient,
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
-            value::denormalize_unsigned_value_u8,
-            value::InputValue,
+            value::{denormalize_unsigned_value_u8, InputValue},
         },
         output_capability::OutputCapability,
         output_event::OutputEvent,
+        target::generate_mac,
     },
 };
 
@@ -37,6 +37,8 @@ const GRAVITY: f64 = 9.80665;
 // each other for chords.
 const MIN_CHORD_TIME: Duration = Duration::from_millis(80);
 
+const ULTIMATE2_BASE_MAC: [u8; 3] = [0x02, 0x2d, 0xc8];
+
 pub struct Ultimate2WirelessDevice {
     device: UHIDDevice<File>,
     state: PackedInputDataReport,
@@ -44,11 +46,16 @@ pub struct Ultimate2WirelessDevice {
 }
 
 impl Ultimate2WirelessDevice {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new(persistent_id: &str) -> Result<Self, Box<dyn Error>> {
+        let mac_addr = generate_mac(ULTIMATE2_BASE_MAC, persistent_id);
+        let uniq = format!(
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            mac_addr[5], mac_addr[4], mac_addr[3], mac_addr[2], mac_addr[1], mac_addr[0],
+        );
         let device = UHIDDevice::create(CreateParams {
             name: String::from("8BitDo Ultimate 2 Wireless Controller"),
             phys: String::from(""),
-            uniq: String::from(""),
+            uniq,
             bus: Bus::USB,
             vendor: VID as u32,
             product: PID as u32,

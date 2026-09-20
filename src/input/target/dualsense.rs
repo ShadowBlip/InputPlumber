@@ -5,7 +5,6 @@
 use std::{cmp::Ordering, error::Error, fmt::Debug, fs::File, time::Duration};
 
 use packed_struct::prelude::*;
-use rand::Rng;
 use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 
 use crate::{
@@ -41,6 +40,7 @@ use crate::{
         },
         output_capability::{OutputCapability, LED},
         output_event::OutputEvent,
+        target::generate_mac,
     },
 };
 
@@ -61,6 +61,11 @@ pub enum BusType {
     Bluetooth,
 }
 
+/// Model-specific prefixes; locally-administered bit set so neither
+/// resembles a real Sony device.
+const DS5_BASE_MAC: [u8; 3] = [0x02, 0x05, 0xd5];
+const DS5_EDGE_BASE_MAC: [u8; 3] = [0x02, 0x0e, 0xd6];
+
 /// The [DualSenseHardware] defines the kind of DualSense controller to emulate
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct DualSenseHardware {
@@ -70,45 +75,18 @@ pub struct DualSenseHardware {
 }
 
 impl DualSenseHardware {
-    pub fn new(model: ModelType, bus_type: BusType) -> Self {
-        // "e8:47:3a:d6:e7:74"
-        //let mac_addr = [0x74, 0xe7, 0xd6, 0x3a, 0x47, 0xe8];
-        let mut rng = rand::rng();
-        let mac_addr: [u8; 6] = [
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-        ];
-        log::debug!(
-            "Creating new DualSense Edge device using MAC Address: {:?}",
-            mac_addr
-        );
+    pub fn new(model: ModelType, bus_type: BusType, persistent_id: &str) -> Self {
+        let prefix = match model {
+            ModelType::Normal => DS5_BASE_MAC,
+            ModelType::Edge => DS5_EDGE_BASE_MAC,
+        };
+
+        let mac_addr = generate_mac(prefix, persistent_id);
+        log::debug!("Creating new DualSense device using MAC Address: {mac_addr:?}");
 
         Self {
             model,
             bus_type,
-            mac_addr,
-        }
-    }
-}
-
-impl Default for DualSenseHardware {
-    fn default() -> Self {
-        let mut rng = rand::rng();
-        let mac_addr: [u8; 6] = [
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-            rng.random(),
-        ];
-        Self {
-            model: ModelType::Normal,
-            bus_type: BusType::Usb,
             mac_addr,
         }
     }
