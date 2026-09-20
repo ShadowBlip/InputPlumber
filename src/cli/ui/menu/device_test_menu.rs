@@ -1,4 +1,4 @@
-use std::{error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, time::Duration};
 
 use futures::StreamExt;
 use packed_struct::PackedStruct;
@@ -73,6 +73,7 @@ pub struct DeviceTestMenu {
     profile_path: Option<String>,
     target_device_types: Vec<TargetDeviceTypeId>,
     intercept_mode: u32,
+    filtered_events: HashMap<String, Vec<String>>,
     ui_buttons: Vec<ButtonGauge>,
     ui_triggers: Vec<TriggerGauge>,
     ui_axes: Vec<AxisGauge>,
@@ -121,6 +122,11 @@ impl DeviceTestMenu {
 
         // Save the current intercept mode so it can be restored
         let intercept_mode = device.intercept_mode().await?;
+
+        // Save the current event filters so they can be restored, then clear
+        // them so every source's raw capabilities are visible during testing
+        let filtered_events = device.filtered_events().await?;
+        device.set_filtered_events(HashMap::new()).await?;
 
         // Add the debug target device if it does not exist
         if !target_device_types.iter().any(|t| t.as_str() == "debug") {
@@ -174,6 +180,7 @@ impl DeviceTestMenu {
             capability_report: None,
             target_device_types,
             intercept_mode,
+            filtered_events,
             ui_buttons: Default::default(),
             ui_triggers: Default::default(),
             ui_axes: Default::default(),
@@ -191,36 +198,65 @@ impl DeviceTestMenu {
         let intercept_mode = self.intercept_mode;
         let profile = self.profile.clone();
         let profile_path = self.profile_path.clone();
+        let filtered_events = self.filtered_events.clone();
+        let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
         tokio::task::spawn(async move {
             // Create a reference to the composite device
-            let device = CompositeDeviceInterfaceProxy::builder(&conn)
+            let Ok(device) = CompositeDeviceInterfaceProxy::builder(&conn)
                 .path(dbus_path)
                 .unwrap()
                 .build()
                 .await
-                .unwrap();
+            else {
+                log::warn!("Failed to create composite device proxy; cannot restore device state");
+                if let Err(e) = tx.send(Err("failed to create composite device proxy".into())) {
+                    log::warn!("Failed to report device state restore failure: {e}");
+                }
+                return;
+            };
 
             // Restore the profile
-            if let Some(profile_path) = profile_path {
-                let _ = device.load_profile_path(profile_path).await;
+            let profile_result = if let Some(profile_path) = profile_path {
+                device.load_profile_path(profile_path).await
             } else if let Some(profile) = profile {
-                let _ = device.load_profile_from_yaml(profile).await;
+                device.load_profile_from_yaml(profile).await
+            } else {
+                Ok(())
+            };
+            if let Err(e) = profile_result {
+                log::warn!("Failed to restore profile: {e}");
             }
 
             // Restore the target devices of the device
             let target_devices = target_device_types
-                .clone()
                 .into_iter()
                 .map(|kind| kind.as_str().to_string())
                 .collect();
-            let _ = device.set_target_devices(target_devices).await;
+            if let Err(e) = device.set_target_devices(target_devices).await {
+                log::warn!("Failed to restore target devices: {e}");
+            }
 
             // Restore the intercept mode
-            let _ = device.set_intercept_mode(intercept_mode).await;
+            if let Err(e) = device.set_intercept_mode(intercept_mode).await {
+                log::warn!("Failed to restore intercept mode: {e}");
+            }
+
+            // Restore the event filters
+            if let Err(e) = device.set_filtered_events(filtered_events).await {
+                log::warn!("Failed to restore event filters: {e}");
+            }
+
+            if let Err(e) = tx.send(Ok(())) {
+                log::warn!("Failed to report device state restore: {e}");
+            }
         });
 
-        // Wait a beat for the target devices to be restored
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        // Wait up to 5s for the device state to be restored before exiting
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => log::warn!("Failed to restore device state: {e}"),
+            Err(e) => log::warn!("Failed to restore device state within timeout: {e}"),
+        }
     }
 }
 
