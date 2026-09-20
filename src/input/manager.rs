@@ -922,7 +922,15 @@ impl Manager {
         // Find any target devices that were in use by the composite device
         if let Some(target_device_paths) = self.composite_device_targets.get(&path) {
             for target_device_path in target_device_paths {
-                self.target_devices.remove(target_device_path);
+                let Some(client) = self.target_devices.remove(target_device_path) else {
+                    log::error!(
+                        "Failed to remove target device {target_device_path} from target devices."
+                    );
+                    continue;
+                };
+                if let Err(e) = client.stop().await {
+                    log::warn!("Failed to stop target device {target_device_path}: {e:?}");
+                }
             }
         }
 
