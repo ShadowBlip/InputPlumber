@@ -2,7 +2,11 @@ use std::{collections::HashSet, error::Error, fmt::Debug};
 
 use crate::{
     config,
-    drivers::iio_imu::{self, driver::Driver, info::MountMatrix},
+    drivers::iio_imu::{
+        self,
+        driver::Driver,
+        info::{MountMatrix, TriggerStrategy},
+    },
     input::{
         capability::{Capability, Source},
         event::{native::NativeEvent, value::InputValue},
@@ -11,16 +15,13 @@ use crate::{
     udev::device::UdevDevice,
 };
 
-// Scale from IIO SI units to Steam Deck UHID raw LSB.
-// IIO channels report m/s² for accel and rad/s for gyro after applying scale:
-//   https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-bus-iio
-// UHID LSB constants from src/drivers/steam_deck/driver.rs.
-const ACCEL_SCALE_FACTOR: f64 = 1632.6530612244898; // 1 / 0.0006125 (m/s² → UHID LSB)
-const GYRO_SCALE_FACTOR: f64 = 916.7324722093172; // (180/π) / 0.0625 (rad/s → °/s → UHID LSB)
-
 pub struct AccelGyro3dImu {
     driver: Driver,
 }
+
+// Sensor fusion hub devices produce bogus scale factors.
+const ACCEL_CORRECTION: f64 = 10.0;
+const GYRO_CORRECTION: f64 = 100.0;
 
 impl AccelGyro3dImu {
     /// Create a new Accel Gyro 3D source device with the given udev
@@ -49,8 +50,7 @@ impl AccelGyro3dImu {
         let sample_rate = config.as_ref().and_then(|c| c.sample_rate);
 
         let id = device_info.sysname();
-        let name = device_info.name();
-        let driver = Driver::new(id, name, mount_matrix, sample_rate)?;
+        let driver = Driver::new(id, mount_matrix, sample_rate, TriggerStrategy::FindExisting)?;
 
         Ok(Self { driver })
     }
@@ -75,14 +75,7 @@ impl SourceInputDevice for AccelGyro3dImu {
     }
 
     fn get_default_event_filter(&self) -> Result<HashSet<Capability>, InputError> {
-        let filtered_events = self.driver.get_default_event_filter();
-        let filtered_events = match filtered_events {
-            Ok(events) => events,
-            Err(e) => {
-                return Err(format!("Failed to get default event filter: {:?}", e).into());
-            }
-        };
-        Ok(filtered_events)
+        Ok(self.driver.get_default_event_filter()?)
     }
 }
 
@@ -109,18 +102,18 @@ fn translate_event(event: iio_imu::event::Event) -> NativeEvent {
         iio_imu::event::Event::Accelerometer(data) => {
             let cap = Capability::Accelerometer(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * ACCEL_SCALE_FACTOR),
-                y: Some(data.pitch * ACCEL_SCALE_FACTOR),
-                z: Some(data.yaw * ACCEL_SCALE_FACTOR),
+                x: Some(data.roll * data.scale * ACCEL_CORRECTION),
+                y: Some(data.pitch * data.scale * ACCEL_CORRECTION),
+                z: Some(data.yaw * data.scale * ACCEL_CORRECTION),
             };
             NativeEvent::new(cap, value)
         }
         iio_imu::event::Event::Gyro(data) => {
             let cap = Capability::Gyroscope(Source::Center);
             let value = InputValue::Vector3 {
-                x: Some(data.roll * GYRO_SCALE_FACTOR),
-                y: Some(data.pitch * GYRO_SCALE_FACTOR),
-                z: Some(data.yaw * GYRO_SCALE_FACTOR),
+                x: Some(data.roll * data.scale * GYRO_CORRECTION),
+                y: Some(data.pitch * data.scale * GYRO_CORRECTION),
+                z: Some(data.yaw * data.scale * GYRO_CORRECTION),
             };
             NativeEvent::new(cap, value)
         }
