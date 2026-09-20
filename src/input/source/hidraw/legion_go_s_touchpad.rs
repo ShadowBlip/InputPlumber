@@ -1,7 +1,7 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::legos::{event, touchpad_driver::TouchpadDriver, PAD_FORCE_MAX, PAD_MOTION_MAX},
+    drivers::legion_go_s::{event, touchpad_driver::TouchpadDriver, PAD_FORCE_MAX, PAD_MOTION_MAX},
     input::{
         capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
         event::{native::NativeEvent, value::normalize_unsigned_value, value::InputValue},
@@ -12,11 +12,11 @@ use crate::{
 };
 
 /// Legion Go Controller source device implementation
-pub struct LegionSTouchpadController {
+pub struct LegionGoSTouchpadController {
     driver: TouchpadDriver,
 }
 
-impl LegionSTouchpadController {
+impl LegionGoSTouchpadController {
     /// Create a new Legion controller source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -25,7 +25,7 @@ impl LegionSTouchpadController {
     }
 }
 
-impl SourceInputDevice for LegionSTouchpadController {
+impl SourceInputDevice for LegionGoSTouchpadController {
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
@@ -39,7 +39,7 @@ impl SourceInputDevice for LegionSTouchpadController {
     }
 }
 
-impl SourceOutputDevice for LegionSTouchpadController {
+impl SourceOutputDevice for LegionGoSTouchpadController {
     /// Write the given output event to the source device. Output events are
     /// events that flow from an application (like a game) to the physical
     /// input device, such as force feedback events.
@@ -48,9 +48,9 @@ impl SourceOutputDevice for LegionSTouchpadController {
     }
 }
 
-impl Debug for LegionSTouchpadController {
+impl Debug for LegionGoSTouchpadController {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LegionSController").finish()
+        f.debug_struct("LegionGoSController").finish()
     }
 }
 
