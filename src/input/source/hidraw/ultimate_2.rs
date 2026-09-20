@@ -1,16 +1,21 @@
 use std::{collections::HashMap, error::Error, fmt::Debug};
 
 use evdev::{FFEffectData, FFEffectKind};
+use packed_struct::{types::SizedInteger, PrimitiveEnum};
 
 use crate::{
-    drivers::ultimate_2::{driver::Driver, event, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
+    drivers::{
+        dualsense::hid_report::SetStatePackedOutputData,
+        steam_deck::hid_report::{PackedHapticReport, PadSide},
+        ultimate_2::{driver::Driver, event, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
+    },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source},
         event::{
             native::NativeEvent,
             value::{normalize_signed_value, normalize_unsigned_value, InputValue},
         },
-        output_capability::OutputCapability,
+        output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -121,6 +126,42 @@ impl Ultimate2 {
 
         Ok(())
     }
+
+    /// Process DualSense-style force feedback output reports
+    fn process_dualsense_ff(
+        &mut self,
+        report: SetStatePackedOutputData,
+    ) -> Result<(), Box<dyn Error>> {
+        let left_speed = report.rumble_emulation_left;
+        let right_speed = report.rumble_emulation_right;
+
+        if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+            let err = format!("Failed to do rumble: {e:?}");
+            return Err(err.into());
+        }
+
+        Ok(())
+    }
+
+    /// Process Steam Deck-style haptic output reports
+    fn process_haptic_ff(
+        &self,
+        report: PackedHapticReport,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let intensity = report.intensity.to_primitive() + 1;
+        let scaled_gain = (report.gain + 24) as u8 * intensity;
+        let normalized_gain = normalize_unsigned_value(scaled_gain as f64, 150.0);
+        let new_gain = normalized_gain * u8::MAX as f64;
+        let new_gain = new_gain as u8;
+
+        match report.side {
+            PadSide::Left => self.driver.rumble(new_gain, 0)?,
+            PadSide::Right => self.driver.rumble(0, new_gain)?,
+            PadSide::Both => self.driver.rumble(new_gain, new_gain)?,
+        }
+
+        Ok(())
+    }
 }
 
 impl SourceInputDevice for Ultimate2 {
@@ -151,11 +192,31 @@ impl SourceOutputDevice for Ultimate2 {
         log::trace!("Received output event: {:?}", event);
         match event {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
-            OutputEvent::DualSense(_) => Ok(()),
+            OutputEvent::DualSense(report) => {
+                log::debug!("Received DualSense output report");
+                if report.use_rumble_not_haptics || report.enable_improved_rumble_emulation {
+                    self.process_dualsense_ff(report)?;
+                }
+                Ok(())
+            }
             OutputEvent::Uinput(_) => Ok(()),
-            OutputEvent::SteamDeckHaptics(_packed_haptic_report) => Ok(()),
-            OutputEvent::SteamDeckRumble(_packed_rumble_report) => Ok(()),
-            OutputEvent::GenericRumble { .. } => Ok(()),
+            OutputEvent::SteamDeckHaptics(report) => Ok(self.process_haptic_ff(report)?),
+            OutputEvent::SteamDeckRumble(report) => {
+                let left_speed = (report.left_speed.to_primitive() / 256) as u8;
+                let right_speed = (report.right_speed.to_primitive() / 256) as u8;
+                Ok(self.driver.rumble(left_speed, right_speed)?)
+            }
+            OutputEvent::GenericRumble {
+                weak_magnitude,
+                strong_magnitude,
+            } => {
+                let left_speed = (strong_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
+                let left_speed = left_speed.round() as u8;
+                let right_speed = (weak_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
+                let right_speed = right_speed.round() as u8;
+
+                Ok(self.driver.rumble(left_speed, right_speed)?)
+            }
         }
     }
 
@@ -400,4 +461,10 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gyroscope(Source::Center),
 ];
 
-pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[OutputCapability::ForceFeedback];
+pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[
+    OutputCapability::ForceFeedback,
+    OutputCapability::ForceFeedbackUpload,
+    OutputCapability::ForceFeedbackErase,
+    OutputCapability::Haptics(Haptic::TrackpadLeft),
+    OutputCapability::Haptics(Haptic::TrackpadRight),
+];
