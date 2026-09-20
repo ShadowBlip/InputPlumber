@@ -6,33 +6,32 @@ version: 1
 kind: CapabilityMap
 
 # Name for the device event map
-name: OneXPlayer Type 5
+name: OneXPlayer Type 9
 
 # Unique identifier of the capability mapping
-id: oxp5
+id: oxp9
+
+# Verification (ONEXPLAYER 3):
+#   ONEX: evtest reports LeftCtrl+LeftAlt+LeftMeta on HID 1a86:fe00.
+#   Keyboard: evtest reports LeftCtrl+LeftMeta+O on HID 1a86:fe00.
+#   Home: no evdev event; OXP HID interface 2 reports vendor button ID 0x24,
+#     which the OXP HID driver translates to gamepad Keyboard.
 
 # List of mapped events that are activated by a specific set of activation keys.
 mapping:
-  - name: Turbo
+  - name: ONEX
     source_events:
       - keyboard: KeyLeftCtrl
       - keyboard: KeyLeftAlt
       - keyboard: KeyLeftMeta
     target_event:
       gamepad:
-        button: Keyboard
-  - name: QuickAccess # this model uses the kb button for this
+        button: QuickAccess
+  - name: Keyboard
     source_events:
-      - keyboard: KeyRightCtrl
+      - keyboard: KeyLeftCtrl
       - keyboard: KeyLeftMeta
       - keyboard: KeyO
-    target_event:
-      gamepad:
-        button: QuickAccess
-  - name: QuickAccess from HID
-    source_events:
-      - gamepad:
-          button: Keyboard
     target_event:
       gamepad:
         button: QuickAccess2
