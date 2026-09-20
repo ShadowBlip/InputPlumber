@@ -214,10 +214,6 @@ impl InputValue {
                                 Gamepad::Axis(_) => self.translate_button_to_axis(target_config),
                                 // Gamepad Button -> Trigger
                                 Gamepad::Trigger(_) => Ok(self.translate_button_to_trigger()),
-                                // Gamepad Button -> Accelerometer
-                                Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
-                                // Gamepad Button -> Gyro
-                                Gamepad::Gyro => Err(TranslationError::NotImplemented),
                                 Gamepad::Dial(_) => Ok(self.clone()),
                             },
                             // Gamepad Button -> Mouse
@@ -301,10 +297,6 @@ impl InputValue {
                                 }
                                 // Axis -> Trigger
                                 Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
-                                // Axis -> Accelerometer
-                                Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
-                                // Axis -> Gyro
-                                Gamepad::Gyro => Err(TranslationError::NotImplemented),
                                 Gamepad::Dial(_) => Err(TranslationError::NotImplemented),
                             },
                             // Axis -> Mouse
@@ -350,10 +342,6 @@ impl InputValue {
                             }
                             // Trigger -> Trigger
                             Gamepad::Trigger(_) => Ok(self.clone()),
-                            // Trigger -> Accelerometer
-                            Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
-                            // Trigger -> Gyro
-                            Gamepad::Gyro => Err(TranslationError::NotImplemented),
                             Gamepad::Dial(_) => self.translate_trigger_to_button(source_config),
                         },
                         // Trigger -> Mouse
@@ -379,10 +367,6 @@ impl InputValue {
                         // Trigger -> Accelerometer
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
                     },
-                    // Accelerometer -> ...
-                    Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
-                    // Gyro -> ...
-                    Gamepad::Gyro => Err(TranslationError::NotImplemented),
                     // Dial mapping to -> ..
                     Gamepad::Dial(_) => match target_cap {
                         Capability::None => Ok(InputValue::None),
@@ -393,8 +377,6 @@ impl InputValue {
                             Gamepad::Button(_) => self.translate_dial_to_button(source_config),
                             Gamepad::Axis(_) => Err(TranslationError::NotImplemented),
                             Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
-                            Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
-                            Gamepad::Gyro => Err(TranslationError::NotImplemented),
                             Gamepad::Dial(_) => Ok(self.clone()),
                         },
                         Capability::Mouse(mouse) => match mouse {
@@ -436,8 +418,6 @@ impl InputValue {
                     Gamepad::Button(_) => Ok(self.clone()),
                     Gamepad::Axis(_) => Err(TranslationError::NotImplemented),
                     Gamepad::Trigger(_) => Err(TranslationError::NotImplemented),
-                    Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
-                    Gamepad::Gyro => Err(TranslationError::NotImplemented),
                     Gamepad::Dial(_) => Ok(self.clone()),
                 },
                 // Keyboard Key -> Mouse
@@ -1216,8 +1196,6 @@ impl InputValue {
                 Gamepad::Button(_) => Ok(self.clone()),
                 Gamepad::Axis(_) => self.translate_button_to_axis(target_config),
                 Gamepad::Trigger(_) => Ok(self.translate_button_to_trigger()),
-                Gamepad::Accelerometer => Err(TranslationError::NotImplemented),
-                Gamepad::Gyro => Err(TranslationError::NotImplemented),
                 Gamepad::Dial(_) => Ok(self.clone()),
             },
             Capability::Mouse(mouse) => match mouse {
@@ -1249,4 +1227,3 @@ impl InputValue {
         }
     }
 }
-
