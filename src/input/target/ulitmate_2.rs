@@ -427,6 +427,7 @@ impl TargetOutputDevice for Ultimate2WirelessDevice {
         let output_events = match event {
             uhid_virt::OutputEvent::Start { dev_flags: _ } => {
                 log::debug!("Start event received");
+                self.write_state()?;
                 Ok(vec![])
             }
             uhid_virt::OutputEvent::Stop => {
@@ -435,6 +436,7 @@ impl TargetOutputDevice for Ultimate2WirelessDevice {
             }
             uhid_virt::OutputEvent::Open => {
                 log::debug!("Open event received");
+                self.write_state()?;
                 Ok(vec![])
             }
             uhid_virt::OutputEvent::Close => {
