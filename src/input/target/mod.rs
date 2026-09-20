@@ -885,7 +885,7 @@ impl TargetDevice {
                 Ok(Self::HoripadSteam(driver))
             }
             "8bitdo-u2" => {
-                let device = Ultimate2WirelessDevice::new()?;
+                let device = Ultimate2WirelessDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(1),
                     buffer_size: 2048,
