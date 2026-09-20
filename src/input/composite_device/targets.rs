@@ -125,6 +125,7 @@ impl CompositeDeviceTargets {
     pub async fn set_devices(
         &mut self,
         device_types: Vec<TargetDeviceTypeId>,
+        persistent_id: Option<String>,
     ) -> Result<(), Box<dyn Error>> {
         let dbus_path = self.path.as_str();
         log::info!("[{dbus_path}] Setting target devices: {device_types:?}");
@@ -204,13 +205,18 @@ impl CompositeDeviceTargets {
             let dbus_path = dbus_path.to_owned();
             let manager = self.manager.clone();
             let composite_path = self.path.clone();
+            let persistent_id = persistent_id.clone();
 
             // Spawn a task that requests creating a new target device.
             tasks.spawn(async move {
                 // Ask the input manager to create a target device
                 log::debug!("[{dbus_path}] Requesting to create device: {kind}");
                 let (sender, mut receiver) = mpsc::channel(1);
-                let create_cmd = ManagerCommand::CreateTargetDevice { kind, sender };
+                let create_cmd = ManagerCommand::CreateTargetDevice {
+                    kind,
+                    persistent_id,
+                    sender,
+                };
                 manager.send(create_cmd).await?;
                 let Some(response) = receiver.recv().await else {
                     log::warn!("[{dbus_path}] Channel closed waiting for response from input manager");
@@ -579,7 +585,7 @@ impl CompositeDeviceTargets {
 
     /// Called when notified by the input manager that system resume is about
     /// to happen.
-    pub async fn handle_resume(&mut self) {
+    pub async fn handle_resume(&mut self, persistent_id: Option<String>) {
         let dbus_path = self.path.as_str();
         log::info!(
             "[{dbus_path}] Restoring target devices: {:?}",
@@ -589,7 +595,7 @@ impl CompositeDeviceTargets {
         // Set the target devices back to the ones used before suspend
         let target_devices = self.target_devices_suspended.clone();
         self.target_devices_suspended.clear();
-        if let Err(err) = self.set_devices(target_devices).await {
+        if let Err(err) = self.set_devices(target_devices, persistent_id).await {
             log::error!("Failed to set restore target devices: {err:?}");
         }
     }

@@ -810,6 +810,7 @@ impl TargetDevice {
     pub fn from_type_id(
         id: TargetDeviceTypeId,
         dbus: DBusInterfaceManager,
+        #[allow(unused_variables)] persistent_id: Option<String>,
     ) -> Result<Self, Box<dyn Error>> {
         match id.as_str() {
             "dbus" => {
