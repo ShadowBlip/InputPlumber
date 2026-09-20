@@ -1,12 +1,18 @@
 use std::{error::Error, fmt::Debug};
 
 use crate::{
-    drivers::horipad_steam::{driver::Driver, event, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
+    drivers::horipad_steam::{
+        driver::Driver, event, HORIPAD_ACCEL_RAW_TO_MPS2, HORIPAD_GYRO_RAW_TO_RAD_S, JOY_AXIS_MAX,
+        JOY_AXIS_MIN, TRIGGER_AXIS_MAX,
+    },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source},
         event::{
             native::NativeEvent,
-            value::{normalize_signed_value, normalize_unsigned_value, InputValue},
+            value::{
+                normalize_accel_value_i16, normalize_gyro_value_i16, normalize_signed_value,
+                normalize_unsigned_value, InputValue,
+            },
         },
         source::{InputError, SourceInputDevice, SourceOutputDevice},
     },
@@ -224,21 +230,21 @@ fn translate_event(event: event::Event) -> NativeEvent {
                 normalize_trigger_value(trigg),
             ),
         },
-        event::Event::Inertia(accel_event) => match accel_event {
+        event::Event::Inertia(intertia) => match intertia {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Accelerometer),
+                Capability::Accelerometer(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(normalize_accel_value_i16(value.x, HORIPAD_ACCEL_RAW_TO_MPS2)),
+                    y: Some(normalize_accel_value_i16(value.y, HORIPAD_ACCEL_RAW_TO_MPS2)),
+                    z: Some(normalize_accel_value_i16(value.z, HORIPAD_ACCEL_RAW_TO_MPS2)),
                 },
             ),
-            event::InertialEvent::Gyro(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Gyro),
+            event::InertialEvent::Gyroscope(value) => NativeEvent::new(
+                Capability::Gyroscope(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(normalize_gyro_value_i16(value.x, HORIPAD_GYRO_RAW_TO_RAD_S)),
+                    y: Some(normalize_gyro_value_i16(value.y, HORIPAD_GYRO_RAW_TO_RAD_S)),
+                    z: Some(normalize_gyro_value_i16(value.z, HORIPAD_GYRO_RAW_TO_RAD_S)),
                 },
             ),
         },
@@ -247,7 +253,7 @@ fn translate_event(event: event::Event) -> NativeEvent {
 
 /// List of all capabilities that the driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
+    Capability::Accelerometer(Source::Center),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -274,7 +280,7 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-    Capability::Gamepad(Gamepad::Gyro),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+    Capability::Gyroscope(Source::Center),
 ];

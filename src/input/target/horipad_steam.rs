@@ -8,15 +8,18 @@ use crate::{
     drivers::horipad_steam::{
         hid_report::{Direction, PackedInputDataReport},
         report_descriptor::REPORT_DESCRIPTOR,
-        JOY_AXIS_MAX, JOY_AXIS_MIN, PIDS, TRIGGER_AXIS_MAX, VID,
+        HORIPAD_MPS2_TO_ACCEL_RAW, HORIPAD_RAD_S_TO_GYRO_RAW, JOY_AXIS_MAX, JOY_AXIS_MIN, PIDS,
+        TRIGGER_AXIS_MAX, VID,
     },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source},
         composite_device::client::CompositeDeviceClient,
         event::{
             native::{NativeEvent, ScheduledNativeEvent},
-            value::InputValue,
-            value::{denormalize_signed_value_u8, denormalize_unsigned_value_u8},
+            value::{
+                denormalize_accel_value_i16, denormalize_gyro_value_i16,
+                denormalize_signed_value_u8, denormalize_unsigned_value_u8, InputValue,
+            },
         },
         output_capability::OutputCapability,
         output_event::OutputEvent,
@@ -240,57 +243,49 @@ impl HoripadSteamDevice {
                     GamepadTrigger::RightTouchpadForce => (),
                     GamepadTrigger::RightStickForce => (),
                 },
-                Gamepad::Accelerometer => {
-                    if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            self.state.accel_x = Integer::from_primitive(denormalize_accel_value(x))
-                        }
-                        if let Some(y) = y {
-                            self.state.accel_y = Integer::from_primitive(denormalize_accel_value(y))
-                        }
-                        if let Some(z) = z {
-                            self.state.accel_z = Integer::from_primitive(denormalize_accel_value(z))
-                        }
-                    }
-                }
-                Gamepad::Gyro => {
-                    if let InputValue::Vector3 { x, y, z } = value {
-                        if let Some(x) = x {
-                            self.state.pitch = Integer::from_primitive(denormalize_gyro_value(x));
-                        }
-                        if let Some(y) = y {
-                            self.state.yaw = Integer::from_primitive(denormalize_gyro_value(y))
-                        }
-                        if let Some(z) = z {
-                            self.state.roll = Integer::from_primitive(denormalize_gyro_value(z))
-                        }
-                    }
-                }
                 _ => (),
             },
             Capability::Gyroscope(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        self.state.pitch = Integer::from_primitive(x as i16);
+                        self.state.pitch = Integer::from_primitive(denormalize_gyro_value_i16(
+                            -x,
+                            HORIPAD_RAD_S_TO_GYRO_RAW,
+                        ));
                     }
                     if let Some(y) = y {
-                        self.state.yaw = Integer::from_primitive(y as i16);
+                        self.state.yaw = Integer::from_primitive(denormalize_gyro_value_i16(
+                            -y,
+                            HORIPAD_RAD_S_TO_GYRO_RAW,
+                        ));
                     }
                     if let Some(z) = z {
-                        self.state.roll = Integer::from_primitive(z as i16);
+                        self.state.roll = Integer::from_primitive(denormalize_gyro_value_i16(
+                            -z,
+                            HORIPAD_RAD_S_TO_GYRO_RAW,
+                        ));
                     }
                 }
             }
             Capability::Accelerometer(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
                     if let Some(x) = x {
-                        self.state.accel_x = Integer::from_primitive(x as i16);
+                        self.state.accel_x = Integer::from_primitive(denormalize_accel_value_i16(
+                            x,
+                            HORIPAD_MPS2_TO_ACCEL_RAW,
+                        ));
                     }
                     if let Some(y) = y {
-                        self.state.accel_y = Integer::from_primitive(y as i16);
+                        self.state.accel_y = Integer::from_primitive(denormalize_accel_value_i16(
+                            -y,
+                            HORIPAD_MPS2_TO_ACCEL_RAW,
+                        ));
                     }
                     if let Some(z) = z {
-                        self.state.accel_z = Integer::from_primitive(z as i16);
+                        self.state.accel_z = Integer::from_primitive(denormalize_accel_value_i16(
+                            z,
+                            HORIPAD_MPS2_TO_ACCEL_RAW,
+                        ));
                     }
                 }
             }
@@ -332,7 +327,7 @@ impl TargetInputDevice for HoripadSteamDevice {
 
     fn get_capabilities(&self) -> Result<Vec<crate::input::capability::Capability>, InputError> {
         Ok(vec![
-            Capability::Gamepad(Gamepad::Accelerometer),
+            Capability::Accelerometer(Source::Center),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -360,9 +355,9 @@ impl TargetInputDevice for HoripadSteamDevice {
             Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
             Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-            Capability::Gamepad(Gamepad::Gyro),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
             Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+            Capability::Gyroscope(Source::Center),
         ])
     }
 
@@ -522,25 +517,4 @@ impl Debug for HoripadSteamDevice {
             .field("timestamp", &self.timestamp)
             .finish()
     }
-}
-
-/// De-normalizes the given value in meters per second into a real value that
-/// the controller understands.
-/// Accelerometer values are measured in []
-/// units of G acceleration (1G == 9.8m/s). InputPlumber accelerometer
-/// values are measured in units of meters per second. To denormalize
-/// the value, it needs to be converted into G units (by dividing by 9.8),
-/// then multiplying that value by the [].
-fn denormalize_accel_value(value_meters_sec: f64) -> i16 {
-    let value = value_meters_sec;
-    value as i16
-}
-
-/// SDL negates all gyro axes when reading from this device (SDL_hidapi_steam_hori.c L329-331):
-///   imu_data[N] = -1.0f * LOAD16(data[...])
-/// We invert here so that SDL produces the correct sign after its negation.
-/// https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_steam_hori.c#L329-L331
-fn denormalize_gyro_value(value_degrees_sec: f64) -> i16 {
-    let value = -value_degrees_sec;
-    value as i16
 }
