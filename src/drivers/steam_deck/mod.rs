@@ -1,7 +1,12 @@
+#[cfg(test)]
+mod mod_test;
+
 pub mod driver;
 pub mod event;
 pub mod hid_report;
 pub mod report_descriptor;
+
+use super::hash_id;
 
 /// Target Device ProductIds, used to ID specific devices in SDL.
 #[derive(Debug, Clone)]
@@ -18,6 +23,27 @@ pub enum ProductId {
 
 /// Vendor ID
 pub const VID: u16 = 0x28de;
+
+/// Returns the serial number to report, an uppercase alphanumeric string
+/// with no separators, matching the shape of a real Steam Controller/Deck
+/// unit serial (e.g. "FXA996190463B").
+pub fn generate_serial(persistent_id: Option<&str>) -> String {
+    let hash = match persistent_id.filter(|id| !id.is_empty()) {
+        Some(id) => hash_id(id.as_bytes()),
+        None => 0x01ae1c0b,
+    };
+    format!("{:010X}", hash & 0xFF_FFFF_FFFF)
+}
+
+/// Returns the board (PCB) serial number to report, in the "M0BA######"
+/// shape Steam recognizes as a valid PCB revision code.
+pub fn generate_board_serial(persistent_id: Option<&str>) -> String {
+    let hash = match persistent_id.filter(|id| !id.is_empty()) {
+        Some(id) => hash_id(id.as_bytes()),
+        None => 0x01ae1c0b,
+    };
+    format!("M0BA{:06}", hash % 1_000_000)
+}
 
 impl ProductId {
     pub fn to_u16(&self) -> u16 {

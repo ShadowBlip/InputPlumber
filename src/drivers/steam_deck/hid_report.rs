@@ -32,6 +32,23 @@ pub const TRIGG_AXIS_MULT: f64 = 1.0 / TRIGG_MAX;
 // has to be disabled again with a CLEAR_MAPPINGS report.
 pub const LIZARD_SLEEP_SEC: f64 = 2.0;
 
+/// String attribute identifiers used by GetStringAttribute requests.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StringAttribute {
+    BoardSerial = 0,
+    #[default]
+    UnitSerial = 1,
+}
+
+impl From<u8> for StringAttribute {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::BoardSerial,
+            _ => Self::UnitSerial,
+        }
+    }
+}
+
 // From https://github.com/libsdl-org/SDL/blob/510c7edd9b53c6e1b826a2a009de24fcc4dfb2c1/src/joystick/hidapi/steam/controller_constants.h
 // TODO: These are universal for all Valve Controllers. When adding
 // Steam Controller support, move these to a generic location.

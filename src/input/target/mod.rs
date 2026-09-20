@@ -826,7 +826,7 @@ impl TargetDevice {
                 Ok(Self::Debug(driver))
             }
             "deck" => {
-                let device = SteamDeckDevice::new()?;
+                let device = SteamDeckDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(4),
                     buffer_size: 2048,
@@ -835,7 +835,7 @@ impl TargetDevice {
                 Ok(Self::SteamDeck(driver))
             }
             "deck-uhid" => {
-                let device = SteamDeckUhidDevice::new()?;
+                let device = SteamDeckUhidDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(4),
                     buffer_size: 2048,

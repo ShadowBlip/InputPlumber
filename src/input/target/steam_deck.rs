@@ -23,10 +23,11 @@ use virtual_usb::{
 
 use crate::{
     drivers::steam_deck::{
+        generate_board_serial, generate_serial,
         hid_report::{
             PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
-            PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX,
-            STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
+            StringAttribute, PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN,
+            STICK_FORCE_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
         report_descriptor::{CONTROLLER_DESCRIPTOR, KEYBOARD_DESCRIPTOR, MOUSE_DESCRIPTOR},
         ProductId, VID,
@@ -71,6 +72,7 @@ impl Default for SteamDeckConfig {
 const MIN_CHORD_TIME: Duration = Duration::from_millis(80);
 
 pub struct SteamDeckDevice {
+    board_serial: String,
     chip_id: [u8; 15],
     config: SteamDeckConfig,
     config_rx: Option<Receiver<SteamDeckConfig>>,
@@ -80,25 +82,34 @@ pub struct SteamDeckDevice {
     device: Option<VirtualUSBDevice>,
     lizard_mode_enabled: bool,
     output_event: Option<OutputEvent>,
+    persistent_id: Option<String>,
     queued_events: Vec<ScheduledNativeEvent>,
+    /// Which string attribute the last GetStringAttribute SetReport asked for.
+    requested_string_attribute: StringAttribute,
     serial_number: String,
     state: PackedInputDataReport,
 }
 
 impl SteamDeckDevice {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
-        SteamDeckDevice::new_with_config(SteamDeckConfig::default())
+    pub fn new(persistent_id: Option<String>) -> Result<Self, Box<dyn Error>> {
+        SteamDeckDevice::new_with_config(SteamDeckConfig::default(), persistent_id)
     }
 
     /// Create a new emulated Steam Deck device with the given configuration.
-    pub fn new_with_config(config: SteamDeckConfig) -> Result<Self, Box<dyn Error>> {
+    pub fn new_with_config(
+        config: SteamDeckConfig,
+        persistent_id: Option<String>,
+    ) -> Result<Self, Box<dyn Error>> {
         // Ensure the vhci_hcd kernel module is loaded
         log::debug!("Ensuring vhci_hcd kernel module is loaded");
         if let Err(e) = load_vhci_hcd() {
             return Err(e.to_string().into());
         }
 
+        let serial_number = generate_serial(persistent_id.as_deref());
+        let board_serial = generate_board_serial(persistent_id.as_deref());
         Ok(Self {
+            board_serial,
             chip_id: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4],
             config,
             config_rx: None,
@@ -106,20 +117,26 @@ impl SteamDeckDevice {
             device: None,
             lizard_mode_enabled: false,
             output_event: None,
+            persistent_id,
             queued_events: vec![],
-            serial_number: "1NPU7PLUMB3R".to_string(),
+            requested_string_attribute: StringAttribute::default(),
+            serial_number,
             state: PackedInputDataReport::default(),
         })
     }
 
     /// Create the virtual device to emulate
-    fn create_virtual_device(config: &SteamDeckConfig) -> Result<VirtualUSBDevice, Box<dyn Error>> {
+    fn create_virtual_device(
+        config: &SteamDeckConfig,
+        serial_number: &str,
+    ) -> Result<VirtualUSBDevice, Box<dyn Error>> {
         // Configuration values can be obtained from a real device with "sudo lsusb -v"
         let virtual_device = VirtualUSBDeviceBuilder::new(VID, config.product_id.to_u16())
             .class(DeviceClass::UseInterface)
             .supported_langs(vec![LangId::EnglishUnitedStates])
             .manufacturer(config.vendor.as_ref())
             .product(config.name.as_ref())
+            .serial(serial_number)
             .max_packet_size(64)
             .configuration(
                 ConfigurationBuilder::new()
@@ -328,12 +345,21 @@ impl SteamDeckDevice {
                                 Reply::from_xfer(xfer, &data)
                             }
                             ReportType::GetStringAttribute => {
-                                // Reply with the serial number
-                                // [ReportType::GetSerial, 0x14, 0x01, ..serial?]?
-                                log::debug!("Sending serial number: {}", self.serial_number);
-                                let mut data =
-                                    vec![ReportType::GetStringAttribute as u8, 0x14, 0x01];
-                                let mut serial_data = self.serial_number.as_bytes().to_vec();
+                                let (attribute, value) = match self.requested_string_attribute {
+                                    StringAttribute::BoardSerial => {
+                                        (StringAttribute::BoardSerial, &self.board_serial)
+                                    }
+                                    StringAttribute::UnitSerial => {
+                                        (StringAttribute::UnitSerial, &self.serial_number)
+                                    }
+                                };
+                                log::debug!("Sending {attribute:?}: {value}");
+                                let mut serial_data = value.as_bytes().to_vec();
+                                let mut data = vec![
+                                    ReportType::GetStringAttribute as u8,
+                                    serial_data.len() as u8,
+                                    attribute as u8,
+                                ];
                                 data.append(&mut serial_data);
                                 data.resize(64, 0);
                                 Reply::from_xfer(xfer, data.as_slice())
@@ -442,10 +468,15 @@ impl SteamDeckDevice {
                         log::debug!("Setting lizard mode enabled");
                         self.lizard_mode_enabled = true;
                     }
-                    // Configure the next GET_REPORT call to return the serial
-                    // number.
+                    // Configure the next GET_REPORT call to return the
+                    // requested string attribute (board or unit serial).
                     ReportType::GetStringAttribute => {
-                        log::debug!("Serial number requested");
+                        let attribute = data
+                            .get(2)
+                            .map(|byte| StringAttribute::from(*byte))
+                            .unwrap_or_default();
+                        log::debug!("String attribute requested: {attribute:?}");
+                        self.requested_string_attribute = attribute;
                         self.current_report = ReportType::GetStringAttribute;
                     }
                     // Configure the next GET_REPORT call to return the serial
@@ -941,16 +972,13 @@ impl TargetOutputDevice for SteamDeckDevice {
                     TryRecvError::Disconnected => self.config.clone(),
                 },
             };
-            let mut device = SteamDeckDevice::create_virtual_device(&config)?;
+            let serial_number = generate_serial(self.persistent_id.as_deref());
+            let mut device = SteamDeckDevice::create_virtual_device(&config, &serial_number)?;
             device.start()?;
             self.device = Some(device);
             self.config = config;
             self.config_rx = None;
-            self.serial_number = format!(
-                "{:04x?}-{:04x?}-1ae1c0b",
-                VID,
-                self.config.product_id.to_u32()
-            );
+            self.serial_number = serial_number;
         }
 
         // Increment the frame
