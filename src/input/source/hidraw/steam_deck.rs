@@ -14,20 +14,21 @@ use crate::{
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
         steam_deck::{
-            self,
-            driver::{Driver, ACCEL_SCALE},
-            hid_report::LIZARD_SLEEP_SEC,
+            self, driver::Driver, hid_report::LIZARD_SLEEP_SEC, DECK_ACCEL_RAW_TO_MPS2,
+            DECK_GYRO_RAW_TO_RAD_S,
         },
     },
     input::{
         capability::{
-            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
-            Touchpad,
+            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source, Touch,
+            TouchButton, Touchpad,
         },
         event::{
             native::NativeEvent,
-            value::InputValue,
-            value::{normalize_signed_value, normalize_unsigned_value},
+            value::{
+                normalize_accel_value_i16, normalize_gyro_value_i16, normalize_signed_value,
+                normalize_unsigned_value, InputValue,
+            },
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
@@ -529,20 +530,20 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
             ),
         },
         steam_deck::event::Event::Accelerometer(accel) => match accel {
-            steam_deck::event::AccelerometerEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Accelerometer),
+            steam_deck::event::IntertialEvent::Accelerometer(value) => NativeEvent::new(
+                Capability::Accelerometer(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64 * ACCEL_SCALE),
-                    y: Some(value.y as f64 * ACCEL_SCALE),
-                    z: Some(value.z as f64 * ACCEL_SCALE),
+                    x: Some(normalize_accel_value_i16(value.x, DECK_ACCEL_RAW_TO_MPS2)),
+                    y: Some(normalize_accel_value_i16(value.y, DECK_ACCEL_RAW_TO_MPS2)),
+                    z: Some(normalize_accel_value_i16(value.z, DECK_ACCEL_RAW_TO_MPS2)),
                 },
             ),
-            steam_deck::event::AccelerometerEvent::Attitude(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Gyro),
+            steam_deck::event::IntertialEvent::Gyroscope(value) => NativeEvent::new(
+                Capability::Gyroscope(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(value.x as f64),
-                    y: Some(value.y as f64),
-                    z: Some(value.z as f64),
+                    x: Some(normalize_gyro_value_i16(value.x, DECK_GYRO_RAW_TO_RAD_S)),
+                    y: Some(normalize_gyro_value_i16(value.y, DECK_GYRO_RAW_TO_RAD_S)),
+                    z: Some(normalize_gyro_value_i16(value.z, DECK_GYRO_RAW_TO_RAD_S)),
                 },
             ),
         },
@@ -591,7 +592,7 @@ fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
 
 /// List of all capabilities that the Steam Deck driver implements
 pub const CAPABILITIES: &[Capability] = &[
-    Capability::Gamepad(Gamepad::Accelerometer),
+    Capability::Accelerometer(Source::Center),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
     Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
@@ -618,9 +619,9 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-    Capability::Gamepad(Gamepad::Gyro),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+    Capability::Gyroscope(Source::Center),
     Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Touch))),
     Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),

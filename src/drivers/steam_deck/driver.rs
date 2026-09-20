@@ -9,16 +9,12 @@ use packed_struct::{
 
 use super::{
     event::{
-        AccelerometerEvent, AccelerometerInput, AxisEvent, AxisInput, BinaryInput, ButtonEvent,
-        Event, TouchAxisInput, TriggerEvent, TriggerInput,
+        AxisEvent, AxisInput, BinaryInput, ButtonEvent, Event, IntertialEvent, IntertialInput,
+        TouchAxisInput, TriggerEvent, TriggerInput,
     },
     hid_report::{PackedMappingsReport, PackedRumbleReport, Register, ReportType, TrackpadMode},
 };
 
-/// Scale to multiply accelerometer values to get in units of meters per second
-pub const ACCEL_SCALE: f64 = 0.0006125;
-/// Scale to multiply gyro values to get in units of degrees per second
-//pub const GYRO_SCALE: f64 = 0.0625;
 /// Size of the HID packet
 const PACKET_SIZE: usize = 64;
 /// Timeout in milliseconds for reading an HID packet
@@ -406,19 +402,18 @@ impl Driver {
                 })));
             }
 
-            // Accelerometer events
-            events.push(Event::Accelerometer(AccelerometerEvent::Accelerometer(
-                AccelerometerInput {
+            events.push(Event::Accelerometer(IntertialEvent::Accelerometer(
+                IntertialInput {
                     x: state.accel_x.to_primitive(),
-                    y: state.accel_y.to_primitive(),
-                    z: state.accel_z.to_primitive(),
+                    y: state.accel_z.to_primitive(),
+                    z: -state.accel_y.to_primitive(),
                 },
             )));
-            events.push(Event::Accelerometer(AccelerometerEvent::Attitude(
-                AccelerometerInput {
+            events.push(Event::Accelerometer(IntertialEvent::Gyroscope(
+                IntertialInput {
                     x: state.pitch.to_primitive(),
-                    y: state.yaw.to_primitive(),
-                    z: state.roll.to_primitive(),
+                    y: state.roll.to_primitive(),
+                    z: -state.yaw.to_primitive(),
                 },
             )));
         };
