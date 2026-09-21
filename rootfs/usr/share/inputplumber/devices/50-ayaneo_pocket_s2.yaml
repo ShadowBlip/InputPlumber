@@ -22,6 +22,12 @@ source_devices:
           vendor_id: 4001
           product_id: 0428
           handler: event*
+    # Rumble
+    - group: gamepad
+      hidraw:
+          vendor_id: 0x4001
+          product_id: 0x0428
+          interface_num: 0
     # Xinput mode
     - group: gamepad
       evdev:
