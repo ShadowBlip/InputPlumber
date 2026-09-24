@@ -9,7 +9,10 @@ not a USB/HID enumeration number; do not rename it without migrating its state.
 Read-only properties:
 
 - `Capabilities (usasuu)`: API version, persistent identity, supported effects,
-  minimum and maximum colour-cycle period in milliseconds.
+  minimum and maximum colour-cycle period in milliseconds. Both bounds are zero
+  for a firmware-fixed cycle; hide the speed control in that case. The saved
+  period remains a valid 2000–30000 value and is ignored by fixed-speed hardware,
+  preserving the configuration format and remembered software-cycle preference.
 - `State (t(sayuu)ss)`: revision, complete configuration, application status,
   and last hardware/restore error. This property is one atomic snapshot.
 - Configuration `(sayuu)`: effect name, exactly three RGB bytes, brightness
@@ -32,9 +35,14 @@ A dedicated LED thread serializes persistence and hardware writes. At most eight
 configuration commands can be queued, and there is no frame queue. Suspend and
 resume use coalesced lifecycle state with revision acknowledgements outside that
 queue, applied before configuration and frame writes.
-The worker computes the current cycle frame at most every 100 ms, skips missed
-frames, and sleeps between commands for Off/Solid/zero brightness. Cycle frames
-write hue only. A transport failure stops animation and retains configuration.
+The worker sleeps between commands for native cycling, Off, Solid and zero
+brightness. Native cycling selects the driver's `effect=rainbow` once and leaves
+animation to firmware. Other devices can use software frames at most every
+100 ms, skipping missed frames and writing hue only. AYANEO 3 profiles set
+`hardware_cycle_only: true`: if the driver lacks both `none` and `rainbow` in
+`effect_index`, Cycle is unavailable instead of falling back to the observed
+flickering path. Clearing a native effect precedes hardware breathing; Off blanks
+the rings before clearing it. A transport failure stops animation and retains configuration.
 Apply, reconnect, restart, or resume may retry; there is no failure retry loop.
 Stopping takes priority over a saturated command queue. System sleep and orderly
 shutdown request Off without overwriting saved settings. A hard kill or blocked

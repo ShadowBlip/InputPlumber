@@ -636,6 +636,7 @@ fn unavailable_sysfs_reports_failure_and_recovers_on_explicit_apply() {
         Box::new(RecoveringSysfsTransport {
             root: root.clone(),
             device: None,
+            hardware_cycle_only: false,
         }),
         Box::new(TestStorage::default()),
         Box::new(TestClock::default()),
@@ -890,5 +891,193 @@ fn directory_sync_failure_reflects_committed_file_and_stops_effects_until_retry(
     engine.tick();
     assert_eq!(engine.snapshot.state.status, "applied");
     assert_eq!(device.frames.lock().unwrap().len(), 1);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[derive(Clone)]
+struct NativeTestDevice(TestDevice);
+impl Transport for NativeTestDevice {
+    fn effects(&self) -> Vec<String> {
+        self.0.effects()
+    }
+    fn native_cycle(&self) -> bool {
+        true
+    }
+    fn write(&mut self, config: &LedConfig, color: [u8; 3], transition: bool) -> Result<()> {
+        self.0.write(config, color, transition)
+    }
+}
+
+#[test]
+fn native_cycle_sleeps_without_frames_and_resumes_saved_configuration() {
+    let device = TestDevice::default();
+    let storage = TestStorage::default();
+    let clock = TestClock::default();
+    let mut engine = Engine::new(
+        "native-test".into(),
+        Box::new(NativeTestDevice(device.clone())),
+        Box::new(storage.clone()),
+        Box::new(clock.clone()),
+    );
+    assert_eq!(
+        (
+            engine.snapshot.capabilities.cycle_min_ms,
+            engine.snapshot.capabilities.cycle_max_ms
+        ),
+        (0, 0)
+    );
+    let setting = LedConfig {
+        color: vec![19, 61, 127],
+        brightness: 60,
+        cycle_period_ms: 17000,
+        ..config("cycle")
+    };
+    engine.apply(setting.clone()).unwrap();
+    engine.tick();
+    assert_eq!(engine.next_frame_wait(), None);
+    for _ in 0..1200 {
+        clock.advance(100);
+        engine.tick();
+    }
+    assert_eq!(device.frames.lock().unwrap().len(), 1);
+    assert_eq!(device.frames.lock().unwrap()[0].1, [19, 61, 127]);
+    engine.suspend().unwrap();
+    engine.resume();
+    engine.tick();
+    assert_eq!(engine.snapshot.state.config, setting);
+    assert_eq!(*storage.config.lock().unwrap(), Some(setting));
+    let frames = device.frames.lock().unwrap();
+    assert_eq!(frames.len(), 3);
+    assert_eq!(frames[1].0.effect, "off");
+    assert_eq!(frames[2].0.effect, "cycle");
+    assert_eq!(engine.next_frame_wait(), None);
+}
+
+fn native_sysfs_fixture(label: &str) -> PathBuf {
+    let path = temp_dir(label);
+    for (name, value) in [
+        ("max_brightness", "255"),
+        ("multi_index", "red green blue"),
+        ("trigger", "[none] pattern"),
+        ("brightness", "0"),
+        ("multi_intensity", "17 34 51"),
+        ("hw_pattern", ""),
+        ("effect_index", "none rainbow"),
+        ("effect", "none"),
+    ] {
+        fs::write(path.join(name), value).unwrap();
+    }
+    path
+}
+
+#[test]
+fn native_sysfs_transitions_clear_the_effect_and_preserve_remembered_colour() {
+    for from in ["off", "solid", "breathing", "cycle"] {
+        for to in ["off", "solid", "breathing", "cycle"] {
+            let root = native_sysfs_fixture("native-transition");
+            let mut transport = SysfsTransport::open(root.clone()).unwrap();
+            transport.write(&config(from), [17, 34, 51], true).unwrap();
+            let setting = LedConfig {
+                brightness: 60,
+                ..config(to)
+            };
+            transport.write(&setting, [17, 34, 51], true).unwrap();
+            let read = |name| fs::read_to_string(root.join(name)).unwrap();
+            assert_eq!(
+                read("effect"),
+                if to == "cycle" { "rainbow" } else { "none" }
+            );
+            assert_eq!(read("multi_intensity"), "17 34 51");
+            if to == "off" {
+                assert_eq!(read("brightness"), "0");
+            } else if to == "breathing" {
+                assert_eq!(read("trigger"), "pattern");
+                assert_eq!(read("hw_pattern"), "0 1000 153 1000");
+            } else {
+                assert_eq!(read("brightness"), "153");
+            }
+            let zero = LedConfig {
+                brightness: 0,
+                ..config("cycle")
+            };
+            transport.write(&zero, [255; 3], true).unwrap();
+            assert_eq!(read("brightness"), "0");
+            assert_eq!(read("effect"), "none");
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+}
+
+#[test]
+fn hardware_only_profile_never_falls_back_when_native_effect_disappears() {
+    let root = native_sysfs_fixture("native-disappeared");
+    let clock = TestClock::default();
+    let storage = TestStorage::default();
+    let mut engine = Engine::new(
+        "native-required".into(),
+        Box::new(RecoveringSysfsTransport {
+            root: root.clone(),
+            device: None,
+            hardware_cycle_only: true,
+        }),
+        Box::new(storage.clone()),
+        Box::new(clock.clone()),
+    );
+    let setting = config("cycle");
+    engine.apply(setting.clone()).unwrap();
+    engine.tick();
+    assert_eq!(engine.snapshot.state.status, "applied");
+    fs::remove_file(root.join("effect")).unwrap();
+    // No attribute polling or colour writes are needed to keep firmware running.
+    clock.advance(120_000);
+    engine.tick();
+    assert_eq!(engine.snapshot.state.status, "applied");
+    engine.resume();
+    assert_eq!(engine.snapshot.state.status, "failed");
+    assert!(!engine
+        .snapshot
+        .capabilities
+        .effects
+        .contains(&"cycle".into()));
+    assert!(engine.apply(setting.clone()).is_err());
+    assert_eq!(*storage.config.lock().unwrap(), Some(setting));
+    assert_eq!(
+        fs::read_to_string(root.join("multi_intensity")).unwrap(),
+        "17 34 51"
+    );
+    assert!(!root.join("effect").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn native_capability_requires_clear_and_select_and_legacy_policy_is_explicit() {
+    let root = native_sysfs_fixture("native-detection");
+    for modes in ["rainbow", "none", "static rainbow", "none rainbows", ""] {
+        fs::write(root.join("effect_index"), modes).unwrap();
+        let required = RecoveringSysfsTransport {
+            root: root.clone(),
+            device: None,
+            hardware_cycle_only: true,
+        };
+        assert!(!required.native_cycle());
+        assert!(!required.effects().contains(&"cycle".into()));
+        let software = RecoveringSysfsTransport {
+            root: root.clone(),
+            device: None,
+            hardware_cycle_only: false,
+        };
+        assert!(software.effects().contains(&"cycle".into()));
+    }
+    fs::write(root.join("effect_index"), "none rainbow").unwrap();
+    let mut transport = RecoveringSysfsTransport {
+        root: root.clone(),
+        device: None,
+        hardware_cycle_only: true,
+    };
+    assert!(transport.native_cycle());
+    assert!(transport.effects().contains(&"cycle".into()));
+    fs::remove_file(root.join("effect")).unwrap();
+    assert!(transport.write(&config("cycle"), [255; 3], true).is_err());
+    assert_eq!(fs::read_to_string(root.join("brightness")).unwrap(), "0");
     fs::remove_dir_all(root).unwrap();
 }
