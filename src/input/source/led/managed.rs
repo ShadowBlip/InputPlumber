@@ -234,8 +234,18 @@ impl Engine {
     pub fn new(
         identity: String,
         transport: Box<dyn Transport>,
+        storage: Box<dyn Storage>,
+        clock: Box<dyn Clock>,
+    ) -> Self {
+        Self::new_with_initial_config(identity, transport, storage, clock, None)
+    }
+
+    pub fn new_with_initial_config(
+        identity: String,
+        transport: Box<dyn Transport>,
         mut storage: Box<dyn Storage>,
         clock: Box<dyn Clock>,
+        initial_config: Option<LedConfig>,
     ) -> Self {
         let effects = transport.effects();
         let cycle_range = if transport.native_cycle() {
@@ -266,7 +276,32 @@ impl Engine {
                     }
                 }
             }
-            Ok(None) => (),
+            Ok(None) => {
+                if let Some(config) = initial_config {
+                    match config.validate(&effects) {
+                        Ok(()) => match storage.save(&config) {
+                            Ok(SaveOutcome::Durable) => state.config = config,
+                            Ok(SaveOutcome::CommittedUncertain(error)) => {
+                                // The file changed, but its crash durability is unknown.
+                                state.config = config;
+                                restore_error = Some(error.clone());
+                                state.status = "failed".into();
+                                state.last_error = error;
+                            }
+                            Err(error) => {
+                                restore_error = Some(error.clone());
+                                state.status = "failed".into();
+                                state.last_error = error;
+                            }
+                        },
+                        Err(error) => {
+                            restore_error = Some(error.clone());
+                            state.status = "failed".into();
+                            state.last_error = error;
+                        }
+                    }
+                }
+            }
             Err(e) => {
                 restore_error = Some(e.clone());
                 state.status = "failed".into();
@@ -926,6 +961,7 @@ pub fn start_sysfs(
     root: PathBuf,
     suspended: bool,
     hardware_cycle_only: bool,
+    initial_config: Option<LedConfig>,
 ) -> Result<()> {
     let directory = std::env::var_os("STATE_DIRECTORY")
         .map(PathBuf::from)
@@ -936,11 +972,12 @@ pub fn start_sysfs(
         device: None,
         hardware_cycle_only,
     };
-    let mut engine = Engine::new(
+    let mut engine = Engine::new_with_initial_config(
         identity,
         Box::new(transport),
         Box::new(storage),
         Box::new(SystemClock(Instant::now())),
+        initial_config,
     );
     if suspended {
         engine.paused = true;

@@ -326,6 +326,9 @@ pub struct LedConfig {
     /// Disable software colour cycling on controllers that flicker on RGB updates.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hardware_cycle_only: Option<bool>,
+    /// Configuration to persist only when this LED role has no saved settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initial_config: Option<crate::input::source::led::managed::LedConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixed_color: Option<FixedRgbColor>,
 }

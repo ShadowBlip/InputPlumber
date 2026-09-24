@@ -29,7 +29,12 @@ read state before retrying. Invalid requests never change saved settings.
 Effects are `off`, `solid`, `breathing`, and `cycle`. Hardware breathing is
 advertised only if the pattern trigger is available. Its tempo is fixed by
 firmware. A colour cycle preserves the remembered solid colour. Off preserves
-colour, brightness, and cycle speed. Defaults are Off, white, 30%, and 8 seconds.
+colour, brightness, and cycle speed. The generic fallback is Off, white, 30%,
+and 8 seconds. A profile may supply `config.led.initial_config`; it is validated,
+saved, and applied only when that LED role has no saved state. AYANEO 3 joystick
+rings start Solid RGB `[0,128,128]` at 50% on first discovery. Existing saved
+settings, including Off, always take precedence. Invalid or unreadable saved
+state is reported and is never replaced by the initial configuration.
 
 A dedicated LED thread serializes persistence and hardware writes. At most eight
 configuration commands can be queued, and there is no frame queue. Suspend and
