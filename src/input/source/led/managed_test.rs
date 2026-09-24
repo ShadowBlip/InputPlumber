@@ -1081,3 +1081,128 @@ fn native_capability_requires_clear_and_select_and_legacy_policy_is_explicit() {
     assert_eq!(fs::read_to_string(root.join("brightness")).unwrap(), "0");
     fs::remove_dir_all(root).unwrap();
 }
+
+struct DropGatedTransport {
+    device: TestDevice,
+    entered: Option<oneshot::Sender<()>>,
+    release: mpsc::Receiver<()>,
+    released: Arc<AtomicBool>,
+}
+impl Transport for DropGatedTransport {
+    fn effects(&self) -> Vec<String> {
+        self.device.effects()
+    }
+    fn write(&mut self, config: &LedConfig, color: [u8; 3], transition: bool) -> Result<()> {
+        self.device.write(config, color, transition)
+    }
+}
+impl Drop for DropGatedTransport {
+    fn drop(&mut self) {
+        if let Some(sender) = self.entered.take() {
+            let _ = sender.send(());
+        }
+        // Dropping the test's sender also releases the worker after an assertion failure.
+        let _ = self.release.recv();
+        self.released.store(true, Ordering::SeqCst);
+    }
+}
+fn drop_gated_engine() -> (
+    Engine,
+    oneshot::Receiver<()>,
+    mpsc::Sender<()>,
+    Arc<AtomicBool>,
+) {
+    let (entered, wait) = oneshot::channel();
+    let (release, receiver) = mpsc::channel();
+    let released = Arc::new(AtomicBool::new(false));
+    let engine = Engine::new(
+        "retiring-rings".into(),
+        Box::new(DropGatedTransport {
+            device: TestDevice::default(),
+            entered: Some(entered),
+            release: receiver,
+            released: released.clone(),
+        }),
+        Box::new(TestStorage::default()),
+        Box::new(TestClock::default()),
+    );
+    (engine, wait, release, released)
+}
+
+#[tokio::test]
+async fn worker_completion_waits_for_transport_cleanup() {
+    let handle = LedHandle::default();
+    let (engine, entered, release, released) = drop_gated_engine();
+    handle.start(engine).unwrap();
+    handle.stop();
+    tokio::time::timeout(Duration::from_secs(3), entered)
+        .await
+        .expect("worker did not reach transport cleanup")
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), handle.wait_stopped())
+            .await
+            .is_err(),
+        "completion must wait for transport resource release"
+    );
+    release.send(()).unwrap();
+    handle.wait_stopped().await.unwrap();
+    assert!(released.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn registry_removal_retires_the_old_handle_before_allowing_reconnect() {
+    let registry = LedRegistry::default();
+    let old = registry.get("leds://retiring-rings");
+    let (engine, entered, release, released) = drop_gated_engine();
+    old.start(engine).unwrap();
+    let removing_registry = registry.clone();
+    let removal =
+        tokio::spawn(async move { removing_registry.remove("leds://retiring-rings").await });
+    tokio::time::timeout(Duration::from_secs(3), entered)
+        .await
+        .expect("removal did not reach transport cleanup")
+        .unwrap();
+    assert!(!removal.is_finished());
+    let during_removal = registry.get("leds://retiring-rings");
+    assert!(during_removal.start(setup().0).is_err());
+    release.send(()).unwrap();
+    removal.await.unwrap().unwrap();
+    assert!(released.load(Ordering::SeqCst));
+    assert!(
+        old.start(setup().0).is_err(),
+        "a retired handle cannot become an owner again"
+    );
+    let replacement = registry.get("leds://retiring-rings");
+    replacement.start(setup().0).unwrap();
+    old.stop();
+    replacement.apply(config("solid")).await.unwrap();
+    registry.remove("leds://retiring-rings").await.unwrap();
+    replacement.wait_stopped().await.unwrap();
+}
+
+#[tokio::test]
+async fn timed_out_registry_removal_keeps_the_retiring_owner_blocked() {
+    let registry = LedRegistry::default();
+    let old = registry.get("leds://blocked-rings");
+    let (engine, entered, release, _) = drop_gated_engine();
+    old.start(engine).unwrap();
+    let removing_registry = registry.clone();
+    let removal =
+        tokio::spawn(async move { removing_registry.remove("leds://blocked-rings").await });
+    entered.await.unwrap();
+    let error = removal.await.unwrap().unwrap_err();
+    assert!(error.contains("did not stop"));
+    assert_eq!(old.snapshot().state.status, "failed");
+    assert_eq!(old.snapshot().state.last_error, error);
+    assert!(registry
+        .get("leds://blocked-rings")
+        .start(setup().0)
+        .is_err());
+    release.send(()).unwrap();
+    old.wait_stopped().await.unwrap();
+    registry.remove("leds://blocked-rings").await.unwrap();
+    let replacement = registry.get("leds://blocked-rings");
+    replacement.start(setup().0).unwrap();
+    registry.remove("leds://blocked-rings").await.unwrap();
+}

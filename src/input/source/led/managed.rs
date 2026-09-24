@@ -488,6 +488,7 @@ pub struct LedHandle {
     commands: Arc<Mutex<Option<mpsc::SyncSender<Command>>>>,
     finished: watch::Sender<bool>,
     stopping: Arc<AtomicBool>,
+    retired: Arc<AtomicBool>,
     lifecycle: Arc<Mutex<Lifecycle>>,
     lifecycle_ack: watch::Sender<LifecycleAck>,
 }
@@ -499,6 +500,7 @@ impl Default for LedHandle {
             commands: Arc::new(Mutex::new(None)),
             finished: watch::channel(true).0,
             stopping: Arc::new(AtomicBool::new(false)),
+            retired: Arc::new(AtomicBool::new(false)),
             lifecycle: Arc::new(Mutex::new(Lifecycle::default())),
             lifecycle_ack: watch::channel(LifecycleAck::default()).0,
         }
@@ -519,6 +521,9 @@ impl LedHandle {
     }
     pub fn start(&self, engine: Engine) -> Result<()> {
         let mut commands = self.commands.lock().map_err(|_| "Lighting lock poisoned")?;
+        if self.retired.load(Ordering::SeqCst) {
+            return Err("Lighting source is retiring".into());
+        }
         if commands.is_some() || !*self.finished.borrow() {
             return Err("Lighting source already has an owner".into());
         }
@@ -605,7 +610,9 @@ impl LedHandle {
                         }
                     });
                 }
-                snapshot.send_replace(engine.snapshot);
+                snapshot.send_replace(engine.snapshot.clone());
+                // Completion includes transport and storage resource release.
+                drop(engine);
                 finished.send_replace(true);
             })
             .map_err(|e| {
@@ -710,10 +717,26 @@ impl LedRegistry {
     pub fn get(&self, id: &str) -> LedHandle {
         self.0.lock().unwrap().entry(id.into()).or_default().clone()
     }
-    pub fn remove(&self, id: &str) {
-        if let Some(handle) = self.0.lock().unwrap().remove(id) {
+    pub async fn remove(&self, id: &str) -> Result<()> {
+        let handle = self.0.lock().unwrap().get(id).cloned();
+        if let Some(handle) = handle {
+            // Keep a tombstone until this writer is fully gone. On timeout,
+            // fail closed instead of allowing a second owner of the same LED.
+            handle.retired.store(true, Ordering::SeqCst);
             handle.stop();
+            if let Err(error) = handle.wait_stopped().await {
+                handle.fail(error.clone());
+                return Err(error);
+            }
+            let mut devices = self.0.lock().unwrap();
+            if devices
+                .get(id)
+                .is_some_and(|current| Arc::ptr_eq(&current.commands, &handle.commands))
+            {
+                devices.remove(id);
+            }
         }
+        Ok(())
     }
     pub async fn set_suspended(&self, suspended: bool) {
         self.1.store(suspended, Ordering::SeqCst);
