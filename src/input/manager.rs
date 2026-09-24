@@ -1454,7 +1454,7 @@ impl Manager {
         log::debug!("Device ID: {id}");
 
         // Signal that a source device was removed
-        self.led_registry.remove(&id);
+        self.led_registry.remove(&id).await?;
         self.source_device_dbus_paths.remove(&id);
         self.on_source_device_removed(device.into(), id).await?;
 
