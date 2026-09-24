@@ -319,6 +319,16 @@ pub struct ImuConfig {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct LedConfig {
+    /// Stable profile and LED-role identity; opts into persistent user control.
+    /// Must contain only ASCII letters, digits, underscores and hyphens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persistent_id: Option<String>,
+    /// Disable software colour cycling on controllers that flicker on RGB updates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hardware_cycle_only: Option<bool>,
+    /// Configuration to persist only when this LED role has no saved settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initial_config: Option<crate::input::source::led::managed::LedConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixed_color: Option<FixedRgbColor>,
 }

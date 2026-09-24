@@ -73,6 +73,7 @@ pub enum InterceptMode {
 /// can translate input to any target devices
 #[derive(Debug)]
 pub struct CompositeDevice {
+    led_registry: crate::input::source::led::managed::LedRegistry,
     /// DBus interface(s) for this device
     dbus: DBusInterfaceManager,
     /// Configuration for the CompositeDevice
@@ -173,12 +174,14 @@ impl CompositeDevice {
         device_info: DeviceInfo,
         dbus_path: String,
         capability_map: Option<CapabilityMapConfig>,
+        led_registry: crate::input::source::led::managed::LedRegistry,
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating CompositeDevice with config: {}", config.name);
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
         let name = config.name.clone();
         let dbus = DBusInterfaceManager::new(conn.clone(), dbus_path.clone())?;
         let mut device = Self {
+            led_registry,
             dbus,
             config,
             name,
@@ -1759,7 +1762,12 @@ impl CompositeDevice {
                     }
                     "leds" => {
                         log::debug!("Adding LED source device: {:?}", device.sysname());
-                        let device = LedDevice::new(device, self.client(), source_config.clone())?;
+                        let device = LedDevice::new(
+                            device,
+                            self.client(),
+                            source_config.clone(),
+                            &self.led_registry,
+                        )?;
                         SourceDevice::Led(device)
                     }
                     "tty" => {

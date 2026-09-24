@@ -98,6 +98,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    input_manager.shutdown_leds().await;
+
     // Unhide all devices on shutdown
     if let Err(e) = unhide_all().await {
         log::error!("Unable to un-hide devices: {:?}", e);

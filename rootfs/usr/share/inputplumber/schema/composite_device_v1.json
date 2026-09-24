@@ -284,6 +284,31 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "persistent_id": {
+          "description": "Opt into persistent lighting using a stable profile and LED-role identity.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "hardware_cycle_only": {
+          "description": "Require native firmware colour cycling; do not fall back to repeated RGB updates.",
+          "type": "boolean",
+          "default": false
+        },
+        "initial_config": {
+          "description": "Persist and apply this configuration only when no saved setting exists for the LED role.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect", "color", "brightness", "cycle_period_ms"],
+          "properties": {
+            "effect": {"type": "string", "enum": ["off", "solid", "breathing", "cycle"]},
+            "color": {
+              "type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 255},
+              "minItems": 3, "maxItems": 3
+            },
+            "brightness": {"type": "integer", "minimum": 0, "maximum": 100},
+            "cycle_period_ms": {"type": "integer", "minimum": 2000, "maximum": 30000}
+          }
+        },
         "fixed_color": {
           "$ref": "#/definitions/Color"
         }

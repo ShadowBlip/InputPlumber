@@ -87,6 +87,15 @@ source_devices:
     udev: # Updated
       sys_name: "*:rgb:joystick_rings"
       subsystem: leds
+    config:
+      led:
+        persistent_id: ayaneo-3-joystick-rings
+        hardware_cycle_only: true
+        initial_config:
+          effect: solid
+          color: [0, 128, 128]
+          brightness: 50
+          cycle_period_ms: 8000
 
 # Optional configuration for the composite device
 options:
