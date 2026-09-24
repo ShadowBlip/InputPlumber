@@ -93,6 +93,11 @@ impl LedDevice {
                     .and_then(|c| c.led.as_ref())
                     .and_then(|led| led.hardware_cycle_only)
                     .unwrap_or(false);
+                let initial_config = conf
+                    .as_ref()
+                    .and_then(|s| s.config.as_ref())
+                    .and_then(|c| c.led.as_ref())
+                    .and_then(|led| led.initial_config.clone());
                 let device = if let Some(identity) = identity {
                     let handle = registry.get(&device_info.get_id());
                     if let Err(error) = managed::start_sysfs(
@@ -101,6 +106,7 @@ impl LedDevice {
                         device_info.syspath().into(),
                         registry.is_suspended(),
                         hardware_cycle_only,
+                        initial_config,
                     ) {
                         handle.fail(error);
                     }

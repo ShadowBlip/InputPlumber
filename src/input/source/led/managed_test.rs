@@ -79,6 +79,98 @@ fn config(effect: &str) -> LedConfig {
     }
 }
 
+fn teal_default() -> LedConfig {
+    LedConfig {
+        effect: "solid".into(),
+        color: vec![0, 128, 128],
+        brightness: 50,
+        cycle_period_ms: 8000,
+    }
+}
+
+#[test]
+fn fresh_profile_persists_teal_once_and_reuses_saved_settings() {
+    let device = TestDevice::default();
+    let storage = TestStorage::default();
+    let mut first = Engine::new_with_initial_config(
+        "ayaneo-3-joystick-rings".into(),
+        Box::new(device.clone()),
+        Box::new(storage.clone()),
+        Box::new(TestClock::default()),
+        Some(teal_default()),
+    );
+    assert_eq!(storage.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(first.snapshot.state.config, teal_default());
+    first.tick();
+    assert_eq!(first.snapshot.state.status, "applied");
+    assert_eq!(device.frames.lock().unwrap()[0].1, [0, 128, 128]);
+
+    let mut second = Engine::new_with_initial_config(
+        "ayaneo-3-joystick-rings".into(),
+        Box::new(device),
+        Box::new(storage.clone()),
+        Box::new(TestClock::default()),
+        Some(config("off")),
+    );
+    assert_eq!(storage.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(second.snapshot.state.config, teal_default());
+    second.tick();
+    assert_eq!(second.snapshot.state.status, "applied");
+}
+
+#[test]
+fn saved_off_and_corrupt_state_are_not_overwritten_by_profile_default() {
+    let path = temp_dir("initial-preservation");
+    let name = "ayaneo-3-joystick-rings";
+    let mut storage = FileStorage::new(&path, name).unwrap();
+    storage.save(&config("off")).unwrap();
+    let file = path.join(format!("{name}.json"));
+    let saved = fs::read(&file).unwrap();
+    let off = Engine::new_with_initial_config(
+        name.into(),
+        Box::new(TestDevice::default()),
+        Box::new(storage),
+        Box::new(TestClock::default()),
+        Some(teal_default()),
+    );
+    assert_eq!(off.snapshot.state.config.effect, "off");
+    assert_eq!(fs::read(&file).unwrap(), saved);
+
+    fs::write(&file, b"invalid saved state").unwrap();
+    let device = TestDevice::default();
+    let mut corrupt = Engine::new_with_initial_config(
+        name.into(),
+        Box::new(device.clone()),
+        Box::new(FileStorage::new(&path, name).unwrap()),
+        Box::new(TestClock::default()),
+        Some(teal_default()),
+    );
+    corrupt.tick();
+    assert_eq!(corrupt.snapshot.state.status, "failed");
+    assert_eq!(fs::read(&file).unwrap(), b"invalid saved state");
+    assert!(device.frames.lock().unwrap().is_empty());
+    fs::remove_dir_all(path).unwrap();
+}
+
+#[test]
+fn failed_initial_persistence_never_applies_unsaved_lighting() {
+    let storage = TestStorage::default();
+    storage.failed.store(true, Ordering::SeqCst);
+    let device = TestDevice::default();
+    let mut engine = Engine::new_with_initial_config(
+        "ayaneo-3-joystick-rings".into(),
+        Box::new(device.clone()),
+        Box::new(storage.clone()),
+        Box::new(TestClock::default()),
+        Some(teal_default()),
+    );
+    engine.tick();
+    assert_eq!(engine.snapshot.state.status, "failed");
+    assert!(engine.snapshot.state.last_error.contains("storage failure"));
+    assert_eq!(storage.writes.load(Ordering::SeqCst), 0);
+    assert!(device.frames.lock().unwrap().is_empty());
+}
+
 #[test]
 fn invalid_requests_are_atomic_and_never_touch_storage_or_hardware() {
     let (mut engine, device, storage, _) = setup();
