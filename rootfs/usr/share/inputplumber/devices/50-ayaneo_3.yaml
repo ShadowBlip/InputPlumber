@@ -78,15 +78,7 @@ source_devices:
       #   y: [-1, 0, 0]
       #   z: [0, 0, -1]
 
-  # RGB
-  - group: led
-    udev: # Legacy
-      sys_name: multicolor:chassis
-      subsystem: leds
-  - group: led
-    udev: # Updated
-      sys_name: "*:rgb:joystick_rings"
-      subsystem: leds
+  # Steam manages the joystick-ring LEDs through the kernel LED interface.
 
 # Optional configuration for the composite device
 options:
