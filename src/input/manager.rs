@@ -258,7 +258,7 @@ impl Manager {
         self.listen_on_dbus();
         let _ = tokio::join!(
             Self::discover_all_devices(&cmd_tx_all_devices),
-            Self::watch_iio_devices(self.tx.clone()),
+            Self::watch_non_devnode_devices(self.tx.clone()),
             Self::watch_devnodes(self.tx.clone(), &mut watcher_rx),
             self.events_loop()
         );
@@ -1490,12 +1490,15 @@ impl Manager {
         Err(Box::from("No available dbus path left"))
     }
 
-    /// Watch for IIO device events
-    fn watch_iio_devices(
+    /// Watch processed udev events for devices without hidraw/evdev nodes.
+    fn watch_non_devnode_devices(
         cmd_tx: mpsc::Sender<ManagerCommand>,
     ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + std::marker::Send + Sync>>> {
         task::spawn_blocking(move || {
-            let mut monitor = MonitorBuilder::new()?.match_subsystem("iio")?.listen()?;
+            let mut monitor = MonitorBuilder::new()?
+                .match_subsystem("iio")?
+                .match_subsystem("leds")?
+                .listen()?;
 
             let mut poll = Poll::new()?;
             let mut events = Events::with_capacity(1024);
@@ -1512,11 +1515,15 @@ impl Manager {
                     let device = event.device();
                     let dev_name = device.name();
                     let dev_sysname = device.sysname().to_string_lossy();
+                    let subsystem = device
+                        .subsystem()
+                        .map(|value| value.to_string_lossy())
+                        .unwrap_or_default();
 
                     match action.to_string_lossy().trim() {
                         "add" => {
                             log::debug!(
-                                "Got udev add action for iio device {dev_name} ({dev_sysname})"
+                                "Got udev add action for {subsystem} device {dev_name} ({dev_sysname})"
                             );
                             cmd_tx.blocking_send(ManagerCommand::DeviceAdded {
                                 device: device.into(),
@@ -1524,14 +1531,14 @@ impl Manager {
                         }
                         "remove" => {
                             log::debug!(
-                                "Got udev remove action for iio device {dev_name} ({dev_sysname})"
+                                "Got udev remove action for {subsystem} device {dev_name} ({dev_sysname})"
                             );
                             cmd_tx.blocking_send(ManagerCommand::DeviceRemoved {
                                 device: device.into(),
                             })?;
                         }
                         unhandled_action => {
-                            log::trace!("Unhandled udev action for iio device {dev_name} ({dev_sysname}: {unhandled_action}");
+                            log::trace!("Unhandled udev action for {subsystem} device {dev_name} ({dev_sysname}: {unhandled_action}");
                         }
                     }
                 }
