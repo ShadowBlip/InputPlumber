@@ -2,6 +2,8 @@
 Description=InputPlumber Service
 
 [Service]
+StateDirectory=inputplumber
+StateDirectoryMode=0700
 Type=dbus
 BusName=org.shadowblip.InputPlumber
 Environment=LOG_LEVEL=info

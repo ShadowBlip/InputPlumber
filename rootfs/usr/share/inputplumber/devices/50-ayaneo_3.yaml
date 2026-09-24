@@ -87,6 +87,9 @@ source_devices:
     udev: # Updated
       sys_name: "*:rgb:joystick_rings"
       subsystem: leds
+    config:
+      led:
+        persistent_id: ayaneo-3-joystick-rings
 
 # Optional configuration for the composite device
 options:
