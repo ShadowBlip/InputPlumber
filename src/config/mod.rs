@@ -323,6 +323,9 @@ pub struct LedConfig {
     /// Must contain only ASCII letters, digits, underscores and hyphens.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub persistent_id: Option<String>,
+    /// Disable software colour cycling on controllers that flicker on RGB updates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hardware_cycle_only: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixed_color: Option<FixedRgbColor>,
 }

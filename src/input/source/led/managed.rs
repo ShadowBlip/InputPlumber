@@ -100,6 +100,10 @@ pub struct Snapshot {
 /// Hardware boundary. All methods execute on one dedicated thread per LED.
 pub trait Transport: Send {
     fn effects(&self) -> Vec<String>;
+    /// True when cycle timing is owned by the device firmware.
+    fn native_cycle(&self) -> bool {
+        false
+    }
     fn write(&mut self, config: &LedConfig, color: [u8; 3], transition: bool) -> Result<()>;
 }
 #[derive(Debug, PartialEq, Eq)]
@@ -234,6 +238,11 @@ impl Engine {
         clock: Box<dyn Clock>,
     ) -> Self {
         let effects = transport.effects();
+        let cycle_range = if transport.native_cycle() {
+            (0, 0)
+        } else {
+            (2000, 30000)
+        };
         let mut state = LedState {
             status: "pending".into(),
             ..LedState::default()
@@ -270,6 +279,8 @@ impl Engine {
                 capabilities: Capabilities {
                     persistent_id: identity,
                     effects,
+                    cycle_min_ms: cycle_range.0,
+                    cycle_max_ms: cycle_range.1,
                     ..Capabilities::default()
                 },
                 state,
@@ -316,12 +327,15 @@ impl Engine {
         self.dirty = true;
         Ok(self.snapshot.state.revision)
     }
+    fn software_cycle(&self) -> bool {
+        self.snapshot.state.config.effect == "cycle"
+            && self.snapshot.state.config.brightness != 0
+            && self.snapshot.capabilities.cycle_min_ms != 0
+    }
     fn next_frame_wait(&self) -> Option<Duration> {
         if self.paused
             || self.snapshot.state.status == "failed"
-            || (!self.dirty
-                && (self.snapshot.state.config.effect != "cycle"
-                    || self.snapshot.state.config.brightness == 0))
+            || (!self.dirty && !self.software_cycle())
         {
             return None;
         }
@@ -343,10 +357,10 @@ impl Engine {
             return;
         }
         let config = &self.snapshot.state.config;
-        if !self.dirty && (config.effect != "cycle" || config.brightness == 0) {
+        if !self.dirty && !self.software_cycle() {
             return;
         }
-        let color = if config.effect == "cycle" {
+        let color = if self.software_cycle() {
             cycle_color(now.saturating_sub(self.epoch), config.cycle_period_ms)
         } else {
             [config.color[0], config.color[1], config.color[2]]
@@ -384,6 +398,13 @@ impl Engine {
             return;
         }
         self.snapshot.capabilities.effects = self.transport.effects();
+        let (minimum, maximum) = if self.transport.native_cycle() {
+            (0, 0)
+        } else {
+            (2000, 30000)
+        };
+        self.snapshot.capabilities.cycle_min_ms = minimum;
+        self.snapshot.capabilities.cycle_max_ms = maximum;
         if let Err(error) = self
             .snapshot
             .state
@@ -711,6 +732,15 @@ pub struct SysfsTransport {
     maximum: u32,
     channels: Vec<String>,
     breathing: bool,
+    native_cycle: bool,
+}
+/// Only opt into the effect ABI when both selection and explicit clearing exist.
+fn native_cycle_supported(root: &Path) -> bool {
+    root.join("effect").is_file()
+        && fs::read_to_string(root.join("effect_index")).is_ok_and(|modes| {
+            let modes: Vec<_> = modes.split_whitespace().collect();
+            modes.contains(&"none") && modes.contains(&"rainbow")
+        })
 }
 impl SysfsTransport {
     pub fn open(root: PathBuf) -> Result<Self> {
@@ -738,11 +768,13 @@ impl SysfsTransport {
             .unwrap_or_default()
             .split_whitespace()
             .any(|s| s.trim_matches(['[', ']']) == "pattern");
+        let native_cycle = native_cycle_supported(&root);
         Ok(Self {
             root,
             maximum,
             channels,
             breathing,
+            native_cycle,
         })
     }
     fn write_attribute(&self, name: &str, value: &str) -> Result<()> {
@@ -757,6 +789,9 @@ impl SysfsTransport {
     }
 }
 impl Transport for SysfsTransport {
+    fn native_cycle(&self) -> bool {
+        self.native_cycle
+    }
     fn effects(&self) -> Vec<String> {
         let mut effects = vec!["off".into(), "solid".into(), "cycle".into()];
         if self.breathing {
@@ -770,7 +805,26 @@ impl Transport for SysfsTransport {
             self.write_attribute("trigger", "none")?;
         }
         if config.effect == "off" || config.brightness == 0 {
-            return self.write_attribute("brightness", "0");
+            // Blank before clearing a native effect, so Off cannot flash the
+            // remembered static colour.
+            self.write_attribute("brightness", "0")?;
+            if self.native_cycle {
+                self.write_attribute("effect", "none")?;
+            }
+            return Ok(());
+        }
+        let brightness =
+            ((u64::from(config.brightness) * u64::from(self.maximum) + 50) / 100).to_string();
+        if self.native_cycle && config.effect == "cycle" {
+            if transition {
+                self.write_attribute("brightness", &brightness)?;
+                self.write_attribute("effect", "rainbow")?;
+            }
+            return Ok(());
+        }
+        if self.native_cycle && transition {
+            // Clear the hardware mode before selecting the pattern trigger.
+            self.write_attribute("effect", "none")?;
         }
         let values = self
             .channels
@@ -786,8 +840,6 @@ impl Transport for SysfsTransport {
             .collect::<Vec<_>>()
             .join(" ");
         self.write_attribute("multi_intensity", &values)?;
-        let brightness =
-            ((u64::from(config.brightness) * u64::from(self.maximum) + 50) / 100).to_string();
         if config.effect == "breathing" {
             // hw_pattern appears only after selecting the pattern trigger. Firmware
             // fixes its tempo; do not expose these placeholder durations as speed.
@@ -806,10 +858,17 @@ impl Transport for SysfsTransport {
 struct RecoveringSysfsTransport {
     root: PathBuf,
     device: Option<SysfsTransport>,
+    hardware_cycle_only: bool,
 }
 impl Transport for RecoveringSysfsTransport {
+    fn native_cycle(&self) -> bool {
+        native_cycle_supported(&self.root)
+    }
     fn effects(&self) -> Vec<String> {
-        let mut effects = vec!["off".into(), "solid".into(), "cycle".into()];
+        let mut effects = vec!["off".into(), "solid".into()];
+        if !self.hardware_cycle_only || self.native_cycle() {
+            effects.push("cycle".into());
+        }
         if fs::read_to_string(self.root.join("trigger"))
             .unwrap_or_default()
             .split_whitespace()
@@ -823,11 +882,14 @@ impl Transport for RecoveringSysfsTransport {
         if transition || self.device.is_none() {
             self.device = Some(SysfsTransport::open(self.root.clone())?);
         }
-        let result = self
+        let device = self
             .device
             .as_mut()
-            .ok_or("Lighting transport unavailable")?
-            .write(config, color, transition);
+            .ok_or("Lighting transport unavailable")?;
+        if self.hardware_cycle_only && config.effect == "cycle" && !device.native_cycle {
+            return Err("Colour cycle requires the controller's native effect support".into());
+        }
+        let result = device.write(config, color, transition);
         if result.is_err() {
             self.device = None;
         }
@@ -840,12 +902,17 @@ pub fn start_sysfs(
     identity: String,
     root: PathBuf,
     suspended: bool,
+    hardware_cycle_only: bool,
 ) -> Result<()> {
     let directory = std::env::var_os("STATE_DIRECTORY")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/var/lib/inputplumber"));
     let storage = FileStorage::new(&directory.join("leds"), &identity)?;
-    let transport = RecoveringSysfsTransport { root, device: None };
+    let transport = RecoveringSysfsTransport {
+        root,
+        device: None,
+        hardware_cycle_only,
+    };
     let mut engine = Engine::new(
         identity,
         Box::new(transport),

@@ -289,6 +289,11 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{1,128}$"
         },
+        "hardware_cycle_only": {
+          "description": "Require native firmware colour cycling; do not fall back to repeated RGB updates.",
+          "type": "boolean",
+          "default": false
+        },
         "fixed_color": {
           "$ref": "#/definitions/Color"
         }
