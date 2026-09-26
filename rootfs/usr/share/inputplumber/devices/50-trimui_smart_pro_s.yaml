@@ -1,26 +1,40 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
 version: 1
 kind: CompositeDevice
 name: TRIMUI Smart Pro S
-
-options:
-  auto_manage: true
-
+single_source: false
 # No DMI or devicetree scoping is possible on this board (empty DMI data,
-# generic "allwinner,a523 arm,sun55iw3p1" root compatible), so match the
-# TrimUI-specific evdev names instead. The gamepad node is created by the
-# vendor trimui_inputd daemon over uinput, which is why it also needs a
-# VIRT_DEVICE_WHITELIST entry to be considered at all.
+# generic "allwinner,a523 arm,sun55iw3p1" root compatible), so the sources
+# below match TrimUI-specific names and UART paths instead.
 matches: []
 
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
 source_devices:
+  # Gamepad MCUs on uart5/uart7, read natively by the trimui_tty driver.
+  # Matched on the parent UART address: stable across ttyAS* renumbering,
+  # and the ttyAS0 console can never match. NOTE: `*` does not cross `/`
+  # in glob_match, so the UART fragment must sit between `/**/`.
+  # These are real (non-virtual) nodes, so no VIRT_DEVICE_WHITELIST entry
+  # is needed for them.
+  #
+  # WARNING: the legacy trimui_inputd daemon opens these same UARTs.
+  # Serial reads are destructive, so trimui-inputd.service MUST be disabled
+  # when this profile is in use, or both readers will split the byte
+  # stream and the pad will misbehave.
   - group: gamepad
-    capability_map_id: trimui_type1
-    unique: true
-    evdev:
-      name: "TRIMUI Smart Pro S Controller"
-      handler: event*
+    udev:
+      subsystem: tty
+      sys_path: "/**/2501400.uart/**"
+  - group: gamepad
+    udev:
+      subsystem: tty
+      sys_path: "/**/2501c00.uart/**"
 
+  # LRADC side keys (volume rockers + Home). The trimui_type1 capability
+  # map turns Home into QuickAccess; volume keys pass through to the
+  # keyboard target untouched.
   - group: keyboard
     capability_map_id: trimui_type1
     evdev:
@@ -28,12 +42,31 @@ source_devices:
       phys_path: "sunxikbd/input0"
       handler: event*
 
+  # Physical function key (gpio-keys switch). The capability map turns it
+  # into QuickAccess2, which no target emits, so a DeviceProfile can route
+  # it to a DBus UI event instead (overlay-only).
   - group: keyboard
     capability_map_id: trimui_type1
     evdev:
       name: "fn-switches"
       handler: event*
 
+  # PWM rumble motor is its own real platform device (EV_FF only, no
+  # inputs), so the deck target's rumble output has somewhere to go.
+  # No capability map: there are no input events to translate.
+  - group: gamepad
+    evdev:
+      name: "pwm-vibrator"
+      handler: event*
+
+# Optional configuration for the composite device
+options:
+  # If true, InputPlumber will automatically try to manage the input device. If
+  # this is false, InputPlumber will not try to manage the device unless an
+  # external service enables management of the device. Defaults to 'false'
+  auto_manage: true
+
+# The target input device(s) that the virtual device profile can use
 target_devices:
   - deck
   - keyboard
