@@ -2,19 +2,23 @@ use std::{error::Error, time::Duration};
 
 pub mod oxflyserial;
 pub mod oxp_x1_serial;
+pub mod trimui_serial;
 
 use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver};
 use crate::{
     config,
     constants::BUS_SOURCES_PREFIX,
     drivers::oxp_tty::{self, OxpDriverType},
+    drivers::trimui_tty::{self},
     input::{
         capability::Capability,
         composite_device::client::CompositeDeviceClient,
         info::DeviceInfoRef,
         output_capability::OutputCapability,
         source::{
-            tty::{oxflyserial::OneXFlySerial, oxp_x1_serial::OxpX1Serial},
+            tty::{
+                oxflyserial::OneXFlySerial, oxp_x1_serial::OxpX1Serial, trimui_serial::TrimuiSerial,
+            },
             SourceDriverOptions,
         },
     },
@@ -26,6 +30,7 @@ enum DriverType {
     Unknown,
     OneXFlySerial,
     OxpX1Serial,
+    TrimuiSerial,
 }
 
 /// [TtyDevice] represents an input device using the tty subsystem.
@@ -33,6 +38,7 @@ enum DriverType {
 pub enum TtyDevice {
     OneXFlySerial(SourceDriver<OneXFlySerial>),
     OxpX1Serial(SourceDriver<OxpX1Serial>),
+    TrimuiSerial(SourceDriver<TrimuiSerial>),
 }
 
 impl SourceDeviceCompatible for TtyDevice {
@@ -40,6 +46,7 @@ impl SourceDeviceCompatible for TtyDevice {
         match self {
             TtyDevice::OneXFlySerial(source_driver) => source_driver.info_ref(),
             TtyDevice::OxpX1Serial(source_driver) => source_driver.info_ref(),
+            TtyDevice::TrimuiSerial(source_driver) => source_driver.info_ref(),
         }
     }
 
@@ -47,6 +54,7 @@ impl SourceDeviceCompatible for TtyDevice {
         match self {
             TtyDevice::OneXFlySerial(source_driver) => source_driver.get_id(),
             TtyDevice::OxpX1Serial(source_driver) => source_driver.get_id(),
+            TtyDevice::TrimuiSerial(source_driver) => source_driver.get_id(),
         }
     }
 
@@ -54,6 +62,7 @@ impl SourceDeviceCompatible for TtyDevice {
         match self {
             TtyDevice::OneXFlySerial(source_driver) => source_driver.client(),
             TtyDevice::OxpX1Serial(source_driver) => source_driver.client(),
+            TtyDevice::TrimuiSerial(source_driver) => source_driver.client(),
         }
     }
 
@@ -61,6 +70,7 @@ impl SourceDeviceCompatible for TtyDevice {
         match self {
             TtyDevice::OneXFlySerial(source_driver) => source_driver.run().await,
             TtyDevice::OxpX1Serial(source_driver) => source_driver.run().await,
+            TtyDevice::TrimuiSerial(source_driver) => source_driver.run().await,
         }
     }
 
@@ -68,6 +78,7 @@ impl SourceDeviceCompatible for TtyDevice {
         match self {
             TtyDevice::OneXFlySerial(source_driver) => source_driver.get_capabilities(),
             TtyDevice::OxpX1Serial(source_driver) => source_driver.get_capabilities(),
+            TtyDevice::TrimuiSerial(source_driver) => source_driver.get_capabilities(),
         }
     }
 
@@ -79,6 +90,7 @@ impl SourceDeviceCompatible for TtyDevice {
         match self {
             TtyDevice::OneXFlySerial(source_driver) => source_driver.get_device_path(),
             TtyDevice::OxpX1Serial(source_driver) => source_driver.get_device_path(),
+            TtyDevice::TrimuiSerial(source_driver) => source_driver.get_device_path(),
         }
     }
 }
@@ -125,6 +137,21 @@ impl TtyDevice {
                 );
                 Ok(Self::OxpX1Serial(source_device))
             }
+            DriverType::TrimuiSerial => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(trimui_tty::TTY_TIMEOUT),
+                    buffer_size: 4096,
+                };
+                let device = TrimuiSerial::new(device_info.clone())?;
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
+                Ok(Self::TrimuiSerial(source_device))
+            }
         }
     }
 
@@ -168,6 +195,13 @@ impl TtyDevice {
             "Finding driver for tty interface: {name}, port: {:04x?}",
             port
         );
+
+        // TrimUI Smart Pro S MCU UARTs match on the parent UART address in
+        // the syspath (stable across ttyAS* renumbering); the console and
+        // all other ttys fall through to the USB-based drivers below.
+        if trimui_tty::side_from_syspath(device.syspath().as_str()).is_some() {
+            return DriverType::TrimuiSerial;
+        }
 
         match oxp_tty::get_driver_type(port, vid, pid, interface) {
             OxpDriverType::Unknown => DriverType::Unknown,
