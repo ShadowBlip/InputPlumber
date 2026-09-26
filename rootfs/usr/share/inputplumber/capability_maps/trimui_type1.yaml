@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+version: 2
+kind: CapabilityMap
+name: TrimUI Type 1
+id: trimui_type1
+mapping:
+  # Side Home key (LRADC sunxi-keyboard) becomes the Deck "..." button, kept
+  # distinct from the pad's own Guide button so overlay software can tell
+  # them apart. Intercept PASS still eats Guide; QuickAccess stays visible.
+  - name: Home to Quick Access
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_HOMEPAGE
+          value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+  # The physical function key presents as SW_TABLET_MODE, not a button.
+  # Normalize it to QuickAccess2: the deck target does not emit QuickAccess2
+  # at all (steam_deck.rs only handles QuickAccess), so it never reaches
+  # game clients, but a DeviceProfile can still route it to a DBus UI event
+  # (overlay-only). Do NOT use Screenshot here: the deck target translates
+  # Screenshot into a Guide+RightBumper chord, which would leak Guide to
+  # games on every fn press. Switch edge-to-press semantics still need
+  # verification on hardware.
+  - name: Function Switch to Quick Access 2
+    source_events:
+      - evdev:
+          event_type: SW
+          event_code: SW_TABLET_MODE
+          value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess2
+
+# NOTE: volume keys (KEY_VOLUMEDOWN/KEY_VOLUMEUP) are deliberately unmapped.
+# They route to the keyboard target only and never reach gamepad clients.
+# The pad's BTN_MODE is deliberately unmapped as well: it stays Guide, which
+# intercept mode filters for the overlay.

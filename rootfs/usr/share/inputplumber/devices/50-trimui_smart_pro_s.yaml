@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: TRIMUI Smart Pro S
+
+options:
+  auto_manage: true
+
+# No DMI or devicetree scoping is possible on this board (empty DMI data,
+# generic "allwinner,a523 arm,sun55iw3p1" root compatible), so match the
+# TrimUI-specific evdev names instead. The gamepad node is created by the
+# vendor trimui_inputd daemon over uinput, which is why it also needs a
+# VIRT_DEVICE_WHITELIST entry to be considered at all.
+matches: []
+
+source_devices:
+  - group: gamepad
+    capability_map_id: trimui_type1
+    unique: true
+    evdev:
+      name: "TRIMUI Smart Pro S Controller"
+      handler: event*
+
+  - group: keyboard
+    capability_map_id: trimui_type1
+    evdev:
+      name: "sunxi-keyboard"
+      phys_path: "sunxikbd/input0"
+      handler: event*
+
+  - group: keyboard
+    capability_map_id: trimui_type1
+    evdev:
+      name: "fn-switches"
+      handler: event*
+
+target_devices:
+  - deck
+  - keyboard
