@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+version: 2
+kind: CapabilityMap
+name: TrimUI Type 1
+id: trimui_type1
+mapping:
+
+  - name: Home to Quick Access
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_HOMEPAGE
+          value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess
+
+  - name: Function Switch to Quick Access 2
+    source_events:
+      - evdev:
+          event_type: SW
+          event_code: SW_TABLET_MODE
+          value_type: button
+    target_event:
+      gamepad:
+        button: QuickAccess2
+

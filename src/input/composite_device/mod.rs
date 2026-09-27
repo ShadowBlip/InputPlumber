@@ -772,6 +772,21 @@ impl CompositeDevice {
                     // Upload the effect data to the source devices
                     let mut source_effect_ids = HashMap::new();
                     for (source_id, source) in self.source_devices.iter() {
+                        // Only upload to sources that actually accept FF
+                        // uploads.
+                        let can_upload = self
+                            .output_capabilities_by_source
+                            .get(source_id)
+                            .map(|caps| {
+                                caps.contains(&OutputCapability::ForceFeedbackUpload)
+                            })
+                            .unwrap_or(false);
+                        if !can_upload {
+                            log::trace!(
+                                "Skipping FF upload to {source_id}: no upload capability"
+                            );
+                            continue;
+                        }
                         log::debug!("Uploading effect to {source_id}");
                         match source.upload_effect(*data).await {
                             Ok(source_effect_id) => {
