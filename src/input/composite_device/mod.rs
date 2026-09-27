@@ -773,15 +773,7 @@ impl CompositeDevice {
                     let mut source_effect_ids = HashMap::new();
                     for (source_id, source) in self.source_devices.iter() {
                         // Only upload to sources that actually accept FF
-                        // uploads. Every source round-trips through its
-                        // driver task, and input-only sources (keyboards,
-                        // switches, serial pads) can be wedged inside a
-                        // blocking event send while the sticks stream. The
-                        // xpad target gives up after 1s, so a stalled
-                        // source bricks rumble for the whole composite:
-                        // leaked live effects on the vibrator, missed
-                        // stops, and per-frame re-uploads (RetroArch)
-                        // freezing the game loop.
+                        // uploads.
                         let can_upload = self
                             .output_capabilities_by_source
                             .get(source_id)

@@ -1,4 +1,4 @@
-//! TrimUI Smart Pro S MCU frame protocol (ported from trimui-inputrs).
+//! TrimUI Smart Pro S MCU frame protocol
 //!
 //! Each MCU speaks 19200 8N1 with 19-byte `ff ... fe` frames: a
 //! little-endian u32 button bitmap at bytes [2..6] and 12-bit stick axes.

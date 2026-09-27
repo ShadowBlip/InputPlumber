@@ -196,9 +196,6 @@ impl TtyDevice {
             port
         );
 
-        // TrimUI Smart Pro S MCU UARTs match on the parent UART address in
-        // the syspath (stable across ttyAS* renumbering); the console and
-        // all other ttys fall through to the USB-based drivers below.
         if trimui_tty::side_from_syspath(device.syspath().as_str()).is_some() {
             return DriverType::TrimuiSerial;
         }

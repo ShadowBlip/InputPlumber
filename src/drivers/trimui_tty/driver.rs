@@ -1,6 +1,4 @@
-//! Serial transport for TrimUI Smart Pro S MCUs: read 19-byte frames off
-//! the UART and decode them into [`Event`]s. Calibration and capability
-//! translation live in the source-device adapter, not here.
+//! Serial transport for TrimUI Smart Pro S MCUs
 
 use std::{error::Error, io::Read, time::Duration};
 
