@@ -48,7 +48,15 @@
           "type": "string"
         },
         "target_event": {
+          "description": "A single event to emit when all source events are active",
           "$ref": "#/definitions/Event"
+        },
+        "target_events": {
+          "description": "A chord of events to emit when all source events are active. Events are pressed in order and released in reverse order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Event"
+          }
         },
         "source_events": {
           "type": "array",
@@ -59,8 +67,19 @@
       },
       "required": [
         "name",
-        "source_events",
-        "target_event"
+        "source_events"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "target_event"
+          ]
+        },
+        {
+          "required": [
+            "target_events"
+          ]
+        }
       ]
     },
     "Event": {
