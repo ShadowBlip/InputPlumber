@@ -1433,22 +1433,17 @@ impl CompositeDevice {
         }
 
         // Emit the translated events. If this translated event has been emitted
-        // very recently, delay sending subsequent events of the same type.
+        // very recently, delay sending it and all subsequent events so that
+        // chords are still emitted in order.
         let sleep_time = Duration::from_millis(4);
+        let mut delayed_events = Vec::new();
         for event in emit_queue {
             // Check to see if the event is in recently translated.
-            // If it is, spawn a task to delay emit the event.
+            // If it is, delay emitting the event.
             let cap = event.as_capability();
-            if self.translated_recent_events.contains(&cap) {
+            if !delayed_events.is_empty() || self.translated_recent_events.contains(&cap) {
                 log::debug!("Event emitted too quickly. Delaying emission.");
-                let tx = self.tx.clone();
-                tokio::task::spawn(async move {
-                    tokio::time::sleep(sleep_time).await;
-                    if let Err(e) = tx.send(CompositeCommand::HandleEvent(event)).await {
-                        log::error!("Failed to send delayed event command: {:?}", e);
-                    }
-                });
-
+                delayed_events.push(event);
                 continue;
             }
 
@@ -1466,6 +1461,19 @@ impl CompositeDevice {
 
             log::trace!("Emitting event: {:?}", event);
             self.handle_event(event).await?;
+        }
+
+        // Spawn a single task to emit any delayed events in order
+        if !delayed_events.is_empty() {
+            let tx = self.tx.clone();
+            tokio::task::spawn(async move {
+                tokio::time::sleep(sleep_time).await;
+                for event in delayed_events {
+                    if let Err(e) = tx.send(CompositeCommand::HandleEvent(event)).await {
+                        log::error!("Failed to send delayed event command: {:?}", e);
+                    }
+                }
+            });
         }
 
         Ok(())
