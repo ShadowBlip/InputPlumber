@@ -171,13 +171,34 @@ pub struct SourceMapping {
 }
 
 /// A [NativeCapabilityMapping] maps one or more native inputplumber events to
-/// a different native inputplumber event.
+/// a different native inputplumber event, or to a chord of events.
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct NativeCapabilityMapping {
     pub name: String,
     pub source_events: Vec<CapabilityConfig>,
-    pub target_event: CapabilityConfig,
+    /// A single event to emit when all source events are active
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_event: Option<CapabilityConfig>,
+    /// A chord of events to emit when all source events are active. Events are
+    /// pressed in order and released in reverse order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_events: Option<Vec<CapabilityConfig>>,
+}
+
+impl NativeCapabilityMapping {
+    /// Returns all target events for this mapping in the order they should
+    /// be pressed.
+    pub fn targets(&self) -> Vec<CapabilityConfig> {
+        let mut targets = Vec::new();
+        if let Some(target) = self.target_event.as_ref() {
+            targets.push(target.clone());
+        }
+        if let Some(events) = self.target_events.as_ref() {
+            targets.extend(events.iter().cloned());
+        }
+        targets
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq, Default)]

@@ -236,11 +236,13 @@ impl CompositeDevice {
             match map {
                 CapabilityMapConfig::V1(config) => {
                     for mapping in config.mapping.iter() {
-                        let cap = mapping.target_event.clone().into();
-                        if cap == Capability::NotImplemented {
-                            continue;
+                        for target in mapping.targets() {
+                            let cap = target.into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            device.capabilities.insert(cap);
                         }
-                        device.capabilities.insert(cap);
                     }
                 }
                 CapabilityMapConfig::V2(config) => {
@@ -1321,15 +1323,18 @@ impl CompositeDevice {
                             }
                         }
 
-                        // If no more inputs are being pressed, send a release event.
+                        // If no more inputs are being pressed, send release events
+                        // in the reverse order they were pressed.
                         if !has_source_event_pressed {
-                            let cap = mapping.target_event.clone().into();
-                            if cap == Capability::NotImplemented {
-                                continue;
+                            for target in mapping.targets().into_iter().rev() {
+                                let cap = target.into();
+                                if cap == Capability::NotImplemented {
+                                    continue;
+                                }
+                                let event = NativeEvent::new(cap, InputValue::Bool(false));
+                                log::trace!("Adding event to emit queue: {:?}", event);
+                                emit_queue.push(event);
                             }
-                            let event = NativeEvent::new(cap, InputValue::Bool(false));
-                            log::trace!("Adding event to emit queue: {:?}", event);
-                            emit_queue.push(event);
                             self.emitted_mappings.remove(&mapping.name);
                         }
                     }
@@ -1349,13 +1354,15 @@ impl CompositeDevice {
                         }
 
                         if !is_missing_source_event {
-                            let cap = mapping.target_event.clone().into();
-                            if cap == Capability::NotImplemented {
-                                continue;
+                            for target in mapping.targets() {
+                                let cap = target.into();
+                                if cap == Capability::NotImplemented {
+                                    continue;
+                                }
+                                let event = NativeEvent::new(cap, InputValue::Bool(true));
+                                log::trace!("Adding event to emit queue: {:?}", event);
+                                emit_queue.push(event);
                             }
-                            let event = NativeEvent::new(cap, InputValue::Bool(true));
-                            log::trace!("Adding event to emit queue: {:?}", event);
-                            emit_queue.push(event);
                             self.emitted_mappings.insert(mapping.name.clone());
                         }
                     }
