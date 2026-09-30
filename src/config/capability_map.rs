@@ -360,3 +360,31 @@ pub struct SourceCapability {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub axis: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_v1_chord_target_events() {
+        let map = CapabilityMapConfig::from_yaml_file(
+            "./rootfs/usr/share/inputplumber/capability_maps/flow_type1.yaml",
+        )
+        .expect("failed to load capability map");
+        let CapabilityMapConfig::V1(config) = map else {
+            panic!("expected a V1 capability map");
+        };
+        let keys = |mapping: &NativeCapabilityMapping| -> Vec<String> {
+            mapping
+                .targets()
+                .into_iter()
+                .filter_map(|t| t.keyboard)
+                .collect()
+        };
+        assert_eq!(
+            keys(&config.mapping[0]),
+            vec!["KeyLeftCtrl", "KeyLeftShift", "KeyTab"]
+        );
+        assert_eq!(keys(&config.mapping[1]), vec!["KeyLeftShift", "KeyTab"]);
+    }
+}
