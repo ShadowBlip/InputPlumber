@@ -810,6 +810,7 @@ impl TargetDevice {
     pub fn from_type_id(
         id: TargetDeviceTypeId,
         dbus: DBusInterfaceManager,
+        persistent_id: &str,
     ) -> Result<Self, Box<dyn Error>> {
         match id.as_str() {
             "dbus" => {
@@ -823,7 +824,7 @@ impl TargetDevice {
                 Ok(Self::Debug(driver))
             }
             "deck" => {
-                let device = SteamDeckDevice::new()?;
+                let device = SteamDeckDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(4),
                     buffer_size: 2048,
@@ -832,7 +833,7 @@ impl TargetDevice {
                 Ok(Self::SteamDeck(driver))
             }
             "deck-uhid" => {
-                let device = SteamDeckUhidDevice::new()?;
+                let device = SteamDeckUhidDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(4),
                     buffer_size: 2048,
@@ -845,19 +846,24 @@ impl TargetDevice {
                     "ds5" | "ds5-usb" => DualSenseHardware::new(
                         dualsense::ModelType::Normal,
                         dualsense::BusType::Usb,
+                        persistent_id,
                     ),
                     "ds5-bt" => DualSenseHardware::new(
                         dualsense::ModelType::Normal,
                         dualsense::BusType::Bluetooth,
+                        persistent_id,
                     ),
-                    "ds5-edge" | "ds5-edge-usb" => {
-                        DualSenseHardware::new(dualsense::ModelType::Edge, dualsense::BusType::Usb)
-                    }
+                    "ds5-edge" | "ds5-edge-usb" => DualSenseHardware::new(
+                        dualsense::ModelType::Edge,
+                        dualsense::BusType::Usb,
+                        persistent_id,
+                    ),
                     "ds5-edge-bt" => DualSenseHardware::new(
                         dualsense::ModelType::Edge,
                         dualsense::BusType::Bluetooth,
+                        persistent_id,
                     ),
-                    _ => DualSenseHardware::default(),
+                    _ => unreachable!("unexpected ds5 target id: {id}"),
                 };
                 let device = DualSenseDevice::new(hw)?;
                 let options = TargetDriverOptions {
@@ -877,7 +883,7 @@ impl TargetDevice {
                 Ok(Self::HoripadSteam(driver))
             }
             "8bitdo-u2" => {
-                let device = Ultimate2WirelessDevice::new()?;
+                let device = Ultimate2WirelessDevice::new(persistent_id)?;
                 let options = TargetDriverOptions {
                     poll_rate: Duration::from_millis(1),
                     buffer_size: 2048,
@@ -1007,4 +1013,36 @@ impl TargetDevice {
             TargetDevice::UnifiedGamepad(device) => device.run().await,
         }
     }
+}
+
+/// Hashes `bytes` using FNV-1a.
+pub fn hash_id(bytes: &[u8]) -> u64 {
+    /// Starting value of the hash, before any bytes are mixed in.
+    const OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    /// Multiplied into the hash after each byte to spread its bits.
+    const PRIME: u64 = 0x100000001b3;
+    bytes.iter().fold(OFFSET_BASIS, |hash, &b| {
+        (hash ^ b as u64).wrapping_mul(PRIME)
+    })
+}
+
+/// Generates a MAC address from the prefix and persistent_id.
+pub fn generate_mac(prefix: [u8; 3], persistent_id: &str) -> [u8; 6] {
+    let hash = hash_id(persistent_id.as_bytes()).to_be_bytes();
+    [prefix[0], prefix[1], prefix[2], hash[5], hash[6], hash[7]]
+}
+
+/// Returns the serial number to report, an uppercase alphanumeric string
+/// with no separators, matching the shape of a real Steam Controller/Deck
+/// unit serial (e.g. "FXA996190463B").
+pub fn generate_deck_serial(persistent_id: &str) -> String {
+    let hash = hash_id(persistent_id.as_bytes());
+    format!("{:010X}", hash & 0xFF_FFFF_FFFF)
+}
+
+/// Returns the board (PCB) serial number to report, in the "M0BA######"
+/// shape Steam recognizes as a valid PCB revision code.
+pub fn generate_deck_board_serial(persistent_id: &str) -> String {
+    let hash = hash_id(persistent_id.as_bytes());
+    format!("M0BA{:06}", hash % 1_000_000)
 }
