@@ -2169,10 +2169,8 @@ impl CompositeDevice {
 
     /// Drain any held partial activation chord into button-down events.
     fn take_pending_intercept_events(&mut self) -> Vec<NativeEvent> {
-        std::mem::take(&mut self.intercept_active_inputs)
-            .into_iter()
-            .map(|cap| NativeEvent::new(cap, InputValue::Bool(true)))
-            .collect()
+        let pending = std::mem::take(&mut self.intercept_active_inputs);
+        held_pending_events(pending, &self.active_inputs)
     }
 
     /// Emit a DBus signal when source devices change
@@ -2284,6 +2282,17 @@ impl CompositeDevice {
     }
 }
 
+/// Returns button-down events for pending chord inputs that are still physically held.
+/// Inputs released while not in Pass mode remain pending but are no longer active, and
+/// must not be pressed again since no release would follow.
+fn held_pending_events(pending: Vec<Capability>, active_inputs: &[Capability]) -> Vec<NativeEvent> {
+    pending
+        .into_iter()
+        .filter(|cap| active_inputs.contains(cap))
+        .map(|cap| NativeEvent::new(cap, InputValue::Bool(true)))
+        .collect()
+}
+
 /// Returns true if the given stick or trigger event is past the default deadzone.
 fn is_intentional_analog_input(event: &NativeEvent) -> bool {
     match (event.as_capability(), event.get_value()) {
@@ -2353,5 +2362,15 @@ mod tests {
             },
         );
         assert!(!is_intentional_analog_input(&hat));
+    }
+
+    #[test]
+    fn released_pending_inputs_are_not_pressed() {
+        let guide = Capability::Gamepad(Gamepad::Button(GamepadButton::Guide));
+        let south = Capability::Gamepad(Gamepad::Button(GamepadButton::South));
+        let events = held_pending_events(vec![guide, south.clone()], &[south.clone()]);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].as_capability(), south);
+        assert!(events[0].pressed());
     }
 }
