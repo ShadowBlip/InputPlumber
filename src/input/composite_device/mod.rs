@@ -26,10 +26,12 @@ use crate::{
         DBusInterfaceManager,
     },
     input::{
-        capability::{Capability, Gamepad, GamepadButton, Mouse},
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse},
         event::{
             native::NativeEvent,
-            value::{InputValue, TranslationError},
+            value::{
+                InputValue, TranslationError, DEFAULT_AXIS_DEADZONE, DEFAULT_TRIGGER_DEADZONE,
+            },
             Event,
         },
         output_capability::OutputCapability,
@@ -972,10 +974,10 @@ impl CompositeDevice {
                         }
                     }
                     Gamepad::Dial(_) => {}
-                    Gamepad::Axis(_)
-                    | Gamepad::Trigger(_)
-                    | Gamepad::Accelerometer
-                    | Gamepad::Gyro => {}
+                    Gamepad::Axis(_) | Gamepad::Trigger(_) => {
+                        self.flush_pending_intercept_on_analog(&event).await?;
+                    }
+                    Gamepad::Accelerometer | Gamepad::Gyro => {}
                 },
                 Capability::Mouse(ref t) => match t {
                     Mouse::Motion => {}
@@ -2130,21 +2132,47 @@ impl CompositeDevice {
             // Handle chords with partial matches. Up events will be handled normally.
             log::debug!("This event is not what we're looking for.");
             self.intercept_active_inputs.push(cap);
-            let mut chord: Vec<NativeEvent> = Vec::new();
 
             // Send all currently held events as a chord
-            for c in self.intercept_active_inputs.clone() {
-                let event = NativeEvent::new(c.clone(), InputValue::Bool(true));
-                chord.push(event);
-            }
+            let chord = self.take_pending_intercept_events();
             log::trace!("Release new chord: {chord:?}");
             self.write_chord_events(chord).await?;
-            self.intercept_active_inputs.clear();
             return Ok(true);
         }
 
         log::trace!("Keep processing event: {event:?}");
         Ok(false)
+    }
+
+    /// Resolve a partial multi-button activation chord when intentional analog
+    /// input arrives, so the held buttons are not swallowed.
+    async fn flush_pending_intercept_on_analog(
+        &mut self,
+        event: &NativeEvent,
+    ) -> Result<(), Box<dyn Error>> {
+        // Partial chords are only held in Pass mode with multi-button activation.
+        if self.intercept_mode != InterceptMode::Pass
+            || self.intercept_activation_caps.len() < 2
+            || self.intercept_active_inputs.is_empty()
+            || !is_intentional_analog_input(event)
+        {
+            return Ok(());
+        }
+
+        // Skip chord delays so the buttons reach the target before the analog event.
+        // Leave active_inputs intact so the physical releases pass through.
+        for event in self.take_pending_intercept_events() {
+            self.write_event(event).await?;
+        }
+        Ok(())
+    }
+
+    /// Drain any held partial activation chord into button-down events.
+    fn take_pending_intercept_events(&mut self) -> Vec<NativeEvent> {
+        std::mem::take(&mut self.intercept_active_inputs)
+            .into_iter()
+            .map(|cap| NativeEvent::new(cap, InputValue::Bool(true)))
+            .collect()
     }
 
     /// Emit a DBus signal when source devices change
@@ -2253,5 +2281,77 @@ impl CompositeDevice {
                 log::error!("Failed to set filtered events on source devices: {e}");
             };
         });
+    }
+}
+
+/// Returns true if the given stick or trigger event is past the default deadzone.
+fn is_intentional_analog_input(event: &NativeEvent) -> bool {
+    match (event.as_capability(), event.get_value()) {
+        (
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick | GamepadAxis::RightStick)),
+            InputValue::Vector2 { x, y },
+        ) => {
+            x.unwrap_or_default().abs() >= DEFAULT_AXIS_DEADZONE
+                || y.unwrap_or_default().abs() >= DEFAULT_AXIS_DEADZONE
+        }
+        (
+            Capability::Gamepad(Gamepad::Trigger(
+                GamepadTrigger::LeftTrigger | GamepadTrigger::RightTrigger,
+            )),
+            InputValue::Float(value),
+        ) => value >= DEFAULT_TRIGGER_DEADZONE,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stick(x: Option<f64>, y: Option<f64>) -> NativeEvent {
+        NativeEvent::new(
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
+            InputValue::Vector2 { x, y },
+        )
+    }
+
+    fn trigger(value: f64) -> NativeEvent {
+        NativeEvent::new(
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+            InputValue::Float(value),
+        )
+    }
+
+    #[test]
+    fn stick_within_deadzone_is_not_intentional() {
+        assert!(!is_intentional_analog_input(&stick(Some(0.1), None)));
+        assert!(!is_intentional_analog_input(&stick(None, Some(-0.2))));
+        assert!(!is_intentional_analog_input(&stick(None, None)));
+    }
+
+    #[test]
+    fn stick_past_deadzone_is_intentional() {
+        assert!(is_intentional_analog_input(&stick(Some(-0.5), None)));
+        let edge = stick(None, Some(DEFAULT_AXIS_DEADZONE));
+        assert!(is_intentional_analog_input(&edge));
+    }
+
+    #[test]
+    fn trigger_threshold() {
+        assert!(!is_intentional_analog_input(&trigger(0.1)));
+        let edge = trigger(DEFAULT_TRIGGER_DEADZONE);
+        assert!(is_intentional_analog_input(&edge));
+    }
+
+    #[test]
+    fn other_analog_input_is_ignored() {
+        let hat = NativeEvent::new(
+            Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat0)),
+            InputValue::Vector2 {
+                x: Some(1.0),
+                y: None,
+            },
+        );
+        assert!(!is_intentional_analog_input(&hat));
     }
 }
