@@ -5,11 +5,6 @@ use crate::{
 
 use super::dbus::Action;
 
-/// Default normalized deflection (0.0 - 1.0) at which a stick axis is considered "pressed".
-pub const DEFAULT_AXIS_DEADZONE: f64 = 0.3;
-/// Default normalized pull (0.0 - 1.0) at which a trigger is considered "pressed".
-pub const DEFAULT_TRIGGER_DEADZONE: f64 = 0.3;
-
 /// Possible errors while doing input value translation
 #[derive(Debug)]
 pub enum TranslationError {
@@ -945,7 +940,7 @@ impl InputValue {
         if let Some(gamepad_config) = source_config.gamepad.as_ref() {
             if let Some(axis) = gamepad_config.axis.as_ref() {
                 // Get the threshold to consider the axis as 'pressed' or not
-                let threshold = axis.deadzone.unwrap_or(DEFAULT_AXIS_DEADZONE);
+                let threshold = axis.deadzone.unwrap_or(0.3);
                 if let Some(direction) = axis.direction.as_ref() {
                     // TODO: Axis input is a special case where we need
                     // to keep track of the state of the axis and only
@@ -1037,7 +1032,7 @@ impl InputValue {
         if let Some(gamepad_config) = source_config.gamepad.as_ref() {
             if let Some(trigger) = gamepad_config.trigger.as_ref() {
                 // Get the threshold to consider the trigger as 'pressed' or not
-                let threshold = trigger.deadzone.unwrap_or(DEFAULT_TRIGGER_DEADZONE);
+                let threshold = trigger.deadzone.unwrap_or(0.3);
 
                 // Get the trigger value
                 let value = match self {

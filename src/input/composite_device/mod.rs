@@ -29,9 +29,7 @@ use crate::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Mouse},
         event::{
             native::NativeEvent,
-            value::{
-                InputValue, TranslationError, DEFAULT_AXIS_DEADZONE, DEFAULT_TRIGGER_DEADZONE,
-            },
+            value::{InputValue, TranslationError},
             Event,
         },
         output_capability::OutputCapability,
@@ -54,6 +52,11 @@ use super::{
 
 /// Size of the command channel buffer for processing input events and commands.
 const BUFFER_SIZE: usize = 16384;
+
+/// Normalized stick deflection (0.0 - 1.0) that resolves a pending intercept activation chord.
+const INTERCEPT_STICK_THRESHOLD: f64 = 0.1;
+/// Normalized trigger pull (0.0 - 1.0) that resolves a pending intercept activation chord.
+const INTERCEPT_TRIGGER_THRESHOLD: f64 = 0.1;
 
 /// The [InterceptMode] defines whether or not inputs should be routed over
 /// DBus instead of to the target devices. This can be used by overlays to
@@ -2293,22 +2296,22 @@ fn held_pending_events(pending: Vec<Capability>, active_inputs: &[Capability]) -
         .collect()
 }
 
-/// Returns true if the given stick or trigger event is past the default deadzone.
+/// Returns true if the given stick or trigger event is past the intercept chord threshold.
 fn is_intentional_analog_input(event: &NativeEvent) -> bool {
     match (event.as_capability(), event.get_value()) {
         (
             Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick | GamepadAxis::RightStick)),
             InputValue::Vector2 { x, y },
         ) => {
-            x.unwrap_or_default().abs() >= DEFAULT_AXIS_DEADZONE
-                || y.unwrap_or_default().abs() >= DEFAULT_AXIS_DEADZONE
+            x.unwrap_or_default().abs() >= INTERCEPT_STICK_THRESHOLD
+                || y.unwrap_or_default().abs() >= INTERCEPT_STICK_THRESHOLD
         }
         (
             Capability::Gamepad(Gamepad::Trigger(
                 GamepadTrigger::LeftTrigger | GamepadTrigger::RightTrigger,
             )),
             InputValue::Float(value),
-        ) => value >= DEFAULT_TRIGGER_DEADZONE,
+        ) => value >= INTERCEPT_TRIGGER_THRESHOLD,
         _ => false,
     }
 }
@@ -2332,23 +2335,23 @@ mod tests {
     }
 
     #[test]
-    fn stick_within_deadzone_is_not_intentional() {
-        assert!(!is_intentional_analog_input(&stick(Some(0.1), None)));
-        assert!(!is_intentional_analog_input(&stick(None, Some(-0.2))));
+    fn stick_within_threshold_is_not_intentional() {
+        assert!(!is_intentional_analog_input(&stick(Some(0.05), None)));
+        assert!(!is_intentional_analog_input(&stick(None, Some(-0.09))));
         assert!(!is_intentional_analog_input(&stick(None, None)));
     }
 
     #[test]
-    fn stick_past_deadzone_is_intentional() {
+    fn stick_past_threshold_is_intentional() {
         assert!(is_intentional_analog_input(&stick(Some(-0.5), None)));
-        let edge = stick(None, Some(DEFAULT_AXIS_DEADZONE));
+        let edge = stick(None, Some(INTERCEPT_STICK_THRESHOLD));
         assert!(is_intentional_analog_input(&edge));
     }
 
     #[test]
     fn trigger_threshold() {
-        assert!(!is_intentional_analog_input(&trigger(0.1)));
-        let edge = trigger(DEFAULT_TRIGGER_DEADZONE);
+        assert!(!is_intentional_analog_input(&trigger(0.05)));
+        let edge = trigger(INTERCEPT_TRIGGER_THRESHOLD);
         assert!(is_intentional_analog_input(&edge));
     }
 
