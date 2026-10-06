@@ -10,6 +10,8 @@ use std::{
 
 use ::evdev::FFEffectData;
 use led::LedDevice;
+#[cfg(feature = "networking")]
+use network::NetworkDevice;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
@@ -35,6 +37,8 @@ pub mod evdev;
 pub mod hidraw;
 pub mod iio;
 pub mod led;
+#[cfg(feature = "networking")]
+pub mod network;
 pub mod tty;
 
 /// Size of the [SourceCommand] buffer for receiving output events
@@ -361,6 +365,8 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
     pub fn info_ref(&self) -> DeviceInfoRef<'_> {
         match &self.device_info {
             DeviceInfo::Udev(device) => device.into(),
+            #[cfg(feature = "networking")]
+            DeviceInfo::Websocket(client) => client.into(),
         }
     }
 
@@ -605,6 +611,8 @@ pub(crate) trait SourceDeviceCompatible {
 
                 None
             }
+            #[cfg(feature = "networking")]
+            DeviceInfoRef::Websocket(_) => None,
         }
     }
 
@@ -631,6 +639,8 @@ pub enum SourceDevice {
     HidRaw(HidRawDevice),
     Iio(IioDevice),
     Led(LedDevice),
+    #[cfg(feature = "networking")]
+    Network(NetworkDevice),
     Tty(TtyDevice),
 }
 
@@ -642,6 +652,8 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_device_ref(),
             SourceDevice::Iio(device) => device.get_device_ref(),
             SourceDevice::Led(device) => device.get_device_ref(),
+            #[cfg(feature = "networking")]
+            SourceDevice::Network(device) => device.get_device_ref(),
             SourceDevice::Tty(device) => device.get_device_ref(),
         }
     }
@@ -653,6 +665,8 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_id(),
             SourceDevice::Iio(device) => device.get_id(),
             SourceDevice::Led(device) => device.get_id(),
+            #[cfg(feature = "networking")]
+            SourceDevice::Network(device) => device.get_id(),
             SourceDevice::Tty(device) => device.get_id(),
         }
     }
@@ -664,6 +678,8 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_serial(),
             SourceDevice::Iio(_) => None,
             SourceDevice::Led(_) => None,
+            #[cfg(feature = "networking")]
+            SourceDevice::Network(_) => None,
             SourceDevice::Tty(_) => None,
         }
     }
@@ -675,6 +691,8 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.client(),
             SourceDevice::Iio(device) => device.client(),
             SourceDevice::Led(device) => device.client(),
+            #[cfg(feature = "networking")]
+            SourceDevice::Network(device) => device.client(),
             SourceDevice::Tty(device) => device.client(),
         }
     }
@@ -686,6 +704,8 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.run().await,
             SourceDevice::Iio(device) => device.run().await,
             SourceDevice::Led(device) => device.run().await,
+            #[cfg(feature = "networking")]
+            SourceDevice::Network(device) => device.run().await,
             SourceDevice::Tty(device) => device.run().await,
         }
     }
@@ -697,6 +717,8 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_capabilities(),
             SourceDevice::Iio(device) => device.get_capabilities(),
             SourceDevice::Led(device) => device.get_capabilities(),
+            #[cfg(feature = "networking")]
+            SourceDevice::Network(device) => device.get_capabilities(),
             SourceDevice::Tty(device) => device.get_capabilities(),
         }
     }
@@ -708,6 +730,8 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_output_capabilities(),
             SourceDevice::Iio(device) => device.get_output_capabilities(),
             SourceDevice::Led(device) => device.get_output_capabilities(),
+            #[cfg(feature = "networking")]
+            SourceDevice::Network(device) => device.get_output_capabilities(),
             SourceDevice::Tty(device) => device.get_output_capabilities(),
         }
     }
@@ -719,6 +743,8 @@ impl SourceDevice {
             SourceDevice::HidRaw(device) => device.get_device_path(),
             SourceDevice::Iio(device) => device.get_device_path(),
             SourceDevice::Led(device) => device.get_device_path(),
+            #[cfg(feature = "networking")]
+            SourceDevice::Network(device) => device.get_device_path(),
             SourceDevice::Tty(device) => device.get_device_path(),
         }
     }

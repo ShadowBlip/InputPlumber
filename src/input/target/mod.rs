@@ -12,6 +12,8 @@ pub mod touchpad;
 pub mod touchscreen;
 pub mod ulitmate_2;
 pub mod unified_gamepad;
+#[cfg(feature = "networking")]
+pub mod websocket;
 pub mod xpad;
 
 use std::{
@@ -66,6 +68,8 @@ use self::steam_deck::SteamDeckDevice;
 use self::touchpad::TouchpadDevice;
 use self::touchscreen::TouchscreenDevice;
 use self::ulitmate_2::Ultimate2WirelessDevice;
+#[cfg(feature = "networking")]
+use self::websocket::WebsocketDevice;
 
 /// Possible errors for a target device client
 #[derive(Error, Debug)]
@@ -254,6 +258,12 @@ impl TargetDeviceTypeId {
                 name: "Debug Device",
                 device_class: TargetDeviceClass::Debug,
             },
+            #[cfg(feature = "networking")]
+            TargetDeviceTypeId {
+                id: "websocket",
+                name: "Websocket Device",
+                device_class: TargetDeviceClass::Websocket,
+            },
         ]
     }
 
@@ -271,7 +281,14 @@ impl TargetDeviceTypeId {
     pub fn is_gamepad(&self) -> bool {
         !matches!(
             self.id,
-            "dbus" | "null" | "touchscreen" | "touchpad" | "mouse" | "keyboard" | "debug"
+            "dbus"
+                | "null"
+                | "touchscreen"
+                | "touchpad"
+                | "mouse"
+                | "keyboard"
+                | "debug"
+                | "websocket"
         )
     }
 
@@ -317,6 +334,8 @@ pub enum TargetDeviceClass {
     Mouse,
     Touchscreen,
     Touchpad,
+    #[cfg(feature = "networking")]
+    Websocket,
 }
 
 impl Display for TargetDeviceClass {
@@ -330,6 +349,8 @@ impl Display for TargetDeviceClass {
             TargetDeviceClass::Mouse => "mouse",
             TargetDeviceClass::Touchscreen => "touchscreen",
             TargetDeviceClass::Touchpad => "touchpad",
+            #[cfg(feature = "networking")]
+            TargetDeviceClass::Websocket => "websocket",
         };
         write!(f, "{str}")
     }
@@ -803,6 +824,8 @@ pub enum TargetDevice {
     Ultimate2Wireless(TargetDriver<Ultimate2WirelessDevice>),
     XBoxController(TargetDriver<XBoxController>),
     UnifiedGamepad(TargetDriver<UnifiedGamepadDevice>),
+    #[cfg(feature = "networking")]
+    Websocket(TargetDriver<WebsocketDevice>),
 }
 
 impl TargetDevice {
@@ -927,6 +950,12 @@ impl TargetDevice {
                 let driver = TargetDriver::new(id, device, dbus);
                 Ok(Self::UnifiedGamepad(driver))
             }
+            #[cfg(feature = "networking")]
+            "websocket" => {
+                let device = WebsocketDevice::new(dbus.connection().clone());
+                let driver = TargetDriver::new(id, device, dbus);
+                Ok(Self::Websocket(driver))
+            }
             "null" => Ok(Self::Null),
             _ => Ok(Self::Null),
         }
@@ -965,6 +994,8 @@ impl TargetDevice {
                 ]
             }
             TargetDevice::UnifiedGamepad(_) => vec!["unified-gamepad".try_into().unwrap()],
+            #[cfg(feature = "networking")]
+            TargetDevice::Websocket(_) => vec!["websocket".try_into().unwrap()],
         }
     }
 
@@ -985,6 +1016,8 @@ impl TargetDevice {
             TargetDevice::Touchscreen(device) => Some(device.client()),
             TargetDevice::XBoxController(device) => Some(device.client()),
             TargetDevice::UnifiedGamepad(device) => Some(device.client()),
+            #[cfg(feature = "networking")]
+            TargetDevice::Websocket(device) => Some(device.client()),
         }
     }
 
@@ -1005,6 +1038,8 @@ impl TargetDevice {
             TargetDevice::Touchscreen(device) => device.run().await,
             TargetDevice::XBoxController(device) => device.run().await,
             TargetDevice::UnifiedGamepad(device) => device.run().await,
+            #[cfg(feature = "networking")]
+            TargetDevice::Websocket(device) => device.run().await,
         }
     }
 }

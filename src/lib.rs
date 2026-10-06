@@ -6,6 +6,8 @@ pub mod dbus;
 pub mod dmi;
 pub mod drivers;
 pub mod input;
+#[cfg(feature = "networking")]
+pub mod network;
 pub mod sync;
 pub mod udev;
 pub mod watcher;

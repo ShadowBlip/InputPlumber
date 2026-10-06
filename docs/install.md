@@ -99,6 +99,19 @@
     sudo make install
     ```
 
+    InputPlumber is built with the `networking` feature enabled by default, which
+    adds websocket support for routing input over the network. To compile without
+    it, pass an empty `FEATURES` value (or use cargo directly):
+
+    ```bash
+    make build FEATURES=""
+    # or
+    cargo build --no-default-features
+    ```
+
+    When built without the `networking` feature, websocket devices are not
+    supported and any `websocket` entries in device configs are ignored.
+
     Then start the service with:
     
     ```bash

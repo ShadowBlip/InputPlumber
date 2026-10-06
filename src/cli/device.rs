@@ -11,6 +11,8 @@ use zbus::Connection;
 use crate::cli::get_managed_objects;
 use crate::dbus::interface::composite_device::CompositeDeviceInterfaceProxy;
 use crate::dbus::interface::manager::ManagerInterfaceProxy;
+#[cfg(feature = "networking")]
+use crate::dbus::interface::target::websocket::TargetWebsocketInterfaceProxy;
 use crate::dbus::interface::target::TargetInterfaceProxy;
 use crate::input::target::TargetDeviceTypeId;
 
@@ -48,6 +50,12 @@ pub enum DeviceCommand {
     },
     /// Test input menu
     Test,
+    /// Connect this input device to a remote instance of InputPlumber
+    #[cfg(feature = "networking")]
+    Connect {
+        /// URL of the remote instance of InputPlumber (e.g. "ws://192.168.0.100:12901")
+        url: String,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -336,6 +344,21 @@ pub async fn handle_device(
                 });
             if let Err(e) = task.await? {
                 return Err(e.to_string().into());
+            }
+        }
+        #[cfg(feature = "networking")]
+        DeviceCommand::Connect { url } => {
+            device
+                .set_target_devices(vec!["websocket".to_string()])
+                .await?;
+            let target_devices = device.target_devices().await?;
+            for path in target_devices {
+                let websocket = TargetWebsocketInterfaceProxy::builder(&conn)
+                    .path(path)?
+                    .build()
+                    .await?;
+                websocket.connect(url.clone()).await?;
+                println!("Successfully connected to: {url}");
             }
         }
     }

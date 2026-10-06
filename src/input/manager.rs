@@ -38,6 +38,8 @@ use crate::input::{
     source::{evdev, hidraw, iio, led, tty},
     target::{TargetDevice, TargetDeviceTypeId},
 };
+#[cfg(feature = "networking")]
+use crate::network::websocket::{watch_websockets, WebsocketClient};
 use crate::udev::{
     self,
     device::{AttributeGetter, UdevDevice},
@@ -249,6 +251,9 @@ impl Manager {
         log::debug!("Starting input manager task...");
 
         self.listen_on_dbus();
+
+        #[cfg(feature = "networking")]
+        tokio::spawn(watch_websockets(self.tx.clone()));
         let _ = tokio::join!(
             Self::discover_all_devices(&cmd_tx_all_devices),
             Self::watch_iio_devices(self.tx.clone()),
@@ -423,12 +428,23 @@ impl Manager {
                             log::error!("Error adding device '{dev_name} ({dev_sysname})': {e}");
                         }
                     }
+                    #[cfg(feature = "networking")]
+                    DeviceInfo::Websocket(client) => {
+                        if let Err(e) = self.on_websocket_device_added(client).await {
+                            log::error!("Error adding websocket client: {e}");
+                        }
+                    }
                 },
                 ManagerCommand::DeviceRemoved { device } => match device {
                     DeviceInfo::Udev(device) => {
                         if let Err(e) = self.on_udev_device_removed(device).await {
                             log::error!("Error removing device: {e}");
                         }
+                    }
+                    #[cfg(feature = "networking")]
+                    DeviceInfo::Websocket(_websocket_client) => {
+                        // TODO: implement
+                        log::error!("TODO: ADD REMOVE LOGIC FOR WEBSOCKETS");
                     }
                 },
                 ManagerCommand::SetManageAllDevices(manage_all_devices) => {
@@ -1168,6 +1184,21 @@ impl Manager {
         sources.remove(idx.unwrap());
         self.source_devices.remove(&id);
         self.source_devices_used.remove(&id);
+
+        Ok(())
+    }
+
+    /// Called when a new network device has connected
+    #[cfg(feature = "networking")]
+    async fn on_websocket_device_added(
+        &mut self,
+        client: WebsocketClient,
+    ) -> Result<(), Box<dyn Error>> {
+        // TODO: Create a dbus interface for the network device
+
+        log::debug!("Websocket client connected: {client:?}");
+        let id = client.get_id();
+        self.on_source_device_added(id, client.into()).await?;
 
         Ok(())
     }
