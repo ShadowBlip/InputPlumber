@@ -58,6 +58,18 @@ pub fn get_capability_maps_paths() -> Vec<PathBuf> {
     paths
 }
 
+/// Returns a list of directories in load order to find event scripts.
+/// E.g. ["/etc/inputplumber/scripts.d", "/usr/share/inputplumber/scripts"]
+pub fn get_scripts_paths() -> Vec<PathBuf> {
+    let paths = vec![
+        PathBuf::from("./rootfs/usr/share/inputplumber/scripts"),
+        PathBuf::from("/etc/inputplumber/scripts.d"),
+        get_base_path().join("scripts"),
+    ];
+
+    paths
+}
+
 /// Returns a list of file paths for the given directories sorted by filename across
 /// all given directories. The filter argument is a closure that should return
 /// `true` for any files that should be included in the final results.
