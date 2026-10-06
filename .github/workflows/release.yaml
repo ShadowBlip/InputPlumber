@@ -3,14 +3,7 @@
 name: "🎉 Release"
 
 on:
-  push:
-    branches:
-      - main
-      - v0.x
-      - v1.x
-    paths-ignore:
-      - README.md
-      - "docs/**"
+  workflow_dispatch:
 
 # Jobs to run
 jobs:
