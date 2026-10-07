@@ -360,6 +360,7 @@ pub struct UdevDevice {
     product_id: Option<u16>,
     bus_type: Option<u16>,
     properties: HashMap<String, String>,
+    initialized: bool,
 }
 
 impl UdevDevice {
@@ -392,6 +393,7 @@ impl UdevDevice {
             Ok(device) => device.syspath().to_string_lossy().to_string(),
             Err(_) => "".to_string(),
         };
+        let initialized = result.as_ref().is_ok_and(|device| device.is_initialized());
         let properties = match result {
             Ok(device) => device.get_properties(),
             Err(_) => HashMap::new(),
@@ -407,6 +409,7 @@ impl UdevDevice {
             vendor_id: None,
             product_id: None,
             bus_type: None,
+            initialized,
         }
     }
 
@@ -452,6 +455,7 @@ impl UdevDevice {
             product_id: None,
             bus_type: None,
             properties: Default::default(),
+            initialized: device.is_initialized(),
         }
     }
 
@@ -461,6 +465,14 @@ impl UdevDevice {
             Ok(device) => Ok(device),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Returns true if udev has finished initializing the device. Devices
+    /// that are still being processed by udev only have a minimal set of
+    /// properties available and may not match their config at initial
+    /// detection.
+    pub fn is_initialized(&self) -> bool {
+        self.initialized
     }
 
     /// Returns true if this device is virtual
@@ -714,6 +726,7 @@ impl From<::udev::Device> for UdevDevice {
             vendor_id: Some(device.id_vendor()),
             product_id: Some(device.id_product()),
             bus_type: Some(device.id_bustype()),
+            initialized: device.is_initialized(),
         }
     }
 }
