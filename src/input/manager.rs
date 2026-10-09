@@ -103,6 +103,10 @@ pub enum ManagerCommand {
     TargetDeviceStopped {
         path: String,
     },
+    SourceDeviceStopped {
+        composite_path: String,
+        device_id: String,
+    },
     RemoveFromGamepadOrder {
         device_path: String,
     },
@@ -164,9 +168,10 @@ pub struct Manager {
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": <Handle>}
     composite_devices: HashMap<String, CompositeDeviceClient>,
     /// Mapping of all source devices used by composite devices with the CompositeDevice path as
-    /// the key for the hashmap.
-    /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<SourceDevice>}
-    composite_device_sources: HashMap<String, Vec<SourceDevice>>,
+    /// the key for the hashmap. Each entry is a pair of the config entry and the id of the
+    /// device consuming it.
+    /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<(SourceDevice, "evdev://event3")>}
+    composite_device_sources: HashMap<String, Vec<(SourceDevice, String)>>,
     /// Map of target devices being used by a [CompositeDevice].
     /// E.g. {"/org/shadowblip/InputPlumber/CompositeDevice0": Vec<"/org/shadowblip/InputPlumber/devices/target/dbus0">}
     composite_device_targets: HashMap<String, HashSet<String>>,
@@ -424,6 +429,15 @@ impl Manager {
                             log::debug!("Failed to notify input manager to remove device from gamepad order: {e}");
                         }
                     });
+                }
+                ManagerCommand::SourceDeviceStopped {
+                    composite_path,
+                    device_id,
+                } => {
+                    log::debug!(
+                        "Source device {device_id} stopped in composite device {composite_path}"
+                    );
+                    self.remove_stopped_source_device(&composite_path, &device_id);
                 }
                 ManagerCommand::RemoveFromGamepadOrder { device_path } => {
                     // A gamepad target may have been re-attached while this
@@ -939,11 +953,6 @@ impl Manager {
         log::debug!(
             "Starting CompositeDevice at {composite_path} with the following sources: {source_device_ids:?}"
         );
-        for id in source_device_ids {
-            self.source_devices_used
-                .insert(id.clone(), composite_path.clone());
-            self.source_devices.insert(id, source_device.clone());
-        }
 
         if !self.composite_device_sources.contains_key(&composite_path) {
             self.composite_device_sources
@@ -953,7 +962,13 @@ impl Manager {
             .composite_device_sources
             .get_mut(&composite_path)
             .unwrap();
-        sources.push(source_device);
+        for id in source_device_ids {
+            self.source_devices_used
+                .insert(id.clone(), composite_path.clone());
+            self.source_devices
+                .insert(id.clone(), source_device.clone());
+            sources.push((source_device.clone(), id));
+        }
 
         // Get a handle to the device
         let client = device.client();
@@ -1142,7 +1157,7 @@ impl Manager {
             // Check if the device has already been used in this config or not,
             // stop here if the device must be unique.
             if let Some(sources) = self.composite_device_sources.get(composite_device) {
-                for source in sources {
+                for (source, _) in sources {
                     if *source != source_device {
                         continue;
                     }
@@ -1184,7 +1199,7 @@ impl Manager {
                 .composite_device_sources
                 .get_mut(&composite_id)
                 .unwrap();
-            sources.push(source_device.clone());
+            sources.push((source_device.clone(), id.clone()));
             self.source_devices.insert(id, source_device.clone());
 
             return Ok(());
@@ -1275,15 +1290,15 @@ impl Manager {
 
         client.remove_source_device(device).await?;
 
-        let Some(device) = self.source_devices.get(&id) else {
+        if !self.source_devices.contains_key(&id) {
             return Err(format!("Device {} not found in source devices", id).into());
-        };
+        }
 
         let Some(sources) = self.composite_device_sources.get_mut(composite_device_path) else {
             return Err(format!("CompostiteDevice {} not found", composite_device_path).into());
         };
 
-        let idx = sources.iter().position(|item| item == device);
+        let idx = sources.iter().position(|(_, source_id)| source_id == &id);
         if idx.is_none() {
             self.source_devices.remove(&id);
             return Err(format!("Device {} not found in composite device sources", id).into());
@@ -1293,6 +1308,17 @@ impl Manager {
         self.source_devices_used.remove(&id);
 
         Ok(())
+    }
+
+    /// Removes bookkeeping for a source device that stopped inside a
+    /// composite device. This is idempotent since the device may have
+    /// already been cleaned up by a udev removal event.
+    fn remove_stopped_source_device(&mut self, composite_path: &str, device_id: &str) {
+        self.source_devices_used.remove(device_id);
+        self.source_devices.remove(device_id);
+        if let Some(sources) = self.composite_device_sources.get_mut(composite_path) {
+            sources.retain(|(_, id)| id != device_id);
+        }
     }
 
     /// Called when a new device is detected by udev
