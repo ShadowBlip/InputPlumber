@@ -43,6 +43,7 @@ pub enum CompositeCommand {
     SetInterceptActivation(Vec<Capability>, Capability),
     SetInterceptMode(InterceptMode),
     SetTargetDevices(Vec<TargetDeviceTypeId>),
+    TargetDevicesCreated(Vec<String>),
     GetFilteredEvents(mpsc::Sender<HashMap<String, Vec<Capability>>>),
     SetFilteredEvents(HashMap<String, Vec<Capability>>),
     GetFilterableEvents(mpsc::Sender<HashMap<String, Vec<Capability>>>),
