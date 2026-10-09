@@ -318,6 +318,14 @@ impl CompositeDeviceClient {
         Ok(())
     }
 
+    /// Notify the composite device that the given target devices were created
+    pub async fn target_devices_created(&self, paths: Vec<String>) -> Result<(), ClientError> {
+        self.tx
+            .send(CompositeCommand::TargetDevicesCreated(paths))
+            .await?;
+        Ok(())
+    }
+
     /// Attach the given target devices to the composite device
     pub async fn attach_target_devices(
         &self,

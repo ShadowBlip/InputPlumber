@@ -412,9 +412,28 @@ impl CompositeDevice {
                             log::error!("Failed to set target devices: {e}");
                         }
                     }
+                    CompositeCommand::TargetDevicesCreated(paths) => {
+                        self.targets.finish_target_creation(paths);
+                        if let Some(target_types) = self.targets.take_pending_set_devices() {
+                            let persistent_id = self.get_persistent_id().await;
+                            if let Err(e) =
+                                self.targets.set_devices(target_types, &persistent_id).await
+                            {
+                                log::error!("Failed to set target devices: {e}");
+                            }
+                        }
+                    }
                     CompositeCommand::AttachTargetDevices(targets) => {
                         if let Err(e) = self.targets.attach_devices(targets).await {
                             log::error!("Failed to attach target devices: {e:?}");
+                        }
+                        if let Some(target_types) = self.targets.take_pending_set_devices() {
+                            let persistent_id = self.get_persistent_id().await;
+                            if let Err(e) =
+                                self.targets.set_devices(target_types, &persistent_id).await
+                            {
+                                log::error!("Failed to set target devices: {e}");
+                            }
                         }
                     }
                     CompositeCommand::GetName(sender) => {
