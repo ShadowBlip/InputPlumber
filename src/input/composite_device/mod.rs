@@ -120,6 +120,8 @@ pub struct CompositeDevice {
     tx: mpsc::Sender<CompositeCommand>,
     /// Receiver channel for listening for commands
     rx: mpsc::Receiver<CompositeCommand>,
+    /// Channel for sending commands to the manager, must never be awaited.
+    manager: mpsc::Sender<ManagerCommand>,
     /// Map of source device id to their respective transmitter channel.
     /// E.g. {"evdev://event0": <Sender>}
     source_devices: HashMap<String, SourceDeviceClient>,
@@ -205,6 +207,7 @@ impl CompositeDevice {
             intercept_mode: InterceptMode::None,
             tx: tx.clone(),
             rx,
+            manager: manager.clone(),
             source_devices: HashMap::new(),
             source_devices_discovered: Vec::new(),
             source_devices_to_hide: Vec::new(),
@@ -374,8 +377,19 @@ impl CompositeDevice {
                         }
                     }
                     CompositeCommand::SourceDeviceAdded(device) => {
+                        let id = device.get_id();
                         if let Err(e) = self.on_source_device_added(device).await {
-                            log::error!("Failed to add source device: {:?}", e);
+                            log::error!("Failed to add source device: {e:?}");
+                            // Notify the manager so it can free the config entry
+                            // this source device was holding
+                            if let Err(e) =
+                                self.manager.try_send(ManagerCommand::SourceDeviceStopped {
+                                    composite_path: self.dbus.path().to_string(),
+                                    device_id: id,
+                                })
+                            {
+                                log::error!("Failed to send source device stopped command: {e:?}");
+                            }
                         }
                     }
                     CompositeCommand::SourceDeviceStopped(device) => {
@@ -1685,6 +1699,15 @@ impl CompositeDevice {
         // Clear the state of target devices in case the source device was
         // disconnected in the middle of an input.
         self.targets.schedule_clear_state();
+
+        // Notify the manager so it can free the config entry this source
+        // device was holding
+        if let Err(e) = self.manager.try_send(ManagerCommand::SourceDeviceStopped {
+            composite_path: self.dbus.path().to_string(),
+            device_id: id.clone(),
+        }) {
+            log::error!("Failed to send source device stopped command: {e:?}");
+        }
 
         log::debug!(
             "Current source device paths: {:?}",
