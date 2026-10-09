@@ -328,18 +328,9 @@ impl HidRawDevice {
         match driver_type {
             DriverType::Unknown => Err("No driver for hidraw interface found".into()),
             DriverType::AyaneoHaptics => {
-                let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(0),
-                    buffer_size: 1024,
-                };
                 let device = AyaneoHaptics::new(device_info.clone())?;
-                let source_device = SourceDriver::new_with_options(
-                    composite_device,
-                    device,
-                    device_info.into(),
-                    options,
-                    conf,
-                );
+                let source_device =
+                    SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::AyaneoHaptics(source_device))
             }
             DriverType::Blocked => {
