@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Mayflash GameCube Controller Adapter
+
+# This adapter's HID report descriptor declares its top-level collection as
+# Usage(Joystick) [0x04] rather than Usage(Gamepad) [0x05], with its 16
+# face/shoulder buttons reported under the generic Button usage page as a
+# plain bitmask rather than a labeled gamepad usage. Because of this, the
+# Linux kernel assigns the legacy joystick-era evdev codes BTN_TRIGGER
+# (0x120) through BTN_DEAD (0x12f) to these buttons instead of the modern
+# gamepad codes (BTN_SOUTH/0x130 etc.) that the 65-generic_gamepad.yaml
+# fallback profile (and InputPlumber's generic evdev translation) expect -
+# so without this profile, none of this adapter's face/shoulder buttons
+# produce usable input. See capability_maps/mayflash_gamecube_adapter.yaml
+# for the full writeup and the specific button mapping, which is applied
+# below via capability_map_id.
+#
+# Note: 60-xbox_360_gamepad.yaml already lists a vendor/product entry for
+# "0079"/"18d4", which does not match this adapter's actual reported product
+# ID "1844" (this looks like a transposed-digit typo in that file, unrelated
+# to this profile) - even if that typo were fixed, matching the xbox_360
+# profile alone would not solve this, since the actual problem is the
+# evdev button-code translation, not device selection.
+# Empty: this profile is selected purely by the vendor_id/product_id match
+# on the source_devices entry below, not by any system-level match (like
+# DMI data for handheld-specific profiles).
+matches: []
+
+# Maximum number of source devices per CompositeDevice. Each of this
+# adapter's 4 ports enumerates as its own separate evdev device with the
+# same vendor/product ID; each gets its own CompositeDevice.
+maximum_sources: 1
+
+# NOTE: capability_map_id exists as BOTH a CompositeDeviceConfig-level field
+# and a SourceDevice-level field (src/config/mod.rs) - they are NOT the same
+# mechanism. The top-level one only affects capability *declaration*
+# bookkeeping for legacy V1 chord-style maps (composite_device/mod.rs
+# load_capability_map / device.capabilities); it does not translate anything.
+# The ACTUAL per-event translation (raw evdev KEY -> Capability, via
+# EventTranslator) is wired only from the field on each source_devices[]
+# entry below (src/input/source/evdev.rs EventDevice::new, which builds the
+# GamepadEventDevice's EventTranslator from THIS field, not the top-level
+# one). Setting only the top-level field (as an earlier version of this
+# profile did) parses fine and loads a CompositeDevice successfully, but
+# silently never translates any button - confirmed live: axis/D-pad events
+# passed through correctly while all face-button presses produced zero
+# output events. Both fields are set below to be safe.
+capability_map_id: mayflash_gamecube_adapter
+
+source_devices:
+  - group: gamepad
+    unique: true
+    capability_map_id: mayflash_gamecube_adapter
+    evdev:
+      vendor_id: "0079"
+      product_id: "1844"
+      handler: event*
+
+# The target input device(s) to emulate by default
+target_devices:
+  - xb360
+  - mouse
+  - keyboard
