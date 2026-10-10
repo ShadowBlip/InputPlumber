@@ -236,11 +236,13 @@ impl CompositeDevice {
             match map {
                 CapabilityMapConfig::V1(config) => {
                     for mapping in config.mapping.iter() {
-                        let cap = mapping.target_event.clone().into();
-                        if cap == Capability::NotImplemented {
-                            continue;
+                        for target in mapping.targets() {
+                            let cap = target.into();
+                            if cap == Capability::NotImplemented {
+                                continue;
+                            }
+                            device.capabilities.insert(cap);
                         }
-                        device.capabilities.insert(cap);
                     }
                 }
                 CapabilityMapConfig::V2(config) => {
@@ -1321,15 +1323,18 @@ impl CompositeDevice {
                             }
                         }
 
-                        // If no more inputs are being pressed, send a release event.
+                        // If no more inputs are being pressed, send release events
+                        // in the reverse order they were pressed.
                         if !has_source_event_pressed {
-                            let cap = mapping.target_event.clone().into();
-                            if cap == Capability::NotImplemented {
-                                continue;
+                            for target in mapping.targets().into_iter().rev() {
+                                let cap = target.into();
+                                if cap == Capability::NotImplemented {
+                                    continue;
+                                }
+                                let event = NativeEvent::new(cap, InputValue::Bool(false));
+                                log::trace!("Adding event to emit queue: {:?}", event);
+                                emit_queue.push(event);
                             }
-                            let event = NativeEvent::new(cap, InputValue::Bool(false));
-                            log::trace!("Adding event to emit queue: {:?}", event);
-                            emit_queue.push(event);
                             self.emitted_mappings.remove(&mapping.name);
                         }
                     }
@@ -1349,13 +1354,15 @@ impl CompositeDevice {
                         }
 
                         if !is_missing_source_event {
-                            let cap = mapping.target_event.clone().into();
-                            if cap == Capability::NotImplemented {
-                                continue;
+                            for target in mapping.targets() {
+                                let cap = target.into();
+                                if cap == Capability::NotImplemented {
+                                    continue;
+                                }
+                                let event = NativeEvent::new(cap, InputValue::Bool(true));
+                                log::trace!("Adding event to emit queue: {:?}", event);
+                                emit_queue.push(event);
                             }
-                            let event = NativeEvent::new(cap, InputValue::Bool(true));
-                            log::trace!("Adding event to emit queue: {:?}", event);
-                            emit_queue.push(event);
                             self.emitted_mappings.insert(mapping.name.clone());
                         }
                     }
@@ -1433,22 +1440,17 @@ impl CompositeDevice {
         }
 
         // Emit the translated events. If this translated event has been emitted
-        // very recently, delay sending subsequent events of the same type.
+        // very recently, delay sending it and all subsequent events so that
+        // chords are still emitted in order.
         let sleep_time = Duration::from_millis(4);
+        let mut delayed_events = Vec::new();
         for event in emit_queue {
             // Check to see if the event is in recently translated.
-            // If it is, spawn a task to delay emit the event.
+            // If it is, delay emitting the event.
             let cap = event.as_capability();
-            if self.translated_recent_events.contains(&cap) {
+            if !delayed_events.is_empty() || self.translated_recent_events.contains(&cap) {
                 log::debug!("Event emitted too quickly. Delaying emission.");
-                let tx = self.tx.clone();
-                tokio::task::spawn(async move {
-                    tokio::time::sleep(sleep_time).await;
-                    if let Err(e) = tx.send(CompositeCommand::HandleEvent(event)).await {
-                        log::error!("Failed to send delayed event command: {:?}", e);
-                    }
-                });
-
+                delayed_events.push(event);
                 continue;
             }
 
@@ -1466,6 +1468,19 @@ impl CompositeDevice {
 
             log::trace!("Emitting event: {:?}", event);
             self.handle_event(event).await?;
+        }
+
+        // Spawn a single task to emit any delayed events in order
+        if !delayed_events.is_empty() {
+            let tx = self.tx.clone();
+            tokio::task::spawn(async move {
+                tokio::time::sleep(sleep_time).await;
+                for event in delayed_events {
+                    if let Err(e) = tx.send(CompositeCommand::HandleEvent(event)).await {
+                        log::error!("Failed to send delayed event command: {:?}", e);
+                    }
+                }
+            });
         }
 
         Ok(())

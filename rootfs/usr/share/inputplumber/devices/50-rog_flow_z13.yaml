@@ -18,6 +18,9 @@ matches:
   - dmi_data:
       board_name: GZ302EA
       sys_vendor: ASUSTeK COMPUTER INC.
+  - dmi_data:
+      board_name: GZ302EAC
+      board_vendor: ASUSTeK COMPUTER INC.
 
 # One or more source devices to combine into a single virtual device. The events
 # from these devices will be watched and translated according to the key map.
@@ -25,6 +28,11 @@ source_devices:
   - group: keyboard
     evdev:
       name: Asus WMI hotkeys
+      handler: event*
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
       handler: event*
 
 # Optional configuration for the composite device
@@ -36,10 +44,7 @@ options:
 
 # The target input device(s) to emulate by default
 target_devices:
-  - xbox-elite
-  - touchpad
   - keyboard
-  #- touchscreen
 
 # The ID of a device event mapping in the 'event_maps' folder
 capability_map_id: flw1

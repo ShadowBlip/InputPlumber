@@ -171,13 +171,34 @@ pub struct SourceMapping {
 }
 
 /// A [NativeCapabilityMapping] maps one or more native inputplumber events to
-/// a different native inputplumber event.
+/// a different native inputplumber event, or to a chord of events.
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct NativeCapabilityMapping {
     pub name: String,
     pub source_events: Vec<CapabilityConfig>,
-    pub target_event: CapabilityConfig,
+    /// A single event to emit when all source events are active
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_event: Option<CapabilityConfig>,
+    /// A chord of events to emit when all source events are active. Events are
+    /// pressed in order and released in reverse order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_events: Option<Vec<CapabilityConfig>>,
+}
+
+impl NativeCapabilityMapping {
+    /// Returns all target events for this mapping in the order they should
+    /// be pressed.
+    pub fn targets(&self) -> Vec<CapabilityConfig> {
+        let mut targets = Vec::new();
+        if let Some(target) = self.target_event.as_ref() {
+            targets.push(target.clone());
+        }
+        if let Some(events) = self.target_events.as_ref() {
+            targets.extend(events.iter().cloned());
+        }
+        targets
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq, Default)]
@@ -338,4 +359,32 @@ pub struct SourceCapability {
     pub deadzone: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub axis: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_v1_chord_target_events() {
+        let map = CapabilityMapConfig::from_yaml_file(
+            "./rootfs/usr/share/inputplumber/capability_maps/flow_type1.yaml",
+        )
+        .expect("failed to load capability map");
+        let CapabilityMapConfig::V1(config) = map else {
+            panic!("expected a V1 capability map");
+        };
+        let keys = |mapping: &NativeCapabilityMapping| -> Vec<String> {
+            mapping
+                .targets()
+                .into_iter()
+                .filter_map(|t| t.keyboard)
+                .collect()
+        };
+        assert_eq!(
+            keys(&config.mapping[0]),
+            vec!["KeyLeftCtrl", "KeyLeftShift", "KeyTab"]
+        );
+        assert_eq!(keys(&config.mapping[1]), vec!["KeyLeftShift", "KeyTab"]);
+    }
 }

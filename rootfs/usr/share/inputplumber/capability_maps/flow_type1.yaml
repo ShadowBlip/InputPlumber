@@ -16,9 +16,22 @@ mapping:
   - name: Armoury Crate button
     source_events:
       - keyboard: KeyProg3
-    target_event:
-      gamepad:
-        button: QuickAccess
+    target_events:
+      - keyboard: KeyLeftCtrl
+      - keyboard: KeyLeftShift
+      - keyboard: KeyTab
+  # Holding the Armoury Crate button for ~3 seconds sends the Copilot key
+  # chord through the AT keyboard. The hold threshold is set by the firmware,
+  # which only reports the button after it decides between a tap and a hold,
+  # so it cannot be shortened here.
+  - name: Armoury Crate button (hold)
+    source_events:
+      - keyboard: KeyLeftMeta
+      - keyboard: KeyLeftShift
+      - keyboard: KeyF23
+    target_events:
+      - keyboard: KeyLeftShift
+      - keyboard: KeyTab
 
 # List of events to filter from the source devices
 filtered_events: []
