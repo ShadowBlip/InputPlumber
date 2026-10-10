@@ -1,5 +1,6 @@
 pub mod client;
 pub mod command;
+mod intercept_passthrough;
 pub mod targets;
 
 use std::{
@@ -13,7 +14,11 @@ use std::{
 
 use evdev::InputEvent;
 use targets::CompositeDeviceTargets;
-use tokio::{sync::mpsc, task::JoinSet, time::Duration};
+use tokio::{
+    sync::mpsc,
+    task::JoinSet,
+    time::{Duration, Instant},
+};
 use zbus::{object_server::Interface, Connection};
 
 use crate::{
@@ -43,7 +48,10 @@ use crate::{
     udev::{hide_device, unhide_device, HideFlag},
 };
 
-use self::{client::CompositeDeviceClient, command::CompositeCommand};
+use self::{
+    client::CompositeDeviceClient, command::CompositeCommand,
+    intercept_passthrough::InterceptPassthrough,
+};
 
 use super::{
     info::DeviceInfo, manager::ManagerCommand, output_event::OutputEvent,
@@ -162,6 +170,8 @@ pub struct CompositeDevice {
     intercept_mode_target_cap: Capability,
     /// List of currently active events that could trigger intercept mode.
     intercept_active_inputs: Vec<Capability>,
+    /// Ordered replay of partial activation chords and subsequent button transitions.
+    intercept_passthrough: InterceptPassthrough,
     /// List of currently active buttons and keys. Used to block "up" events for
     /// keys that have already been handled.
     active_inputs: Vec<Capability>,
@@ -223,6 +233,7 @@ impl CompositeDevice {
             ))],
             intercept_mode_target_cap: Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
             intercept_active_inputs: Vec::new(),
+            intercept_passthrough: InterceptPassthrough::default(),
             active_inputs: Vec::new(),
             exclusive_inputs: HashMap::new(),
         };
@@ -309,7 +320,17 @@ impl CompositeDevice {
         log::debug!("CompositeDevice started");
         let mut buffer = Vec::with_capacity(BUFFER_SIZE);
         'main: loop {
-            let num = self.rx.recv_many(&mut buffer, BUFFER_SIZE).await;
+            let num = tokio::select! {
+                biased;
+                _ = self.intercept_passthrough.wait() => {
+                    if let Err(e) = self.write_next_intercept_passthrough_event().await {
+                        log::error!("Failed to replay intercept chord: {e:?}");
+                        break 'main;
+                    }
+                    continue;
+                }
+                num = self.rx.recv_many(&mut buffer, BUFFER_SIZE) => num,
+            };
             if num == 0 {
                 log::warn!("Unable to receive more commands. Channel closed.");
                 break;
@@ -532,6 +553,7 @@ impl CompositeDevice {
                             "Preparing to suspend target devices for: {}",
                             self.dbus.path()
                         );
+                        self.intercept_passthrough.clear();
                         self.targets.handle_suspend().await;
                         if let Err(e) = sender.send(()).await {
                             log::error!("Failed to send suspend response: {e:?}");
@@ -1009,6 +1031,12 @@ impl CompositeDevice {
                 Capability::Accelerometer(_) => (),
             }
 
+            // Only transitions for the replayed chord's buttons need deferral.
+            if self.intercept_passthrough.defer(&event, Instant::now()) {
+                self.write_next_intercept_passthrough_event().await?;
+                continue;
+            }
+
             // if this is a chord with no matches to the intercept_active_inputs, add a keypress
             // delay for event chords. This is required to support steam chords as it will passed
             // through or miss events if they aren't properly
@@ -1088,8 +1116,19 @@ impl CompositeDevice {
         }
     }
 
+    /// Finish older replay before an immediate write changes one of its buttons.
+    async fn write_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+        for pending in self
+            .intercept_passthrough
+            .finish_before(&event.as_capability())
+        {
+            self.write_event_now(pending).await?;
+        }
+        self.write_event_now(event).await
+    }
+
     /// Writes the given event to the appropriate target device.
-    async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
+    async fn write_event_now(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
         let cap = event.as_capability();
 
         // If this event implements the DBus capability, send the event to DBus devices
@@ -1247,6 +1286,13 @@ impl CompositeDevice {
         if self.intercept_mode == mode {
             log::debug!("Intercept is already set to: {mode:?}");
             return;
+        }
+        // Finish the replay on the old route before switching modes. There must
+        // be no delayed presses or releases left to leak into the new mode.
+        for event in self.intercept_passthrough.drain() {
+            if let Err(e) = self.write_event(event).await {
+                log::error!("Failed to finish intercept chord before mode change: {e:?}");
+            }
         }
         self.intercept_mode = mode;
 
@@ -1683,7 +1729,8 @@ impl CompositeDevice {
         self.signal_sources_changed().await;
 
         // Clear the state of target devices in case the source device was
-        // disconnected in the middle of an input.
+        // disconnected in the middle of an input. Cancel its delayed replay too.
+        self.intercept_passthrough.clear();
         self.targets.schedule_clear_state();
 
         log::debug!(
@@ -1960,7 +2007,8 @@ impl CompositeDevice {
             });
         }
 
-        // Clear the state from all target devices
+        // Clear the state from all target devices and cancel the old replay.
+        self.intercept_passthrough.clear();
         self.targets.schedule_clear_state();
 
         log::debug!("Successfully loaded device profile: {}", profile.name);
@@ -2132,11 +2180,11 @@ impl CompositeDevice {
                     let event = NativeEvent::new(cap.clone(), InputValue::Bool(true));
                     let event2 = NativeEvent::new(cap, InputValue::Bool(false));
                     let chord: Vec<NativeEvent> = vec![event, event2];
-                    self.write_chord_events(chord).await?;
+                    self.write_intercept_chord(chord).await?;
                     return Ok(true);
                 }
             }
-        } else if !self.intercept_active_inputs.is_empty() && is_pressed {
+        } else if intercept && !self.intercept_active_inputs.is_empty() && is_pressed {
             // Handle chords with partial matches. Up events will be handled normally.
             log::debug!("This event is not what we're looking for.");
             self.intercept_active_inputs.push(cap);
@@ -2148,13 +2196,30 @@ impl CompositeDevice {
                 chord.push(event);
             }
             log::trace!("Release new chord: {chord:?}");
-            self.write_chord_events(chord).await?;
+            self.write_intercept_chord(chord).await?;
             self.intercept_active_inputs.clear();
             return Ok(true);
         }
 
         log::trace!("Keep processing event: {event:?}");
         Ok(false)
+    }
+
+    /// Replay a partial activation chord without letting its releases overtake it.
+    async fn write_intercept_chord(
+        &mut self,
+        events: Vec<NativeEvent>,
+    ) -> Result<(), Box<dyn Error>> {
+        self.intercept_passthrough.start(events, Instant::now());
+        self.write_next_intercept_passthrough_event().await
+    }
+
+    async fn write_next_intercept_passthrough_event(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(event) = self.intercept_passthrough.pop_ready(Instant::now()) {
+            log::debug!("Replay intercept passthrough event: {event:?}");
+            self.write_event_now(event).await?;
+        }
+        Ok(())
     }
 
     /// Emit a DBus signal when source devices change
