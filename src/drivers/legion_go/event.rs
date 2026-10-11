@@ -1,3 +1,5 @@
+use std::mem;
+
 /// Events that can be emitted by the Legion Go controller
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -7,14 +9,27 @@ pub enum Event {
     Trigger(TriggerEvent),
 }
 
+impl Event {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Event::GamepadButton(a), Event::GamepadButton(b)) => a.variant_eq(b),
+            (Event::TouchButton(a), Event::TouchButton(b)) => a.variant_eq(b),
+            (Event::Axis(a), Event::Axis(b)) => a.variant_eq(b),
+            (Event::Trigger(a), Event::Trigger(b)) => a.variant_eq(b),
+            _ => false,
+        }
+    }
+}
+
 /// Binary input contain either pressed or unpressed
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BinaryInput {
     pub pressed: bool,
 }
 
 /// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TouchAxisInput {
     pub index: u8,
     pub is_touching: bool,
@@ -23,13 +38,13 @@ pub struct TouchAxisInput {
 }
 
 /// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct JoyAxisInput {
     pub x: u8,
     pub y: u8,
 }
 /// IMU Axis input contain (x, y, z) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ImuAxisInput {
     pub pitch: i16,
     pub roll: i16,
@@ -37,13 +52,13 @@ pub struct ImuAxisInput {
 }
 
 /// Mouse Wheel contains negative integars
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MouseWheelInput {
     pub value: i8,
 }
 
 /// Trigger input contains non-negative integars
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TriggerInput {
     pub value: u8,
 }
@@ -115,6 +130,46 @@ pub enum TouchButtonEvent {
     Left(BinaryInput),
 }
 
+impl GamepadButtonEvent {
+    /// Whether two events are the same button, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+
+    /// Whether the button is pressed
+    pub fn pressed(&self) -> bool {
+        match self {
+            Self::A(input)
+            | Self::X(input)
+            | Self::B(input)
+            | Self::Y(input)
+            | Self::Menu(input)
+            | Self::View(input)
+            | Self::Legion(input)
+            | Self::QuickAccess(input)
+            | Self::DPadDown(input)
+            | Self::DPadUp(input)
+            | Self::DPadLeft(input)
+            | Self::DPadRight(input)
+            | Self::LB(input)
+            | Self::DTriggerL(input)
+            | Self::ThumbL(input)
+            | Self::Y1(input)
+            | Self::Y2(input)
+            | Self::Y3(input)
+            | Self::RB(input)
+            | Self::DTriggerR(input)
+            | Self::ThumbR(input)
+            | Self::M1(input)
+            | Self::M2(input)
+            | Self::M3(input)
+            | Self::MouseClick(input)
+            | Self::ShowDesktop(input)
+            | Self::AltTab(input) => input.pressed,
+        }
+    }
+}
+
 /// Axis events are events that have (x, y) values
 #[derive(Clone, Debug)]
 pub enum AxisEvent {
@@ -129,6 +184,13 @@ pub enum AxisEvent {
     MultiGyro(ImuAxisInput),
 }
 
+impl AxisEvent {
+    /// Whether two events are the same axis, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
 /// Trigger events contain values indicating how far a trigger is pulled
 #[derive(Clone, Debug)]
 pub enum TriggerEvent {
@@ -136,4 +198,25 @@ pub enum TriggerEvent {
     ATriggerR(TriggerInput),
     MouseWheel(MouseWheelInput),
     RpadForce(TriggerInput),
+}
+
+impl TriggerEvent {
+    /// Whether two events are the same trigger, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
+impl TouchButtonEvent {
+    /// Whether two events are the same button, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+
+    /// Whether the button is pressed
+    pub fn pressed(&self) -> bool {
+        match self {
+            Self::Left(input) => input.pressed,
+        }
+    }
 }
