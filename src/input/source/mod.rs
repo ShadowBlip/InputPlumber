@@ -29,7 +29,7 @@ use self::{
 use super::{
     capability::Capability,
     composite_device::client::CompositeDeviceClient,
-    event::{context::EventContext, native::NativeEvent, Event},
+    event::{context::EventContext, native::NativeEvent, value::InputValue, Event},
     info::{DeviceInfo, DeviceInfoRef},
     output_capability::OutputCapability,
     output_event::OutputEvent,
@@ -728,6 +728,21 @@ impl SourceDevice {
             SourceDevice::Tty(device) => device.get_device_path(),
         }
     }
+}
+
+/// Maps a driver's device events to and from native capabilities
+pub trait EventCapability {
+    /// The native capability this event represents
+    fn to_capability(&self) -> Capability;
+
+    /// The normalized value this event carries, if the event produces a
+    /// native event
+    fn to_value(&self) -> Option<InputValue>;
+
+    /// A prototype event for the given capability, if the device has one
+    fn from_capability(capability: &Capability) -> Option<Self>
+    where
+        Self: Sized;
 }
 
 /// Nominal percent played at 0 dB for deck haptic click, tick, and pulse levels
