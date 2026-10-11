@@ -20,6 +20,8 @@ use super::{
 pub struct Driver {
     /// HIDRAW device instance
     device: HidDevice,
+    /// List of events that should be filtered and not emitted
+    filtered_events: Vec<Event>,
     /// Timestamp of the first touch event.
     first_touch: Instant,
     /// [x, y] of the first sample of the current touch, used for tap displacement gating.
@@ -68,6 +70,7 @@ impl Driver {
 
         Ok(Self {
             device,
+            filtered_events: Default::default(),
             first_touch: Instant::now(),
             first_touch_pos: Default::default(),
             is_clicked: false,
@@ -79,6 +82,20 @@ impl Driver {
             release_delay,
             drag_timeout,
         })
+    }
+
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
     }
 
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
@@ -154,23 +171,21 @@ impl Driver {
                 self.first_touch_pos = [state.touch_x_0, state.touch_y_0];
             }
             self.last_touch = Instant::now();
-            events.push(self.touch_event(state));
+            self.emit(&mut events, self.touch_event(state));
         } else if self.is_clicked {
             if self.last_touch.elapsed() < self.drag_timeout {
-                events.push(self.touch_event(state));
+                self.emit(&mut events, self.touch_event(state));
                 return events;
             }
             self.touch_started = false;
-            let mut new_events = self.release_click();
-            events.append(&mut new_events);
+            self.release_click(&mut events);
         } else if self.touch_started {
             let dx = (state.touch_x_0 as i64) - (self.first_touch_pos[0] as i64);
             let dy = (state.touch_y_0 as i64) - (self.first_touch_pos[1] as i64);
             let dist_sq = dx * dx + dy * dy;
 
             if self.first_touch.elapsed() < self.release_delay && dist_sq < TAP_MAX_DISTANCE_SQ {
-                let mut click_events = self.start_click();
-                events.append(&mut click_events);
+                self.start_click(&mut events);
                 return events;
             }
 
@@ -179,7 +194,7 @@ impl Driver {
             state.touch_x_0 = 0;
             state.touch_y_0 = 0;
             self.touchpad_state = Some(state);
-            events.push(self.touch_event(state));
+            self.emit(&mut events, self.touch_event(state));
             log::trace!("END Touch");
         }
 
@@ -187,28 +202,36 @@ impl Driver {
     }
 
     /// Start a click event
-    fn start_click(&mut self) -> Vec<Event> {
+    fn start_click(&mut self, events: &mut Vec<Event>) {
         if self.is_clicked {
-            return vec![];
+            return;
         }
         log::trace!("START Click");
         self.is_clicked = true;
-        vec![
+        self.emit(
+            events,
             Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true })),
+        );
+        self.emit(
+            events,
             Event::Trigger(TriggerEvent::RpadForce(TriggerInput {
                 value: PAD_FORCE_NORMAL,
             })),
-        ]
+        );
     }
 
     /// End a click event
-    fn release_click(&mut self) -> Vec<Event> {
+    fn release_click(&mut self, events: &mut Vec<Event>) {
         log::trace!("END Click");
         self.is_clicked = false;
-        vec![
+        self.emit(
+            events,
             Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false })),
+        );
+        self.emit(
+            events,
             Event::Trigger(TriggerEvent::RpadForce(TriggerInput { value: 0 })),
-        ]
+        );
     }
 
     /// Generate a touch event from the device state

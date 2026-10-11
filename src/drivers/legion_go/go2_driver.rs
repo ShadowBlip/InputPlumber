@@ -1,11 +1,9 @@
-use std::collections::HashSet;
 use std::{error::Error, ffi::CString};
 
 use hidapi::HidDevice;
 use packed_struct::PackedStruct;
 
-use crate::drivers::legion_go::HID_LENOVO_GO_FILTER;
-use crate::input::capability::{Capability, Source};
+use crate::drivers::legion_go::{default_event_filter, hid_lenovo_go_filter};
 use crate::udev::device::UdevDevice;
 
 use super::{
@@ -14,8 +12,7 @@ use super::{
         MouseWheelInput, TriggerEvent, TriggerInput,
     },
     hid_report::{GamepadMode, XInputDataReport},
-    DEFAULT_EVENT_FILTER, GAMEPAD_TIMEOUT, GO2_PIDS, GP_IID, VID, XINPUT_COMMAND_ID, XINPUT_DATA,
-    XINPUT_PACKET_SIZE,
+    GAMEPAD_TIMEOUT, GO2_PIDS, GP_IID, VID, XINPUT_COMMAND_ID, XINPUT_DATA, XINPUT_PACKET_SIZE,
 };
 
 /// Legion Go hardware generation
@@ -46,7 +43,7 @@ pub struct Driver {
     /// Udev device instance
     udev_device: UdevDevice,
     /// List of events that should not be generated
-    filtered_events: HashSet<Capability>,
+    filtered_events: Vec<Event>,
     /// State for the internal gamepad controller
     state: Option<XInputDataReport>,
     /// Hardware generation of this device
@@ -77,37 +74,41 @@ impl Driver {
         })
     }
 
-    //TODO: Using InputPlumber Capability enum prevents this driver from having the ability to be
-    //a standalone crate. When this driver is eventually separated, refactor the Event type to
-    //follow the pattern DeviceEvent(Event, Value) and create a match table for
-    //Capability->Event/Event->Capability in the SourceDriver implementation.
-    pub fn update_filtered_events(&mut self, events: HashSet<Capability>) {
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
         self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
     }
 
     pub fn gen(&self) -> LegionGoGen {
         self.gen
     }
 
-    pub fn get_default_event_filter(
-        &self,
-    ) -> Result<HashSet<Capability>, Box<dyn Error + Send + Sync>> {
+    pub fn get_default_event_filter(&self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let device = self.udev_device.get_device()?;
         let Some(parent) = device.parent() else {
-            return Ok(HashSet::from(DEFAULT_EVENT_FILTER));
+            return Ok(default_event_filter());
         };
 
         let Some(driver) = parent.driver() else {
-            return Ok(HashSet::from(DEFAULT_EVENT_FILTER));
+            return Ok(default_event_filter());
         };
 
         let Some(driver) = driver.to_str() else {
-            return Ok(HashSet::from(DEFAULT_EVENT_FILTER));
+            return Ok(default_event_filter());
         };
 
         let filtered_events = match driver {
-            "hid-lenovo-go" => HashSet::from(HID_LENOVO_GO_FILTER),
-            _ => HashSet::from(DEFAULT_EVENT_FILTER),
+            "hid-lenovo-go" => hid_lenovo_go_filter(),
+            _ => default_event_filter(),
         };
 
         Ok(filtered_events)
@@ -208,210 +209,253 @@ impl Driver {
             if state.gamepad_mode == GamepadMode::Fps {
                 //log::debug!("In FPS Mode, rejecting gamepad input.");
                 if state.legion != old_state.legion {
-                    events.push(Event::GamepadButton(GamepadButtonEvent::Legion(
-                        BinaryInput {
+                    self.emit(
+                        &mut events,
+                        Event::GamepadButton(GamepadButtonEvent::Legion(BinaryInput {
                             pressed: state.legion,
-                        },
-                    )));
+                        })),
+                    );
                 }
                 if state.quick_access != old_state.quick_access {
-                    events.push(Event::GamepadButton(GamepadButtonEvent::QuickAccess(
-                        BinaryInput {
+                    self.emit(
+                        &mut events,
+                        Event::GamepadButton(GamepadButtonEvent::QuickAccess(BinaryInput {
                             pressed: state.quick_access,
-                        },
-                    )));
+                        })),
+                    );
                 }
                 return events;
             }
 
             // Binary Events
             if state.a != old_state.a {
-                events.push(Event::GamepadButton(GamepadButtonEvent::A(BinaryInput {
-                    pressed: state.a,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::A(BinaryInput { pressed: state.a })),
+                );
             }
             if state.b != old_state.b {
-                events.push(Event::GamepadButton(GamepadButtonEvent::B(BinaryInput {
-                    pressed: state.b,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::B(BinaryInput { pressed: state.b })),
+                );
             }
             if state.x != old_state.x {
-                events.push(Event::GamepadButton(GamepadButtonEvent::X(BinaryInput {
-                    pressed: state.x,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::X(BinaryInput { pressed: state.x })),
+                );
             }
             if state.y != old_state.y {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Y(BinaryInput {
-                    pressed: state.y,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::Y(BinaryInput { pressed: state.y })),
+                );
             }
             if state.menu != old_state.menu {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Menu(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::Menu(BinaryInput {
                         pressed: state.menu,
-                    },
-                )));
+                    })),
+                );
             }
             if state.view != old_state.view {
-                events.push(Event::GamepadButton(GamepadButtonEvent::View(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::View(BinaryInput {
                         pressed: state.view,
-                    },
-                )));
+                    })),
+                );
             }
             if state.legion != old_state.legion {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Legion(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::Legion(BinaryInput {
                         pressed: state.legion,
-                    },
-                )));
+                    })),
+                );
             }
             if state.quick_access != old_state.quick_access {
-                events.push(Event::GamepadButton(GamepadButtonEvent::QuickAccess(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::QuickAccess(BinaryInput {
                         pressed: state.quick_access,
-                    },
-                )));
+                    })),
+                );
             }
             if state.down != old_state.down {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DPadDown(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::DPadDown(BinaryInput {
                         pressed: state.down,
-                    },
-                )));
+                    })),
+                );
             }
             if state.up != old_state.up {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DPadUp(
-                    BinaryInput { pressed: state.up },
-                )));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::DPadUp(BinaryInput {
+                        pressed: state.up,
+                    })),
+                );
             }
             if state.left != old_state.left {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DPadLeft(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::DPadLeft(BinaryInput {
                         pressed: state.left,
-                    },
-                )));
+                    })),
+                );
             }
             if state.right != old_state.right {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DPadRight(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::DPadRight(BinaryInput {
                         pressed: state.right,
-                    },
-                )));
+                    })),
+                );
             }
             if state.lb != old_state.lb {
-                events.push(Event::GamepadButton(GamepadButtonEvent::LB(BinaryInput {
-                    pressed: state.lb,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::LB(BinaryInput { pressed: state.lb })),
+                );
             }
             if state.rb != old_state.rb {
-                events.push(Event::GamepadButton(GamepadButtonEvent::RB(BinaryInput {
-                    pressed: state.rb,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::RB(BinaryInput { pressed: state.rb })),
+                );
             }
             if state.d_trigger_l != old_state.d_trigger_l {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DTriggerL(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::DTriggerL(BinaryInput {
                         pressed: state.d_trigger_l,
-                    },
-                )));
+                    })),
+                );
             }
             if state.d_trigger_r != old_state.d_trigger_r {
-                events.push(Event::GamepadButton(GamepadButtonEvent::DTriggerR(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::DTriggerR(BinaryInput {
                         pressed: state.d_trigger_r,
-                    },
-                )));
+                    })),
+                );
             }
             if state.m1 != old_state.m1 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::M1(BinaryInput {
-                    pressed: state.m1,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::M1(BinaryInput { pressed: state.m1 })),
+                );
             }
             if state.m2 != old_state.m2 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::M2(BinaryInput {
-                    pressed: state.m2,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::M2(BinaryInput { pressed: state.m2 })),
+                );
             }
             if state.m3 != old_state.m3 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::M3(BinaryInput {
-                    pressed: state.m3,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::M3(BinaryInput { pressed: state.m3 })),
+                );
             }
             if state.y1 != old_state.y1 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Y1(BinaryInput {
-                    pressed: state.y1,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::Y1(BinaryInput { pressed: state.y1 })),
+                );
             }
             if state.y2 != old_state.y2 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Y2(BinaryInput {
-                    pressed: state.y2,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::Y2(BinaryInput { pressed: state.y2 })),
+                );
             }
             if state.y3 != old_state.y3 {
-                events.push(Event::GamepadButton(GamepadButtonEvent::Y3(BinaryInput {
-                    pressed: state.y3,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::Y3(BinaryInput { pressed: state.y3 })),
+                );
             }
             if state.mouse_click != old_state.mouse_click {
-                events.push(Event::GamepadButton(GamepadButtonEvent::MouseClick(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::MouseClick(BinaryInput {
                         pressed: state.mouse_click,
-                    },
-                )));
+                    })),
+                );
             }
             if state.show_desktop != old_state.show_desktop {
-                events.push(Event::GamepadButton(GamepadButtonEvent::ShowDesktop(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::ShowDesktop(BinaryInput {
                         pressed: state.show_desktop,
-                    },
-                )));
+                    })),
+                );
             }
             if state.alt_tab != old_state.alt_tab {
-                events.push(Event::GamepadButton(GamepadButtonEvent::AltTab(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::AltTab(BinaryInput {
                         pressed: state.alt_tab,
-                    },
-                )));
+                    })),
+                );
             }
             if state.thumb_l != old_state.thumb_l {
-                events.push(Event::GamepadButton(GamepadButtonEvent::ThumbL(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::ThumbL(BinaryInput {
                         pressed: state.thumb_l,
-                    },
-                )));
+                    })),
+                );
             }
             if state.thumb_r != old_state.thumb_r {
-                events.push(Event::GamepadButton(GamepadButtonEvent::ThumbR(
-                    BinaryInput {
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::ThumbR(BinaryInput {
                         pressed: state.thumb_r,
-                    },
-                )));
+                    })),
+                );
             }
 
             // Axis events
             if state.l_stick_x != old_state.l_stick_x || state.l_stick_y != old_state.l_stick_y {
-                events.push(Event::Axis(AxisEvent::LStick(JoyAxisInput {
-                    x: state.l_stick_x,
-                    y: state.l_stick_y,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::LStick(JoyAxisInput {
+                        x: state.l_stick_x,
+                        y: state.l_stick_y,
+                    })),
+                );
             }
             if state.r_stick_x != old_state.r_stick_x || state.r_stick_y != old_state.r_stick_y {
-                events.push(Event::Axis(AxisEvent::RStick(JoyAxisInput {
-                    x: state.r_stick_x,
-                    y: state.r_stick_y,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::RStick(JoyAxisInput {
+                        x: state.r_stick_x,
+                        y: state.r_stick_y,
+                    })),
+                );
             }
 
             if state.a_trigger_l != old_state.a_trigger_l {
-                events.push(Event::Trigger(TriggerEvent::ATriggerL(TriggerInput {
-                    value: state.a_trigger_l,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Trigger(TriggerEvent::ATriggerL(TriggerInput {
+                        value: state.a_trigger_l,
+                    })),
+                );
             }
             if state.a_trigger_r != old_state.a_trigger_r {
-                events.push(Event::Trigger(TriggerEvent::ATriggerR(TriggerInput {
-                    value: state.a_trigger_r,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Trigger(TriggerEvent::ATriggerR(TriggerInput {
+                        value: state.a_trigger_r,
+                    })),
+                );
             }
             if state.mouse_z != old_state.mouse_z {
                 log::trace!(
@@ -426,9 +470,10 @@ impl Driver {
                 };
 
                 log::trace!("Normalized scroll wheel value: {value}");
-                events.push(Event::Trigger(TriggerEvent::MouseWheel(MouseWheelInput {
-                    value,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Trigger(TriggerEvent::MouseWheel(MouseWheelInput { value })),
+                );
             }
 
             // IMU Events
@@ -438,96 +483,96 @@ impl Driver {
                 log::trace!("Left controller connected state: {:?}", state.l_con_state);
                 log::trace!("Right controller connected state: {:?}", state.r_con_state);
             }
-            if !self
-                .filtered_events
-                .contains(&Capability::Accelerometer(Source::Left))
-                && (state.left_accel_x != old_state.left_accel_x
-                    || state.left_accel_y != old_state.left_accel_y
-                    || state.left_accel_z != old_state.left_accel_z)
+            if state.left_accel_x != old_state.left_accel_x
+                || state.left_accel_y != old_state.left_accel_y
+                || state.left_accel_z != old_state.left_accel_z
             {
-                events.push(Event::Axis(AxisEvent::LeftAccel(ImuAxisInput {
-                    pitch: -state.left_accel_x,
-                    roll: -state.left_accel_y,
-                    yaw: -state.left_accel_z,
-                })))
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::LeftAccel(ImuAxisInput {
+                        pitch: -state.left_accel_x,
+                        roll: -state.left_accel_y,
+                        yaw: -state.left_accel_z,
+                    })),
+                )
             }
-            if !self
-                .filtered_events
-                .contains(&Capability::Accelerometer(Source::Right))
-                && (state.right_accel_x != old_state.right_accel_x
-                    || state.right_accel_y != old_state.right_accel_y
-                    || state.right_accel_z != old_state.right_accel_z)
+            if state.right_accel_x != old_state.right_accel_x
+                || state.right_accel_y != old_state.right_accel_y
+                || state.right_accel_z != old_state.right_accel_z
             {
-                events.push(Event::Axis(AxisEvent::RightAccel(ImuAxisInput {
-                    pitch: -state.right_accel_x,
-                    roll: -state.right_accel_y,
-                    yaw: state.right_accel_z,
-                })))
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::RightAccel(ImuAxisInput {
+                        pitch: -state.right_accel_x,
+                        roll: -state.right_accel_y,
+                        yaw: state.right_accel_z,
+                    })),
+                )
             }
-            if !self
-                .filtered_events
-                .contains(&Capability::Accelerometer(Source::Center))
-                && (state.left_accel_x != old_state.left_accel_x
-                    || state.left_accel_y != old_state.left_accel_y
-                    || state.left_accel_z != old_state.left_accel_z
-                    || state.right_accel_x != old_state.right_accel_x
-                    || state.right_accel_y != old_state.right_accel_y
-                    || state.right_accel_z != old_state.right_accel_z)
+            if state.left_accel_x != old_state.left_accel_x
+                || state.left_accel_y != old_state.left_accel_y
+                || state.left_accel_z != old_state.left_accel_z
+                || state.right_accel_x != old_state.right_accel_x
+                || state.right_accel_y != old_state.right_accel_y
+                || state.right_accel_z != old_state.right_accel_z
             {
-                events.push(Event::Axis(AxisEvent::MultiAccel(ImuAxisInput {
-                    pitch: -(state.left_accel_x + state.right_accel_x) / 2,
-                    roll: -(state.left_accel_y + state.right_accel_y) / 2,
-                    yaw: (-state.left_accel_z + state.right_accel_z) / 2,
-                })))
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::MultiAccel(ImuAxisInput {
+                        pitch: -(state.left_accel_x + state.right_accel_x) / 2,
+                        roll: -(state.left_accel_y + state.right_accel_y) / 2,
+                        yaw: (-state.left_accel_z + state.right_accel_z) / 2,
+                    })),
+                )
             }
-            if !self
-                .filtered_events
-                .contains(&Capability::Gyroscope(Source::Left))
-                && (state.left_gyro_x != old_state.left_gyro_x
-                    || state.left_gyro_y != old_state.left_gyro_y
-                    || state.left_gyro_z != old_state.left_gyro_z)
+            if state.left_gyro_x != old_state.left_gyro_x
+                || state.left_gyro_y != old_state.left_gyro_y
+                || state.left_gyro_z != old_state.left_gyro_z
             {
-                events.push(Event::Axis(AxisEvent::LeftGyro(ImuAxisInput {
-                    pitch: -state.left_gyro_x,
-                    roll: -state.left_gyro_y,
-                    yaw: match self.gen {
-                        LegionGoGen::Gen2 => -state.left_gyro_z,
-                        LegionGoGen::Gen1 => state.left_gyro_z,
-                    },
-                })))
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::LeftGyro(ImuAxisInput {
+                        pitch: -state.left_gyro_x,
+                        roll: -state.left_gyro_y,
+                        yaw: match self.gen {
+                            LegionGoGen::Gen2 => -state.left_gyro_z,
+                            LegionGoGen::Gen1 => state.left_gyro_z,
+                        },
+                    })),
+                )
             }
-            if !self
-                .filtered_events
-                .contains(&Capability::Gyroscope(Source::Right))
-                && (state.right_gyro_x != old_state.right_gyro_x
-                    || state.right_gyro_y != old_state.right_gyro_y
-                    || state.right_gyro_z != old_state.right_gyro_z)
+            if state.right_gyro_x != old_state.right_gyro_x
+                || state.right_gyro_y != old_state.right_gyro_y
+                || state.right_gyro_z != old_state.right_gyro_z
             {
-                events.push(Event::Axis(AxisEvent::RightGyro(ImuAxisInput {
-                    pitch: -state.right_gyro_x,
-                    roll: -state.right_gyro_y,
-                    yaw: -state.right_gyro_z,
-                })))
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::RightGyro(ImuAxisInput {
+                        pitch: -state.right_gyro_x,
+                        roll: -state.right_gyro_y,
+                        yaw: -state.right_gyro_z,
+                    })),
+                )
             }
 
-            if !self
-                .filtered_events
-                .contains(&Capability::Gyroscope(Source::Center))
-                && (state.left_gyro_x != old_state.left_gyro_x
-                    || state.left_gyro_y != old_state.left_gyro_y
-                    || state.left_gyro_z != old_state.left_gyro_z
-                    || state.right_gyro_x != old_state.right_gyro_x
-                    || state.right_gyro_y != old_state.right_gyro_y
-                    || state.right_gyro_z != old_state.right_gyro_z)
+            if state.left_gyro_x != old_state.left_gyro_x
+                || state.left_gyro_y != old_state.left_gyro_y
+                || state.left_gyro_z != old_state.left_gyro_z
+                || state.right_gyro_x != old_state.right_gyro_x
+                || state.right_gyro_y != old_state.right_gyro_y
+                || state.right_gyro_z != old_state.right_gyro_z
             {
-                events.push(Event::Axis(AxisEvent::MultiGyro(ImuAxisInput {
-                    pitch: -(state.left_gyro_x + state.right_gyro_x) / 2,
-                    roll: -(state.left_gyro_y + state.right_gyro_y) / 2,
-                    yaw: match self.gen {
-                        LegionGoGen::Gen2 => -(state.left_gyro_z + state.right_gyro_z) / 2,
-                        LegionGoGen::Gen1 => (state.left_gyro_z - state.right_gyro_z) / 2,
-                    },
-                })))
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::MultiGyro(ImuAxisInput {
+                        pitch: -(state.left_gyro_x + state.right_gyro_x) / 2,
+                        roll: -(state.left_gyro_y + state.right_gyro_y) / 2,
+                        yaw: match self.gen {
+                            LegionGoGen::Gen2 => -(state.left_gyro_z + state.right_gyro_z) / 2,
+                            LegionGoGen::Gen1 => (state.left_gyro_z - state.right_gyro_z) / 2,
+                        },
+                    })),
+                )
             }
         }
         events

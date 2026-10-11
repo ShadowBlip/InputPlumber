@@ -7,7 +7,7 @@ pub mod hid_report;
 use std::f64::consts::PI;
 use std::time::Duration;
 
-use crate::input::capability::{Capability, Source};
+use event::{AxisEvent, Event, ImuAxisInput};
 
 // Hardware ID's
 pub const VID: u16 = 0x17ef;
@@ -84,24 +84,26 @@ pub const GO2_ACCEL_RAW_TO_MPS2: f64 = 9.80665 / 4096.0;
 // Gyro scale is 32768 LSB full scale over +/-2000 deg/s (16.384 LSB/(deg/s))
 pub const GO2_GYRO_RAW_TO_RAD_S: f64 = (2000.0 / 32768.0) * (PI / 180.0);
 
-const DEFAULT_EVENT_FILTER: [Capability; 6] = [
-    Capability::Accelerometer(Source::Center),
-    Capability::Accelerometer(Source::Left),
-    Capability::Accelerometer(Source::Right),
-    Capability::Gyroscope(Source::Center),
-    Capability::Gyroscope(Source::Left),
-    Capability::Gyroscope(Source::Right),
-];
+fn default_event_filter() -> Vec<Event> {
+    vec![
+        Event::Axis(AxisEvent::MultiAccel(ImuAxisInput::default())),
+        Event::Axis(AxisEvent::LeftAccel(ImuAxisInput::default())),
+        Event::Axis(AxisEvent::RightAccel(ImuAxisInput::default())),
+        Event::Axis(AxisEvent::MultiGyro(ImuAxisInput::default())),
+        Event::Axis(AxisEvent::LeftGyro(ImuAxisInput::default())),
+        Event::Axis(AxisEvent::RightGyro(ImuAxisInput::default())),
+    ]
+}
 
 //TODO: Default to Source::Right. The Legion Go 1 left and right handle y axis are inverted from
 //each other and cancel out. To fix this we can use only the right handle. The kernel driver IMU
 //enablement is currently broken. Once fixed upstream and in jupiter/linux_integration switch to
 //using right handle first.
-const HID_LENOVO_GO_FILTER: [Capability; 4] = [
-    //Capability::Accelerometer(Source::Center),
-    Capability::Accelerometer(Source::Left),
-    Capability::Accelerometer(Source::Right),
-    //Capability::Gyroscope(Source::Center),
-    Capability::Gyroscope(Source::Left),
-    Capability::Gyroscope(Source::Right),
-];
+fn hid_lenovo_go_filter() -> Vec<Event> {
+    vec![
+        Event::Axis(AxisEvent::LeftAccel(ImuAxisInput::default())),
+        Event::Axis(AxisEvent::RightAccel(ImuAxisInput::default())),
+        Event::Axis(AxisEvent::LeftGyro(ImuAxisInput::default())),
+        Event::Axis(AxisEvent::RightGyro(ImuAxisInput::default())),
+    ]
+}
