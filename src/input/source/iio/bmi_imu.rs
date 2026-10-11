@@ -6,7 +6,7 @@ use crate::{
     input::{
         capability::Capability,
         event::native::NativeEvent,
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
+        source::{EventCapability, InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -35,6 +35,8 @@ impl BmiImu {
             id,
             mount_matrix,
             sample_rate,
+            1.0,
+            1.0,
             TriggerStrategy::Hrtimer(trigger_name),
         )?;
 
@@ -46,7 +48,7 @@ impl SourceInputDevice for BmiImu {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
-        Ok(translate_events(events, 1.0, 1.0))
+        Ok(translate_events(events))
     }
 
     /// Returns the possible input events this device is capable of emitting
@@ -55,12 +57,20 @@ impl SourceInputDevice for BmiImu {
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
-        self.driver.update_filtered_events(events);
+        let filtered = events
+            .iter()
+            .filter_map(EventCapability::from_capability)
+            .collect();
+        self.driver.update_filtered_events(filtered);
         Ok(())
     }
 
     fn get_default_event_filter(&self) -> Result<HashSet<Capability>, InputError> {
-        Ok(self.driver.get_default_event_filter()?)
+        let filtered_events = self.driver.get_default_event_filter()?;
+        Ok(filtered_events
+            .into_iter()
+            .map(|e| e.to_capability())
+            .collect())
     }
 }
 

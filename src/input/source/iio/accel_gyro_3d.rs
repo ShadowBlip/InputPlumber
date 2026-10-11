@@ -6,7 +6,7 @@ use crate::{
     input::{
         capability::Capability,
         event::native::NativeEvent,
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
+        source::{EventCapability, InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -18,8 +18,6 @@ use super::common::{
 
 pub struct AccelGyro3dImu {
     driver: Driver,
-    accel_correction: f64,
-    gyro_correction: f64,
 }
 
 impl AccelGyro3dImu {
@@ -34,13 +32,16 @@ impl AccelGyro3dImu {
         let (accel_correction, gyro_correction) = corrections_from_config(config.as_ref());
 
         let id = device_info.sysname();
-        let driver = Driver::new(id, mount_matrix, sample_rate, TriggerStrategy::FindExisting)?;
-
-        Ok(Self {
-            driver,
+        let driver = Driver::new(
+            id,
+            mount_matrix,
+            sample_rate,
             accel_correction,
             gyro_correction,
-        })
+            TriggerStrategy::FindExisting,
+        )?;
+
+        Ok(Self { driver })
     }
 }
 
@@ -48,11 +49,7 @@ impl SourceInputDevice for AccelGyro3dImu {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
-        Ok(translate_events(
-            events,
-            self.accel_correction,
-            self.gyro_correction,
-        ))
+        Ok(translate_events(events))
     }
 
     /// Returns the possible input events this device is capable of emitting
@@ -61,12 +58,20 @@ impl SourceInputDevice for AccelGyro3dImu {
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
-        self.driver.update_filtered_events(events);
+        let filtered = events
+            .iter()
+            .filter_map(EventCapability::from_capability)
+            .collect();
+        self.driver.update_filtered_events(filtered);
         Ok(())
     }
 
     fn get_default_event_filter(&self) -> Result<HashSet<Capability>, InputError> {
-        Ok(self.driver.get_default_event_filter()?)
+        let filtered_events = self.driver.get_default_event_filter()?;
+        Ok(filtered_events
+            .into_iter()
+            .map(|e| e.to_capability())
+            .collect())
     }
 }
 
