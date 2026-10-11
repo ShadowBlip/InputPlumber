@@ -1,13 +1,10 @@
 use std::{
-    collections::HashSet,
     error::Error,
     fmt, fs,
     path::PathBuf,
     thread,
     time::{Duration, Instant},
 };
-
-use crate::input::capability::{Capability, Source};
 
 use super::{
     event::{AxisData, Event},
@@ -25,7 +22,9 @@ pub struct Driver {
     record_buf: Vec<u8>,
     accel_scale: f64,
     gyro_scale: f64,
-    filtered_events: HashSet<Capability>,
+    accel_correction: f64,
+    gyro_correction: f64,
+    filtered_events: Vec<Event>,
     poll_interval: Duration,
     accel_state: Option<AxisData>,
     gyro_state: Option<AxisData>,
@@ -47,6 +46,8 @@ impl Driver {
         name: String,
         matrix: Option<MountMatrix>,
         sample_rate: Option<f64>,
+        accel_correction: f64,
+        gyro_correction: f64,
         trigger: TriggerStrategy,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         log::debug!("Creating IIO IMU driver instance for {name}");
@@ -107,6 +108,8 @@ impl Driver {
             record_buf,
             accel_scale,
             gyro_scale,
+            accel_correction,
+            gyro_correction,
             filtered_events: Default::default(),
             poll_interval,
             accel_state: None,
@@ -115,25 +118,23 @@ impl Driver {
         })
     }
 
-    //TODO: Using InputPlumber Capability enum prevents this driver from having the ability to be
-    //a standalone crate. When this driver is eventually separated, refactor the Event type to
-    //follow the pattern DeviceEvent(Event, Value) and create a match table for
-    //Capability->Event/Event->Capability in the SourceDriver implementation.
-    pub fn update_filtered_events(&mut self, events: HashSet<Capability>) {
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
         self.filtered_events = events;
     }
 
-    pub fn get_default_event_filter(
-        &self,
-    ) -> Result<HashSet<Capability>, Box<dyn Error + Send + Sync>> {
+    pub fn get_default_event_filter(&self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         match fs::read_to_string("/proc/modules") {
-            Ok(modules) if modules.contains("hid_lenovo_go") => Ok(HashSet::from([
-                Capability::Accelerometer(Source::Center),
-                Capability::Gyroscope(Source::Center),
-            ])),
-            Ok(_) => Ok(HashSet::new()),
+            Ok(modules) if modules.contains("hid_lenovo_go") => Ok(vec![
+                Event::Accelerometer(AxisData::default()),
+                Event::Gyroscope(AxisData::default()),
+            ]),
+            Ok(_) => Ok(Vec::new()),
             Err(e) => Err(format!("Failed to read '/proc/modules': {e:?}").into()),
         }
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
     }
 
     /// Skips a group's event if unchanged since the last poll; paces total call time to poll_interval.
@@ -145,11 +146,10 @@ impl Driver {
         let mut events = Vec::new();
 
         if !self.layout.accel.is_empty()
-            && !self
-                .filtered_events
-                .contains(&Capability::Accelerometer(Source::Center))
+            && !self.is_filtered(&Event::Accelerometer(AxisData::default()))
         {
             let mut data = decode_group(&self.layout.accel, self.accel_scale, &self.record_buf);
+            Self::apply_correction(&mut data, self.accel_correction);
             self.rotate_value(&mut data);
             if self.accel_state.as_ref() != Some(&data) {
                 self.accel_state = Some(data.clone());
@@ -157,12 +157,10 @@ impl Driver {
             }
         }
 
-        if !self.layout.gyro.is_empty()
-            && !self
-                .filtered_events
-                .contains(&Capability::Gyroscope(Source::Center))
+        if !self.layout.gyro.is_empty() && !self.is_filtered(&Event::Gyroscope(AxisData::default()))
         {
             let mut data = decode_group(&self.layout.gyro, self.gyro_scale, &self.record_buf);
+            Self::apply_correction(&mut data, self.gyro_correction);
             self.rotate_value(&mut data);
             if self.gyro_state.as_ref() != Some(&data) {
                 self.gyro_state = Some(data.clone());
@@ -177,6 +175,13 @@ impl Driver {
         }
 
         Ok(events)
+    }
+
+    /// Apply the configured correction factor to the given axis data
+    fn apply_correction(value: &mut AxisData, correction: f64) {
+        value.roll *= correction;
+        value.pitch *= correction;
+        value.yaw *= correction;
     }
 
     /// Rotate the given axis data according to the mount matrix. This is used

@@ -1,3 +1,5 @@
+use std::mem;
+
 /// Events that can be emitted by the BMI IMU
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -7,6 +9,13 @@ pub enum Event {
     Accelerometer(AxisData),
     /// Gyroscope events measure the angular velocity in rads per second.
     Gyroscope(AxisData),
+}
+
+impl Event {
+    /// Whether two events are the same sensor type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
 }
 
 /// AxisData represents the raw (offset-corrected, pre-scale) accelerometer or

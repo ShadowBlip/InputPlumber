@@ -1,17 +1,12 @@
 use crate::{
     config,
-    drivers::iio_imu::{self, info::MountMatrix},
+    drivers::iio_imu::{self, event, info::MountMatrix},
     input::{
         capability::{Capability, Source},
         event::{native::NativeEvent, value::InputValue},
+        source::EventCapability,
     },
 };
-
-/// List of all capabilities that the iio IMU drivers implement
-pub(super) const CAPABILITIES: &[Capability] = &[
-    Capability::Accelerometer(Source::Center),
-    Capability::Gyroscope(Source::Center),
-];
 
 /// Build a mount matrix override from the per-device config, if one is set.
 /// The `config.imu.mount_matrix` option takes precedence over the
@@ -39,9 +34,7 @@ fn deprecated_mount_matrix(config: Option<&config::SourceDevice>) -> Option<&con
 /// The sample rate requested in the per-device config, if one is set.
 /// The `config.imu.sample_rate` option takes precedence over the
 /// `iio.sample_rate` option.
-pub(super) fn sample_rate_from_config(
-    config: Option<&config::SourceDevice>,
-) -> Option<f64> {
+pub(super) fn sample_rate_from_config(config: Option<&config::SourceDevice>) -> Option<f64> {
     if let Some(rate) = config
         .and_then(|c| c.config.as_ref())
         .and_then(|c| c.imu.as_ref())
@@ -50,7 +43,9 @@ pub(super) fn sample_rate_from_config(
         return Some(rate);
     }
     #[allow(deprecated)]
-    let rate = config.and_then(|c| c.iio.as_ref()).and_then(|i| i.sample_rate)?;
+    let rate = config
+        .and_then(|c| c.iio.as_ref())
+        .and_then(|i| i.sample_rate)?;
     log::warn!("config option iio.sample_rate is deprecated, use <SourceDevice>.config.imu.sample_rate instead");
     Some(rate)
 }
@@ -75,42 +70,50 @@ fn to_mount_matrix(matrix: &config::MountMatrix) -> MountMatrix {
     }
 }
 
-/// Translate the given driver events into native events, applying the given
-/// per-group scale corrections to the kernel-reported scale.
-pub(super) fn translate_events(
-    events: Vec<iio_imu::event::Event>,
-    accel_correction: f64,
-    gyro_correction: f64,
-) -> Vec<NativeEvent> {
-    events
-        .into_iter()
-        .map(|event| translate_event(event, accel_correction, gyro_correction))
-        .collect()
+/// Translate the given driver events into native events
+pub(super) fn translate_events(events: Vec<iio_imu::event::Event>) -> Vec<NativeEvent> {
+    events.into_iter().filter_map(translate_event).collect()
 }
 
-fn translate_event(
-    event: iio_imu::event::Event,
-    accel_correction: f64,
-    gyro_correction: f64,
-) -> NativeEvent {
-    let (cap, data, correction) = match event {
-        iio_imu::event::Event::Accelerometer(data) => (
-            Capability::Accelerometer(Source::Center),
-            data,
-            accel_correction,
-        ),
-        iio_imu::event::Event::Gyroscope(data) => (
-            Capability::Gyroscope(Source::Center),
-            data,
-            gyro_correction,
-        ),
-    };
-    NativeEvent::new(
-        cap,
-        InputValue::Vector3 {
-            x: Some(data.roll * data.scale * correction),
-            y: Some(data.pitch * data.scale * correction),
-            z: Some(data.yaw * data.scale * correction),
-        },
-    )
+fn translate_event(event: iio_imu::event::Event) -> Option<NativeEvent> {
+    let value = event.to_value()?;
+    Some(NativeEvent::new(event.to_capability(), value))
 }
+
+impl EventCapability for event::Event {
+    fn to_capability(&self) -> Capability {
+        match self {
+            event::Event::Accelerometer(_) => Capability::Accelerometer(Source::Center),
+            event::Event::Gyroscope(_) => Capability::Gyroscope(Source::Center),
+        }
+    }
+
+    fn to_value(&self) -> Option<InputValue> {
+        let data = match self {
+            event::Event::Accelerometer(data) | event::Event::Gyroscope(data) => data,
+        };
+        Some(InputValue::Vector3 {
+            x: Some(data.roll * data.scale),
+            y: Some(data.pitch * data.scale),
+            z: Some(data.yaw * data.scale),
+        })
+    }
+
+    fn from_capability(capability: &Capability) -> Option<Self> {
+        match capability {
+            Capability::Accelerometer(Source::Center) => {
+                Some(event::Event::Accelerometer(event::AxisData::default()))
+            }
+            Capability::Gyroscope(Source::Center) => {
+                Some(event::Event::Gyroscope(event::AxisData::default()))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// List of all capabilities that the iio IMU drivers implement
+pub(super) const CAPABILITIES: &[Capability] = &[
+    Capability::Accelerometer(Source::Center),
+    Capability::Gyroscope(Source::Center),
+];
