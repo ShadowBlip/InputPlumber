@@ -1,3 +1,5 @@
+use std::mem;
+
 use super::hid_report::{
     PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse, PackedTriggerVibration,
     PackedTriggerVibrationExtended,
@@ -10,6 +12,19 @@ pub enum Event {
     Inertia(InertialEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
+}
+
+impl Event {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Event::Button(a), Event::Button(b)) => a.variant_eq(b),
+            (Event::Inertia(a), Event::Inertia(b)) => a.variant_eq(b),
+            (Event::Axis(a), Event::Axis(b)) => a.variant_eq(b),
+            (Event::Trigger(a), Event::Trigger(b)) => a.variant_eq(b),
+            _ => false,
+        }
+    }
 }
 
 /// Output events supported by the Steam Deck controller. These wrap the
@@ -25,7 +40,7 @@ pub enum OutputEvent {
 }
 
 /// Binary input contain either pressed or unpressed
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BinaryInput {
     pub pressed: bool,
 }
@@ -92,14 +107,14 @@ pub enum ButtonEvent {
 }
 
 /// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AxisInput {
     pub x: i16,
     pub y: i16,
 }
 
 /// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TouchAxisInput {
     pub index: u8,
     pub is_touching: bool,
@@ -117,7 +132,7 @@ pub enum AxisEvent {
 }
 
 /// Trigger input contains non-negative integars
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TriggerInput {
     pub value: u16,
 }
@@ -134,7 +149,7 @@ pub enum TriggerEvent {
 }
 
 /// [InertialInput] represents the state of the IMU (x, y, z) values
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct InertialInput {
     pub x: i16,
     pub y: i16,
@@ -147,4 +162,66 @@ pub enum InertialEvent {
     Accelerometer(InertialInput),
     /// Pitch, yaw, roll
     Gyroscope(InertialInput),
+}
+
+impl ButtonEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+
+    /// Whether the button is pressed
+    pub fn pressed(&self) -> bool {
+        match self {
+            Self::A(input)
+            | Self::X(input)
+            | Self::B(input)
+            | Self::Y(input)
+            | Self::Menu(input)
+            | Self::Options(input)
+            | Self::Steam(input)
+            | Self::QuickAccess(input)
+            | Self::DPadDown(input)
+            | Self::DPadUp(input)
+            | Self::DPadLeft(input)
+            | Self::DPadRight(input)
+            | Self::L1(input)
+            | Self::L2(input)
+            | Self::L3(input)
+            | Self::L4(input)
+            | Self::L5(input)
+            | Self::R1(input)
+            | Self::R2(input)
+            | Self::R3(input)
+            | Self::R4(input)
+            | Self::R5(input)
+            | Self::RPadTouch(input)
+            | Self::LPadTouch(input)
+            | Self::RPadPress(input)
+            | Self::LPadPress(input)
+            | Self::RStickTouch(input)
+            | Self::LStickTouch(input) => input.pressed,
+        }
+    }
+}
+
+impl AxisEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
+impl TriggerEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
+impl InertialEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
 }

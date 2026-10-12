@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     error::Error,
     fmt::Debug,
     sync::{Arc, Mutex},
@@ -34,7 +34,7 @@ use crate::{
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{EventCapability, InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -213,6 +213,15 @@ impl SourceInputDevice for DeckController {
     }
 
     /// Returns the possible input events this device is capable of emitting
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        let filtered = events
+            .iter()
+            .filter_map(EventCapability::from_capability)
+            .collect();
+        self.driver.update_filtered_events(filtered);
+        Ok(())
+    }
+
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(CAPABILITIES.into())
     }
@@ -319,7 +328,7 @@ impl Debug for DeckController {
 
 /// Normalize the value to something between -1.0 and 1.0 based on the Deck's
 /// minimum and maximum axis ranges.
-fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
+fn normalize_axis_value(event: &steam_deck::event::AxisEvent) -> InputValue {
     match event {
         steam_deck::event::AxisEvent::LPad(value) => {
             let min = steam_deck::hid_report::PAD_X_MIN;
@@ -396,7 +405,7 @@ fn normalize_axis_value(event: steam_deck::event::AxisEvent) -> InputValue {
 
 /// Normalize the trigger value to something between 0.0 and 1.0 based on the Deck's
 /// maximum axis ranges.
-fn normalize_trigger_value(event: steam_deck::event::TriggerEvent) -> InputValue {
+fn normalize_trigger_value(event: &steam_deck::event::TriggerEvent) -> InputValue {
     match event {
         steam_deck::event::TriggerEvent::LTrigger(value) => {
             let max = steam_deck::hid_report::TRIGG_MAX;
@@ -427,184 +436,296 @@ fn normalize_trigger_value(event: steam_deck::event::TriggerEvent) -> InputValue
 
 /// Translate the given Steam Deck events into native events
 fn translate_events(events: Vec<steam_deck::event::Event>) -> Vec<NativeEvent> {
-    events.into_iter().map(translate_event).collect()
+    events.into_iter().filter_map(translate_event).collect()
 }
 
 /// Translate the given Steam Deck event into a native event
-fn translate_event(event: steam_deck::event::Event) -> NativeEvent {
-    match event {
-        steam_deck::event::Event::Button(button) => match button {
-            steam_deck::event::ButtonEvent::A(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::X(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::B(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::Y(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::Menu(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::Options(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::Steam(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::QuickAccess(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::DPadDown(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::DPadUp(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::DPadLeft(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::DPadRight(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::L1(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::L2(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::L3(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::L4(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::L5(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::R1(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::R2(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::R3(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::R4(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::R5(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::RPadTouch(value) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Touch))),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::LPadTouch(value) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Touch))),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::RPadPress(value) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::LPadPress(value) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::RStickTouch(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch)),
-                InputValue::Bool(value.pressed),
-            ),
-            steam_deck::event::ButtonEvent::LStickTouch(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch)),
-                InputValue::Bool(value.pressed),
-            ),
-        },
-        steam_deck::event::Event::Inertia(inertia) => match inertia {
-            steam_deck::event::InertialEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::Accelerometer(Source::Center),
-                InputValue::Vector3 {
+fn translate_event(event: steam_deck::event::Event) -> Option<NativeEvent> {
+    let value = event.to_value()?;
+    Some(NativeEvent::new(event.to_capability(), value))
+}
+
+impl EventCapability for steam_deck::event::Event {
+    fn to_value(&self) -> Option<InputValue> {
+        match self {
+            event::Event::Button(button) => Some(InputValue::Bool(button.pressed())),
+            event::Event::Inertia(inertia) => match inertia {
+                event::InertialEvent::Accelerometer(value) => Some(InputValue::Vector3 {
                     x: Some(normalize_accel_value_i16(value.x, DECK_ACCEL_RAW_TO_MPS2)),
                     y: Some(normalize_accel_value_i16(value.y, DECK_ACCEL_RAW_TO_MPS2)),
                     z: Some(normalize_accel_value_i16(value.z, DECK_ACCEL_RAW_TO_MPS2)),
-                },
-            ),
-            steam_deck::event::InertialEvent::Gyroscope(value) => NativeEvent::new(
-                Capability::Gyroscope(Source::Center),
-                InputValue::Vector3 {
+                }),
+                event::InertialEvent::Gyroscope(value) => Some(InputValue::Vector3 {
                     x: Some(normalize_gyro_value_i16(value.x, DECK_GYRO_RAW_TO_RAD_S)),
                     y: Some(normalize_gyro_value_i16(value.y, DECK_GYRO_RAW_TO_RAD_S)),
                     z: Some(normalize_gyro_value_i16(value.z, DECK_GYRO_RAW_TO_RAD_S)),
-                },
-            ),
-        },
-        steam_deck::event::Event::Axis(axis) => match axis.clone() {
-            steam_deck::event::AxisEvent::LPad(_) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
-                normalize_axis_value(axis),
-            ),
-            steam_deck::event::AxisEvent::RPad(_) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
-                normalize_axis_value(axis),
-            ),
-            steam_deck::event::AxisEvent::LStick(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
-                normalize_axis_value(axis),
-            ),
-            steam_deck::event::AxisEvent::RStick(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
-                normalize_axis_value(axis),
-            ),
-        },
-        steam_deck::event::Event::Trigger(trigg) => match trigg.clone() {
-            steam_deck::event::TriggerEvent::LTrigger(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
-                normalize_trigger_value(trigg),
-            ),
-            steam_deck::event::TriggerEvent::RTrigger(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-                normalize_trigger_value(trigg),
-            ),
-            steam_deck::event::TriggerEvent::LPadForce(_) => {
-                NativeEvent::new(Capability::NotImplemented, normalize_trigger_value(trigg))
+                }),
+            },
+            event::Event::Axis(axis) => Some(normalize_axis_value(axis)),
+            event::Event::Trigger(trigger) => match trigger {
+                event::TriggerEvent::LTrigger(_) | event::TriggerEvent::RTrigger(_) => {
+                    Some(normalize_trigger_value(trigger))
+                }
+                event::TriggerEvent::LPadForce(_)
+                | event::TriggerEvent::RPadForce(_)
+                | event::TriggerEvent::LStickForce(_)
+                | event::TriggerEvent::RStickForce(_) => None,
+            },
+        }
+    }
+
+    fn to_capability(&self) -> Capability {
+        match self {
+            steam_deck::event::Event::Button(button) => match button {
+                steam_deck::event::ButtonEvent::A(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::South))
+                }
+                steam_deck::event::ButtonEvent::X(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::North))
+                }
+                steam_deck::event::ButtonEvent::B(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::East))
+                }
+                steam_deck::event::ButtonEvent::Y(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::West))
+                }
+                steam_deck::event::ButtonEvent::Menu(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::Start))
+                }
+                steam_deck::event::ButtonEvent::Options(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::Select))
+                }
+                steam_deck::event::ButtonEvent::Steam(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
+                }
+                steam_deck::event::ButtonEvent::QuickAccess(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess))
+                }
+                steam_deck::event::ButtonEvent::DPadDown(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown))
+                }
+                steam_deck::event::ButtonEvent::DPadUp(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp))
+                }
+                steam_deck::event::ButtonEvent::DPadLeft(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft))
+                }
+                steam_deck::event::ButtonEvent::DPadRight(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight))
+                }
+                steam_deck::event::ButtonEvent::L1(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper))
+                }
+                steam_deck::event::ButtonEvent::L2(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftTrigger))
+                }
+                steam_deck::event::ButtonEvent::L3(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick))
+                }
+                steam_deck::event::ButtonEvent::L4(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1))
+                }
+                steam_deck::event::ButtonEvent::L5(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2))
+                }
+                steam_deck::event::ButtonEvent::R1(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper))
+                }
+                steam_deck::event::ButtonEvent::R2(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightTrigger))
+                }
+                steam_deck::event::ButtonEvent::R3(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick))
+                }
+                steam_deck::event::ButtonEvent::R4(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1))
+                }
+                steam_deck::event::ButtonEvent::R5(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2))
+                }
+                steam_deck::event::ButtonEvent::RPadTouch(_) => {
+                    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Touch)))
+                }
+                steam_deck::event::ButtonEvent::LPadTouch(_) => {
+                    Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Touch)))
+                }
+                steam_deck::event::ButtonEvent::RPadPress(_) => {
+                    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press)))
+                }
+                steam_deck::event::ButtonEvent::LPadPress(_) => {
+                    Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press)))
+                }
+                steam_deck::event::ButtonEvent::RStickTouch(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStickTouch))
+                }
+                steam_deck::event::ButtonEvent::LStickTouch(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStickTouch))
+                }
+            },
+            steam_deck::event::Event::Inertia(inertia) => match inertia {
+                steam_deck::event::InertialEvent::Accelerometer(_) => {
+                    Capability::Accelerometer(Source::Center)
+                }
+                steam_deck::event::InertialEvent::Gyroscope(_) => {
+                    Capability::Gyroscope(Source::Center)
+                }
+            },
+            steam_deck::event::Event::Axis(axis) => match axis {
+                steam_deck::event::AxisEvent::LPad(_) => {
+                    Capability::Touchpad(Touchpad::LeftPad(Touch::Motion))
+                }
+                steam_deck::event::AxisEvent::RPad(_) => {
+                    Capability::Touchpad(Touchpad::RightPad(Touch::Motion))
+                }
+                steam_deck::event::AxisEvent::LStick(_) => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick))
+                }
+                steam_deck::event::AxisEvent::RStick(_) => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick))
+                }
+            },
+            steam_deck::event::Event::Trigger(trigg) => match trigg {
+                steam_deck::event::TriggerEvent::LTrigger(_) => {
+                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger))
+                }
+                steam_deck::event::TriggerEvent::RTrigger(_) => {
+                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger))
+                }
+                _ => Capability::NotImplemented,
+            },
+        }
+    }
+
+    fn from_capability(capability: &Capability) -> Option<Self> {
+        match capability {
+            Capability::Gamepad(Gamepad::Button(button)) => {
+                let event = match button {
+                    GamepadButton::South => steam_deck::event::ButtonEvent::A(Default::default()),
+                    GamepadButton::North => steam_deck::event::ButtonEvent::X(Default::default()),
+                    GamepadButton::East => steam_deck::event::ButtonEvent::B(Default::default()),
+                    GamepadButton::West => steam_deck::event::ButtonEvent::Y(Default::default()),
+                    GamepadButton::Start => {
+                        steam_deck::event::ButtonEvent::Menu(Default::default())
+                    }
+                    GamepadButton::Select => {
+                        steam_deck::event::ButtonEvent::Options(Default::default())
+                    }
+                    GamepadButton::Guide => {
+                        steam_deck::event::ButtonEvent::Steam(Default::default())
+                    }
+                    GamepadButton::QuickAccess => {
+                        steam_deck::event::ButtonEvent::QuickAccess(Default::default())
+                    }
+                    GamepadButton::DPadDown => {
+                        steam_deck::event::ButtonEvent::DPadDown(Default::default())
+                    }
+                    GamepadButton::DPadUp => {
+                        steam_deck::event::ButtonEvent::DPadUp(Default::default())
+                    }
+                    GamepadButton::DPadLeft => {
+                        steam_deck::event::ButtonEvent::DPadLeft(Default::default())
+                    }
+                    GamepadButton::DPadRight => {
+                        steam_deck::event::ButtonEvent::DPadRight(Default::default())
+                    }
+                    GamepadButton::LeftBumper => {
+                        steam_deck::event::ButtonEvent::L1(Default::default())
+                    }
+                    GamepadButton::LeftTrigger => {
+                        steam_deck::event::ButtonEvent::L2(Default::default())
+                    }
+                    GamepadButton::LeftStick => {
+                        steam_deck::event::ButtonEvent::L3(Default::default())
+                    }
+                    GamepadButton::LeftPaddle1 => {
+                        steam_deck::event::ButtonEvent::L4(Default::default())
+                    }
+                    GamepadButton::LeftPaddle2 => {
+                        steam_deck::event::ButtonEvent::L5(Default::default())
+                    }
+                    GamepadButton::RightBumper => {
+                        steam_deck::event::ButtonEvent::R1(Default::default())
+                    }
+                    GamepadButton::RightTrigger => {
+                        steam_deck::event::ButtonEvent::R2(Default::default())
+                    }
+                    GamepadButton::RightStick => {
+                        steam_deck::event::ButtonEvent::R3(Default::default())
+                    }
+                    GamepadButton::RightPaddle1 => {
+                        steam_deck::event::ButtonEvent::R4(Default::default())
+                    }
+                    GamepadButton::RightPaddle2 => {
+                        steam_deck::event::ButtonEvent::R5(Default::default())
+                    }
+                    GamepadButton::RightStickTouch => {
+                        steam_deck::event::ButtonEvent::RStickTouch(Default::default())
+                    }
+                    GamepadButton::LeftStickTouch => {
+                        steam_deck::event::ButtonEvent::LStickTouch(Default::default())
+                    }
+                    _ => return None,
+                };
+                Some(steam_deck::event::Event::Button(event))
             }
-            steam_deck::event::TriggerEvent::RPadForce(_) => {
-                NativeEvent::new(Capability::NotImplemented, normalize_trigger_value(trigg))
+            Capability::Gamepad(Gamepad::Axis(axis)) => match axis {
+                GamepadAxis::LeftStick => Some(steam_deck::event::Event::Axis(
+                    steam_deck::event::AxisEvent::LStick(Default::default()),
+                )),
+                GamepadAxis::RightStick => Some(steam_deck::event::Event::Axis(
+                    steam_deck::event::AxisEvent::RStick(Default::default()),
+                )),
+                _ => None,
+            },
+            Capability::Gamepad(Gamepad::Trigger(trigger)) => match trigger {
+                GamepadTrigger::LeftTrigger => Some(steam_deck::event::Event::Trigger(
+                    steam_deck::event::TriggerEvent::LTrigger(Default::default()),
+                )),
+                GamepadTrigger::RightTrigger => Some(steam_deck::event::Event::Trigger(
+                    steam_deck::event::TriggerEvent::RTrigger(Default::default()),
+                )),
+                _ => None,
+            },
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Button(button))) => {
+                let event = match button {
+                    TouchButton::Press => {
+                        steam_deck::event::ButtonEvent::LPadPress(Default::default())
+                    }
+                    TouchButton::Touch => {
+                        steam_deck::event::ButtonEvent::LPadTouch(Default::default())
+                    }
+                };
+                Some(steam_deck::event::Event::Button(event))
             }
-            steam_deck::event::TriggerEvent::LStickForce(_) => {
-                NativeEvent::new(Capability::NotImplemented, normalize_trigger_value(trigg))
+            Capability::Touchpad(Touchpad::RightPad(Touch::Button(button))) => {
+                let event = match button {
+                    TouchButton::Press => {
+                        steam_deck::event::ButtonEvent::RPadPress(Default::default())
+                    }
+                    TouchButton::Touch => {
+                        steam_deck::event::ButtonEvent::RPadTouch(Default::default())
+                    }
+                };
+                Some(steam_deck::event::Event::Button(event))
             }
-            steam_deck::event::TriggerEvent::RStickForce(_) => {
-                NativeEvent::new(Capability::NotImplemented, normalize_trigger_value(trigg))
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)) => {
+                Some(steam_deck::event::Event::Axis(
+                    steam_deck::event::AxisEvent::LPad(Default::default()),
+                ))
             }
-        },
+            Capability::Touchpad(Touchpad::RightPad(Touch::Motion)) => {
+                Some(steam_deck::event::Event::Axis(
+                    steam_deck::event::AxisEvent::RPad(Default::default()),
+                ))
+            }
+            Capability::Accelerometer(Source::Center) => Some(steam_deck::event::Event::Inertia(
+                steam_deck::event::InertialEvent::Accelerometer(Default::default()),
+            )),
+            Capability::Gyroscope(Source::Center) => Some(steam_deck::event::Event::Inertia(
+                steam_deck::event::InertialEvent::Gyroscope(Default::default()),
+            )),
+            _ => None,
+        }
     }
 }
 
