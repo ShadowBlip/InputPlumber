@@ -1,9 +1,23 @@
-/// Events that can be emitted by the Legion Go controller
+use std::mem;
+
+/// Events that can be emitted by the MSI Claw controller
 #[derive(Clone, Debug)]
 pub enum Event {
     Axis(AxisEvent),
     Button(ButtonEvent),
     Trigger(TriggerEvent),
+}
+
+impl Event {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Event::Axis(a), Event::Axis(b)) => a.variant_eq(b),
+            (Event::Button(a), Event::Button(b)) => a.variant_eq(b),
+            (Event::Trigger(a), Event::Trigger(b)) => a.variant_eq(b),
+            _ => false,
+        }
+    }
 }
 
 /// Output events supported by the MSI Claw controller
@@ -13,7 +27,7 @@ pub enum OutputEvent {
 }
 
 /// Binary input contain either pressed or unpressed
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BinaryInput {
     pub pressed: bool,
 }
@@ -51,8 +65,35 @@ pub enum ButtonEvent {
     ThumbR(BinaryInput),
 }
 
+impl ButtonEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+
+    /// Whether the button is pressed
+    pub fn pressed(&self) -> bool {
+        match self {
+            Self::A(input)
+            | Self::X(input)
+            | Self::B(input)
+            | Self::Y(input)
+            | Self::Menu(input)
+            | Self::View(input)
+            | Self::DPadDown(input)
+            | Self::DPadUp(input)
+            | Self::DPadLeft(input)
+            | Self::DPadRight(input)
+            | Self::LB(input)
+            | Self::ThumbL(input)
+            | Self::RB(input)
+            | Self::ThumbR(input) => input.pressed,
+        }
+    }
+}
+
 /// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct JoyAxisInput {
     pub x: u8,
     pub y: u8,
@@ -65,8 +106,15 @@ pub enum AxisEvent {
     RStick(JoyAxisInput),
 }
 
+impl AxisEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
 /// Trigger input contains non-negative integars
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TriggerInput {
     pub value: u8,
 }
@@ -76,4 +124,11 @@ pub struct TriggerInput {
 pub enum TriggerEvent {
     ATriggerL(TriggerInput),
     ATriggerR(TriggerInput),
+}
+
+impl TriggerEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
 }
