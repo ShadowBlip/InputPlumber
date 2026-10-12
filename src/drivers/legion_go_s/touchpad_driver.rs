@@ -16,6 +16,8 @@ pub struct TouchpadDriver {
     device: HidDevice,
     /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport>,
+
+    filtered_events: Vec<Event>,
 }
 
 impl TouchpadDriver {
@@ -35,10 +37,25 @@ impl TouchpadDriver {
         Ok(Self {
             device,
             touchpad_state: None,
+            filtered_events: vec![],
         })
     }
 
     /// Poll the device and read input reports
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
+    }
+
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut events = vec![];
@@ -106,15 +123,21 @@ impl TouchpadDriver {
 
         // Binary events
         if state.pressed != old_state.pressed {
-            events.push(Event::Button(ButtonEvent::RPadPress(BinaryInput {
-                pressed: state.pressed,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::RPadPress(BinaryInput {
+                    pressed: state.pressed,
+                })),
+            );
             // The touchpad doesn't have a force sensor. TouchAxisInputhe deck target wont produce a "click"
             // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
             // around this.
-            events.push(Event::Trigger(TriggerEvent::RpadForce(TriggerInput {
-                value: PAD_FORCE_NORMAL * state.pressed as u8,
-            })));
+            self.emit(
+                &mut events,
+                Event::Trigger(TriggerEvent::RpadForce(TriggerInput {
+                    value: PAD_FORCE_NORMAL * state.pressed as u8,
+                })),
+            );
         }
 
         // Axis events
@@ -122,12 +145,15 @@ impl TouchpadDriver {
             || state.touch_y != old_state.touch_y
             || state.tip_switch != old_state.tip_switch
         {
-            events.push(Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
-                index: 0,
-                is_touching: state.tip_switch,
-                x: state.touch_x,
-                y: state.touch_y,
-            })));
+            self.emit(
+                &mut events,
+                Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
+                    index: 0,
+                    is_touching: state.tip_switch,
+                    x: state.touch_x,
+                    y: state.touch_y,
+                })),
+            );
         }
         events
     }

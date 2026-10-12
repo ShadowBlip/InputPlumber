@@ -6,9 +6,7 @@ pub mod fts3528;
 pub mod gpd_device;
 pub mod horipad_steam;
 pub mod legion_go;
-pub mod legion_go_s_imu;
-pub mod legion_go_s_touchpad;
-pub mod legion_go_s_xinput;
+pub mod legion_go_s;
 pub mod msi_claw;
 pub mod opineo_touchpad;
 pub mod oxp_hid;
@@ -41,8 +39,11 @@ use self::{
     },
     horipad_steam::HoripadSteam,
     legion_go::go1::LegionGoController, legion_go::go2::LegionGo2Controller,
-    legion_go_s_imu::LegionGoSImuController, legion_go_s_touchpad::LegionGoSTouchpadController,
-    legion_go_s_xinput::LegionGoSXInputController, msi_claw::MsiClawController,
+    legion_go_s::{
+        imu::LegionGoSImuController, touchpad::LegionGoSTouchpadController,
+        xinput::LegionGoSXInputController,
+    },
+    msi_claw::MsiClawController,
     opineo_touchpad::OrangePiNeoTouchpad, oxp_hid::OxpHid, rog_ally::RogAlly,
     steam_deck::DeckController, ultimate_2::Ultimate2, xpad_uhid::XpadUhid, zotac_zone::ZotacZone,
 };

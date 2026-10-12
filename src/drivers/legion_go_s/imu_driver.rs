@@ -16,6 +16,8 @@ pub struct IMUDriver {
     accel_state: Option<InertialDataReport>,
     /// State for the IMU Gyroscope
     gyro_state: Option<InertialDataReport>,
+
+    filtered_events: Vec<Event>,
 }
 
 impl IMUDriver {
@@ -36,10 +38,25 @@ impl IMUDriver {
             accel_state: None,
             device,
             gyro_state: None,
+            filtered_events: vec![],
         })
     }
 
     /// Poll the device and read input reports
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
+    }
+
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; INERTIAL_PACKET_SIZE];
@@ -119,7 +136,7 @@ impl IMUDriver {
     }
 
     /// Translate the accel_state into individual events
-    fn translate_accel_data(&self, old_state: Option<InertialDataReport>) -> Vec<Event> {
+    fn translate_accel_data(&mut self, old_state: Option<InertialDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
         let Some(state) = self.accel_state else {
             return events;
@@ -130,20 +147,21 @@ impl IMUDriver {
             return events;
         };
         if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
-            events.push(Event::Inertia(InertialEvent::Accelerometer(
-                InertialInput {
+            self.emit(
+                &mut events,
+                Event::Inertia(InertialEvent::Accelerometer(InertialInput {
                     x: -state.x.to_primitive(),
                     y: state.z.to_primitive(),
                     z: -state.y.to_primitive(),
-                },
-            )))
+                })),
+            )
         };
 
         events
     }
 
     /// Translate the gyro_state into individual events
-    fn translate_gyro_data(&self, old_state: Option<InertialDataReport>) -> Vec<Event> {
+    fn translate_gyro_data(&mut self, old_state: Option<InertialDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
         let Some(state) = self.gyro_state else {
             return events;
@@ -155,11 +173,14 @@ impl IMUDriver {
         };
 
         if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
-            events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
-                x: -state.x.to_primitive(),
-                y: -state.z.to_primitive(),
-                z: -state.y.to_primitive(),
-            })))
+            self.emit(
+                &mut events,
+                Event::Inertia(InertialEvent::Gyroscope(InertialInput {
+                    x: -state.x.to_primitive(),
+                    y: -state.z.to_primitive(),
+                    z: -state.y.to_primitive(),
+                })),
+            )
         };
 
         events

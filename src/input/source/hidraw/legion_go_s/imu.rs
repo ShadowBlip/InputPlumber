@@ -1,15 +1,12 @@
-use std::{error::Error, fmt::Debug};
+use std::{collections::HashSet, error::Error, fmt::Debug};
 
 use crate::{
-    drivers::legion_go_s::{event, imu_driver::IMUDriver, ACCEL_RAW_TO_MPS2, GYRO_RAW_TO_RAD_S},
+    drivers::legion_go_s::{event, imu_driver::IMUDriver},
     input::{
         capability::{Capability, Source},
-        event::{
-            native::NativeEvent,
-            value::{normalize_accel_value_i16, normalize_gyro_value_i16, InputValue},
-        },
+        event::native::NativeEvent,
         output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{EventCapability, InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -37,6 +34,15 @@ impl SourceInputDevice for LegionGoSImuController {
     }
 
     /// Returns the possible input events this device is capable of emitting
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        let filtered = events
+            .iter()
+            .filter_map(EventCapability::from_capability)
+            .collect();
+        self.driver.update_filtered_events(filtered);
+        Ok(())
+    }
+
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(CAPABILITIES.into())
     }
@@ -59,32 +65,13 @@ impl Debug for LegionGoSImuController {
 
 /// Translate the given Legion Go events into native events
 fn translate_events(events: Vec<event::Event>) -> Vec<NativeEvent> {
-    events.into_iter().map(translate_event).collect()
+    events.into_iter().filter_map(translate_event).collect()
 }
 
 /// Translate the given Legion Go event into a native event
-fn translate_event(event: event::Event) -> NativeEvent {
-    match event {
-        event::Event::Inertia(motion) => match motion {
-            event::InertialEvent::Accelerometer(value) => NativeEvent::new(
-                Capability::Accelerometer(Source::Center),
-                InputValue::Vector3 {
-                    x: Some(normalize_accel_value_i16(value.x, ACCEL_RAW_TO_MPS2)),
-                    y: Some(normalize_accel_value_i16(value.y, ACCEL_RAW_TO_MPS2)),
-                    z: Some(normalize_accel_value_i16(value.z, ACCEL_RAW_TO_MPS2)),
-                },
-            ),
-            event::InertialEvent::Gyroscope(value) => NativeEvent::new(
-                Capability::Gyroscope(Source::Center),
-                InputValue::Vector3 {
-                    x: Some(normalize_gyro_value_i16(value.x, GYRO_RAW_TO_RAD_S)),
-                    y: Some(normalize_gyro_value_i16(value.y, GYRO_RAW_TO_RAD_S)),
-                    z: Some(normalize_gyro_value_i16(value.z, GYRO_RAW_TO_RAD_S)),
-                },
-            ),
-        },
-        _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
-    }
+fn translate_event(event: event::Event) -> Option<NativeEvent> {
+    let value = event.to_value()?;
+    Some(NativeEvent::new(event.to_capability(), value))
 }
 
 /// List of all capabilities that the Legion Go driver implements
