@@ -1,20 +1,19 @@
 use std::{error::Error, time::Duration};
 
-pub mod oxflyserial;
-pub mod oxp_x1_serial;
+pub mod oxp_serial;
 
 use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver};
 use crate::{
     config,
     constants::BUS_SOURCES_PREFIX,
-    drivers::oxp_tty::{self, OxpDriverType},
+    drivers::oxp_tty::{get_driver_type, OxpDriverType, TTY_TIMEOUT},
     input::{
         capability::Capability,
         composite_device::client::CompositeDeviceClient,
         info::DeviceInfoRef,
         output_capability::OutputCapability,
         source::{
-            tty::{oxflyserial::OneXFlySerial, oxp_x1_serial::OxpX1Serial},
+            tty::oxp_serial::{onexfly::OneXFlySerial, x1::OxpX1Serial},
             SourceDriverOptions,
         },
     },
@@ -97,7 +96,7 @@ impl TtyDevice {
             DriverType::Unknown => Err("No driver for tty interface found".into()),
             DriverType::OneXFlySerial => {
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(oxp_tty::TTY_TIMEOUT),
+                    poll_rate: Duration::from_millis(TTY_TIMEOUT),
                     buffer_size: 4096,
                 };
                 let device = OneXFlySerial::new(device_info.clone(), OxpDriverType::OneXFly)?;
@@ -112,7 +111,7 @@ impl TtyDevice {
             }
             DriverType::OxpX1Serial => {
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(oxp_tty::TTY_TIMEOUT),
+                    poll_rate: Duration::from_millis(TTY_TIMEOUT),
                     buffer_size: 4096,
                 };
                 let device = OxpX1Serial::new(device_info.clone(), OxpDriverType::OxpX1)?;
@@ -169,7 +168,7 @@ impl TtyDevice {
             port
         );
 
-        match oxp_tty::get_driver_type(port, vid, pid, interface) {
+        match get_driver_type(port, vid, pid, interface) {
             OxpDriverType::Unknown => DriverType::Unknown,
             OxpDriverType::OneXFly => DriverType::OneXFlySerial,
             OxpDriverType::OxpX1 => DriverType::OxpX1Serial,
