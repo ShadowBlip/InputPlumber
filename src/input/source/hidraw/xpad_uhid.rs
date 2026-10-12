@@ -1,4 +1,9 @@
-use std::{collections::HashMap, error::Error, fmt::Debug, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Debug,
+    time::Instant,
+};
 
 use evdev::{FFEffectData, FFEffectKind};
 use packed_struct::types::SizedInteger;
@@ -21,8 +26,8 @@ use crate::{
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{
-            HapticPulseSeries, HapticState, InputError, OutputError, SourceInputDevice,
-            SourceOutputDevice,
+            EventCapability, HapticPulseSeries, HapticState, InputError, OutputError,
+            SourceInputDevice, SourceOutputDevice,
         },
     },
     udev::device::UdevDevice,
@@ -191,6 +196,15 @@ impl SourceInputDevice for XpadUhid {
     }
 
     /// Returns the possible input events this device is capable of emitting
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        let filtered = events
+            .iter()
+            .filter_map(EventCapability::from_capability)
+            .collect();
+        self.driver.update_filtered_events(filtered);
+        Ok(())
+    }
+
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(CAPABILITIES.into())
     }
@@ -278,7 +292,7 @@ impl Debug for XpadUhid {
 
 /// Normalize the value to something between -1.0 and 1.0 based on the
 /// minimum and maximum axis ranges.
-fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
+fn normalize_axis_value(event: &event::AxisEvent) -> InputValue {
     let min = JOY_AXIS_MIN;
     let max = JOY_AXIS_MAX;
     match event {
@@ -305,7 +319,7 @@ fn normalize_axis_value(event: event::AxisEvent) -> InputValue {
 
 /// Normalize the trigger value to something between 0.0 and 1.0 based on the
 /// maximum axis range.
-fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
+fn normalize_trigger_value(event: &event::TriggerEvent) -> InputValue {
     let max = TRIGGER_AXIS_MAX;
     match event {
         event::TriggerEvent::TriggerL(value) => {
@@ -319,102 +333,135 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
 
 /// Translate the given events into native events
 fn translate_events(events: Vec<event::Event>) -> Vec<NativeEvent> {
-    let mut translated = Vec::with_capacity(events.len());
-    for event in events.into_iter() {
-        translated.push(translate_event(event));
-    }
-    if !translated.is_empty() {
-        log::debug!("Translated events: {translated:?}");
-    };
-    translated
+    events.into_iter().filter_map(translate_event).collect()
 }
 
 /// Translate the given event into a native event
-fn translate_event(event: event::Event) -> NativeEvent {
-    log::debug!("Got event {event:?}");
-    match event {
-        event::Event::Button(button) => match button {
-            event::ButtonEvent::A(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::X(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::B(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::East)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::Y(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::Menu(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Start)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::View(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Select)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::Guide(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::Guide)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::DPadDown(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::DPadUp(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::DPadLeft(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::DPadRight(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::LB(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::ThumbL(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::RB(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper)),
-                InputValue::Bool(value.pressed),
-            ),
-            event::ButtonEvent::ThumbR(value) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick)),
-                InputValue::Bool(value.pressed),
-            ),
-        },
-        event::Event::Axis(axis) => match axis.clone() {
-            event::AxisEvent::LStick(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick)),
-                normalize_axis_value(axis),
-            ),
-            event::AxisEvent::RStick(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick)),
-                normalize_axis_value(axis),
-            ),
-        },
-        event::Event::Trigger(trigg) => match trigg.clone() {
-            event::TriggerEvent::TriggerL(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
-                normalize_trigger_value(trigg),
-            ),
-            event::TriggerEvent::TriggerR(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
-                normalize_trigger_value(trigg),
-            ),
-        },
+fn translate_event(event: event::Event) -> Option<NativeEvent> {
+    let value = event.to_value()?;
+    Some(NativeEvent::new(event.to_capability(), value))
+}
+
+impl EventCapability for event::Event {
+    fn to_value(&self) -> Option<InputValue> {
+        match self {
+            event::Event::Button(button) => Some(InputValue::Bool(button.pressed())),
+            event::Event::Axis(axis) => Some(normalize_axis_value(axis)),
+            event::Event::Trigger(trigger) => Some(normalize_trigger_value(trigger)),
+        }
+    }
+
+    fn to_capability(&self) -> Capability {
+        match self {
+            event::Event::Button(button) => match button {
+                event::ButtonEvent::A(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::South))
+                }
+                event::ButtonEvent::X(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::North))
+                }
+                event::ButtonEvent::B(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::East))
+                }
+                event::ButtonEvent::Y(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::West))
+                }
+                event::ButtonEvent::Menu(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::Start))
+                }
+                event::ButtonEvent::View(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::Select))
+                }
+                event::ButtonEvent::Guide(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
+                }
+                event::ButtonEvent::DPadDown(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadDown))
+                }
+                event::ButtonEvent::DPadUp(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp))
+                }
+                event::ButtonEvent::DPadLeft(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadLeft))
+                }
+                event::ButtonEvent::DPadRight(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::DPadRight))
+                }
+                event::ButtonEvent::LB(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftBumper))
+                }
+                event::ButtonEvent::ThumbL(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick))
+                }
+                event::ButtonEvent::RB(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightBumper))
+                }
+                event::ButtonEvent::ThumbR(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick))
+                }
+            },
+            event::Event::Axis(axis) => match axis {
+                event::AxisEvent::LStick(_) => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::LeftStick))
+                }
+                event::AxisEvent::RStick(_) => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::RightStick))
+                }
+            },
+            event::Event::Trigger(trigg) => match trigg {
+                event::TriggerEvent::TriggerL(_) => {
+                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger))
+                }
+                event::TriggerEvent::TriggerR(_) => {
+                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger))
+                }
+            },
+        }
+    }
+
+    fn from_capability(capability: &Capability) -> Option<Self> {
+        match capability {
+            Capability::Gamepad(Gamepad::Button(button)) => {
+                let event = match button {
+                    GamepadButton::South => event::ButtonEvent::A(Default::default()),
+                    GamepadButton::North => event::ButtonEvent::X(Default::default()),
+                    GamepadButton::East => event::ButtonEvent::B(Default::default()),
+                    GamepadButton::West => event::ButtonEvent::Y(Default::default()),
+                    GamepadButton::Start => event::ButtonEvent::Menu(Default::default()),
+                    GamepadButton::Select => event::ButtonEvent::View(Default::default()),
+                    GamepadButton::Guide => event::ButtonEvent::Guide(Default::default()),
+                    GamepadButton::DPadDown => event::ButtonEvent::DPadDown(Default::default()),
+                    GamepadButton::DPadUp => event::ButtonEvent::DPadUp(Default::default()),
+                    GamepadButton::DPadLeft => event::ButtonEvent::DPadLeft(Default::default()),
+                    GamepadButton::DPadRight => event::ButtonEvent::DPadRight(Default::default()),
+                    GamepadButton::LeftBumper => event::ButtonEvent::LB(Default::default()),
+                    GamepadButton::LeftStick => event::ButtonEvent::ThumbL(Default::default()),
+                    GamepadButton::RightBumper => event::ButtonEvent::RB(Default::default()),
+                    GamepadButton::RightStick => event::ButtonEvent::ThumbR(Default::default()),
+                    _ => return None,
+                };
+                Some(event::Event::Button(event))
+            }
+            Capability::Gamepad(Gamepad::Axis(axis)) => match axis {
+                GamepadAxis::LeftStick => Some(event::Event::Axis(event::AxisEvent::LStick(
+                    Default::default(),
+                ))),
+                GamepadAxis::RightStick => Some(event::Event::Axis(event::AxisEvent::RStick(
+                    Default::default(),
+                ))),
+                _ => None,
+            },
+            Capability::Gamepad(Gamepad::Trigger(trigger)) => match trigger {
+                GamepadTrigger::LeftTrigger => Some(event::Event::Trigger(
+                    event::TriggerEvent::TriggerL(Default::default()),
+                )),
+                GamepadTrigger::RightTrigger => Some(event::Event::Trigger(
+                    event::TriggerEvent::TriggerR(Default::default()),
+                )),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
 

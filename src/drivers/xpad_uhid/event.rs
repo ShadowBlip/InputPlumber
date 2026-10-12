@@ -1,9 +1,23 @@
-/// Events that can be emitted by the controller
+use std::mem;
+
+/// Events that can be emitted by the XPad UHID controller
 #[derive(Clone, Debug)]
 pub enum Event {
     Button(ButtonEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
+}
+
+impl Event {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Event::Button(a), Event::Button(b)) => a.variant_eq(b),
+            (Event::Axis(a), Event::Axis(b)) => a.variant_eq(b),
+            (Event::Trigger(a), Event::Trigger(b)) => a.variant_eq(b),
+            _ => false,
+        }
+    }
 }
 
 /// Output events supported by the XPad controller
@@ -13,20 +27,20 @@ pub enum OutputEvent {
 }
 
 /// Binary input contain either pressed or unpressed
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BinaryInput {
     pub pressed: bool,
 }
 
 /// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct JoyAxisInput {
     pub x: u16,
     pub y: u16,
 }
 
 /// Trigger input contains non-negative integars
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TriggerInput {
     pub value: u16,
 }
@@ -78,4 +92,46 @@ pub enum AxisEvent {
 pub enum TriggerEvent {
     TriggerL(TriggerInput),
     TriggerR(TriggerInput),
+}
+
+impl ButtonEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+
+    /// Whether the button is pressed
+    pub fn pressed(&self) -> bool {
+        match self {
+            Self::A(input)
+            | Self::X(input)
+            | Self::B(input)
+            | Self::Y(input)
+            | Self::RB(input)
+            | Self::LB(input)
+            | Self::View(input)
+            | Self::Menu(input)
+            | Self::Guide(input)
+            | Self::ThumbL(input)
+            | Self::ThumbR(input)
+            | Self::DPadUp(input)
+            | Self::DPadRight(input)
+            | Self::DPadDown(input)
+            | Self::DPadLeft(input) => input.pressed,
+        }
+    }
+}
+
+impl AxisEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
+impl TriggerEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
 }
