@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+version: 1
+kind: CompositeDevice
+name: AYN Odin
+
+options:
+  auto_manage: true
+
+matches:
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: ayn,odin-m0
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: ayn,odin-m2
+
+source_devices:
+  - group: gamepad
+    evdev:
+      name: adc-joystick
+      handler: event*
+
+  - group: gamepad
+    capability_map_id: ayn4
+    evdev:
+      name: AYN Odin Gamepad Buttons
+      phys_path: gpio-keys/input0
+      handler: event*
+
+target_devices:
+  - xbox-elite
