@@ -11,10 +11,7 @@ use packed_struct::{types::SizedInteger, PrimitiveEnum};
 use crate::{
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
-        legion_go_s::{
-            event, xinput_driver::XInputDriver, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
-            TRIGG_MAX,
-        },
+        legion_go_s::{event, xinput_driver::XInputDriver},
         steam_deck::hid_report::{CommandType, PackedTriggerHapticPulse, PadSide},
     },
     input::{
