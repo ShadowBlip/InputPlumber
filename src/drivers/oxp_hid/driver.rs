@@ -13,6 +13,7 @@ use super::{
 pub struct Driver {
     device: HidDevice,
     btn_state: [bool; 0x25],
+    filtered_events: Vec<Event>,
 }
 
 /// Format first N bytes of a buffer as hex string for logging.
@@ -43,7 +44,22 @@ impl Driver {
         Ok(Self {
             device,
             btn_state: [false; 0x25],
+            filtered_events: vec![],
         })
+    }
+
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
     }
 
     /// Poll the device and read input reports
@@ -119,6 +135,8 @@ impl Driver {
             report.func_code,
         );
 
-        Ok(vec![Event::Button(event)])
+        let mut events = Vec::new();
+        self.emit(&mut events, Event::Button(event));
+        Ok(events)
     }
 }
