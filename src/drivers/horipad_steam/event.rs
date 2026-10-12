@@ -1,3 +1,5 @@
+use std::mem;
+
 /// Events that can be emitted by the controller
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -7,8 +9,21 @@ pub enum Event {
     Trigger(TriggerEvent),
 }
 
+impl Event {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Event::Button(a), Event::Button(b)) => a.variant_eq(b),
+            (Event::Inertia(a), Event::Inertia(b)) => a.variant_eq(b),
+            (Event::Joystick(a), Event::Joystick(b)) => a.variant_eq(b),
+            (Event::Trigger(a), Event::Trigger(b)) => a.variant_eq(b),
+            _ => false,
+        }
+    }
+}
+
 /// [BinaryInput] contains either pressed or unpressed
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BinaryInput {
     pub pressed: bool,
 }
@@ -66,8 +81,45 @@ pub enum ButtonEvent {
     DPadLeft(BinaryInput),
 }
 
+impl ButtonEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+
+    /// Whether the button is pressed
+    pub fn pressed(&self) -> bool {
+        match self {
+            Self::A(input)
+            | Self::X(input)
+            | Self::B(input)
+            | Self::Y(input)
+            | Self::RB(input)
+            | Self::LB(input)
+            | Self::View(input)
+            | Self::Menu(input)
+            | Self::Steam(input)
+            | Self::Quick(input)
+            | Self::M1(input)
+            | Self::M2(input)
+            | Self::L4(input)
+            | Self::R4(input)
+            | Self::LSClick(input)
+            | Self::RSClick(input)
+            | Self::LSTouch(input)
+            | Self::RSTouch(input)
+            | Self::LTDigital(input)
+            | Self::RTDigital(input)
+            | Self::DPadUp(input)
+            | Self::DPadRight(input)
+            | Self::DPadDown(input)
+            | Self::DPadLeft(input) => input.pressed,
+        }
+    }
+}
+
 /// [InertialInput] represents the state of the IMU (x, y, z) values
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct InertialInput {
     pub x: i16,
     pub y: i16,
@@ -81,8 +133,15 @@ pub enum InertialEvent {
     Gyroscope(InertialInput),
 }
 
+impl InertialEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
 /// [JoystickInput] is a double  (x, y) axis
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct JoystickInput {
     pub x: u8,
     pub y: u8,
@@ -96,8 +155,15 @@ pub enum JoystickEvent {
     RStick(JoystickInput),
 }
 
+impl JoystickEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
 /// [TriggerInput] is a single (z) axis
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TriggerInput {
     pub value: u8,
 }
@@ -107,4 +173,11 @@ pub struct TriggerInput {
 pub enum TriggerEvent {
     LTAnalog(TriggerInput),
     RTAnalog(TriggerInput),
+}
+
+impl TriggerEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
 }
