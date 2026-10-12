@@ -1,4 +1,8 @@
-use std::{error::Error, ffi::CString, time::{Duration, Instant}};
+use std::{
+    error::Error,
+    ffi::CString,
+    time::{Duration, Instant},
+};
 
 use hidapi::HidDevice;
 use packed_struct::PackedStruct;
@@ -8,8 +12,8 @@ use crate::udev::device::UdevDevice;
 use super::{
     event::{BinaryInput, Event, TouchAxisEvent, TouchButtonEvent, TriggerEvent, TriggerInput},
     hid_report::TouchpadDataReport2024,
-    TOUCHPAD_2024_PAD_FORCE_NORMAL as PAD_FORCE_NORMAL,
-    TOUCHPAD_2024_VID as VID, TOUCHPAD_2024_PID as PID,
+    TOUCHPAD_2024_PAD_FORCE_NORMAL as PAD_FORCE_NORMAL, TOUCHPAD_2024_PID as PID,
+    TOUCHPAD_2024_VID as VID,
 };
 
 // Report ID
@@ -46,6 +50,7 @@ pub struct TouchpadDriver2024 {
     touch_started: bool,
     /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport2024>,
+    filtered_events: Vec<Event>,
 }
 
 impl TouchpadDriver2024 {
@@ -70,10 +75,25 @@ impl TouchpadDriver2024 {
             last_release: Instant::now(),
             touch_started: Default::default(),
             touchpad_state: Default::default(),
+            filtered_events: vec![],
         })
     }
 
     /// Poll the device and read input reports
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
+    }
+
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; TOUCHPAD_PACKET_SIZE];
@@ -146,7 +166,7 @@ impl TouchpadDriver2024 {
                 self.first_touch_x,
                 self.first_touch_y,
                 state.touch_x0,
-                state.touch_y0
+                state.touch_y0,
             ) < MAX_TAP_DISTANCE_SQ
         {
             // Handle double click
@@ -172,12 +192,15 @@ impl TouchpadDriver2024 {
             }
         }
 
-        events.push(Event::TouchAxis(TouchAxisEvent {
-            index: 0,
-            is_touching: self.is_touching,
-            x: state.touch_x0,
-            y: state.touch_y0,
-        }));
+        self.emit(
+            &mut events,
+            Event::TouchAxis(TouchAxisEvent {
+                index: 0,
+                is_touching: self.is_touching,
+                x: state.touch_x0,
+                y: state.touch_y0,
+            }),
+        );
 
         events
     }
@@ -199,15 +222,19 @@ impl TouchpadDriver2024 {
         self.is_clicked = true;
         let mut events = Vec::new();
 
-        let event = Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true }));
-        events.push(event);
+        self.emit(
+            &mut events,
+            Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true })),
+        );
         // The touchpad doesn't have a force sensor. The deck target wont produce a "click"
         // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
         // around this.
-        let event = Event::Trigger(TriggerEvent::PadForce(TriggerInput {
-            value: PAD_FORCE_NORMAL,
-        }));
-        events.push(event);
+        self.emit(
+            &mut events,
+            Event::Trigger(TriggerEvent::PadForce(TriggerInput {
+                value: PAD_FORCE_NORMAL,
+            })),
+        );
         events
     }
 
@@ -219,14 +246,17 @@ impl TouchpadDriver2024 {
         self.touch_started = false;
         self.last_release = Instant::now();
         let mut events = Vec::new();
-        let event = Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false }));
-        events.push(event);
+        self.emit(
+            &mut events,
+            Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false })),
+        );
         // The touchpad doesn't have a force sensor. The deck target wont produce a "click"
         // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
         // around this.
-        let event = Event::Trigger(TriggerEvent::PadForce(TriggerInput { value: 0 }));
-        events.push(event);
+        self.emit(
+            &mut events,
+            Event::Trigger(TriggerEvent::PadForce(TriggerInput { value: 0 })),
+        );
         events
     }
 }
-

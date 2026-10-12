@@ -1,10 +1,10 @@
-pub mod touchpad_driver_2023;
-pub mod touchpad_driver_2024;
-pub mod macro_keyboard_driver;
 pub mod event;
 pub mod hid_report;
 #[cfg(test)]
 pub mod hid_report_test;
+pub mod macro_keyboard_driver;
+pub mod touchpad_driver_2023;
+pub mod touchpad_driver_2024;
 
 // GPD Win Mini Touchpad (2023)
 pub const TOUCHPAD_2023_VID: u16 = 0x093A;
