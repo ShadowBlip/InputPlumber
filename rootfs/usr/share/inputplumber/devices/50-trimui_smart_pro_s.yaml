@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+kind: CompositeDevice
+name: TRIMUI Smart Pro S
+single_source: false
+
+matches: []
+
+source_devices:
+  - group: gamepad
+    udev:
+      subsystem: tty
+      sys_path: "/**/2501400.uart/**"
+  - group: gamepad
+    udev:
+      subsystem: tty
+      sys_path: "/**/2501c00.uart/**"
+
+  # LRADC side keys (volume rockers + Home).
+  - group: keyboard
+    capability_map_id: trimui_type1
+    evdev:
+      name: "sunxi-keyboard"
+      phys_path: "sunxikbd/input0"
+      handler: event*
+
+  - group: keyboard
+    capability_map_id: trimui_type1
+    evdev:
+      name: "fn-switches"
+      handler: event*
+
+  - group: gamepad
+    evdev:
+      name: "pwm-vibrator"
+      handler: event*
+
+# Optional configuration for the composite device
+options:
+  # If true, InputPlumber will automatically try to manage the input device. If
+  # this is false, InputPlumber will not try to manage the device unless an
+  # external service enables management of the device. Defaults to 'false'
+  auto_manage: true
+
+# The target input device(s) that the virtual device profile can use
+target_devices:
+  - xbox-elite
+  - keyboard

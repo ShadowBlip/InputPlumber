@@ -63,6 +63,7 @@ const VIRT_DEVICE_WHITELIST: &[&str] = &[
     "Sunshine gamepad (virtual) motion sensors",
     "Sunshine Nintendo (virtual) pad",
     "MSI WMI hotkeys",
+    "TRIMUI Smart Pro S Controller",
 ];
 
 #[derive(Error, Debug)]
