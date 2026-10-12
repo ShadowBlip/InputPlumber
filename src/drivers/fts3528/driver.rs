@@ -44,6 +44,7 @@ pub struct Driver {
     state: Option<PackedInputDataReport>,
     device: HidDevice,
     touch_state: [TouchState; 15],
+    filtered_events: Vec<Event>,
 }
 
 impl Driver {
@@ -78,6 +79,7 @@ impl Driver {
             device,
             state: Some(PackedInputDataReport::default()),
             touch_state,
+            filtered_events: vec![],
         })
     }
 
@@ -97,22 +99,38 @@ impl Driver {
         let mut events = self.handle_input_report(buf)?;
 
         // Handle touch "up" events
+        let mut release_events = Vec::new();
         for (index, state) in self.touch_state.iter_mut().enumerate() {
             if state.is_touching && (state.last_touch.elapsed() > Duration::from_millis(4)) {
                 log::trace!("Released TOUCH event for contact {index}");
                 state.is_touching = false;
-                let event = Event::Touch(TouchAxisInput {
+                release_events.push(Event::Touch(TouchAxisInput {
                     index: index as u8,
                     is_touching: false,
                     x: 0,
                     y: 0,
-                });
-
-                events.push(event);
+                }));
             }
+        }
+        for event in release_events {
+            self.emit(&mut events, event);
         }
 
         Ok(events)
+    }
+
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
     }
 
     fn handle_input_report(
@@ -167,7 +185,7 @@ impl Driver {
     }
 
     /// Translate the state into individual events
-    fn translate(&self, old_state: Option<PackedInputDataReport>) -> Vec<Event> {
+    fn translate(&mut self, old_state: Option<PackedInputDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
         let Some(state) = self.state else {
             return events;
@@ -187,7 +205,7 @@ impl Driver {
             );
             if state.touch1.is_touching() {
                 let event = state.touch1.into();
-                events.push(Event::Touch(event));
+                self.emit(&mut events, Event::Touch(event));
             }
         }
         if old_state.touch2 != state.touch2 {
@@ -199,7 +217,7 @@ impl Driver {
             );
             if state.touch2.is_touching() {
                 let event = state.touch2.into();
-                events.push(Event::Touch(event));
+                self.emit(&mut events, Event::Touch(event));
             }
         }
         if old_state.touch3 != state.touch3 {
@@ -211,7 +229,7 @@ impl Driver {
             );
             if state.touch3.is_touching() {
                 let event = state.touch3.into();
-                events.push(Event::Touch(event));
+                self.emit(&mut events, Event::Touch(event));
             }
         }
         if old_state.touch4 != state.touch4 {
@@ -223,7 +241,7 @@ impl Driver {
             );
             if state.touch4.is_touching() {
                 let event = state.touch4.into();
-                events.push(Event::Touch(event));
+                self.emit(&mut events, Event::Touch(event));
             }
         }
 

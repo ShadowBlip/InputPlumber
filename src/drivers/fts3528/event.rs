@@ -1,11 +1,21 @@
+use std::mem;
+
 use super::hid_report::TouchData;
 
+#[derive(Clone, Debug)]
 pub enum Event {
     Touch(TouchAxisInput),
 }
 
+impl Event {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
 /// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TouchAxisInput {
     pub index: u8,
     pub is_touching: bool,
