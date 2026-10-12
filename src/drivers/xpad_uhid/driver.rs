@@ -46,6 +46,7 @@ pub struct Driver {
     state: Option<XBoxSeriesInputDataReport>,
     /// Last DPad state
     dpad: DPadState,
+    filtered_events: Vec<Event>,
 }
 
 impl Driver {
@@ -68,6 +69,7 @@ impl Driver {
             device,
             state: None,
             dpad: Default::default(),
+            filtered_events: vec![],
         })
     }
 
@@ -98,6 +100,20 @@ impl Driver {
     }
 
     /// Poll the device and read input reports
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
+    }
+
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; PACKET_SIZE];
@@ -184,59 +200,92 @@ impl Driver {
         if let Some(old_state) = old_state {
             // Binary Events
             if state.button_state.a != old_state.button_state.a {
-                events.push(Event::Button(ButtonEvent::A(BinaryInput {
-                    pressed: state.button_state.a,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::A(BinaryInput {
+                        pressed: state.button_state.a,
+                    })),
+                );
             }
             if state.button_state.b != old_state.button_state.b {
-                events.push(Event::Button(ButtonEvent::B(BinaryInput {
-                    pressed: state.button_state.b,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::B(BinaryInput {
+                        pressed: state.button_state.b,
+                    })),
+                );
             }
             if state.button_state.x != old_state.button_state.x {
-                events.push(Event::Button(ButtonEvent::X(BinaryInput {
-                    pressed: state.button_state.x,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::X(BinaryInput {
+                        pressed: state.button_state.x,
+                    })),
+                );
             }
             if state.button_state.y != old_state.button_state.y {
-                events.push(Event::Button(ButtonEvent::Y(BinaryInput {
-                    pressed: state.button_state.y,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::Y(BinaryInput {
+                        pressed: state.button_state.y,
+                    })),
+                );
             }
             if state.button_state.rb != old_state.button_state.rb {
-                events.push(Event::Button(ButtonEvent::RB(BinaryInput {
-                    pressed: state.button_state.rb,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::RB(BinaryInput {
+                        pressed: state.button_state.rb,
+                    })),
+                );
             }
             if state.button_state.lb != old_state.button_state.lb {
-                events.push(Event::Button(ButtonEvent::LB(BinaryInput {
-                    pressed: state.button_state.lb,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::LB(BinaryInput {
+                        pressed: state.button_state.lb,
+                    })),
+                );
             }
             if state.button_state.view != old_state.button_state.view {
-                events.push(Event::Button(ButtonEvent::View(BinaryInput {
-                    pressed: state.button_state.view,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::View(BinaryInput {
+                        pressed: state.button_state.view,
+                    })),
+                );
             }
             if state.button_state.menu != old_state.button_state.menu {
-                events.push(Event::Button(ButtonEvent::Menu(BinaryInput {
-                    pressed: state.button_state.menu,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::Menu(BinaryInput {
+                        pressed: state.button_state.menu,
+                    })),
+                );
             }
             if state.button_state.guide != old_state.button_state.guide {
-                events.push(Event::Button(ButtonEvent::Guide(BinaryInput {
-                    pressed: state.button_state.guide,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::Guide(BinaryInput {
+                        pressed: state.button_state.guide,
+                    })),
+                );
             }
             if state.button_state.thumb_l != old_state.button_state.thumb_l {
-                events.push(Event::Button(ButtonEvent::ThumbL(BinaryInput {
-                    pressed: state.button_state.thumb_l,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::ThumbL(BinaryInput {
+                        pressed: state.button_state.thumb_l,
+                    })),
+                );
             }
             if state.button_state.thumb_r != old_state.button_state.thumb_r {
-                events.push(Event::Button(ButtonEvent::ThumbR(BinaryInput {
-                    pressed: state.button_state.thumb_r,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::ThumbR(BinaryInput {
+                        pressed: state.button_state.thumb_r,
+                    })),
+                );
             }
             if state.dpad_state != old_state.dpad_state {
                 let up = [
@@ -271,24 +320,28 @@ impl Driver {
                 };
 
                 if up != self.dpad.up {
-                    events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                        pressed: up,
-                    })));
+                    self.emit(
+                        &mut events,
+                        Event::Button(ButtonEvent::DPadUp(BinaryInput { pressed: up })),
+                    );
                 }
                 if down != self.dpad.down {
-                    events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                        pressed: down,
-                    })));
+                    self.emit(
+                        &mut events,
+                        Event::Button(ButtonEvent::DPadDown(BinaryInput { pressed: down })),
+                    );
                 }
                 if left != self.dpad.left {
-                    events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                        pressed: left,
-                    })));
+                    self.emit(
+                        &mut events,
+                        Event::Button(ButtonEvent::DPadLeft(BinaryInput { pressed: left })),
+                    );
                 }
                 if right != self.dpad.right {
-                    events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                        pressed: right,
-                    })));
+                    self.emit(
+                        &mut events,
+                        Event::Button(ButtonEvent::DPadRight(BinaryInput { pressed: right })),
+                    );
                 }
 
                 self.dpad = dpad_state;
@@ -296,27 +349,39 @@ impl Driver {
 
             // Axis events
             if state.l_stick_x != old_state.l_stick_x || state.l_stick_y != old_state.l_stick_y {
-                events.push(Event::Axis(AxisEvent::LStick(JoyAxisInput {
-                    x: state.l_stick_x,
-                    y: state.l_stick_y,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::LStick(JoyAxisInput {
+                        x: state.l_stick_x,
+                        y: state.l_stick_y,
+                    })),
+                );
             }
             if state.r_stick_x != old_state.r_stick_x || state.r_stick_y != old_state.r_stick_y {
-                events.push(Event::Axis(AxisEvent::RStick(JoyAxisInput {
-                    x: state.r_stick_x,
-                    y: state.r_stick_y,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Axis(AxisEvent::RStick(JoyAxisInput {
+                        x: state.r_stick_x,
+                        y: state.r_stick_y,
+                    })),
+                );
             }
 
             if state.trigger_l != old_state.trigger_l {
-                events.push(Event::Trigger(TriggerEvent::TriggerL(TriggerInput {
-                    value: state.trigger_l,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Trigger(TriggerEvent::TriggerL(TriggerInput {
+                        value: state.trigger_l,
+                    })),
+                );
             }
             if state.trigger_l != old_state.trigger_r {
-                events.push(Event::Trigger(TriggerEvent::TriggerR(TriggerInput {
-                    value: state.trigger_r,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Trigger(TriggerEvent::TriggerR(TriggerInput {
+                        value: state.trigger_r,
+                    })),
+                );
             }
             log::trace!("Got events: {events:?}");
 
