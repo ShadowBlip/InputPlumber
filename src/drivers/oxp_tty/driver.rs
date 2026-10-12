@@ -26,6 +26,7 @@ pub struct Driver {
     joystick_state: Option<JoystickDataReport>,
     /// The type of driver that was initialized
     driver_type: OxpDriverType,
+    filtered_events: Vec<Event>,
 }
 
 impl Driver {
@@ -49,7 +50,22 @@ impl Driver {
             last_data: Instant::now(),
             joystick_state: None,
             driver_type,
+            filtered_events: vec![],
         })
+    }
+
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
     }
 
     /// Poll the device and read input reports
@@ -115,6 +131,9 @@ impl Driver {
         // Translate the input report into an event
         let event = self.translate_button(input_report);
 
+        if self.is_filtered(&event) {
+            return Ok(Vec::new());
+        }
         Ok(vec![event])
     }
 
@@ -233,30 +252,42 @@ impl Driver {
         };
 
         if state.left_trigger != old_state.left_trigger {
-            events.push(Event::Axis(AxisEvent::TriggerL(TriggerInput {
-                value: state.left_trigger,
-            })));
+            self.emit(
+                &mut events,
+                Event::Axis(AxisEvent::TriggerL(TriggerInput {
+                    value: state.left_trigger,
+                })),
+            );
         }
         if state.right_trigger != old_state.right_trigger {
-            events.push(Event::Axis(AxisEvent::TriggerR(TriggerInput {
-                value: state.right_trigger,
-            })));
+            self.emit(
+                &mut events,
+                Event::Axis(AxisEvent::TriggerR(TriggerInput {
+                    value: state.right_trigger,
+                })),
+            );
         }
         if state.left_stick_x != old_state.left_stick_x
             || state.left_stick_y != old_state.left_stick_y
         {
-            events.push(Event::Axis(AxisEvent::LStick(JoyAxisInput {
-                x: state.left_stick_x,
-                y: state.left_stick_y,
-            })));
+            self.emit(
+                &mut events,
+                Event::Axis(AxisEvent::LStick(JoyAxisInput {
+                    x: state.left_stick_x,
+                    y: state.left_stick_y,
+                })),
+            );
         }
         if state.right_stick_x != old_state.right_stick_x
             || state.right_stick_y != old_state.right_stick_y
         {
-            events.push(Event::Axis(AxisEvent::RStick(JoyAxisInput {
-                x: state.right_stick_x,
-                y: state.right_stick_y,
-            })));
+            self.emit(
+                &mut events,
+                Event::Axis(AxisEvent::RStick(JoyAxisInput {
+                    x: state.right_stick_x,
+                    y: state.right_stick_y,
+                })),
+            );
         }
         events
     }
