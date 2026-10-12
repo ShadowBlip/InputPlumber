@@ -974,6 +974,16 @@
     </defaults>
   </action>
 
+  <action id="org.shadowblip.Output.ForceFeedback.Scale">
+    <description>Set the scale for force feedback intensity</description>
+    <message>Authentication is required to set the rumble intensity</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
   <action id="org.shadowblip.Output.ForceFeedback.Rumble">
     <description>Allow sending force feedback rumble events</description>
     <message>Authentication is required to send rumble events</message>

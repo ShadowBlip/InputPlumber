@@ -19,6 +19,8 @@ pub trait ForceFeedbacker {
         &mut self,
         enabled: bool,
     ) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
+    fn get_scale(&self) -> impl Future<Output = Result<f64, Box<dyn Error>>> + Send;
+    fn set_scale(&mut self, scale: f64) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
     fn rumble(&mut self, value: f64) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
     fn stop(&mut self) -> impl Future<Output = Result<(), Box<dyn Error>>> + Send;
 }
@@ -30,6 +32,15 @@ impl ForceFeedbacker for CompositeDeviceClient {
 
     async fn set_enabled(&mut self, enabled: bool) -> Result<(), Box<dyn Error>> {
         self.set_ff_enabled(enabled).await?;
+        Ok(())
+    }
+
+    async fn get_scale(&self) -> Result<f64, Box<dyn Error>> {
+        Ok(self.get_ff_scale().await?)
+    }
+
+    async fn set_scale(&mut self, scale: f64) -> Result<(), Box<dyn Error>> {
+        self.set_ff_scale(scale).await?;
         Ok(())
     }
 
@@ -99,8 +110,29 @@ where
         self.device
             .set_enabled(enabled)
             .await
-            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-        Ok(())
+            .map_err(|err| fdo::Error::Failed(err.to_string()))
+    }
+
+    /// Set the scale for force feedback intensity
+    #[zbus(property)]
+    async fn scale(&self) -> fdo::Result<f64> {
+        self.device
+            .get_scale()
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))
+    }
+    #[zbus(property)]
+    async fn set_scale(
+        &mut self,
+        scale: f64,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] hdr: Option<Header<'_>>,
+    ) -> fdo::Result<()> {
+        check_polkit(conn, hdr, "org.shadowblip.Output.ForceFeedback.Scale").await?;
+        self.device
+            .set_scale(scale)
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))
     }
 
     /// Send a simple rumble event
