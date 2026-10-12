@@ -33,6 +33,7 @@ pub struct Driver {
     touch_started: bool,
     /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport>,
+    filtered_events: Vec<Event>,
 }
 
 impl Driver {
@@ -54,7 +55,22 @@ impl Driver {
             last_touch: Instant::now(),
             touch_started: false,
             touchpad_state: None,
+            filtered_events: vec![],
         })
+    }
+
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
     }
 
     /// Poll the device and read input reports
@@ -107,7 +123,7 @@ impl Driver {
         // Check for release conditions
         if self.touch_started && self.last_touch.elapsed() > CLICK_DELAY / 2 {
             let event: Event = self.release_touch();
-            events.push(event);
+            self.emit(&mut events, event);
 
             // If we did a click event, see if we should release it. Accounts for click and drag.
             if self.is_clicked {
@@ -177,12 +193,15 @@ impl Driver {
                 log::trace!("Started TOUCH event");
             }
         }
-        events.push(Event::TouchAxis(TouchAxisEvent {
-            index: 0,
-            is_touching: true,
-            x: state.touch_x.to_primitive(),
-            y: state.touch_y.to_primitive(),
-        }));
+        self.emit(
+            &mut events,
+            Event::TouchAxis(TouchAxisEvent {
+                index: 0,
+                is_touching: true,
+                x: state.touch_x.to_primitive(),
+                y: state.touch_y.to_primitive(),
+            }),
+        );
 
         self.last_touch = Instant::now();
         events
@@ -207,14 +226,14 @@ impl Driver {
         let mut events = Vec::new();
 
         let event = Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: true }));
-        events.push(event);
+        self.emit(&mut events, event);
         // The touchpad doesn't have a force sensor. The deck target wont produce a "click"
         // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
         // around this.
         let event = Event::Trigger(TriggerEvent::PadForce(TriggerInput {
             value: PAD_FORCE_NORMAL,
         }));
-        events.push(event);
+        self.emit(&mut events, event);
         events
     }
 
@@ -225,12 +244,12 @@ impl Driver {
         self.is_clicked = false;
         let mut events = Vec::new();
         let event = Event::TouchButton(TouchButtonEvent::Left(BinaryInput { pressed: false }));
-        events.push(event);
+        self.emit(&mut events, event);
         // The touchpad doesn't have a force sensor. The deck target wont produce a "click"
         // event in desktop or lizard mode without a force value. Simulate a 1/4 press to work
         // around this.
         let event = Event::Trigger(TriggerEvent::PadForce(TriggerInput { value: 0 }));
-        events.push(event);
+        self.emit(&mut events, event);
         events
     }
 }

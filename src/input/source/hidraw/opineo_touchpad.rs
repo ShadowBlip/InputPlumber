@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Debug};
+use std::{collections::HashSet, error::Error, fmt::Debug};
 
 use crate::{
     drivers::opineo::{
@@ -11,7 +11,7 @@ use crate::{
             value::{normalize_unsigned_value, InputValue},
         },
         output_capability::OutputCapability,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{EventCapability, InputError, OutputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -69,6 +69,15 @@ impl SourceInputDevice for OrangePiNeoTouchpad {
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(CAPABILITIES.into())
     }
+
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        let filtered = events
+            .iter()
+            .filter_map(EventCapability::from_capability)
+            .collect();
+        self.driver.update_filtered_events(filtered);
+        Ok(())
+    }
 }
 
 impl SourceOutputDevice for OrangePiNeoTouchpad {
@@ -89,7 +98,7 @@ impl Debug for OrangePiNeoTouchpad {
 
 /// Normalize the value to something between -1.0 and 1.0 based on the Deck's
 /// minimum and maximum axis ranges.
-fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
+fn normalize_axis_value(event: &event::TouchAxisEvent) -> InputValue {
     let x = event.x;
     let y = event.y;
     log::trace!("Got axis to normalize: {x}, {y}");
@@ -118,7 +127,7 @@ fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
 
 /// Normalize the trigger value to something between 0.0 and 1.0 based on the
 /// Orange Pi's maximum axis ranges.
-fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
+fn normalize_trigger_value(event: &event::TriggerEvent) -> InputValue {
     match event {
         event::TriggerEvent::PadForce(value) => {
             InputValue::Float(normalize_unsigned_value(value.value as f64, PAD_FORCE_MAX))
@@ -128,62 +137,80 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
 
 /// Translate the given OrangePi NEO events into native events
 fn translate_events(events: Vec<event::Event>, touchpad_side: TouchpadSide) -> Vec<NativeEvent> {
-    let mut translated = Vec::with_capacity(events.len());
-    for event in events.into_iter() {
-        translated.push(translate_event(event, touchpad_side));
-    }
-    translated
+    events
+        .into_iter()
+        .filter_map(|event| translate_event(event, touchpad_side))
+        .collect()
 }
 
 /// Translate the given OrangePi NEO event into a native event
-fn translate_event(event: event::Event, touchpad_side: TouchpadSide) -> NativeEvent {
-    match event {
-        event::Event::TouchAxis(axis) => match touchpad_side {
-            TouchpadSide::Unknown => {
-                NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
+fn translate_event(event: event::Event, touchpad_side: TouchpadSide) -> Option<NativeEvent> {
+    let value = event.to_value()?;
+    // The side of the pad is only known by the source, so the event kind has
+    // no single fixed capability
+    let cap = match (&event, touchpad_side) {
+        (event::Event::TouchAxis(_), TouchpadSide::Left) => {
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Motion))
+        }
+        (event::Event::TouchAxis(_), TouchpadSide::Right) => {
+            Capability::Touchpad(Touchpad::RightPad(Touch::Motion))
+        }
+        (event::Event::TouchButton(_), TouchpadSide::Left) => {
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press)))
+        }
+        (event::Event::TouchButton(_), TouchpadSide::Right) => {
+            Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press)))
+        }
+        (event::Event::Trigger(_), TouchpadSide::Left) => {
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTouchpadForce))
+        }
+        (event::Event::Trigger(_), TouchpadSide::Right) => {
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce))
+        }
+        (_, TouchpadSide::Unknown) => return None,
+    };
+    Some(NativeEvent::new(cap, value))
+}
+
+impl EventCapability for event::Event {
+    fn to_value(&self) -> Option<InputValue> {
+        match self {
+            event::Event::TouchAxis(axis) => Some(normalize_axis_value(axis)),
+            event::Event::TouchButton(button) => match button {
+                event::TouchButtonEvent::Left(value) => Some(InputValue::Bool(value.pressed)),
+            },
+            event::Event::Trigger(trigger) => Some(normalize_trigger_value(trigger)),
+        }
+    }
+
+    // The side of the pad is only known by the source, so the event kind has
+    // no single fixed capability
+    fn to_capability(&self) -> Capability {
+        Capability::NotImplemented
+    }
+
+    fn from_capability(capability: &Capability) -> Option<Self> {
+        match capability {
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Motion))
+            | Capability::Touchpad(Touchpad::RightPad(Touch::Motion)) => {
+                Some(event::Event::TouchAxis(Default::default()))
             }
-            TouchpadSide::Left => NativeEvent::new(
-                Capability::Touchpad(Touchpad::LeftPad(Touch::Motion)),
-                normalize_axis_value(axis),
+            Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press)))
+            | Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))) => Some(
+                event::Event::TouchButton(event::TouchButtonEvent::Left(Default::default())),
             ),
-            TouchpadSide::Right => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
-                normalize_axis_value(axis),
-            ),
-        },
-        event::Event::TouchButton(button) => match button {
-            event::TouchButtonEvent::Left(value) => match touchpad_side {
-                TouchpadSide::Unknown => {
-                    NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
-                }
-                TouchpadSide::Left => NativeEvent::new(
-                    Capability::Touchpad(Touchpad::LeftPad(Touch::Button(TouchButton::Press))),
-                    InputValue::Bool(value.pressed),
-                ),
-                TouchpadSide::Right => NativeEvent::new(
-                    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
-                    InputValue::Bool(value.pressed),
-                ),
-            },
-        },
-        event::Event::Trigger(trigg) => match trigg.clone() {
-            event::TriggerEvent::PadForce(_) => match touchpad_side {
-                TouchpadSide::Unknown => {
-                    NativeEvent::new(Capability::NotImplemented, InputValue::Bool(false))
-                }
-                TouchpadSide::Left => NativeEvent::new(
-                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTouchpadForce)),
-                    normalize_trigger_value(trigg),
-                ),
-                TouchpadSide::Right => NativeEvent::new(
-                    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
-                    normalize_trigger_value(trigg),
-                ),
-            },
-        },
+            Capability::Gamepad(Gamepad::Trigger(
+                GamepadTrigger::LeftTouchpadForce | GamepadTrigger::RightTouchpadForce,
+            )) => Some(event::Event::Trigger(event::TriggerEvent::PadForce(
+                Default::default(),
+            ))),
+            _ => None,
+        }
     }
 }
 
+/// List of all output capabilities that the OrangePi NEO supports
+pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[OutputCapability::ForceFeedback];
 /// List of all input capabilities that the OrangePi NEO driver implements
 pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTouchpadForce)),
@@ -193,6 +220,3 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
     Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];
-
-/// List of all output capabilities that the OrangePi NEO supports
-pub const OUTPUT_CAPABILITIES: &[OutputCapability] = &[OutputCapability::ForceFeedback];
