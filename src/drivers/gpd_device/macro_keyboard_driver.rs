@@ -1,4 +1,8 @@
-use std::{error::Error, ffi::CString, time::{Duration, Instant}};
+use std::{
+    error::Error,
+    ffi::CString,
+    time::{Duration, Instant},
+};
 
 use hidapi::HidDevice;
 use packed_struct::PackedStruct;
@@ -7,7 +11,7 @@ use crate::udev::device::UdevDevice;
 
 use super::{
     event::{BinaryInput, Event, GamepadButtonEvent},
-    hid_report::{MacroKeyboardDataReport}
+    hid_report::MacroKeyboardDataReport,
 };
 
 pub const VID: u16 = 0x2f24;
@@ -38,6 +42,7 @@ pub struct MacroKeyboardDriver {
     r4_last_pressed: Instant,
     /// State for the keyboard device
     keyboard_state: Option<MacroKeyboardDataReport>,
+    filtered_events: Vec<Event>,
 }
 
 impl MacroKeyboardDriver {
@@ -58,10 +63,25 @@ impl MacroKeyboardDriver {
             l4_last_pressed: Instant::now(),
             r4_last_pressed: Instant::now(),
             keyboard_state: None,
+            filtered_events: vec![],
         })
     }
 
     /// Poll the device and read input reports
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
+    }
+
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; KEYBOARD_PACKET_SIZE];
@@ -87,16 +107,18 @@ impl MacroKeyboardDriver {
         // Check for release conditions
         if self.l4_pressed && self.l4_last_pressed.elapsed() > RELEASE_DELAY {
             log::trace!("Ended L4 event");
-            events.push(
-                Event::GamepadButton(GamepadButtonEvent::L4(BinaryInput { pressed: false}))
+            self.emit(
+                &mut events,
+                Event::GamepadButton(GamepadButtonEvent::L4(BinaryInput { pressed: false })),
             );
             self.l4_pressed = false;
         }
 
         if self.r4_pressed && self.r4_last_pressed.elapsed() > RELEASE_DELAY {
             log::trace!("Ended R4 event");
-            events.push(
-                Event::GamepadButton(GamepadButtonEvent::R4(BinaryInput { pressed: false}))
+            self.emit(
+                &mut events,
+                Event::GamepadButton(GamepadButtonEvent::R4(BinaryInput { pressed: false })),
             );
             self.r4_pressed = false;
         }
@@ -147,8 +169,9 @@ impl MacroKeyboardDriver {
             self.l4_last_pressed = Instant::now();
             if !self.l4_pressed {
                 log::trace!("Started L4 event");
-                events.push(
-                    Event::GamepadButton(GamepadButtonEvent::L4(BinaryInput { pressed: true}))
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::L4(BinaryInput { pressed: true })),
                 );
                 self.l4_pressed = true;
             }
@@ -158,8 +181,9 @@ impl MacroKeyboardDriver {
             self.r4_last_pressed = Instant::now();
             if !self.r4_pressed {
                 log::trace!("Started R4 event");
-                events.push(
-                    Event::GamepadButton(GamepadButtonEvent::R4(BinaryInput { pressed: true}))
+                self.emit(
+                    &mut events,
+                    Event::GamepadButton(GamepadButtonEvent::R4(BinaryInput { pressed: true })),
                 );
                 self.r4_pressed = true;
             }

@@ -1,10 +1,9 @@
-use std::{error::Error, fmt::Debug};
+use std::{collections::HashSet, error::Error, fmt::Debug};
 
 use crate::{
     drivers::gpd_device::{
-        event,
-        touchpad_driver_2023::TouchpadDriver2023,
-        TOUCHPAD_2023_PAD_FORCE_MAX, TOUCHPAD_2023_X_MAX, TOUCHPAD_2023_Y_MAX,
+        event, touchpad_driver_2023::TouchpadDriver2023, TOUCHPAD_2023_PAD_FORCE_MAX,
+        TOUCHPAD_2023_X_MAX, TOUCHPAD_2023_Y_MAX,
     },
     input::{
         capability::{Capability, Gamepad, GamepadTrigger, Touch, TouchButton, Touchpad},
@@ -12,7 +11,7 @@ use crate::{
             native::NativeEvent,
             value::{normalize_unsigned_value, InputValue},
         },
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
+        source::{EventCapability, InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -36,6 +35,15 @@ impl SourceInputDevice for GpdTouchpad2023 {
         Ok(native_events)
     }
 
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        let filtered = events
+            .iter()
+            .filter_map(EventCapability::from_capability)
+            .collect();
+        self.driver.update_filtered_events(filtered);
+        Ok(())
+    }
+
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         Ok(CAPABILITIES.into())
     }
@@ -51,7 +59,7 @@ impl Debug for GpdTouchpad2023 {
 
 /// Normalize the value to something between -1.0 and 1.0 based on the Deck's
 /// minimum and maximum axis ranges.
-fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
+fn normalize_axis_value(event: &event::TouchAxisEvent) -> InputValue {
     let x = event.x;
     let y = event.y;
     log::trace!("Got axis to normalize: {x}, {y}");
@@ -80,7 +88,7 @@ fn normalize_axis_value(event: event::TouchAxisEvent) -> InputValue {
 
 /// Normalize the trigger value to something between 0.0 and 1.0 based on the
 /// maximum axis ranges.
-fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
+fn normalize_trigger_value(event: &event::TriggerEvent) -> InputValue {
     match event {
         event::TriggerEvent::PadForce(value) => InputValue::Float(normalize_unsigned_value(
             value.value as f64,
@@ -91,34 +99,27 @@ fn normalize_trigger_value(event: event::TriggerEvent) -> InputValue {
 
 /// Translate the given touchpad events into native events
 fn translate_events(events: Vec<event::Event>) -> Vec<NativeEvent> {
-    let mut translated = Vec::with_capacity(events.len());
-    for event in events.into_iter() {
-        translated.push(translate_event(event));
-    }
-    translated
+    events.into_iter().filter_map(translate_event).collect()
 }
 
 /// Translate the given touchpad event into a native event
-fn translate_event(event: event::Event) -> NativeEvent {
-    match event {
-        event::Event::TouchAxis(axis) => NativeEvent::new(
+fn translate_event(event: event::Event) -> Option<NativeEvent> {
+    // The touchpad axis and force trigger use per-model max values, so they
+    // are not covered by the shared to_value
+    if let event::Event::TouchAxis(axis) = event {
+        return Some(NativeEvent::new(
             Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
-            normalize_axis_value(axis),
-        ),
-        event::Event::TouchButton(button) => match button {
-            event::TouchButtonEvent::Left(value) => NativeEvent::new(
-                Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
-                InputValue::Bool(value.pressed),
-            ),
-        },
-        event::Event::Trigger(trigg) => match trigg.clone() {
-            event::TriggerEvent::PadForce(_) => NativeEvent::new(
-                Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
-                normalize_trigger_value(trigg),
-            ),
-        },
-        _ => NativeEvent::new(Capability::NotImplemented, InputValue::None),
+            normalize_axis_value(&axis),
+        ));
     }
+    if let event::Event::Trigger(trigger) = event {
+        return Some(NativeEvent::new(
+            Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
+            normalize_trigger_value(&trigger),
+        ));
+    }
+    let value = event.to_value()?;
+    Some(NativeEvent::new(event.to_capability(), value))
 }
 
 /// List of all input capabilities that the GPD Win Mini touchpad driver implements

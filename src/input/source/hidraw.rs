@@ -3,9 +3,7 @@ pub mod blocked;
 pub mod dualsense;
 pub mod flydigi_vader_4_pro;
 pub mod fts3528;
-pub mod gpd_macro_keyboard;
-pub mod gpd_touchpad_2023;
-pub mod gpd_touchpad_2024;
+pub mod gpd_device;
 pub mod horipad_steam;
 pub mod legion_go;
 pub mod legion_go_s_imu;
@@ -37,8 +35,11 @@ use crate::{
 use self::{
     ayaneo_haptics::AyaneoHaptics, blocked::BlockedHidrawDevice, dualsense::DualSenseController,
     flydigi_vader_4_pro::Vader4Pro, fts3528::Fts3528Touchscreen,
-    gpd_macro_keyboard::GpdMacroKeyboard, gpd_touchpad_2023::GpdTouchpad2023,
-    gpd_touchpad_2024::GpdTouchpad2024, horipad_steam::HoripadSteam,
+    gpd_device::{
+        macro_keyboard::GpdMacroKeyboard, touchpad_2023::GpdTouchpad2023,
+        touchpad_2024::GpdTouchpad2024,
+    },
+    horipad_steam::HoripadSteam,
     legion_go::go1::LegionGoController, legion_go::go2::LegionGo2Controller,
     legion_go_s_imu::LegionGoSImuController, legion_go_s_touchpad::LegionGoSTouchpadController,
     legion_go_s_xinput::LegionGoSXInputController, msi_claw::MsiClawController,

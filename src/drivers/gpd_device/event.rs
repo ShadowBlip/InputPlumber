@@ -1,3 +1,5 @@
+use std::mem;
+
 /// Events that can be emitted by the GPD Win Mini drivers
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -7,8 +9,21 @@ pub enum Event {
     Trigger(TriggerEvent),
 }
 
+impl Event {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Event::TouchAxis(_), Event::TouchAxis(_)) => true,
+            (Event::TouchButton(a), Event::TouchButton(b)) => a.variant_eq(b),
+            (Event::GamepadButton(a), Event::GamepadButton(b)) => a.variant_eq(b),
+            (Event::Trigger(a), Event::Trigger(b)) => a.variant_eq(b),
+            _ => false,
+        }
+    }
+}
+
 /// Axis input contain (x, y) coordinates
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TouchAxisEvent {
     pub index: u8,
     pub is_touching: bool,
@@ -17,13 +32,13 @@ pub struct TouchAxisEvent {
 }
 
 /// Binary input contain either pressed or unpressed
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BinaryInput {
     pub pressed: bool,
 }
 
 /// Trigger input contains non-negative integers
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TriggerInput {
     pub value: u8,
 }
@@ -47,4 +62,39 @@ pub enum GamepadButtonEvent {
     /// Tap to click button
     L4(BinaryInput),
     R4(BinaryInput),
+}
+
+impl TouchButtonEvent {
+    /// Whether the button is pressed
+    pub fn pressed(&self) -> bool {
+        match self {
+            Self::Left(input) => input.pressed,
+        }
+    }
+
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
+impl TriggerEvent {
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
+impl GamepadButtonEvent {
+    /// Whether the button is pressed
+    pub fn pressed(&self) -> bool {
+        match self {
+            Self::L4(input) | Self::R4(input) => input.pressed,
+        }
+    }
+
+    /// Whether two events are the same type, ignoring payload data
+    pub fn variant_eq(&self, other: &Self) -> bool {
+        mem::discriminant(self) == mem::discriminant(other)
+    }
 }
