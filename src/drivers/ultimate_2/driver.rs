@@ -39,6 +39,7 @@ pub struct Driver {
     state: Option<PackedInputDataReport>,
     /// Last DPad state
     dpad: DPadState,
+    filtered_events: Vec<Event>,
 }
 
 impl Driver {
@@ -59,6 +60,7 @@ impl Driver {
             device: hid_device,
             state: None,
             dpad: Default::default(),
+            filtered_events: vec![],
         })
     }
 
@@ -85,6 +87,20 @@ impl Driver {
     }
 
     /// Poll the device and read input reports
+    pub fn update_filtered_events(&mut self, events: Vec<Event>) {
+        self.filtered_events = events;
+    }
+
+    fn is_filtered(&self, event: &Event) -> bool {
+        self.filtered_events.iter().any(|f| f.variant_eq(event))
+    }
+
+    fn emit(&mut self, events: &mut Vec<Event>, event: Event) {
+        if !self.is_filtered(&event) {
+            events.push(event);
+        }
+    }
+
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; PACKET_SIZE];
@@ -152,7 +168,7 @@ impl Driver {
     /// Translate the state into individual events
     fn translate_events(&mut self, old_state: Option<PackedInputDataReport>) -> Vec<Event> {
         let mut events = Vec::new();
-        let Some(state) = self.state.as_ref() else {
+        let Some(state) = self.state else {
             return events;
         };
 
@@ -163,79 +179,124 @@ impl Driver {
         // Translate state changes into events if they have changed
         // Binary Events
         if state.button_a != old_state.button_a {
-            events.push(Event::Button(ButtonEvent::A(BinaryInput {
-                pressed: state.button_a,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::A(BinaryInput {
+                    pressed: state.button_a,
+                })),
+            );
         }
         if state.button_b != old_state.button_b {
-            events.push(Event::Button(ButtonEvent::B(BinaryInput {
-                pressed: state.button_b,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::B(BinaryInput {
+                    pressed: state.button_b,
+                })),
+            );
         }
         if state.button_x != old_state.button_x {
-            events.push(Event::Button(ButtonEvent::X(BinaryInput {
-                pressed: state.button_x,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::X(BinaryInput {
+                    pressed: state.button_x,
+                })),
+            );
         }
         if state.button_y != old_state.button_y {
-            events.push(Event::Button(ButtonEvent::Y(BinaryInput {
-                pressed: state.button_y,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::Y(BinaryInput {
+                    pressed: state.button_y,
+                })),
+            );
         }
         if state.button_view != old_state.button_view {
-            events.push(Event::Button(ButtonEvent::View(BinaryInput {
-                pressed: state.button_view,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::View(BinaryInput {
+                    pressed: state.button_view,
+                })),
+            );
         }
         if state.button_menu != old_state.button_menu {
-            events.push(Event::Button(ButtonEvent::Menu(BinaryInput {
-                pressed: state.button_menu,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::Menu(BinaryInput {
+                    pressed: state.button_menu,
+                })),
+            );
         }
         if state.button_guide != old_state.button_guide {
-            events.push(Event::Button(ButtonEvent::Guide(BinaryInput {
-                pressed: state.button_guide,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::Guide(BinaryInput {
+                    pressed: state.button_guide,
+                })),
+            );
         }
         if state.button_r1 != old_state.button_r1 {
-            events.push(Event::Button(ButtonEvent::R1(BinaryInput {
-                pressed: state.button_r1,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::R1(BinaryInput {
+                    pressed: state.button_r1,
+                })),
+            );
         }
         if state.button_l1 != old_state.button_l1 {
-            events.push(Event::Button(ButtonEvent::L1(BinaryInput {
-                pressed: state.button_l1,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::L1(BinaryInput {
+                    pressed: state.button_l1,
+                })),
+            );
         }
         if state.button_r2 != old_state.button_r2 {
-            events.push(Event::Button(ButtonEvent::R2(BinaryInput {
-                pressed: state.button_r2,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::R2(BinaryInput {
+                    pressed: state.button_r2,
+                })),
+            );
         }
         if state.button_l2 != old_state.button_l2 {
-            events.push(Event::Button(ButtonEvent::L2(BinaryInput {
-                pressed: state.button_l2,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::L2(BinaryInput {
+                    pressed: state.button_l2,
+                })),
+            );
         }
         if state.button_r3 != old_state.button_r3 {
-            events.push(Event::Button(ButtonEvent::R3(BinaryInput {
-                pressed: state.button_r3,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::R3(BinaryInput {
+                    pressed: state.button_r3,
+                })),
+            );
         }
         if state.button_l3 != old_state.button_l3 {
-            events.push(Event::Button(ButtonEvent::L3(BinaryInput {
-                pressed: state.button_l3,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::L3(BinaryInput {
+                    pressed: state.button_l3,
+                })),
+            );
         }
         if state.button_l4 != old_state.button_l4 {
-            events.push(Event::Button(ButtonEvent::L4(BinaryInput {
-                pressed: state.button_l4,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::L4(BinaryInput {
+                    pressed: state.button_l4,
+                })),
+            );
         }
         if state.button_r4 != old_state.button_r4 {
-            events.push(Event::Button(ButtonEvent::R4(BinaryInput {
-                pressed: state.button_r4,
-            })));
+            self.emit(
+                &mut events,
+                Event::Button(ButtonEvent::R4(BinaryInput {
+                    pressed: state.button_r4,
+                })),
+            );
         }
         if state.dpad_state != old_state.dpad_state {
             let up = [
@@ -270,24 +331,28 @@ impl Driver {
             };
 
             if up != self.dpad.up {
-                events.push(Event::Button(ButtonEvent::DPadUp(BinaryInput {
-                    pressed: up,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::DPadUp(BinaryInput { pressed: up })),
+                );
             }
             if down != self.dpad.down {
-                events.push(Event::Button(ButtonEvent::DPadDown(BinaryInput {
-                    pressed: down,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::DPadDown(BinaryInput { pressed: down })),
+                );
             }
             if left != self.dpad.left {
-                events.push(Event::Button(ButtonEvent::DPadLeft(BinaryInput {
-                    pressed: left,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::DPadLeft(BinaryInput { pressed: left })),
+                );
             }
             if right != self.dpad.right {
-                events.push(Event::Button(ButtonEvent::DPadRight(BinaryInput {
-                    pressed: right,
-                })));
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::DPadRight(BinaryInput { pressed: right })),
+                );
             }
 
             self.dpad = dpad_state;
@@ -297,29 +362,41 @@ impl Driver {
         if state.joystick_l_x != old_state.joystick_l_x
             || state.joystick_l_y != old_state.joystick_l_y
         {
-            events.push(Event::Axis(AxisEvent::LStick(JoyAxisInput {
-                x: state.joystick_l_x,
-                y: state.joystick_l_y,
-            })));
+            self.emit(
+                &mut events,
+                Event::Axis(AxisEvent::LStick(JoyAxisInput {
+                    x: state.joystick_l_x,
+                    y: state.joystick_l_y,
+                })),
+            );
         }
         if state.joystick_r_x != old_state.joystick_r_x
             || state.joystick_r_y != old_state.joystick_r_y
         {
-            events.push(Event::Axis(AxisEvent::RStick(JoyAxisInput {
-                x: state.joystick_r_x,
-                y: state.joystick_r_y,
-            })));
+            self.emit(
+                &mut events,
+                Event::Axis(AxisEvent::RStick(JoyAxisInput {
+                    x: state.joystick_r_x,
+                    y: state.joystick_r_y,
+                })),
+            );
         }
 
         if state.trigger_l != old_state.trigger_l {
-            events.push(Event::Trigger(TriggerEvent::TriggerL(TriggerInput {
-                value: state.trigger_l,
-            })));
+            self.emit(
+                &mut events,
+                Event::Trigger(TriggerEvent::TriggerL(TriggerInput {
+                    value: state.trigger_l,
+                })),
+            );
         }
         if state.trigger_r != old_state.trigger_r {
-            events.push(Event::Trigger(TriggerEvent::TriggerR(TriggerInput {
-                value: state.trigger_r,
-            })));
+            self.emit(
+                &mut events,
+                Event::Trigger(TriggerEvent::TriggerR(TriggerInput {
+                    value: state.trigger_r,
+                })),
+            );
         }
 
         if state.accel_x != old_state.accel_x
@@ -328,13 +405,14 @@ impl Driver {
         {
             // Rotate from the sensor frame to the SDL standard frame: x=pitch,
             // y=yaw, z=roll. See HIDAPI_Driver8BitDo in SDL_hidapi_8bitdo.c.
-            events.push(Event::Inertia(InertialEvent::Accelerometer(
-                InertialInput {
+            self.emit(
+                &mut events,
+                Event::Inertia(InertialEvent::Accelerometer(InertialInput {
                     x: i16::from(state.accel_y).wrapping_neg(),
                     y: i16::from(state.accel_z),
                     z: i16::from(state.accel_x).wrapping_neg(),
-                },
-            )))
+                })),
+            )
         };
 
         if state.gyro_x != old_state.gyro_x
@@ -342,11 +420,14 @@ impl Driver {
             || state.gyro_z != old_state.gyro_z
         {
             // Same rotation as the accelerometer, to the SDL standard frame.
-            events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
-                x: i16::from(state.gyro_y).wrapping_neg(),
-                y: i16::from(state.gyro_z),
-                z: i16::from(state.gyro_x).wrapping_neg(),
-            })))
+            self.emit(
+                &mut events,
+                Event::Inertia(InertialEvent::Gyroscope(InertialInput {
+                    x: i16::from(state.gyro_y).wrapping_neg(),
+                    y: i16::from(state.gyro_z),
+                    z: i16::from(state.gyro_x).wrapping_neg(),
+                })),
+            )
         };
 
         log::trace!("Got events: {events:?}");
