@@ -285,18 +285,14 @@ impl SourceOutputDevice for RogAlly {
                 Ok(())
             }
             OutputEvent::TriggerVibration(report) => {
-                self.main_strong =
-                    to_magnitude(report.left_speed.to_primitive(), report.left_gain);
-                self.main_weak =
-                    to_magnitude(report.right_speed.to_primitive(), report.right_gain);
+                self.main_strong = to_magnitude(report.left_speed.to_primitive(), report.left_gain);
+                self.main_weak = to_magnitude(report.right_speed.to_primitive(), report.right_gain);
                 self.main_stop_at = None;
                 Ok(self.write_state()?)
             }
             OutputEvent::TriggerVibrationExtended(report) => {
-                self.main_strong =
-                    to_magnitude(report.left_speed.to_primitive(), report.left_gain);
-                self.main_weak =
-                    to_magnitude(report.right_speed.to_primitive(), report.right_gain);
+                self.main_strong = to_magnitude(report.left_speed.to_primitive(), report.left_gain);
+                self.main_weak = to_magnitude(report.right_speed.to_primitive(), report.right_gain);
                 self.trigger_lt =
                     to_magnitude(report.left_trigger_speed.to_primitive(), report.left_gain);
                 self.trigger_rt =

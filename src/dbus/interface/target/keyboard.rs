@@ -239,7 +239,7 @@ fn capability_from_key_string(key: &str) -> Capability {
         "KEY_RED" => Capability::Keyboard(Keyboard::KeyRed),
         "KEY_GREEN" => Capability::Keyboard(Keyboard::KeyGreen),
         "KEY_YELLOW" => Capability::Keyboard(Keyboard::KeyYellow),
-        "KEY_BLUE" => Capability::Keyboard(Keyboard::KeyBlue),        
+        "KEY_BLUE" => Capability::Keyboard(Keyboard::KeyBlue),
         _ => Capability::NotImplemented,
     }
 }

@@ -30,8 +30,7 @@ fn test_touchpad_button_translations() {
         .expect("should translate touchpad button to keyboard key");
     assert!(res.pressed());
 
-    let target_cap =
-        Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Touch)));
+    let target_cap = Capability::Touchpad(Touchpad::CenterPad(Touch::Button(TouchButton::Touch)));
     let res = input_val
         .translate(&source_cap, &source_config, &target_cap, &target_config)
         .expect("should translate touchpad button to touchpad button");

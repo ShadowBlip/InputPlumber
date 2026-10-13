@@ -134,7 +134,9 @@ fn wait_readable(fd: c_int) -> io::Result<()> {
         // Timeouts are transient; keep waiting. Only the poll errors below
         // are fatal.
         if ret == 0 {
-            log::warn!("No IMU sample within {STALL_TIMEOUT_MS} ms; waiting for the trigger to resume");
+            log::warn!(
+                "No IMU sample within {STALL_TIMEOUT_MS} ms; waiting for the trigger to resume"
+            );
             continue;
         }
         if fds[0].revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
@@ -429,11 +431,7 @@ pub fn group_scale(group: &HashMap<char, ChannelLayout>, group_name: &str) -> f6
 
 /// Decode one sample group from a raw IIO record using the pre-computed
 /// channel layout.
-pub fn decode_group(
-    layout: &HashMap<char, ChannelLayout>,
-    scale: f64,
-    record: &[u8],
-) -> AxisData {
+pub fn decode_group(layout: &HashMap<char, ChannelLayout>, scale: f64, record: &[u8]) -> AxisData {
     let mut out = AxisData {
         scale,
         ..Default::default()
@@ -615,14 +613,11 @@ fn find_trigger_for(base: &Path) -> Result<Option<String>, Box<dyn Error + Send 
         let Ok(name) = read_trim(&path.join("name")) else {
             continue;
         };
-        let is_sibling = own_parent
-            .as_ref()
-            .and_then(|parent| {
-                fs::canonicalize(&path)
-                    .ok()
-                    .and_then(|p| p.parent().map(|p| p == parent.as_path()))
-            })
-            == Some(true);
+        let is_sibling = own_parent.as_ref().and_then(|parent| {
+            fs::canonicalize(&path)
+                .ok()
+                .and_then(|p| p.parent().map(|p| p == parent.as_path()))
+        }) == Some(true);
         if is_sibling {
             return Ok(Some(name));
         }
