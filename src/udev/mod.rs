@@ -332,7 +332,9 @@ async fn reload_all() -> Result<(), Box<dyn Error>> {
 
     for action in ["remove", "add"] {
         for subsystem in ["input", "hidraw"] {
-            log::debug!("Retriggering udev rules: udevadm trigger --action {action} -s {subsystem}");
+            log::debug!(
+                "Retriggering udev rules: udevadm trigger --action {action} -s {subsystem}"
+            );
             let _ = Command::new("udevadm")
                 .args(["trigger", "--action", action, "-s", subsystem])
                 .output()

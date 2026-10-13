@@ -31,21 +31,30 @@ use crate::{
 };
 
 use self::{
-    ayaneo_haptics::AyaneoHaptics, blocked::BlockedHidrawDevice, dualsense::DualSenseController,
-    flydigi_vader_4_pro::Vader4Pro, fts3528::Fts3528Touchscreen,
+    ayaneo_haptics::AyaneoHaptics,
+    blocked::BlockedHidrawDevice,
+    dualsense::DualSenseController,
+    flydigi_vader_4_pro::Vader4Pro,
+    fts3528::Fts3528Touchscreen,
     gpd_device::{
         macro_keyboard::GpdMacroKeyboard, touchpad_2023::GpdTouchpad2023,
         touchpad_2024::GpdTouchpad2024,
     },
     horipad_steam::HoripadSteam,
-    legion_go::go1::LegionGoController, legion_go::go2::LegionGo2Controller,
+    legion_go::go1::LegionGoController,
+    legion_go::go2::LegionGo2Controller,
     legion_go_s::{
         imu::LegionGoSImuController, touchpad::LegionGoSTouchpadController,
         xinput::LegionGoSXInputController,
     },
     msi_claw::MsiClawController,
-    opineo_touchpad::OrangePiNeoTouchpad, oxp_hid::OxpHid, rog_ally::RogAlly,
-    steam_deck::DeckController, ultimate_2::Ultimate2, xpad_uhid::XpadUhid, zotac_zone::ZotacZone,
+    opineo_touchpad::OrangePiNeoTouchpad,
+    oxp_hid::OxpHid,
+    rog_ally::RogAlly,
+    steam_deck::DeckController,
+    ultimate_2::Ultimate2,
+    xpad_uhid::XpadUhid,
+    zotac_zone::ZotacZone,
 };
 use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver, SourceDriverOptions};
 

@@ -511,7 +511,9 @@ impl EventTranslator {
                     normalize_unsigned_value(raw_value, info.minimum(), info.maximum())
                 }
             }
-            ValueType::Trigger => normalize_unsigned_value(raw_value, info.minimum(), info.maximum()),
+            ValueType::Trigger => {
+                normalize_unsigned_value(raw_value, info.minimum(), info.maximum())
+            }
             ValueType::JoystickX | ValueType::JoystickY => {
                 normalize_signed_value(raw_value, info.minimum(), info.maximum())
             }
