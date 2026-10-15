@@ -1,74 +1,32 @@
 # Persistent LED control (API version 1)
 
-The existing `org.shadowblip.Input.Source.LEDDevice` interface retains `Id`.
-A source profile opts into persistent control with `config.led.persistent_id`.
-Only AYANEO 3 joystick rings opt in initially. Other LED sources retain their
-existing game-output behavior. The profile key identifies the hardware role,
-not a USB/HID enumeration number; do not rename it without migrating its state.
+The existing org.shadowblip.Input.Source.LEDDevice interface retains Id. A source profile opts into managed control using config.led.persistent_id. Only the AYANEO 3 joystick-ring source opts in initially, with identity ayaneo-3-joystick-rings. The existing controller/IMU mappings and other LED sources' game-output behaviour remain unchanged.
 
-Read-only properties:
+## Interface
 
-- `Capabilities (usasuu)`: API version, persistent identity, supported effects,
-  minimum and maximum colour-cycle period in milliseconds. Both bounds are zero
-  for a firmware-fixed cycle; hide the speed control in that case. The saved
-  period remains a valid 2000–30000 value and is ignored by fixed-speed hardware,
-  preserving the configuration format and remembered software-cycle preference.
-- `State (t(sayuu)ss)`: revision, complete configuration, application status,
-  and last hardware/restore error. This property is one atomic snapshot.
-- Configuration `(sayuu)`: effect name, exactly three RGB bytes, brightness
-  percent (0–100), and cycle period (2000–30000 milliseconds).
+- Capabilities (usasuu): API version, persistent identity, effect names, and minimum/maximum colour-cycle period. Both bounds are zero for firmware-fixed timing; clients must hide speed controls then.
+- State (t(sayuu)ss): revision, complete configuration, application status and last error, in one atomic snapshot.
+- Configuration (sayuu): effect, exactly three RGB bytes, brightness percent (0–100), remembered cycle period (2000–30000 ms).
+- SetConfig((sayuu)) -> t: authorize the actual D-Bus caller, validate a complete configuration and persist it before scheduling hardware writes. Its reply confirms saved settings, not visible output. Observe State/PropertiesChanged for pending, applied, unavailable or failed.
 
-`SetConfig((sayuu)) -> t` authorizes the actual D-Bus caller with the dedicated
-Polkit action and validates an entire configuration. A successful reply confirms
-saved settings, not visible output. Observe `State` and `PropertiesChanged` for
-`pending`, `applied`, `unavailable`, or `failed`. Revision orders accepted changes
-within one service/device lifetime; reconnect and reread after owner changes.
-An operation timeout has an uncertain outcome if persistence already started:
-read state before retrying. Invalid requests never change saved settings.
+The additional unconfigured status means no saved configuration exists. State.config then contains an editor placeholder, not a hardware readback or saved choice. Startup, reconnect, suspend, resume and stop perform no writes until an explicit SetConfig succeeds. Existing valid settings, including Off, are restored. Unreadable/corrupt files remain untouched and reported until the user explicitly applies a valid configuration.
 
-Effects are `off`, `solid`, `breathing`, and `cycle`. Hardware breathing is
-advertised only if the pattern trigger is available. Its tempo is fixed by
-firmware. A colour cycle preserves the remembered solid colour. Off preserves
-colour, brightness, and cycle speed. The generic fallback is Off, white, 30%,
-and 8 seconds. A profile may supply `config.led.initial_config`; it is validated,
-saved, and applied only when that LED role has no saved state. AYANEO 3 joystick
-rings start Solid RGB `[0,128,128]` at 50% on first discovery. Existing saved
-settings, including Off, always take precedence. Invalid or unreadable saved
-state is reported and is never replaced by the initial configuration.
+Revision orders accepted changes within a service/device lifetime. Pin the unique service owner and rediscover after replacement. A timeout may follow a committed save: reread state, never automatically replay the request.
 
-A dedicated LED thread serializes persistence and hardware writes. At most eight
-configuration commands can be queued, and there is no frame queue. Suspend and
-resume use coalesced lifecycle state with revision acknowledgements outside that
-queue, applied before configuration and frame writes.
-The worker sleeps between commands for native cycling, Off, Solid and zero
-brightness. Native cycling selects the driver's `effect=rainbow` once and leaves
-animation to firmware. Other devices can use software frames at most every
-100 ms, skipping missed frames and writing hue only. AYANEO 3 profiles set
-`hardware_cycle_only: true`: if the driver lacks both `none` and `rainbow` in
-`effect_index`, Cycle is unavailable instead of falling back to the observed
-flickering path. Clearing a native effect precedes hardware breathing; Off blanks
-the rings before clearing it. A transport failure stops animation and retains configuration.
-Apply, reconnect, restart, or resume may retry; there is no failure retry loop.
-Stopping takes priority over a saturated command queue. System sleep and orderly
-shutdown request Off without overwriting saved settings. A hard kill or blocked
-kernel I/O may leave the last hardware state until recovery.
+## Native AYANEO effects
 
-The systemd unit provides `/var/lib/inputplumber`; state is atomically replaced
-in its `leds` subdirectory. Files and their directory are synchronized before
-reporting a durable save. A failure before replacement leaves prior settings
-unchanged. If replacement succeeds but directory synchronization fails, SetConfig
-returns an error while State exposes the actual new file/configuration and a
-failed durability status. Animation stops until a successful Apply; clients must
-reread State instead of assuming an error always means the old file survived.
-No frontend has file or sysfs ownership. The distro
-must restrict direct writes to the opted-in device's LED attributes so Steam's
-independent sysfs path cannot override settings. The AYANEO driver may set rumble
-strength to medium when writing LEDs; this is a kernel/firmware interaction.
+Wire effects are off, solid, breathing and cycle (displayed as Rainbow). The current driver exposes effect_index=monocolor breathe rainbow. Solid clears effects with monocolor; Breathing selects breathe; Rainbow selects rainbow. Off writes zero brightness. Both rings share one configuration; firmware fixes effect speed. The saved cycle period remains valid but is ignored on this hardware.
 
-## Tests
+Blank output before transitions, disable old triggers, clear native mode, configure colour/mode and apply final brightness. Hardware breathing does not require the pattern trigger or hw_pattern. The AYANEO hardware_cycle_only profile requires native Breathing/Rainbow and never falls back to software frames. Existing generic transport behaviour remains available to other profiles without changing their defaults.
 
-Run `cargo test --locked` with `dbus-daemon` and `busctl` installed. LED tests
-start a private bus and fake Polkit/device/storage/clock boundaries; they do not
-connect to the host bus or touch hardware. The fake-bus test also verifies actual
-busctl discovery JSON. Physical output and distro permission enforcement require
-separate device validation.
+One dedicated thread owns persistence and writes. Its bounded configuration queue cannot delay lifecycle/stop requests indefinitely; retiring a worker must finish before replacement. Native effects sleep between commands. Transport failures report failed and retain saved configuration, without a retry loop. Explicit Apply, reconnect, restart or resume can recover. Configured devices are blanked for suspend/orderly shutdown and restored afterward without replacing saved settings; a hard kill can leave the last firmware effect until recovery. Closing or uninstalling a frontend does not stop managed lighting.
+
+## Storage and authorization
+
+The systemd unit supplies StateDirectory=inputplumber, mode 0700. Version-1 JSON settings live in its leds subdirectory, named by the stable role. Writes synchronize the temporary file, atomically replace the saved file, and synchronize the directory before reporting durability. Pre-replacement failures preserve old settings; post-replacement synchronization errors expose the actual new configuration with a failed durability status and require rereading before retrying.
+
+SetConfig uses its dedicated Polkit action. The proposal's root/admin and active-local authorization is retained, with inactive/remote callers excluded from the broader inputplumber-group rule. No frontend owns sysfs or state files. Bazzite must exclude the managed AYANEO rings from its generic writable RGB rule and enforce root-only write permissions on add/change. Other LED devices retain their existing behaviour.
+
+## Validation
+
+Run cargo test --locked and strict Clippy with dbus-daemon/busctl installed. Tests use fake device/storage/clock boundaries and a private bus/Polkit authority. Test native mode transitions without a pattern trigger, untouched first use and lifecycle, saved Off, persistence failures, caller authorization, uncertain requests, competing output and worker retirement. Physical output and effective distro permissions require attended device validation; official stock-image acceptance is separate.

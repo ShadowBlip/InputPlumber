@@ -79,73 +79,63 @@ fn config(effect: &str) -> LedConfig {
     }
 }
 
-fn teal_default() -> LedConfig {
-    LedConfig {
-        effect: "solid".into(),
-        color: vec![0, 128, 128],
-        brightness: 50,
-        cycle_period_ms: 8000,
-    }
-}
-
 #[test]
-fn fresh_profile_persists_teal_once_and_reuses_saved_settings() {
-    let device = TestDevice::default();
-    let storage = TestStorage::default();
-    let mut first = Engine::new_with_initial_config(
-        "ayaneo-3-joystick-rings".into(),
-        Box::new(device.clone()),
-        Box::new(storage.clone()),
-        Box::new(TestClock::default()),
-        Some(teal_default()),
-    );
-    assert_eq!(storage.writes.load(Ordering::SeqCst), 1);
-    assert_eq!(first.snapshot.state.config, teal_default());
+fn fresh_profile_is_untouched_until_first_apply_including_lifecycle() {
+    let (mut first, device, storage, clock) = setup();
+    assert_eq!(first.snapshot.state.status, "unconfigured");
+    assert_eq!(first.next_frame_wait(), None);
+    first.tick();
+    first.suspend().unwrap();
+    first.resume();
+    clock.advance(10000);
+    first.tick();
+    assert_eq!(first.snapshot.state.status, "unconfigured");
+    assert_eq!(storage.writes.load(Ordering::SeqCst), 0);
+    assert!(device.frames.lock().unwrap().is_empty());
+    first.apply(config("breathing")).unwrap();
     first.tick();
     assert_eq!(first.snapshot.state.status, "applied");
-    assert_eq!(device.frames.lock().unwrap()[0].1, [0, 128, 128]);
-
-    let mut second = Engine::new_with_initial_config(
+    assert_eq!(storage.writes.load(Ordering::SeqCst), 1);
+    let mut second = Engine::new(
         "ayaneo-3-joystick-rings".into(),
         Box::new(device),
         Box::new(storage.clone()),
         Box::new(TestClock::default()),
-        Some(config("off")),
     );
     assert_eq!(storage.writes.load(Ordering::SeqCst), 1);
-    assert_eq!(second.snapshot.state.config, teal_default());
+    assert_eq!(second.snapshot.state.config.effect, "breathing");
     second.tick();
     assert_eq!(second.snapshot.state.status, "applied");
 }
 
 #[test]
-fn saved_off_and_corrupt_state_are_not_overwritten_by_profile_default() {
+fn saved_off_and_corrupt_state_are_not_overwritten() {
     let path = temp_dir("initial-preservation");
     let name = "ayaneo-3-joystick-rings";
     let mut storage = FileStorage::new(&path, name).unwrap();
     storage.save(&config("off")).unwrap();
     let file = path.join(format!("{name}.json"));
     let saved = fs::read(&file).unwrap();
-    let off = Engine::new_with_initial_config(
+    let off = Engine::new(
         name.into(),
         Box::new(TestDevice::default()),
         Box::new(storage),
         Box::new(TestClock::default()),
-        Some(teal_default()),
     );
     assert_eq!(off.snapshot.state.config.effect, "off");
     assert_eq!(fs::read(&file).unwrap(), saved);
 
     fs::write(&file, b"invalid saved state").unwrap();
     let device = TestDevice::default();
-    let mut corrupt = Engine::new_with_initial_config(
+    let mut corrupt = Engine::new(
         name.into(),
         Box::new(device.clone()),
         Box::new(FileStorage::new(&path, name).unwrap()),
         Box::new(TestClock::default()),
-        Some(teal_default()),
     );
     corrupt.tick();
+    corrupt.suspend().unwrap();
+    corrupt.resume();
     assert_eq!(corrupt.snapshot.state.status, "failed");
     assert_eq!(fs::read(&file).unwrap(), b"invalid saved state");
     assert!(device.frames.lock().unwrap().is_empty());
@@ -153,20 +143,21 @@ fn saved_off_and_corrupt_state_are_not_overwritten_by_profile_default() {
 }
 
 #[test]
-fn failed_initial_persistence_never_applies_unsaved_lighting() {
+fn failed_first_apply_never_changes_unconfigured_hardware() {
     let storage = TestStorage::default();
     storage.failed.store(true, Ordering::SeqCst);
     let device = TestDevice::default();
-    let mut engine = Engine::new_with_initial_config(
+    let mut engine = Engine::new(
         "ayaneo-3-joystick-rings".into(),
         Box::new(device.clone()),
         Box::new(storage.clone()),
         Box::new(TestClock::default()),
-        Some(teal_default()),
     );
+    assert!(engine.apply(config("solid")).is_err());
     engine.tick();
-    assert_eq!(engine.snapshot.state.status, "failed");
-    assert!(engine.snapshot.state.last_error.contains("storage failure"));
+    engine.suspend().unwrap();
+    engine.resume();
+    assert_eq!(engine.snapshot.state.status, "unconfigured");
     assert_eq!(storage.writes.load(Ordering::SeqCst), 0);
     assert!(device.frames.lock().unwrap().is_empty());
 }
@@ -379,7 +370,7 @@ fn sysfs_conversion_honors_channel_order_range_and_hardware_breathing() {
     for (name, value) in [
         ("max_brightness", "1023"),
         ("multi_index", "blue red green"),
-        ("trigger", "[none] pattern"),
+        ("trigger", "[none]"),
         ("brightness", "0"),
         ("multi_intensity", "0 0 0"),
         ("hw_pattern", ""),
@@ -687,7 +678,7 @@ async fn bounded_queue_rejects_excess_work_and_stop_has_priority() {
     let (entered_tx, entered_rx) = mpsc::sync_channel(1);
     let (release_tx, release_rx) = mpsc::sync_channel(1);
     let frames = Arc::new(AtomicUsize::new(0));
-    let engine = Engine::new(
+    let mut engine = Engine::new(
         "test-rings".into(),
         Box::new(BlockingDevice {
             entered: entered_tx,
@@ -697,6 +688,7 @@ async fn bounded_queue_rejects_excess_work_and_stop_has_priority() {
         Box::new(TestStorage::default()),
         Box::new(SystemClock(Instant::now())),
     );
+    engine.apply(config("solid")).unwrap();
     let handle = LedHandle::default();
     handle.start(engine).unwrap();
     tokio::task::spawn_blocking(move || entered_rx.recv_timeout(Duration::from_secs(2)).unwrap())
@@ -859,7 +851,7 @@ async fn suspend_is_prioritized_even_when_configuration_queue_is_full() {
     let (entered_tx, entered_rx) = mpsc::sync_channel(1);
     let (release_tx, release_rx) = mpsc::sync_channel(1);
     let frames = Arc::new(AtomicUsize::new(0));
-    let engine = Engine::new(
+    let mut engine = Engine::new(
         "test-rings".into(),
         Box::new(BlockingDevice {
             entered: entered_tx,
@@ -869,6 +861,7 @@ async fn suspend_is_prioritized_even_when_configuration_queue_is_full() {
         Box::new(TestStorage::default()),
         Box::new(SystemClock(Instant::now())),
     );
+    engine.apply(config("solid")).unwrap();
     let handle = LedHandle::default();
     handle.start(engine).unwrap();
     tokio::task::spawn_blocking(move || entered_rx.recv_timeout(Duration::from_secs(2)).unwrap())
@@ -912,6 +905,7 @@ async fn suspend_is_prioritized_even_when_configuration_queue_is_full() {
 #[tokio::test]
 async fn worker_started_during_sleep_publishes_off_without_a_queued_command() {
     let (mut engine, device, _, _) = setup();
+    engine.apply(config("solid")).unwrap();
     engine.paused = true;
     let handle = LedHandle::default();
     handle.start(engine).unwrap();
@@ -1053,9 +1047,8 @@ fn native_sysfs_fixture(label: &str) -> PathBuf {
         ("trigger", "[none] pattern"),
         ("brightness", "0"),
         ("multi_intensity", "17 34 51"),
-        ("hw_pattern", ""),
-        ("effect_index", "none rainbow"),
-        ("effect", "none"),
+        ("effect_index", "monocolor breathe rainbow"),
+        ("effect", "monocolor"),
     ] {
         fs::write(path.join(name), value).unwrap();
     }
@@ -1077,24 +1070,27 @@ fn native_sysfs_transitions_clear_the_effect_and_preserve_remembered_colour() {
             let read = |name| fs::read_to_string(root.join(name)).unwrap();
             assert_eq!(
                 read("effect"),
-                if to == "cycle" { "rainbow" } else { "none" }
+                match to {
+                    "cycle" => "rainbow",
+                    "breathing" => "breathe",
+                    _ => "monocolor",
+                }
             );
             assert_eq!(read("multi_intensity"), "17 34 51");
             if to == "off" {
                 assert_eq!(read("brightness"), "0");
-            } else if to == "breathing" {
-                assert_eq!(read("trigger"), "pattern");
-                assert_eq!(read("hw_pattern"), "0 1000 153 1000");
             } else {
                 assert_eq!(read("brightness"), "153");
             }
+            assert_eq!(read("trigger"), "none");
+            assert!(!root.join("hw_pattern").exists());
             let zero = LedConfig {
                 brightness: 0,
                 ..config("cycle")
             };
             transport.write(&zero, [255; 3], true).unwrap();
             assert_eq!(read("brightness"), "0");
-            assert_eq!(read("effect"), "none");
+            assert_eq!(read("effect"), "monocolor");
             fs::remove_dir_all(root).unwrap();
         }
     }
@@ -1144,7 +1140,14 @@ fn hardware_only_profile_never_falls_back_when_native_effect_disappears() {
 #[test]
 fn native_capability_requires_clear_and_select_and_legacy_policy_is_explicit() {
     let root = native_sysfs_fixture("native-detection");
-    for modes in ["rainbow", "none", "static rainbow", "none rainbows", ""] {
+    for modes in [
+        "rainbow",
+        "none rainbow",
+        "monocolor",
+        "static rainbow",
+        "monocolor rainbows",
+        "",
+    ] {
         fs::write(root.join("effect_index"), modes).unwrap();
         let required = RecoveringSysfsTransport {
             root: root.clone(),
@@ -1160,7 +1163,7 @@ fn native_capability_requires_clear_and_select_and_legacy_policy_is_explicit() {
         };
         assert!(software.effects().contains(&"cycle".into()));
     }
-    fs::write(root.join("effect_index"), "none rainbow").unwrap();
+    fs::write(root.join("effect_index"), "monocolor breathe rainbow").unwrap();
     let mut transport = RecoveringSysfsTransport {
         root: root.clone(),
         device: None,

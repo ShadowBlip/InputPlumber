@@ -504,7 +504,10 @@ impl Manager {
                         // Park devices that udev has not finished initializing
                         // so they are not matched with a minimal property set
                         if !device.is_initialized() {
-                            if UDEVS_SKIP_RECHECK.iter().any(|p| dev_sysname.starts_with(p)) {
+                            if UDEVS_SKIP_RECHECK
+                                .iter()
+                                .any(|p| dev_sysname.starts_with(p))
+                            {
                                 log::debug!(
                                     "Device {dev_name} ({dev_sysname}) is not initialized by udev and matches a known never-initialized pattern, dropping"
                                 );

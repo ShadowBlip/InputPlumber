@@ -228,24 +228,15 @@ pub struct Engine {
     epoch: Duration,
     paused: bool,
     dirty: bool,
+    configured: bool,
     restore_error: Option<String>,
 }
 impl Engine {
     pub fn new(
         identity: String,
         transport: Box<dyn Transport>,
-        storage: Box<dyn Storage>,
-        clock: Box<dyn Clock>,
-    ) -> Self {
-        Self::new_with_initial_config(identity, transport, storage, clock, None)
-    }
-
-    pub fn new_with_initial_config(
-        identity: String,
-        transport: Box<dyn Transport>,
         mut storage: Box<dyn Storage>,
         clock: Box<dyn Clock>,
-        initial_config: Option<LedConfig>,
     ) -> Self {
         let effects = transport.effects();
         let cycle_range = if transport.native_cycle() {
@@ -254,15 +245,18 @@ impl Engine {
             (2000, 30000)
         };
         let mut state = LedState {
-            status: "pending".into(),
+            status: "unconfigured".into(),
             ..LedState::default()
         };
         let mut restore_error = None;
+        let mut configured = false;
         match storage.load() {
             Ok(Some(config)) => {
                 let all_effects = ["off", "solid", "breathing", "cycle"].map(str::to_owned);
                 match config.validate(&all_effects) {
                     Ok(()) => {
+                        configured = true;
+                        state.status = "pending".into();
                         state.config = config;
                         if let Err(e) = state.config.validate(&effects) {
                             state.status = "failed".into();
@@ -276,32 +270,7 @@ impl Engine {
                     }
                 }
             }
-            Ok(None) => {
-                if let Some(config) = initial_config {
-                    match config.validate(&effects) {
-                        Ok(()) => match storage.save(&config) {
-                            Ok(SaveOutcome::Durable) => state.config = config,
-                            Ok(SaveOutcome::CommittedUncertain(error)) => {
-                                // The file changed, but its crash durability is unknown.
-                                state.config = config;
-                                restore_error = Some(error.clone());
-                                state.status = "failed".into();
-                                state.last_error = error;
-                            }
-                            Err(error) => {
-                                restore_error = Some(error.clone());
-                                state.status = "failed".into();
-                                state.last_error = error;
-                            }
-                        },
-                        Err(error) => {
-                            restore_error = Some(error.clone());
-                            state.status = "failed".into();
-                            state.last_error = error;
-                        }
-                    }
-                }
-            }
+            Ok(None) => {}
             Err(e) => {
                 restore_error = Some(e.clone());
                 state.status = "failed".into();
@@ -326,7 +295,8 @@ impl Engine {
             epoch,
             last_frame: None,
             paused: false,
-            dirty: true,
+            dirty: configured,
+            configured,
             restore_error,
         }
     }
@@ -339,6 +309,7 @@ impl Engine {
             .checked_add(1)
             .ok_or("Revision exhausted")?;
         let saved = self.storage.save(&config)?; // Commit before scheduling any hardware write.
+        self.configured = true;
         self.snapshot.state.revision = revision;
         self.restore_error = None;
         self.snapshot.state.config = config;
@@ -368,7 +339,8 @@ impl Engine {
             && self.snapshot.capabilities.cycle_min_ms != 0
     }
     fn next_frame_wait(&self) -> Option<Duration> {
-        if self.paused
+        if !self.configured
+            || self.paused
             || self.snapshot.state.status == "failed"
             || (!self.dirty && !self.software_cycle())
         {
@@ -381,7 +353,7 @@ impl Engine {
         )
     }
     pub fn tick(&mut self) {
-        if self.paused || self.snapshot.state.status == "failed" {
+        if !self.configured || self.paused || self.snapshot.state.status == "failed" {
             return;
         }
         let now = self.clock.now();
@@ -415,6 +387,9 @@ impl Engine {
     }
     pub fn suspend(&mut self) -> Result<()> {
         self.paused = true;
+        if !self.configured {
+            return Ok(());
+        }
         let result = self.transport.write(&LedConfig::default(), [0; 3], true);
         self.snapshot.state.status = if result.is_ok() {
             "unavailable"
@@ -440,6 +415,10 @@ impl Engine {
         };
         self.snapshot.capabilities.cycle_min_ms = minimum;
         self.snapshot.capabilities.cycle_max_ms = maximum;
+        if !self.configured {
+            self.snapshot.state.status = "unconfigured".into();
+            return;
+        }
         if let Err(error) = self
             .snapshot
             .state
@@ -790,15 +769,20 @@ pub struct SysfsTransport {
     maximum: u32,
     channels: Vec<String>,
     breathing: bool,
+    native_breathing: bool,
+    native_effects: bool,
     native_cycle: bool,
 }
 /// Only opt into the effect ABI when both selection and explicit clearing exist.
-fn native_cycle_supported(root: &Path) -> bool {
+fn native_effect_supported(root: &Path, effect: &str) -> bool {
     root.join("effect").is_file()
         && fs::read_to_string(root.join("effect_index")).is_ok_and(|modes| {
             let modes: Vec<_> = modes.split_whitespace().collect();
-            modes.contains(&"none") && modes.contains(&"rainbow")
+            modes.contains(&"monocolor") && modes.contains(&effect)
         })
+}
+fn native_cycle_supported(root: &Path) -> bool {
+    native_effect_supported(root, "rainbow")
 }
 impl SysfsTransport {
     pub fn open(root: PathBuf) -> Result<Self> {
@@ -827,11 +811,15 @@ impl SysfsTransport {
             .split_whitespace()
             .any(|s| s.trim_matches(['[', ']']) == "pattern");
         let native_cycle = native_cycle_supported(&root);
+        let native_breathing = native_effect_supported(&root, "breathe");
+        let native_effects = native_effect_supported(&root, "monocolor");
         Ok(Self {
             root,
             maximum,
             channels,
             breathing,
+            native_breathing,
+            native_effects,
             native_cycle,
         })
     }
@@ -852,37 +840,34 @@ impl Transport for SysfsTransport {
     }
     fn effects(&self) -> Vec<String> {
         let mut effects = vec!["off".into(), "solid".into(), "cycle".into()];
-        if self.breathing {
+        if self.breathing || self.native_breathing {
             effects.push("breathing".into());
         }
         effects
     }
     fn write(&mut self, config: &LedConfig, color: [u8; 3], transition: bool) -> Result<()> {
-        // Clear old triggers before any effect transition, including Off.
+        // Blank before changing colour/effect, including native-to-native transitions.
         if transition {
+            self.write_attribute("brightness", "0")?;
             self.write_attribute("trigger", "none")?;
+            if self.native_effects {
+                self.write_attribute("effect", "monocolor")?;
+            }
         }
         if config.effect == "off" || config.brightness == 0 {
             // Blank before clearing a native effect, so Off cannot flash the
             // remembered static colour.
             self.write_attribute("brightness", "0")?;
-            if self.native_cycle {
-                self.write_attribute("effect", "none")?;
-            }
             return Ok(());
         }
         let brightness =
             ((u64::from(config.brightness) * u64::from(self.maximum) + 50) / 100).to_string();
         if self.native_cycle && config.effect == "cycle" {
             if transition {
-                self.write_attribute("brightness", &brightness)?;
                 self.write_attribute("effect", "rainbow")?;
+                self.write_attribute("brightness", &brightness)?;
             }
             return Ok(());
-        }
-        if self.native_cycle && transition {
-            // Clear the hardware mode before selecting the pattern trigger.
-            self.write_attribute("effect", "none")?;
         }
         let values = self
             .channels
@@ -898,7 +883,10 @@ impl Transport for SysfsTransport {
             .collect::<Vec<_>>()
             .join(" ");
         self.write_attribute("multi_intensity", &values)?;
-        if config.effect == "breathing" {
+        if config.effect == "breathing" && self.native_breathing {
+            self.write_attribute("effect", "breathe")?;
+            self.write_attribute("brightness", &brightness)
+        } else if config.effect == "breathing" {
             // hw_pattern appears only after selecting the pattern trigger. Firmware
             // fixes its tempo; do not expose these placeholder durations as speed.
             self.write_attribute("trigger", "pattern")?;
@@ -927,10 +915,11 @@ impl Transport for RecoveringSysfsTransport {
         if !self.hardware_cycle_only || self.native_cycle() {
             effects.push("cycle".into());
         }
-        if fs::read_to_string(self.root.join("trigger"))
+        let pattern = fs::read_to_string(self.root.join("trigger"))
             .unwrap_or_default()
             .split_whitespace()
-            .any(|s| s.trim_matches(['[', ']']) == "pattern")
+            .any(|s| s.trim_matches(['[', ']']) == "pattern");
+        if native_effect_supported(&self.root, "breathe") || (!self.hardware_cycle_only && pattern)
         {
             effects.push("breathing".into());
         }
@@ -947,6 +936,9 @@ impl Transport for RecoveringSysfsTransport {
         if self.hardware_cycle_only && config.effect == "cycle" && !device.native_cycle {
             return Err("Colour cycle requires the controller's native effect support".into());
         }
+        if self.hardware_cycle_only && config.effect == "breathing" && !device.native_breathing {
+            return Err("Breathing requires the controller's native effect support".into());
+        }
         let result = device.write(config, color, transition);
         if result.is_err() {
             self.device = None;
@@ -961,7 +953,6 @@ pub fn start_sysfs(
     root: PathBuf,
     suspended: bool,
     hardware_cycle_only: bool,
-    initial_config: Option<LedConfig>,
 ) -> Result<()> {
     let directory = std::env::var_os("STATE_DIRECTORY")
         .map(PathBuf::from)
@@ -972,12 +963,11 @@ pub fn start_sysfs(
         device: None,
         hardware_cycle_only,
     };
-    let mut engine = Engine::new_with_initial_config(
+    let mut engine = Engine::new(
         identity,
         Box::new(transport),
         Box::new(storage),
         Box::new(SystemClock(Instant::now())),
-        initial_config,
     );
     if suspended {
         engine.paused = true;
