@@ -40,7 +40,6 @@ source_devices:
       vendor_id: '1ee9'
       product_id: '1590'
       handler: event*
-    capability_map_id: zone1
     events:
       exclude:
         - '*'
@@ -53,12 +52,6 @@ source_devices:
         - Keyboard:KeyHome
         - Keyboard:KeyVolumeDown
         - Keyboard:KeyVolumeUp
-        - Gamepad:Button:Guide
-        - Gamepad:Button:QuickAccess
-        - Gamepad:Button:QuickAccess2
-        - Gamepad:Button:Keyboard
-        - Gamepad:Button:LeftPaddle1
-        - Gamepad:Button:RightPaddle1
   # TODO: Reevaluate if new firmware with ABS mode is added.
   #- group: mouse
   #  evdev:
@@ -105,3 +98,6 @@ target_devices:
   - xbox-elite
   - mouse
   - keyboard
+
+# The ID of a device event mapping in the 'event_maps' folder
+capability_map_id: zone_buttons
