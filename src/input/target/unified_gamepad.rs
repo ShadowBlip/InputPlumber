@@ -699,6 +699,7 @@ impl From<NativeEvent> for StateUpdate {
 
                 Self { capability, value }
             }
+            Capability::Layer { .. } => Self::default(),
         }
     }
 }
@@ -974,6 +975,7 @@ impl From<Capability> for InputCapability {
                 Source::Right => Self::AccelerometerRight,
                 Source::Center => Self::AccelerometerCenter,
             },
+            Capability::Layer { .. } => Self::default(),
         }
     }
 }
@@ -1016,6 +1018,7 @@ impl From<Capability> for InputCapabilityInfo {
             },
             Capability::Gyroscope(_) => Self::new(capability, ValueType::Int16Vector3),
             Capability::Accelerometer(_) => Self::new(capability, ValueType::Int16Vector3),
+            Capability::Layer { .. } => Self::default(),
         }
     }
 }
