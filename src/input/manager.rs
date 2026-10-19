@@ -141,6 +141,7 @@ pub enum ManagerCommand {
 /// physical gamepads EXCEPT for Steam virtual gamepads.
 /// https://github.com/godotengine/godot/pull/76045
 pub struct Manager {
+    led_registry: crate::input::source::led::managed::LedRegistry,
     /// Dbus interface
     dbus: DBusInterfaceManager,
     /// System DMI data
@@ -197,6 +198,11 @@ pub struct Manager {
 }
 
 impl Manager {
+    /// Complete LED off requests before process exit.
+    pub async fn shutdown_leds(&self) {
+        self.led_registry.set_suspended(true).await;
+    }
+
     /// Returns a new instance of Gamepad Manager
     pub fn new(conn: Connection) -> Manager {
         let path = format!("{BUS_PREFIX}/Manager");
@@ -219,6 +225,7 @@ impl Manager {
         log::debug!("Got CPU info: {cpu_info:?}");
 
         Manager {
+            led_registry: Default::default(),
             dbus,
             dmi_data,
             cpu_info,
@@ -270,7 +277,7 @@ impl Manager {
         self.listen_on_dbus();
         let _ = tokio::join!(
             Self::discover_all_devices(&cmd_tx_all_devices),
-            Self::watch_iio_devices(self.tx.clone()),
+            Self::watch_non_devnode_devices(self.tx.clone()),
             Self::watch_devnodes(self.tx.clone(), &mut watcher_rx),
             self.events_loop()
         );
@@ -497,7 +504,10 @@ impl Manager {
                         // Park devices that udev has not finished initializing
                         // so they are not matched with a minimal property set
                         if !device.is_initialized() {
-                            if UDEVS_SKIP_RECHECK.iter().any(|p| dev_sysname.starts_with(p)) {
+                            if UDEVS_SKIP_RECHECK
+                                .iter()
+                                .any(|p| dev_sysname.starts_with(p))
+                            {
                                 log::debug!(
                                     "Device {dev_name} ({dev_sysname}) is not initialized by udev and matches a known never-initialized pattern, dropping"
                                 );
@@ -579,7 +589,9 @@ impl Manager {
                     // Call the suspend handler on each composite device and wait
                     // for a response.
                     let composite_devices = self.composite_devices.clone();
+                    let leds = self.led_registry.clone();
                     tokio::task::spawn(async move {
+                        leds.set_suspended(true).await;
                         for device in composite_devices.values() {
                             if let Err(e) = device.suspend().await {
                                 log::error!("Failed to call suspend handler on device: {e:?}");
@@ -602,7 +614,9 @@ impl Manager {
                     // for a response.
                     let composite_devices = self.composite_devices.clone();
                     let gamepad_order = self.target_gamepad_order.clone();
+                    let leds = self.led_registry.clone();
                     tokio::task::spawn(async move {
+                        leds.set_suspended(false).await;
                         // Resume any composite devices in gamepad order first
                         for path in gamepad_order {
                             let Some(device) = composite_devices.get(&path) else {
@@ -747,6 +761,7 @@ impl Manager {
             device,
             self.next_composite_dbus_path()?,
             capability_map,
+            self.led_registry.clone(),
         )?;
 
         // Check to see if there's already a CompositeDevice for
@@ -1409,7 +1424,9 @@ impl Manager {
                     dbus.register(iio_iface);
                 }
                 "leds" => {
-                    let led_iface = SourceLedInterface::new(dev);
+                    let handle = self.led_registry.get(&id);
+                    let led_iface = SourceLedInterface::new(dev, handle);
+                    led_iface.watch(dbus.connection().clone(), dbus.path().to_string());
                     dbus.register(led_iface);
                 }
                 "tty" => {
@@ -1628,6 +1645,7 @@ impl Manager {
         log::debug!("Device ID: {id}");
 
         // Signal that a source device was removed
+        self.led_registry.remove(&id).await?;
         self.source_device_dbus_paths.remove(&id);
         self.on_source_device_removed(device.into(), id).await?;
 
@@ -1663,12 +1681,15 @@ impl Manager {
         Err(Box::from("No available dbus path left"))
     }
 
-    /// Watch for IIO device events
-    fn watch_iio_devices(
+    /// Watch processed udev events for devices without hidraw/evdev nodes.
+    fn watch_non_devnode_devices(
         cmd_tx: mpsc::Sender<ManagerCommand>,
     ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + std::marker::Send + Sync>>> {
         task::spawn_blocking(move || {
-            let mut monitor = MonitorBuilder::new()?.match_subsystem("iio")?.listen()?;
+            let mut monitor = MonitorBuilder::new()?
+                .match_subsystem("iio")?
+                .match_subsystem("leds")?
+                .listen()?;
 
             let mut poll = Poll::new()?;
             let mut events = Events::with_capacity(1024);
@@ -1685,11 +1706,15 @@ impl Manager {
                     let device = event.device();
                     let dev_name = device.name();
                     let dev_sysname = device.sysname().to_string_lossy();
+                    let subsystem = device
+                        .subsystem()
+                        .map(|value| value.to_string_lossy())
+                        .unwrap_or_default();
 
                     match action.to_string_lossy().trim() {
                         "add" => {
                             log::debug!(
-                                "Got udev add action for iio device {dev_name} ({dev_sysname})"
+                                "Got udev add action for {subsystem} device {dev_name} ({dev_sysname})"
                             );
                             cmd_tx.blocking_send(ManagerCommand::DeviceAdded {
                                 device: device.into(),
@@ -1697,14 +1722,14 @@ impl Manager {
                         }
                         "remove" => {
                             log::debug!(
-                                "Got udev remove action for iio device {dev_name} ({dev_sysname})"
+                                "Got udev remove action for {subsystem} device {dev_name} ({dev_sysname})"
                             );
                             cmd_tx.blocking_send(ManagerCommand::DeviceRemoved {
                                 device: device.into(),
                             })?;
                         }
                         unhandled_action => {
-                            log::trace!("Unhandled udev action for iio device {dev_name} ({dev_sysname}: {unhandled_action}");
+                            log::trace!("Unhandled udev action for {subsystem} device {dev_name} ({dev_sysname}: {unhandled_action}");
                         }
                     }
                 }
