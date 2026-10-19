@@ -561,7 +561,7 @@ async fn private_bus_exercises_serialization_authorization_notifications_and_two
         .unwrap();
     let caps: Capabilities = a.get_property("Capabilities").await.unwrap();
     assert_eq!(caps.api_version, 1);
-    assert_eq!(caps.persistent_id, "ayaneo-3-joystick-rings");
+    assert_eq!(caps.settings_id, "ayaneo-3-joystick-rings");
     assert_eq!(a.get_property::<String>("Id").await.unwrap(), "test_rings");
     let properties = PropertiesProxy::builder(&first)
         .destination("org.shadowblip.InputPlumber")

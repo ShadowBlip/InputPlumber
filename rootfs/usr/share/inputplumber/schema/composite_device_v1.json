@@ -296,7 +296,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "persistent_id": {
+        "settings_id": {
           "description": "Opt into persistent lighting using a stable profile and LED-role identity.",
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{1,128}$"

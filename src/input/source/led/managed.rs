@@ -58,7 +58,7 @@ impl LedConfig {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, Value, OwnedValue)]
 pub struct Capabilities {
     pub api_version: u32,
-    pub persistent_id: String,
+    pub settings_id: String,
     pub effects: Vec<String>,
     pub cycle_min_ms: u32,
     pub cycle_max_ms: u32,
@@ -67,7 +67,7 @@ impl Default for Capabilities {
     fn default() -> Self {
         Self {
             api_version: 1,
-            persistent_id: String::new(),
+            settings_id: String::new(),
             effects: vec![],
             cycle_min_ms: 2000,
             cycle_max_ms: 30000,
@@ -281,7 +281,7 @@ impl Engine {
         Self {
             snapshot: Snapshot {
                 capabilities: Capabilities {
-                    persistent_id: identity,
+                    settings_id: identity,
                     effects,
                     cycle_min_ms: cycle_range.0,
                     cycle_max_ms: cycle_range.1,
@@ -654,7 +654,7 @@ impl LedHandle {
             .map_err(|_| "Lighting worker stopped")?
     }
     pub async fn set_suspended(&self, suspended: bool) -> Result<()> {
-        if self.snapshot().capabilities.persistent_id.is_empty() {
+        if self.snapshot().capabilities.settings_id.is_empty() {
             return Ok(());
         }
         if self.stopping.load(Ordering::SeqCst) {

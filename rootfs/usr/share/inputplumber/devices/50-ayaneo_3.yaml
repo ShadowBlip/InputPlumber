@@ -91,7 +91,7 @@ source_devices:
       subsystem: leds
     config:
       led:
-        persistent_id: ayaneo-3-joystick-rings
+        settings_id: ayaneo-3-joystick-rings
         hardware_cycle_only: true
 
 # Optional configuration for the composite device

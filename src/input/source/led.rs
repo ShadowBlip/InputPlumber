@@ -86,7 +86,7 @@ impl LedDevice {
                     .as_ref()
                     .and_then(|s| s.config.as_ref())
                     .and_then(|c| c.led.as_ref())
-                    .and_then(|led| led.persistent_id.clone());
+                    .and_then(|led| led.settings_id.clone());
                 let hardware_cycle_only = conf
                     .as_ref()
                     .and_then(|s| s.config.as_ref())

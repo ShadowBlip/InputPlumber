@@ -333,7 +333,7 @@ pub struct LedConfig {
     /// Stable profile and LED-role identity; opts into persistent user control.
     /// Must contain only ASCII letters, digits, underscores and hyphens.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub persistent_id: Option<String>,
+    pub settings_id: Option<String>,
     /// Disable software colour cycling on controllers that flicker on RGB updates.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hardware_cycle_only: Option<bool>,

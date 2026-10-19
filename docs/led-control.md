@@ -1,6 +1,6 @@
 # Persistent LED control (API version 1)
 
-The existing org.shadowblip.Input.Source.LEDDevice interface retains Id. A source profile opts into managed control using config.led.persistent_id. Only the AYANEO 3 joystick-ring source opts in initially, with identity ayaneo-3-joystick-rings. The existing controller/IMU mappings and other LED sources' game-output behaviour remain unchanged.
+The existing org.shadowblip.Input.Source.LEDDevice interface retains Id. A source profile opts into managed control using config.led.settings_id. Only the AYANEO 3 joystick-ring source opts in initially, with identity ayaneo-3-joystick-rings. The existing controller/IMU mappings and other LED sources' game-output behaviour remain unchanged.
 
 ## Interface
 
