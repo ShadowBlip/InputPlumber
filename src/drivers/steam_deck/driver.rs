@@ -2,19 +2,14 @@ use std::{error::Error, ffi::CString};
 
 use crate::drivers::steam_deck::{hid_report::PackedInputDataReport, ProductId, VID};
 use hidapi::HidDevice;
-use packed_struct::{
-    types::{Integer, SizedInteger},
-    PackedStruct,
-};
+use packed_struct::{types::SizedInteger, PackedStruct};
 
 use super::{
     event::{
         AxisEvent, AxisInput, BinaryInput, ButtonEvent, Event, InertialEvent, InertialInput,
-        TouchAxisInput, TriggerEvent, TriggerInput,
+        OutputEvent, TouchAxisInput, TriggerEvent, TriggerInput,
     },
-    hid_report::{
-        PackedMappingsReport, PackedTriggerVibration, Register, ReportType, TrackpadMode,
-    },
+    hid_report::{PackedMappingsReport, Register, ReportType, TrackpadMode},
 };
 
 /// Size of the HID packet
@@ -62,18 +57,13 @@ impl Driver {
     }
 
     /// Rumble the gamepad
-    pub fn haptic_rumble(
-        &mut self,
-        left_speed: u16,
-        right_speed: u16,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let mut report = PackedTriggerVibration::new();
-        report.left_speed = Integer::from_primitive(left_speed);
-        report.right_speed = Integer::from_primitive(right_speed);
-
-        // Write the report to the device
-        let buf = report.pack()?;
-        let _bytes_written = self.device.write(&buf)?;
+    /// Write an output event to the controller
+    pub fn write_event(&self, event: &OutputEvent) -> Result<(), Box<dyn Error + Send + Sync>> {
+        match event {
+            OutputEvent::HapticRumble(report) => self.write(&report.pack()?)?,
+            OutputEvent::HapticClick(report) => self.write(&report.pack()?)?,
+            OutputEvent::HapticPulse(report) => self.write(&report.pack()?)?,
+        }
 
         Ok(())
     }
@@ -411,11 +401,13 @@ impl Driver {
                     z: -state.accel_y.to_primitive(),
                 },
             )));
-            events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
-                x: state.pitch.to_primitive(),
-                y: state.roll.to_primitive(),
-                z: -state.yaw.to_primitive(),
-            })));
+            events.push(Event::Inertia(InertialEvent::Gyroscope(
+                InertialInput {
+                    x: state.pitch.to_primitive(),
+                    y: state.roll.to_primitive(),
+                    z: -state.yaw.to_primitive(),
+                },
+            )));
         };
 
         events

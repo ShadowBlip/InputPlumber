@@ -7,6 +7,12 @@ pub enum Event {
     Trigger(TriggerEvent),
 }
 
+/// Output events supported by the Legion Go S XInput controller
+#[derive(Clone, Debug)]
+pub enum OutputEvent {
+    Rumble { weak: u8, strong: u8 },
+}
+
 /// Binary input contain either pressed or unpressed
 #[derive(Clone, Debug)]
 pub struct BinaryInput {

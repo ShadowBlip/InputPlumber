@@ -12,8 +12,7 @@ use packed_struct::PrimitiveEnum;
 
 use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::drivers::steam_deck::hid_report::{
-    CommandType, PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse,
-    PackedTriggerVibration, PadSide,
+    CommandType, PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedTriggerVibration, PadSide,
 };
 use crate::input::event::evdev::translator::EventTranslator;
 use crate::input::output_capability::{Haptic, OutputCapability, LED};
@@ -334,10 +333,7 @@ impl GamepadEventDevice {
     }
 
     // Process Steam Deck Haptic events.
-    fn process_haptic_ff(
-        &mut self,
-        report: PackedTriggerHapticPulse,
-    ) -> Result<(), Box<dyn Error>> {
+    fn process_haptic_ff(&mut self, report: PackedTriggerHapticPulse) -> Result<(), Box<dyn Error>> {
         // If no effect was uploaded to handle Steam Deck force feedback, upload one.
         if self.ff_effects_deck.is_none() {
             let effect_data = FFEffectData {
@@ -462,18 +458,8 @@ impl GamepadEventDevice {
         let effect_id = self.ff_effects_deck.unwrap();
         let effect = self.ff_effects.get_mut(&effect_id).unwrap();
 
-        // Gain is dB, -24 to +6.
-        let normalized_gain = (report.gain as i16 + 24).clamp(0, 30) as f64 / 30.0;
-        let magnitude = (normalized_gain * u16::MAX as f64) as u16;
-        let (strong_magnitude, weak_magnitude) = match report.side {
-            PadSide::Left => (0, magnitude),
-            PadSide::Right => (magnitude, 0),
-            PadSide::Both => (magnitude, magnitude),
-        };
-
-        let total_us =
-            report.duration_us.to_primitive() as u64 * report.repeat_count.to_primitive() as u64;
-        let length = (total_us.clamp(50_000, 500_000) / 1000) as u16;
+        let (weak_magnitude, strong_magnitude) = report.magnitudes();
+        let length = report.capped_duration().as_millis() as u16;
 
         let effect_data = FFEffectData {
             direction: 0,

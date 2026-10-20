@@ -16,6 +16,7 @@ use crate::{
     drivers::dualsense::{
         self,
         driver::{AxisCalibration, Driver},
+        event,
     },
     input::{
         capability::{
@@ -72,6 +73,16 @@ impl DualSenseController {
         }
     }
 
+    /// Write a rumble event to the driver
+    fn write_rumble(
+        driver: &mut Driver,
+        left: u8,
+        right: u8,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let event = event::OutputEvent::HapticRumble { left, right };
+        driver.write_event(&event)
+    }
+
     /// Process the given evdev force feedback event.
     fn process_evdev_ff(&mut self, input_event: evdev::InputEvent) -> Result<(), Box<dyn Error>> {
         // Get the code (effect id) and value of the event
@@ -93,7 +104,7 @@ impl DualSenseController {
         // The value determines if the effect should be playing or not.
         if value == 0 {
             log::trace!("Stopping rumble");
-            if let Err(e) = self.driver.rumble(0, 0) {
+            if let Err(e) = Self::write_rumble(&mut self.driver, 0, 0) {
                 log::debug!("Failed to stop rumble: {:?}", e);
                 return Ok(());
             }
@@ -133,7 +144,9 @@ impl DualSenseController {
                 let right_speed = weak_magnitude / u8::MAX as u16 + 1;
 
                 // Do rumble
-                if let Err(e) = self.driver.rumble(left_speed as u8, right_speed as u8) {
+                if let Err(e) =
+                    Self::write_rumble(&mut self.driver, left_speed as u8, right_speed as u8)
+                {
                     let err = format!("Failed to do rumble: {e:?}");
                     return Err(err.into());
                 }
@@ -147,8 +160,7 @@ impl DualSenseController {
     fn process_deck_ff(&mut self, report: PackedTriggerVibration) -> Result<(), Box<dyn Error>> {
         let left_speed = report.left_speed.to_primitive() / u8::MAX as u16 + 1;
         let right_speed = report.right_speed.to_primitive() / u8::MAX as u16 + 1;
-        self.driver
-            .rumble(left_speed as u8, right_speed as u8)
+        Self::write_rumble(&mut self.driver, left_speed as u8, right_speed as u8)
             .map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -160,7 +172,7 @@ impl SourceInputDevice for DualSenseController {
         if let Some(stop_at) = self.haptic_timeout {
             if Instant::now() >= stop_at {
                 self.haptic_timeout = None;
-                let _ = self.driver.rumble(0, 0);
+                let _ = Self::write_rumble(&mut self.driver, 0, 0);
             }
         }
 
@@ -196,14 +208,14 @@ impl SourceOutputDevice for DualSenseController {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
             OutputEvent::DualSense(report) => {
                 log::debug!("Received DualSense output report");
-                Ok(self.driver.write(report)?)
+                let state = event::OutputEvent::State(report);
+                Ok(self.driver.write_event(&state)?)
             }
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::TriggerHapticPulse(_report) => Ok(()),
             OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 let (weak, strong) = report.magnitudes();
-                self.driver
-                    .rumble((strong / 256) as u8, (weak / 256) as u8)?;
+                Self::write_rumble(&mut self.driver, (strong / 256) as u8, (weak / 256) as u8)?;
                 self.haptic_timeout = Some(Instant::now() + report.capped_duration());
                 Ok(())
             }
@@ -220,7 +232,7 @@ impl SourceOutputDevice for DualSenseController {
             } => {
                 let left_speed = (strong_magnitude / 256) as u8;
                 let right_speed = (weak_magnitude / 256) as u8;
-                self.driver.rumble(left_speed, right_speed)?;
+                Self::write_rumble(&mut self.driver, left_speed, right_speed)?;
                 Ok(())
             }
         }

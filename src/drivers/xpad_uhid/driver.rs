@@ -9,7 +9,10 @@ use crate::{
 };
 
 use super::{
-    event::{AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, TriggerEvent, TriggerInput},
+    event::{
+        AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, OutputEvent, TriggerEvent,
+        TriggerInput,
+    },
     hid_report::{XpadUhidOutputData, XpadUhidOutputReport},
 };
 
@@ -81,15 +84,17 @@ impl Driver {
         Ok(())
     }
 
-    /// Rumble the gamepad
-    pub fn rumble(
-        &self,
-        _left_speed: u8,
-        _right_speed: u8,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let state = XpadUhidOutputData {};
-
-        self.write(state)
+    /// Write an output event to the gamepad
+    pub fn write_event(&self, event: &OutputEvent) -> Result<(), Box<dyn Error + Send + Sync>> {
+        match event {
+            // Rumble is not implemented on the virtual XPad yet, but write the
+            // empty report so the call path is exercised
+            OutputEvent::Rumble { weak, strong } => {
+                log::trace!("Rumble event (not implemented): weak={weak} strong={strong}");
+                let state = XpadUhidOutputData {};
+                self.write(state)
+            }
+        }
     }
 
     /// Poll the device and read input reports

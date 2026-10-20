@@ -24,8 +24,8 @@ use virtual_usb::{
 use crate::{
     drivers::steam_deck::{
         hid_report::{
-            PackedInputDataReport, PackedTriggerHapticPulse, PackedTriggerVibration, ReportType,
-            StringAttribute, PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN,
+            PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedInputDataReport, PackedTriggerVibration,
+            ReportType, StringAttribute, PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN,
             STICK_FORCE_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
         report_descriptor::{CONTROLLER_DESCRIPTOR, KEYBOARD_DESCRIPTOR, MOUSE_DESCRIPTOR},
@@ -494,16 +494,47 @@ impl SteamDeckDevice {
                             }
                         };
 
-                        let packed_trigger_haptic_pulse =
-                            match PackedTriggerHapticPulse::unpack(buf) {
-                                Ok(report) => report,
-                                Err(e) => {
-                                    log::error!("Failed to process Haptic Command: {e}");
-                                    return;
-                                }
-                            };
+                        let packed_trigger_haptic_pulse = match PackedTriggerHapticPulse::unpack(buf) {
+                            Ok(report) => report,
+                            Err(e) => {
+                                log::error!("Failed to process Haptic Command: {e}");
+                                return;
+                            }
+                        };
                         log::debug!("Got PackedTriggerHapticPulse: {packed_trigger_haptic_pulse:?}");
                         let event = OutputEvent::TriggerHapticPulse(packed_trigger_haptic_pulse);
+                        self.output_event = Some(event);
+                    }
+                    ReportType::TriggerRepeatedHapticPulse => {
+                        self.current_report = ReportType::TriggerRepeatedHapticPulse;
+
+                        let Some(slice) = data.get(..10) else {
+                            log::error!("Buffer too short for Haptic Pulse");
+                            return;
+                        };
+
+                        let buf: &[u8; 10] = match slice.try_into() {
+                            Ok(buffer) => buffer,
+                            Err(e) => {
+                                log::error!("Failed to process Haptic Pulse: {e}");
+                                return;
+                            }
+                        };
+
+                        let packed_trigger_repeated_haptic_pulse = match PackedTriggerRepeatedHapticPulse::unpack(buf)
+                        {
+                            Ok(report) => report,
+                            Err(e) => {
+                                log::error!("Failed to process Haptic Pulse: {e}");
+                                return;
+                            }
+                        };
+                        log::debug!(
+                            "Got PackedTriggerRepeatedHapticPulse: {packed_trigger_repeated_haptic_pulse:?}"
+                        );
+                        let event = OutputEvent::TriggerRepeatedHapticPulse(
+                            packed_trigger_repeated_haptic_pulse,
+                        );
                         self.output_event = Some(event);
                     }
                     ReportType::TriggerVibration => {

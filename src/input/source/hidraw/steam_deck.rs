@@ -8,13 +8,16 @@ use std::{
 };
 
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
-use packed_struct::PackedStruct;
 
 use crate::{
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
         steam_deck::{
-            self, driver::Driver, hid_report::LIZARD_SLEEP_SEC, DECK_ACCEL_RAW_TO_MPS2,
+            self,
+            driver::Driver,
+            event,
+            hid_report::{LIZARD_SLEEP_SEC, PackedTriggerVibration},
+            DECK_ACCEL_RAW_TO_MPS2,
             DECK_GYRO_RAW_TO_RAD_S,
         },
     },
@@ -101,6 +104,16 @@ impl DeckController {
         }
     }
 
+    /// Write a rumble event to the driver
+    fn write_rumble(
+        driver: &mut Driver,
+        left: u16,
+        right: u16,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let event = event::OutputEvent::HapticRumble(PackedTriggerVibration::with_magnitudes(left, right));
+        driver.write_event(&event)
+    }
+
     /// Process the given evdev force feedback event.
     fn process_evdev_ff(&mut self, input_event: InputEvent) -> Result<(), Box<dyn Error>> {
         // Get the code (effect id) and value of the event
@@ -121,7 +134,7 @@ impl DeckController {
 
         // The value determines if the effect should be playing or not.
         if value == 0 {
-            if let Err(e) = self.driver.haptic_rumble(0, 0) {
+            if let Err(e) = Self::write_rumble(&mut self.driver, 0, 0) {
                 log::debug!("Failed to stop haptic rumble: {:?}", e);
                 return Ok(());
             }
@@ -155,12 +168,10 @@ impl DeckController {
                 strong_magnitude,
                 weak_magnitude,
             } => {
-                // Set rumble values based on the effect data
-                let left_speed = strong_magnitude;
-                let right_speed = weak_magnitude;
-
                 // Do rumble
-                if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
+                if let Err(e) =
+                    Self::write_rumble(&mut self.driver, strong_magnitude, weak_magnitude)
+                {
                     let err = format!("Failed to do haptic rumble: {:?}", e);
                     return Err(err.into());
                 }
@@ -175,11 +186,11 @@ impl DeckController {
         &mut self,
         report: SetStatePackedOutputData,
     ) -> Result<(), Box<dyn Error>> {
-        // Set the rumble values based on the DualSense output report
+        // Scale the per-motor speeds up to the deck's 16-bit range
         let left_speed = report.rumble_emulation_left as u16 * 256;
         let right_speed = report.rumble_emulation_right as u16 * 256;
 
-        if let Err(e) = self.driver.haptic_rumble(left_speed, right_speed) {
+        if let Err(e) = Self::write_rumble(&mut self.driver, left_speed, right_speed) {
             let err = format!("Failed to do haptic rumble: {:?}", e);
             return Err(err.into());
         }
@@ -230,28 +241,23 @@ impl SourceOutputDevice for DeckController {
                 }
             }
             OutputEvent::Uinput(_) => (),
-            OutputEvent::TriggerHapticPulse(packed_trigger_haptic_pulse) => {
-                let report = packed_trigger_haptic_pulse
-                    .pack()
-                    .map_err(|e| e.to_string())?;
-                self.driver.write(&report)?;
+            OutputEvent::TriggerHapticPulse(report) => {
+                self.driver
+                    .write_event(&event::OutputEvent::HapticClick(report))?;
             }
-            OutputEvent::TriggerRepeatedHapticPulse(packed_trigger_repeated_haptic_pulse) => {
-                let report = packed_trigger_repeated_haptic_pulse
-                    .pack()
-                    .map_err(|e| e.to_string())?;
-                self.driver.write(&report)?;
+            OutputEvent::TriggerRepeatedHapticPulse(report) => {
+                self.driver
+                    .write_event(&event::OutputEvent::HapticPulse(report))?;
             }
-            OutputEvent::TriggerVibration(packed_trigger_vibration) => {
-                let report = packed_trigger_vibration.pack().map_err(|e| e.to_string())?;
-                self.driver.write(&report)?;
+            OutputEvent::TriggerVibration(report) => {
+                self.driver
+                    .write_event(&event::OutputEvent::HapticRumble(report))?;
             }
             OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,
             } => {
-                self.driver
-                    .haptic_rumble(strong_magnitude, weak_magnitude)?;
+                Self::write_rumble(&mut self.driver, strong_magnitude, weak_magnitude)?;
             }
         }
 

@@ -1,4 +1,9 @@
-use std::{collections::HashMap, error::Error, fmt::Debug, time::Instant};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt::Debug,
+    time::{Duration, Instant},
+};
 
 use evdev::{FFEffectData, FFEffectKind};
 use packed_struct::{types::SizedInteger, PrimitiveEnum};
@@ -62,6 +67,16 @@ impl Ultimate2 {
         }
     }
 
+    /// Write a rumble event to the driver
+    fn write_rumble(
+        driver: &mut Driver,
+        weak: u8,
+        strong: u8,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let event = event::OutputEvent::Rumble { weak, strong };
+        driver.write_event(&event)
+    }
+
     /// Process the given evdev force feedback event.
     fn process_evdev_ff(&mut self, input_event: evdev::InputEvent) -> Result<(), Box<dyn Error>> {
         // Get the code (effect id) and value of the event
@@ -83,7 +98,7 @@ impl Ultimate2 {
         // The value determines if the effect should be playing or not.
         if value == 0 {
             log::trace!("Stopping rumble");
-            if let Err(e) = self.driver.rumble(0, 0) {
+            if let Err(e) = Self::write_rumble(&mut self.driver, 0, 0) {
                 log::debug!("Failed to stop rumble: {:?}", e);
                 return Ok(());
             }
@@ -119,13 +134,13 @@ impl Ultimate2 {
                 weak_magnitude,
             } => {
                 // Scale the rumble values to the DS5 values
-                let left_speed = (strong_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
-                let left_speed = left_speed.round() as u8;
-                let right_speed = (weak_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
-                let right_speed = right_speed.round() as u8;
+                let strong =
+                    ((strong_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64).round() as u8;
+                let weak =
+                    ((weak_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64).round() as u8;
 
                 // Do rumble
-                if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+                if let Err(e) = Self::write_rumble(&mut self.driver, weak, strong) {
                     let err = format!("Failed to do rumble: {e:?}");
                     return Err(err.into());
                 }
@@ -140,10 +155,12 @@ impl Ultimate2 {
         &mut self,
         report: SetStatePackedOutputData,
     ) -> Result<(), Box<dyn Error>> {
-        let left_speed = report.rumble_emulation_left;
-        let right_speed = report.rumble_emulation_right;
-
-        if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+        // The DualSense report carries per-motor speeds in FF convention
+        if let Err(e) = Self::write_rumble(
+            &mut self.driver,
+            report.rumble_emulation_right,
+            report.rumble_emulation_left,
+        ) {
             let err = format!("Failed to do rumble: {e:?}");
             return Err(err.into());
         }
@@ -153,7 +170,7 @@ impl Ultimate2 {
 
     /// Process Steam Deck-style haptic output reports
     fn process_haptic_ff(
-        &self,
+        &mut self,
         report: PackedTriggerHapticPulse,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let intensity = report.intensity.to_primitive() + 1;
@@ -162,11 +179,15 @@ impl Ultimate2 {
         let new_gain = normalized_gain * u8::MAX as f64;
         let new_gain = new_gain as u8;
 
-        match report.side {
-            PadSide::Left => self.driver.rumble(new_gain, 0)?,
-            PadSide::Right => self.driver.rumble(0, new_gain)?,
-            PadSide::Both => self.driver.rumble(new_gain, new_gain)?,
-        }
+        let (weak, strong) = match report.side {
+            PadSide::Left => (0, new_gain),
+            PadSide::Right => (new_gain, 0),
+            PadSide::Both => (new_gain, new_gain),
+        };
+        Self::write_rumble(&mut self.driver, weak, strong)?;
+
+        // Level-based motors need a scheduled stop
+        self.haptic_timeout = Some(Instant::now() + Duration::from_millis(50));
 
         Ok(())
     }
@@ -178,7 +199,7 @@ impl SourceInputDevice for Ultimate2 {
         if let Some(stop_at) = self.haptic_timeout {
             if Instant::now() >= stop_at {
                 self.haptic_timeout = None;
-                let _ = self.driver.rumble(0, 0);
+                let _ = Self::write_rumble(&mut self.driver, 0, 0);
             }
         }
 
@@ -218,26 +239,24 @@ impl SourceOutputDevice for Ultimate2 {
             OutputEvent::TriggerHapticPulse(report) => Ok(self.process_haptic_ff(report)?),
             OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 let (weak, strong) = report.magnitudes();
-                self.driver
-                    .rumble((strong / 256) as u8, (weak / 256) as u8)?;
+                Self::write_rumble(&mut self.driver, (weak / 256) as u8, (strong / 256) as u8)?;
                 self.haptic_timeout = Some(Instant::now() + report.capped_duration());
                 Ok(())
             }
             OutputEvent::TriggerVibration(report) => {
-                let left_speed = (report.left_speed.to_primitive() / 256) as u8;
-                let right_speed = (report.right_speed.to_primitive() / 256) as u8;
-                Ok(self.driver.rumble(left_speed, right_speed)?)
+                let strong = (report.left_speed.to_primitive() / 256) as u8;
+                let weak = (report.right_speed.to_primitive() / 256) as u8;
+                Ok(Self::write_rumble(&mut self.driver, weak, strong)?)
             }
             OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,
             } => {
-                let left_speed = (strong_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
-                let left_speed = left_speed.round() as u8;
-                let right_speed = (weak_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
-                let right_speed = right_speed.round() as u8;
-
-                Ok(self.driver.rumble(left_speed, right_speed)?)
+                let strong =
+                    ((strong_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64).round() as u8;
+                let weak =
+                    ((weak_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64).round() as u8;
+                Ok(Self::write_rumble(&mut self.driver, weak, strong)?)
             }
         }
     }
@@ -435,35 +454,17 @@ fn translate_event(event: event::Event) -> NativeEvent {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
                 Capability::Accelerometer(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(normalize_accel_value_i16(
-                        value.x,
-                        ULTIMATE_2_ACCEL_RAW_TO_MPS2,
-                    )),
-                    y: Some(normalize_accel_value_i16(
-                        value.y,
-                        ULTIMATE_2_ACCEL_RAW_TO_MPS2,
-                    )),
-                    z: Some(normalize_accel_value_i16(
-                        value.z,
-                        ULTIMATE_2_ACCEL_RAW_TO_MPS2,
-                    )),
+                    x: Some(normalize_accel_value_i16(value.x, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
+                    y: Some(normalize_accel_value_i16(value.y, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
+                    z: Some(normalize_accel_value_i16(value.z, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
                 },
             ),
             event::InertialEvent::Gyroscope(value) => NativeEvent::new(
                 Capability::Gyroscope(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(normalize_gyro_value_i16(
-                        value.x,
-                        ULTIMATE_2_GYRO_RAW_TO_RAD_S,
-                    )),
-                    y: Some(normalize_gyro_value_i16(
-                        value.y,
-                        ULTIMATE_2_GYRO_RAW_TO_RAD_S,
-                    )),
-                    z: Some(normalize_gyro_value_i16(
-                        value.z,
-                        ULTIMATE_2_GYRO_RAW_TO_RAD_S,
-                    )),
+                    x: Some(normalize_gyro_value_i16(value.x, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
+                    y: Some(normalize_gyro_value_i16(value.y, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
+                    z: Some(normalize_gyro_value_i16(value.z, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
                 },
             ),
         },

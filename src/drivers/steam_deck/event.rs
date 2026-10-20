@@ -1,3 +1,5 @@
+use super::hid_report::{PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedTriggerVibration};
+
 /// Events that can be emitted by the Steam Deck controller
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -5,6 +7,17 @@ pub enum Event {
     Inertia(InertialEvent),
     Axis(AxisEvent),
     Trigger(TriggerEvent),
+}
+
+/// Output events supported by the Steam Deck controller. These wrap the
+/// native wire reports so events received from a virtual Steam Deck can be
+/// forwarded to a physical one without loss.
+#[derive(Clone, Debug)]
+#[allow(clippy::enum_variant_names)]
+pub enum OutputEvent {
+    HapticRumble(PackedTriggerVibration),
+    HapticClick(PackedTriggerHapticPulse),
+    HapticPulse(PackedTriggerRepeatedHapticPulse),
 }
 
 /// Binary input contain either pressed or unpressed
