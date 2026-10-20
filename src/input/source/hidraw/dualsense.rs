@@ -9,7 +9,7 @@ use crate::drivers::dualsense::{
     DS5_EDGE_PID, DS5_PID, DS5_TOUCHPAD_HEIGHT, DS5_TOUCHPAD_WIDTH, DS5_VID, STICK_X_MAX,
     STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGGER_MAX,
 };
-use crate::drivers::steam_deck::hid_report::PackedRumbleReport;
+use crate::drivers::steam_deck::hid_report::PackedTriggerVibration;
 use crate::input::capability::Source;
 use crate::input::output_capability::{Haptic, OutputCapability, LED};
 use crate::{
@@ -144,7 +144,7 @@ impl DualSenseController {
     }
 
     /// Procces Steam Deck FFB events.
-    fn process_deck_ff(&mut self, report: PackedRumbleReport) -> Result<(), Box<dyn Error>> {
+    fn process_deck_ff(&mut self, report: PackedTriggerVibration) -> Result<(), Box<dyn Error>> {
         let left_speed = report.left_speed.to_primitive() / u8::MAX as u16 + 1;
         let right_speed = report.right_speed.to_primitive() / u8::MAX as u16 + 1;
         self.driver
@@ -199,14 +199,15 @@ impl SourceOutputDevice for DualSenseController {
                 Ok(self.driver.write(report)?)
             }
             OutputEvent::Uinput(_) => Ok(()),
-            OutputEvent::SteamDeckHaptics(_report) => Ok(()),
-            OutputEvent::SteamDeckHapticPulse(report) => {
+            OutputEvent::TriggerHapticPulse(_report) => Ok(()),
+            OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 let (weak, strong) = report.magnitudes();
-                self.driver.rumble((strong / 256) as u8, (weak / 256) as u8)?;
+                self.driver
+                    .rumble((strong / 256) as u8, (weak / 256) as u8)?;
                 self.haptic_timeout = Some(Instant::now() + report.capped_duration());
                 Ok(())
             }
-            OutputEvent::SteamDeckRumble(report) => {
+            OutputEvent::TriggerVibration(report) => {
                 log::debug!("Received Steam Deck FFB Output Report");
                 if let Err(e) = self.process_deck_ff(report) {
                     log::error!("Failed to process Steam Deck Force Feedback Report: {e:?}")

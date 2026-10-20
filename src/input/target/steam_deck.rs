@@ -24,7 +24,7 @@ use virtual_usb::{
 use crate::{
     drivers::steam_deck::{
         hid_report::{
-            PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
+            PackedInputDataReport, PackedTriggerHapticPulse, PackedTriggerVibration, ReportType,
             StringAttribute, PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN,
             STICK_FORCE_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
@@ -483,8 +483,8 @@ impl SteamDeckDevice {
                         log::debug!("Chip ID requested");
                         self.current_report = ReportType::GetChipId;
                     }
-                    ReportType::TriggerHapticCommand => {
-                        self.current_report = ReportType::TriggerHapticCommand;
+                    ReportType::TriggerHapticPulse => {
+                        self.current_report = ReportType::TriggerHapticPulse;
 
                         let buf = match data.as_slice().try_into() {
                             Ok(buffer) => buffer,
@@ -494,19 +494,20 @@ impl SteamDeckDevice {
                             }
                         };
 
-                        let packed_haptic_report = match PackedHapticReport::unpack(buf) {
-                            Ok(report) => report,
-                            Err(e) => {
-                                log::error!("Failed to process Haptic Command: {e}");
-                                return;
-                            }
-                        };
-                        //log::trace!("Got PackedHapticReport: {packed_haptic_report}");
-                        let event = OutputEvent::SteamDeckHaptics(packed_haptic_report);
+                        let packed_trigger_haptic_pulse =
+                            match PackedTriggerHapticPulse::unpack(buf) {
+                                Ok(report) => report,
+                                Err(e) => {
+                                    log::error!("Failed to process Haptic Command: {e}");
+                                    return;
+                                }
+                            };
+                        log::debug!("Got PackedTriggerHapticPulse: {packed_trigger_haptic_pulse:?}");
+                        let event = OutputEvent::TriggerHapticPulse(packed_trigger_haptic_pulse);
                         self.output_event = Some(event);
                     }
-                    ReportType::TriggerRumbleCommand => {
-                        self.current_report = ReportType::TriggerRumbleCommand;
+                    ReportType::TriggerVibration => {
+                        self.current_report = ReportType::TriggerVibration;
 
                         let buf = match data.as_slice().try_into() {
                             Ok(buffer) => buffer,
@@ -516,15 +517,15 @@ impl SteamDeckDevice {
                             }
                         };
 
-                        let packed_rumble_report = match PackedRumbleReport::unpack(buf) {
+                        let packed_trigger_vibration = match PackedTriggerVibration::unpack(buf) {
                             Ok(report) => report,
                             Err(e) => {
                                 log::error!("Failed to process Rumble Command: {e}");
                                 return;
                             }
                         };
-                        //log::trace!("Got PackedRumbleReport: {packed_rumble_report}");
-                        let event = OutputEvent::SteamDeckRumble(packed_rumble_report);
+                        log::debug!("Got PackedTriggerVibration: {packed_trigger_vibration:?}");
+                        let event = OutputEvent::TriggerVibration(packed_trigger_vibration);
                         self.output_event = Some(event);
                     }
                     _ => {

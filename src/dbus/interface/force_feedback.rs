@@ -6,7 +6,7 @@ use zbus_macros::interface;
 
 use crate::{
     dbus::polkit::check_polkit,
-    drivers::steam_deck::hid_report::PackedRumbleReport,
+    drivers::steam_deck::hid_report::PackedTriggerVibration,
     input::{composite_device::client::CompositeDeviceClient, output_event::OutputEvent},
 };
 
@@ -37,13 +37,13 @@ impl ForceFeedbacker for CompositeDeviceClient {
         let value = value.min(1.0);
         let value = value.max(0.0);
         log::debug!("Sending rumble event with value: {value}");
-        let report = PackedRumbleReport {
+        let report = PackedTriggerVibration {
             intensity: (value * u8::MAX as f64) as u8,
             left_speed: Integer::from_primitive((value * u16::MAX as f64) as u16),
             right_speed: Integer::from_primitive((value * u16::MAX as f64) as u16),
             ..Default::default()
         };
-        let event = OutputEvent::SteamDeckRumble(report);
+        let event = OutputEvent::TriggerVibration(report);
         self.process_output_event(event).await?;
         Ok(())
     }

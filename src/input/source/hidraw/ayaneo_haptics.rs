@@ -191,7 +191,7 @@ impl SourceOutputDevice for AyaneoHaptics {
                 }
                 Ok(())
             }
-            OutputEvent::SteamDeckRumble(report) => Ok(self.rumble(
+            OutputEvent::TriggerVibration(report) => Ok(self.rumble(
                 report.left_speed.to_primitive(),
                 report.right_speed.to_primitive(),
             )?),
@@ -199,13 +199,13 @@ impl SourceOutputDevice for AyaneoHaptics {
                 weak_magnitude,
                 strong_magnitude,
             } => Ok(self.rumble(strong_magnitude, weak_magnitude)?),
-            OutputEvent::SteamDeckHapticPulse(report) => {
+            OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 let (weak, strong) = report.magnitudes();
                 self.rumble(strong, weak)?;
                 self.haptic_timeout = Some(Instant::now() + report.capped_duration());
                 Ok(())
             }
-            OutputEvent::Uinput(_) | OutputEvent::SteamDeckHaptics(_) => Ok(()),
+            OutputEvent::Uinput(_) | OutputEvent::TriggerHapticPulse(_) => Ok(()),
         }
     }
 

@@ -10,7 +10,7 @@ use crate::{
             event, xinput_driver::XInputDriver, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
             TRIGG_MAX,
         },
-        steam_deck::hid_report::{PackedHapticReport, PadSide},
+        steam_deck::hid_report::{PackedTriggerHapticPulse, PadSide},
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
@@ -133,7 +133,7 @@ impl LegionGoSXInputController {
 
     fn process_haptic_ff(
         &self,
-        report: PackedHapticReport,
+        report: PackedTriggerHapticPulse,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let intensity = report.intensity.to_primitive() + 1;
         let scaled_gain = (report.gain + 24) as u8 * intensity;
@@ -197,14 +197,14 @@ impl SourceOutputDevice for LegionGoSXInputController {
                 }
             }
             OutputEvent::Uinput(_) => (),
-            OutputEvent::SteamDeckHaptics(report) => self.process_haptic_ff(report)?,
-            OutputEvent::SteamDeckHapticPulse(report) => {
+            OutputEvent::TriggerHapticPulse(report) => self.process_haptic_ff(report)?,
+            OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 let (weak, strong) = report.magnitudes();
                 self.driver
                     .haptic_rumble((strong / 256) as u8, (weak / 256) as u8)?;
                 self.haptic_timeout = Some(Instant::now() + report.capped_duration());
             }
-            OutputEvent::SteamDeckRumble(report) => {
+            OutputEvent::TriggerVibration(report) => {
                 let l_speed = (report.left_speed.to_primitive() / 256) as u8;
                 let r_speed = (report.right_speed.to_primitive() / 256) as u8;
                 self.driver.haptic_rumble(l_speed, r_speed)?;

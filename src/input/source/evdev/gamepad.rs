@@ -12,7 +12,8 @@ use packed_struct::PrimitiveEnum;
 
 use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::drivers::steam_deck::hid_report::{
-    CommandType, PackedHapticPulseReport, PackedHapticReport, PackedRumbleReport, PadSide,
+    CommandType, PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse,
+    PackedTriggerVibration, PadSide,
 };
 use crate::input::event::evdev::translator::EventTranslator;
 use crate::input::output_capability::{Haptic, OutputCapability, LED};
@@ -203,7 +204,7 @@ impl GamepadEventDevice {
     }
 
     // Process Steam Deck FFB events.
-    fn process_deck_ff(&mut self, report: PackedRumbleReport) -> Result<(), Box<dyn Error>> {
+    fn process_deck_ff(&mut self, report: PackedTriggerVibration) -> Result<(), Box<dyn Error>> {
         // If no effect was uploaded to handle Steam Deck force feedback, upload one.
         if self.ff_effects_deck.is_none() {
             let effect_data = FFEffectData {
@@ -333,7 +334,10 @@ impl GamepadEventDevice {
     }
 
     // Process Steam Deck Haptic events.
-    fn process_haptic_ff(&mut self, report: PackedHapticReport) -> Result<(), Box<dyn Error>> {
+    fn process_haptic_ff(
+        &mut self,
+        report: PackedTriggerHapticPulse,
+    ) -> Result<(), Box<dyn Error>> {
         // If no effect was uploaded to handle Steam Deck force feedback, upload one.
         if self.ff_effects_deck.is_none() {
             let effect_data = FFEffectData {
@@ -429,7 +433,10 @@ impl GamepadEventDevice {
 
     // Process Steam Deck Haptic Pulse events. Real controller firmware times
     // this itself; we approximate it with the kernel's FF replay length.
-    fn process_haptic_pulse_ff(&mut self, report: PackedHapticPulseReport) -> Result<(), Box<dyn Error>> {
+    fn process_haptic_pulse_ff(
+        &mut self,
+        report: PackedTriggerRepeatedHapticPulse,
+    ) -> Result<(), Box<dyn Error>> {
         if self.ff_effects_deck.is_none() {
             let effect_data = FFEffectData {
                 direction: 0,
@@ -697,21 +704,21 @@ impl SourceOutputDevice for GamepadEventDevice {
                 log::trace!("Received Uinput output report. Not implemented.");
                 Ok(())
             }
-            OutputEvent::SteamDeckHaptics(report) => {
+            OutputEvent::TriggerHapticPulse(report) => {
                 log::trace!("Received Steam Deck Haptic Output Report");
                 if let Err(e) = self.process_haptic_ff(report) {
                     log::error!("Failed to process Steam Deck Haptic Output Report: {e:?}")
                 }
                 Ok(())
             }
-            OutputEvent::SteamDeckHapticPulse(report) => {
+            OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 log::trace!("Received Steam Deck Haptic Pulse Report");
                 if let Err(e) = self.process_haptic_pulse_ff(report) {
                     log::error!("Failed to process Steam Deck Haptic Pulse Report: {e:?}")
                 }
                 Ok(())
             }
-            OutputEvent::SteamDeckRumble(report) => {
+            OutputEvent::TriggerVibration(report) => {
                 log::trace!("Received Steam Deck Force Feedback Report");
                 if let Err(e) = self.process_deck_ff(report) {
                     log::error!("Failed to process Steam Deck Force Feedback Report: {e:?}")
