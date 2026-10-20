@@ -10,10 +10,16 @@ use std::{
 
 use ::evdev::FFEffectData;
 use led::LedDevice;
+use packed_struct::types::SizedInteger;
 use thiserror::Error;
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
-use crate::config;
+use crate::{
+    config,
+    drivers::steam_deck::hid_report::{
+        CommandType, PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, TriggerSide,
+    },
+};
 
 use self::{
     client::SourceDeviceClient, command::SourceCommand, evdev::EventDevice, hidraw::HidRawDevice,
@@ -721,5 +727,123 @@ impl SourceDevice {
             SourceDevice::Led(device) => device.get_device_path(),
             SourceDevice::Tty(device) => device.get_device_path(),
         }
+    }
+}
+
+/// Nominal percent played at 0 dB for deck haptic click, tick, and pulse levels
+pub const HAPTIC_NOMINAL_PERCENT: f64 = 32.0;
+
+/// Calculates the motor level for the given gain and nominal percent using a
+/// power scale where 0 dB plays the nominal, returning a value on the 0-max
+/// scale
+pub fn haptic_gain_level(gain: i8, max: f64, nominal_percent: f64) -> f64 {
+    let gain = gain.clamp(-24, 6);
+    max * nominal_percent * 10f64.powf(gain as f64 / 10.0) / 100.0
+}
+
+/// Duration that level-based motors should run for a one-shot trackpad haptic
+pub fn haptic_duration(report: &PackedTriggerHapticPulse) -> Duration {
+    let ms = match report.cmd_type {
+        CommandType::Click => report.intensity.to_click(),
+        CommandType::Tick | CommandType::Off => report.intensity.to_tick(),
+    };
+    Duration::from_millis(ms as u64)
+}
+
+/// Active haptic state for level-based motors: a pulse series or a one-shot
+/// with a scheduled stop
+pub enum HapticState {
+    Start(HapticPulseSeries),
+    Stop(Instant),
+}
+
+/// Emulates a Steam Deck trigger haptic pulse (0x8F) on level-based motors,
+/// advanced from the source poll loop
+pub struct HapticPulseSeries {
+    weak: u8,
+    strong: u8,
+    pulse: Duration,
+    interval: Duration,
+    remaining: u16,
+    next_at: Instant,
+    is_on: bool,
+    finished: bool,
+}
+
+impl HapticPulseSeries {
+    /// The first pulse is immediate, so write the on magnitudes after
+    /// starting the series
+    pub fn new(report: &PackedTriggerRepeatedHapticPulse, max: u8) -> Self {
+        let magnitude =
+            haptic_gain_level(report.gain, f64::from(max), HAPTIC_NOMINAL_PERCENT) as u8;
+        let (weak, strong) = match report.side {
+            TriggerSide::Left => (0, magnitude),
+            TriggerSide::Right => (magnitude, 0),
+            TriggerSide::Both => (magnitude, magnitude),
+        };
+        let duration_us = report.duration_us.to_primitive();
+        // A zero duration is a stop, not a pulse
+        if duration_us == 0 {
+            return Self {
+                weak: 0,
+                strong: 0,
+                pulse: Duration::ZERO,
+                interval: Duration::ZERO,
+                remaining: 0,
+                next_at: Instant::now(),
+                is_on: false,
+                finished: true,
+            };
+        }
+        let pulse = Duration::from_micros(duration_us as u64).max(Duration::from_millis(1));
+        let interval = Duration::from_micros(report.interval_us.to_primitive() as u64);
+        let remaining = report.repeat_count.to_primitive();
+
+        Self {
+            weak,
+            strong,
+            pulse,
+            interval,
+            remaining,
+            next_at: Instant::now() + pulse,
+            is_on: true,
+            finished: false,
+        }
+    }
+
+    /// The on magnitudes, (weak, strong)
+    pub fn magnitudes(&self) -> (u8, u8) {
+        (self.weak, self.strong)
+    }
+
+    /// Advance to the given time, returning the motor values to write,
+    /// (weak, strong), if a transition is due
+    pub fn advance(&mut self, now: Instant) -> Option<(u8, u8)> {
+        if self.finished || now < self.next_at {
+            return None;
+        }
+
+        if self.is_on {
+            self.is_on = false;
+            self.next_at += self.interval;
+            if self.remaining == 0 {
+                self.finished = true;
+            }
+            return Some((0, 0));
+        }
+
+        if self.remaining == 0 {
+            return None;
+        }
+
+        self.remaining -= 1;
+        self.is_on = true;
+        self.next_at += self.pulse;
+        Some((self.weak, self.strong))
+    }
+
+    /// Whether all pulses have completed
+    pub fn is_finished(&self) -> bool {
+        self.finished
     }
 }

@@ -20,7 +20,10 @@ use crate::{
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{
+            HapticPulseSeries, HapticState, InputError, OutputError, SourceInputDevice,
+            SourceOutputDevice,
+        },
     },
     udev::device::UdevDevice,
 };
@@ -29,7 +32,7 @@ use crate::{
 pub struct XpadUhid {
     driver: Driver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
-    haptic_timeout: Option<Instant>,
+    haptic_state: Option<HapticState>,
 }
 
 impl XpadUhid {
@@ -40,7 +43,7 @@ impl XpadUhid {
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
-            haptic_timeout: None,
+            haptic_state: None,
         })
     }
 
@@ -105,6 +108,7 @@ impl XpadUhid {
 
         // The value determines if the effect should be playing or not.
         if value == 0 {
+            self.haptic_state = None;
             log::trace!("Stopping rumble");
             if let Err(e) = Self::write_rumble(&mut self.driver, 0, 0) {
                 log::debug!("Failed to stop rumble: {:?}", e);
@@ -162,10 +166,22 @@ impl XpadUhid {
 impl SourceInputDevice for XpadUhid {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        if let Some(stop_at) = self.haptic_timeout {
-            if Instant::now() >= stop_at {
-                self.haptic_timeout = None;
-                let _ = Self::write_rumble(&mut self.driver, 0, 0);
+        if let Some(state) = &mut self.haptic_state {
+            match state {
+                HapticState::Stop(stop_at) => {
+                    if Instant::now() >= *stop_at {
+                        self.haptic_state = None;
+                        let _ = Self::write_rumble(&mut self.driver, 0, 0);
+                    }
+                }
+                HapticState::Start(series) => {
+                    if let Some((weak, strong)) = series.advance(Instant::now()) {
+                        let _ = Self::write_rumble(&mut self.driver, weak, strong);
+                    }
+                    if series.is_finished() {
+                        self.haptic_state = None;
+                    }
+                }
             }
         }
 
@@ -198,9 +214,10 @@ impl SourceOutputDevice for XpadUhid {
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::TriggerHapticPulse(_packed_haptic_report) => Ok(()),
             OutputEvent::TriggerRepeatedHapticPulse(report) => {
-                let (weak, strong) = report.magnitudes();
-                Self::write_rumble(&mut self.driver, (weak / 256) as u8, (strong / 256) as u8)?;
-                self.haptic_timeout = Some(Instant::now() + report.capped_duration());
+                let series = HapticPulseSeries::new(&report, u8::MAX);
+                let (weak, strong) = series.magnitudes();
+                Self::write_rumble(&mut self.driver, weak, strong)?;
+                self.haptic_state = Some(HapticState::Start(series));
                 Ok(())
             }
             OutputEvent::TriggerVibration(report) => {

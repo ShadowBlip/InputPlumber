@@ -12,7 +12,8 @@ use packed_struct::PrimitiveEnum;
 
 use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::drivers::steam_deck::hid_report::{
-    CommandType, PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedTriggerVibration, PadSide,
+    CommandType, PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedTriggerVibration,
+    PadSide, TriggerSide,
 };
 use crate::input::event::evdev::translator::EventTranslator;
 use crate::input::output_capability::{Haptic, OutputCapability, LED};
@@ -22,7 +23,10 @@ use crate::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton},
         event::{evdev::EvdevEvent, native::NativeEvent},
         output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{
+            haptic_duration, haptic_gain_level, InputError, OutputError, SourceInputDevice,
+            SourceOutputDevice, HAPTIC_NOMINAL_PERCENT,
+        },
     },
     udev::device::UdevDevice,
 };
@@ -362,7 +366,7 @@ impl GamepadEventDevice {
         let effect = self.ff_effects.get_mut(&effect_id).unwrap();
 
         let intensity = report.intensity.to_primitive() + 1;
-        let scaled_gain = (report.gain + 24) as u8 * intensity;
+        let scaled_gain = ((report.gain as i16 + 24).clamp(0, 30) as u8) * intensity;
         let normalized_gain = normalize_unsigned_value(scaled_gain as f64, 150.0);
         let new_gain = normalized_gain * u16::MAX as f64;
         let new_gain = new_gain as u16;
@@ -391,11 +395,7 @@ impl GamepadEventDevice {
             CommandType::Click => right_speed,
         };
 
-        let length = match report.cmd_type {
-            CommandType::Off => 0,
-            CommandType::Tick => 50,
-            CommandType::Click => 150,
-        };
+        let length = haptic_duration(&report).as_millis() as u16;
 
         log::trace!("Got FF event data, Left Speed: {left_speed}, Right Speed: {right_speed}, Length: {length}");
 
@@ -458,7 +458,13 @@ impl GamepadEventDevice {
         let effect_id = self.ff_effects_deck.unwrap();
         let effect = self.ff_effects.get_mut(&effect_id).unwrap();
 
-        let (weak_magnitude, strong_magnitude) = report.magnitudes();
+        let magnitude =
+            haptic_gain_level(report.gain, f64::from(u16::MAX), HAPTIC_NOMINAL_PERCENT) as u16;
+        let (weak_magnitude, strong_magnitude) = match report.side {
+            TriggerSide::Left => (0, magnitude),
+            TriggerSide::Right => (magnitude, 0),
+            TriggerSide::Both => (magnitude, magnitude),
+        };
         let length = report.capped_duration().as_millis() as u16;
 
         let effect_data = FFEffectData {

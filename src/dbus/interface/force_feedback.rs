@@ -38,7 +38,7 @@ impl ForceFeedbacker for CompositeDeviceClient {
         let value = value.max(0.0);
         log::debug!("Sending rumble event with value: {value}");
         let report = PackedTriggerVibration {
-            intensity: (value * u8::MAX as f64) as u8,
+            intensity: Integer::from_primitive((value * u8::MAX as f64) as u16),
             left_speed: Integer::from_primitive((value * u16::MAX as f64) as u16),
             right_speed: Integer::from_primitive((value * u16::MAX as f64) as u16),
             ..Default::default()
