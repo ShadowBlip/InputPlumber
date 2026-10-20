@@ -524,7 +524,7 @@ impl HidRawDevice {
             }
             DriverType::XpadUhid => {
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(500),
+                    poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
                 };
                 let device = XpadUhid::new(device_info.clone())?;
