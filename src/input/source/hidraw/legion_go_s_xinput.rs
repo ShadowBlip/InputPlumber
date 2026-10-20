@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    error::Error,
-    fmt::Debug,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, error::Error, fmt::Debug, time::Instant};
 
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
 use packed_struct::{types::SizedInteger, PrimitiveEnum};
@@ -15,7 +10,7 @@ use crate::{
             event, xinput_driver::XInputDriver, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN,
             TRIGG_MAX,
         },
-        steam_deck::hid_report::{PackedTriggerHapticPulse, PadSide},
+        steam_deck::hid_report::{CommandType, PackedTriggerHapticPulse, PadSide},
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
@@ -26,7 +21,10 @@ use crate::{
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{
+            haptic_duration, HapticPulseSeries, HapticState, InputError, OutputError,
+            SourceInputDevice, SourceOutputDevice,
+        },
     },
     udev::device::UdevDevice,
 };
@@ -35,7 +33,7 @@ use crate::{
 pub struct LegionGoSXInputController {
     driver: XInputDriver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
-    haptic_timeout: Option<Instant>,
+    haptic_state: Option<HapticState>,
 }
 
 impl LegionGoSXInputController {
@@ -46,7 +44,7 @@ impl LegionGoSXInputController {
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
-            haptic_timeout: None,
+            haptic_state: None,
         })
     }
 
@@ -80,6 +78,7 @@ impl LegionGoSXInputController {
 
         // The value determines if the effect should be playing or not.
         if value == 0 {
+            self.haptic_state = None;
             if let Err(e) = Self::write_rumble(&mut self.driver, 0, 0) {
                 log::debug!("Failed to stop haptic rumble: {:?}", e);
                 return Ok(());
@@ -151,8 +150,14 @@ impl LegionGoSXInputController {
         &mut self,
         report: PackedTriggerHapticPulse,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if report.cmd_type == CommandType::Off {
+            self.haptic_state = None;
+            Self::write_rumble(&mut self.driver, 0, 0)?;
+            return Ok(());
+        }
+
         let intensity = report.intensity.to_primitive() + 1;
-        let scaled_gain = (report.gain + 24) as u8 * intensity;
+        let scaled_gain = ((report.gain as i16 + 24).clamp(0, 30) as u8) * intensity;
         let normalized_gain = normalize_unsigned_value(scaled_gain as f64, 150.0);
         let new_gain = normalized_gain * u8::MAX as f64;
         let new_gain = new_gain as u8;
@@ -165,7 +170,7 @@ impl LegionGoSXInputController {
         Self::write_rumble(&mut self.driver, weak, strong)?;
 
         // Level-based motors need a scheduled stop
-        self.haptic_timeout = Some(Instant::now() + Duration::from_millis(50));
+        self.haptic_state = Some(HapticState::Stop(Instant::now() + haptic_duration(&report)));
 
         Ok(())
     }
@@ -174,10 +179,22 @@ impl LegionGoSXInputController {
 impl SourceInputDevice for LegionGoSXInputController {
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        if let Some(stop_at) = self.haptic_timeout {
-            if Instant::now() >= stop_at {
-                self.haptic_timeout = None;
-                let _ = Self::write_rumble(&mut self.driver, 0, 0);
+        if let Some(state) = &mut self.haptic_state {
+            match state {
+                HapticState::Stop(stop_at) => {
+                    if Instant::now() >= *stop_at {
+                        self.haptic_state = None;
+                        let _ = Self::write_rumble(&mut self.driver, 0, 0);
+                    }
+                }
+                HapticState::Start(series) => {
+                    if let Some((weak, strong)) = series.advance(Instant::now()) {
+                        let _ = Self::write_rumble(&mut self.driver, weak, strong);
+                    }
+                    if series.is_finished() {
+                        self.haptic_state = None;
+                    }
+                }
             }
         }
 
@@ -219,9 +236,10 @@ impl SourceOutputDevice for LegionGoSXInputController {
             OutputEvent::Uinput(_) => (),
             OutputEvent::TriggerHapticPulse(report) => self.process_haptic_ff(report)?,
             OutputEvent::TriggerRepeatedHapticPulse(report) => {
-                let (weak, strong) = report.magnitudes();
-                Self::write_rumble(&mut self.driver, (weak / 256) as u8, (strong / 256) as u8)?;
-                self.haptic_timeout = Some(Instant::now() + report.capped_duration());
+                let series = HapticPulseSeries::new(&report, u8::MAX);
+                let (weak, strong) = series.magnitudes();
+                Self::write_rumble(&mut self.driver, weak, strong)?;
+                self.haptic_state = Some(HapticState::Start(series));
             }
             OutputEvent::TriggerVibration(report) => {
                 let strong = (report.left_speed.to_primitive() / 256) as u8;

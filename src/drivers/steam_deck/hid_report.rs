@@ -634,6 +634,30 @@ pub enum Intensity {
     Insane = 4,
 }
 
+impl Intensity {
+    /// One-shot trackpad haptic duration in ms for a tick
+    pub fn to_tick(&self) -> u8 {
+        match self {
+            Intensity::Default => 50,
+            Intensity::Short => 35,
+            Intensity::Medium => 65,
+            Intensity::Long => 80,
+            Intensity::Insane => 95,
+        }
+    }
+
+    /// One-shot trackpad haptic duration in ms for a click
+    pub fn to_click(&self) -> u8 {
+        match self {
+            Intensity::Default => 150,
+            Intensity::Short => 120,
+            Intensity::Medium => 180,
+            Intensity::Long => 210,
+            Intensity::Insane => 240,
+        }
+    }
+}
+
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
 pub enum CommandType {
     Off = 0,
@@ -645,7 +669,8 @@ pub enum CommandType {
  * Send a haptic pulse to the trackpads
  * Duration and interval are measured in microseconds, count is the number
  * of pulses to send for duration time with interval microseconds between them
- * and gain is measured in decibels, ranging from -24 to +6
+ * and gain is a power scale dB offset ranging from -24 to +6 where 0 plays
+ * the nominal level
  */
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0")]
@@ -679,18 +704,6 @@ impl PackedTriggerRepeatedHapticPulse {
         }
     }
 
-    /// (weak, strong) rumble magnitudes for devices that must fake this pulse
-    /// with a plain on/off motor, derived from side and gain (dB, -24 to +6).
-    pub fn magnitudes(&self) -> (u16, u16) {
-        let normalized_gain = (self.gain as i16 + 24).clamp(0, 30) as f64 / 30.0;
-        let magnitude = (normalized_gain * u16::MAX as f64) as u16;
-        match self.side {
-            TriggerSide::Left => (0, magnitude),
-            TriggerSide::Right => (magnitude, 0),
-            TriggerSide::Both => (magnitude, magnitude),
-        }
-    }
-
     /// Capped duration for devices that must schedule their own stop, since
     /// duration_us * repeat_count can be huge or bogus.
     pub fn capped_duration(&self) -> Duration {
@@ -715,14 +728,18 @@ pub struct PackedTriggerVibration {
     pub report_size: u8,
     #[packed_field(bytes = "2")]
     pub unk_2: u8,
-    #[packed_field(bytes = "3", endian = "lsb")]
-    pub event_type: u8,
-    #[packed_field(bytes = "4", endian = "lsb")]
-    pub intensity: u8,
+    #[packed_field(bytes = "3..=4", endian = "lsb")]
+    pub intensity: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "5..=6", endian = "lsb")]
     pub left_speed: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "7..=8", endian = "lsb")]
     pub right_speed: Integer<u16, packed_bits::Bits<16>>,
+    /// Left motor gain
+    #[packed_field(bytes = "9")]
+    pub left_gain: i8,
+    /// Right motor gain
+    #[packed_field(bytes = "10")]
+    pub right_gain: i8,
 }
 
 impl PackedTriggerVibration {
@@ -731,10 +748,11 @@ impl PackedTriggerVibration {
             cmd_id: ReportType::TriggerVibration as u8,
             report_size: 9,
             unk_2: 0,
-            event_type: 0,
-            intensity: 0,
+            intensity: Integer::from_primitive(0),
             left_speed: Integer::from_primitive(0),
             right_speed: Integer::from_primitive(0),
+            left_gain: 0,
+            right_gain: 0,
         }
     }
 
@@ -775,8 +793,30 @@ pub struct PackedTriggerHapticPulse {
     pub unk_7: u8,
     #[packed_field(bytes = "8")]
     pub unk_8: u8,
+    #[packed_field(bytes = "9")]
+    pub unk_9: u8,
+    #[packed_field(bytes = "10")]
+    pub unk_10: u8,
+    #[packed_field(bytes = "11")]
+    pub unk_11: u8,
     #[packed_field(bytes = "12")]
     pub unk_12: u8,
+    #[packed_field(bytes = "13")]
+    pub unk_13: u8,
+    #[packed_field(bytes = "14")]
+    pub unk_14: u8,
+    #[packed_field(bytes = "15")]
+    pub unk_15: u8,
+    #[packed_field(bytes = "16")]
+    pub unk_16: u8,
+    #[packed_field(bytes = "17")]
+    pub unk_17: u8,
+    #[packed_field(bytes = "18")]
+    pub unk_18: u8,
+    #[packed_field(bytes = "19")]
+    pub unk_19: u8,
+    #[packed_field(bytes = "20")]
+    pub unk_20: u8,
 }
 
 impl PackedTriggerHapticPulse {
@@ -791,7 +831,18 @@ impl PackedTriggerHapticPulse {
             unk_6: 95,
             unk_7: 204,
             unk_8: 3,
+            unk_9: 0,
+            unk_10: 0,
+            unk_11: 0,
             unk_12: 16,
+            unk_13: 0,
+            unk_14: 0,
+            unk_15: 0,
+            unk_16: 0,
+            unk_17: 0,
+            unk_18: 0,
+            unk_19: 0,
+            unk_20: 0,
         }
     }
 }

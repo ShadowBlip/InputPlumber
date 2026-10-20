@@ -10,7 +10,10 @@ use crate::{
         event::native::NativeEvent,
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{
+            HapticPulseSeries, HapticState, InputError, OutputError, SourceInputDevice,
+            SourceOutputDevice,
+        },
     },
     udev::device::UdevDevice,
 };
@@ -48,7 +51,7 @@ struct AyaneoRumbleReport {
 pub struct AyaneoHaptics {
     device: HidDevice,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
-    haptic_timeout: Option<Instant>,
+    haptic_state: Option<HapticState>,
 }
 
 impl AyaneoHaptics {
@@ -70,7 +73,7 @@ impl AyaneoHaptics {
         Ok(Self {
             device,
             ff_evdev_effects: HashMap::new(),
-            haptic_timeout: None,
+            haptic_state: None,
         })
     }
 
@@ -119,6 +122,7 @@ impl AyaneoHaptics {
             };
 
         if value == 0 {
+            self.haptic_state = None;
             return self.rumble(0, 0);
         }
 
@@ -156,10 +160,24 @@ impl Drop for AyaneoHaptics {
 
 impl SourceInputDevice for AyaneoHaptics {
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        if let Some(stop_at) = self.haptic_timeout {
-            if Instant::now() >= stop_at {
-                self.haptic_timeout = None;
-                let _ = self.rumble(0, 0);
+        if let Some(state) = &mut self.haptic_state {
+            match state {
+                HapticState::Stop(stop_at) => {
+                    if Instant::now() >= *stop_at {
+                        self.haptic_state = None;
+                        let _ = self.rumble(0, 0);
+                    }
+                }
+                HapticState::Start(series) => {
+                    let values = series.advance(Instant::now());
+                    let finished = series.is_finished();
+                    if let Some((weak, strong)) = values {
+                        let _ = self.rumble(u16::from(strong) << 8, u16::from(weak) << 8);
+                    }
+                    if finished {
+                        self.haptic_state = None;
+                    }
+                }
             }
         }
         Ok(vec![])
@@ -200,9 +218,10 @@ impl SourceOutputDevice for AyaneoHaptics {
                 strong_magnitude,
             } => Ok(self.rumble(strong_magnitude, weak_magnitude)?),
             OutputEvent::TriggerRepeatedHapticPulse(report) => {
-                let (weak, strong) = report.magnitudes();
-                self.rumble(strong, weak)?;
-                self.haptic_timeout = Some(Instant::now() + report.capped_duration());
+                let series = HapticPulseSeries::new(&report, u8::MAX);
+                let (weak, strong) = series.magnitudes();
+                self.rumble(u16::from(strong) << 8, u16::from(weak) << 8)?;
+                self.haptic_state = Some(HapticState::Start(series));
                 Ok(())
             }
             OutputEvent::Uinput(_) | OutputEvent::TriggerHapticPulse(_) => Ok(()),

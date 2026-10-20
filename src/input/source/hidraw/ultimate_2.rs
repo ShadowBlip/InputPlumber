@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    error::Error,
-    fmt::Debug,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, error::Error, fmt::Debug, time::Instant};
 
 use evdev::{FFEffectData, FFEffectKind};
 use packed_struct::{types::SizedInteger, PrimitiveEnum};
@@ -11,7 +6,7 @@ use packed_struct::{types::SizedInteger, PrimitiveEnum};
 use crate::{
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
-        steam_deck::hid_report::{PackedTriggerHapticPulse, PadSide},
+        steam_deck::hid_report::{CommandType, PackedTriggerHapticPulse, PadSide},
         ultimate_2::{
             driver::Driver, event, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX,
             ULTIMATE_2_ACCEL_RAW_TO_MPS2, ULTIMATE_2_GYRO_RAW_TO_RAD_S,
@@ -28,7 +23,10 @@ use crate::{
         },
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
-        source::{InputError, OutputError, SourceInputDevice, SourceOutputDevice},
+        source::{
+            haptic_duration, HapticPulseSeries, HapticState, InputError, OutputError,
+            SourceInputDevice, SourceOutputDevice,
+        },
     },
     udev::device::UdevDevice,
 };
@@ -37,7 +35,7 @@ use crate::{
 pub struct Ultimate2 {
     driver: Driver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
-    haptic_timeout: Option<Instant>,
+    haptic_state: Option<HapticState>,
 }
 
 impl Ultimate2 {
@@ -48,7 +46,7 @@ impl Ultimate2 {
         Ok(Self {
             driver,
             ff_evdev_effects: HashMap::new(),
-            haptic_timeout: None,
+            haptic_state: None,
         })
     }
 
@@ -97,6 +95,7 @@ impl Ultimate2 {
 
         // The value determines if the effect should be playing or not.
         if value == 0 {
+            self.haptic_state = None;
             log::trace!("Stopping rumble");
             if let Err(e) = Self::write_rumble(&mut self.driver, 0, 0) {
                 log::debug!("Failed to stop rumble: {:?}", e);
@@ -173,8 +172,14 @@ impl Ultimate2 {
         &mut self,
         report: PackedTriggerHapticPulse,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if report.cmd_type == CommandType::Off {
+            self.haptic_state = None;
+            Self::write_rumble(&mut self.driver, 0, 0)?;
+            return Ok(());
+        }
+
         let intensity = report.intensity.to_primitive() + 1;
-        let scaled_gain = (report.gain + 24) as u8 * intensity;
+        let scaled_gain = ((report.gain as i16 + 24).clamp(0, 30) as u8) * intensity;
         let normalized_gain = normalize_unsigned_value(scaled_gain as f64, 150.0);
         let new_gain = normalized_gain * u8::MAX as f64;
         let new_gain = new_gain as u8;
@@ -187,7 +192,7 @@ impl Ultimate2 {
         Self::write_rumble(&mut self.driver, weak, strong)?;
 
         // Level-based motors need a scheduled stop
-        self.haptic_timeout = Some(Instant::now() + Duration::from_millis(50));
+        self.haptic_state = Some(HapticState::Stop(Instant::now() + haptic_duration(&report)));
 
         Ok(())
     }
@@ -196,10 +201,22 @@ impl Ultimate2 {
 impl SourceInputDevice for Ultimate2 {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
-        if let Some(stop_at) = self.haptic_timeout {
-            if Instant::now() >= stop_at {
-                self.haptic_timeout = None;
-                let _ = Self::write_rumble(&mut self.driver, 0, 0);
+        if let Some(state) = &mut self.haptic_state {
+            match state {
+                HapticState::Stop(stop_at) => {
+                    if Instant::now() >= *stop_at {
+                        self.haptic_state = None;
+                        let _ = Self::write_rumble(&mut self.driver, 0, 0);
+                    }
+                }
+                HapticState::Start(series) => {
+                    if let Some((weak, strong)) = series.advance(Instant::now()) {
+                        let _ = Self::write_rumble(&mut self.driver, weak, strong);
+                    }
+                    if series.is_finished() {
+                        self.haptic_state = None;
+                    }
+                }
             }
         }
 
@@ -238,9 +255,10 @@ impl SourceOutputDevice for Ultimate2 {
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::TriggerHapticPulse(report) => Ok(self.process_haptic_ff(report)?),
             OutputEvent::TriggerRepeatedHapticPulse(report) => {
-                let (weak, strong) = report.magnitudes();
-                Self::write_rumble(&mut self.driver, (weak / 256) as u8, (strong / 256) as u8)?;
-                self.haptic_timeout = Some(Instant::now() + report.capped_duration());
+                let series = HapticPulseSeries::new(&report, u8::MAX);
+                let (weak, strong) = series.magnitudes();
+                Self::write_rumble(&mut self.driver, weak, strong)?;
+                self.haptic_state = Some(HapticState::Start(series));
                 Ok(())
             }
             OutputEvent::TriggerVibration(report) => {
@@ -454,17 +472,35 @@ fn translate_event(event: event::Event) -> NativeEvent {
             event::InertialEvent::Accelerometer(value) => NativeEvent::new(
                 Capability::Accelerometer(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(normalize_accel_value_i16(value.x, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
-                    y: Some(normalize_accel_value_i16(value.y, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
-                    z: Some(normalize_accel_value_i16(value.z, ULTIMATE_2_ACCEL_RAW_TO_MPS2)),
+                    x: Some(normalize_accel_value_i16(
+                        value.x,
+                        ULTIMATE_2_ACCEL_RAW_TO_MPS2,
+                    )),
+                    y: Some(normalize_accel_value_i16(
+                        value.y,
+                        ULTIMATE_2_ACCEL_RAW_TO_MPS2,
+                    )),
+                    z: Some(normalize_accel_value_i16(
+                        value.z,
+                        ULTIMATE_2_ACCEL_RAW_TO_MPS2,
+                    )),
                 },
             ),
             event::InertialEvent::Gyroscope(value) => NativeEvent::new(
                 Capability::Gyroscope(Source::Center),
                 InputValue::Vector3 {
-                    x: Some(normalize_gyro_value_i16(value.x, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
-                    y: Some(normalize_gyro_value_i16(value.y, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
-                    z: Some(normalize_gyro_value_i16(value.z, ULTIMATE_2_GYRO_RAW_TO_RAD_S)),
+                    x: Some(normalize_gyro_value_i16(
+                        value.x,
+                        ULTIMATE_2_GYRO_RAW_TO_RAD_S,
+                    )),
+                    y: Some(normalize_gyro_value_i16(
+                        value.y,
+                        ULTIMATE_2_GYRO_RAW_TO_RAD_S,
+                    )),
+                    z: Some(normalize_gyro_value_i16(
+                        value.z,
+                        ULTIMATE_2_GYRO_RAW_TO_RAD_S,
+                    )),
                 },
             ),
         },
