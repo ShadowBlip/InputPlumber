@@ -59,14 +59,27 @@ impl XpadUhid {
         }
     }
 
+    /// Write a rumble event to the driver
+    fn write_rumble(
+        driver: &mut Driver,
+        weak: u8,
+        strong: u8,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let event = event::OutputEvent::Rumble { weak, strong };
+        driver.write_event(&event)
+    }
+
     /// Process the given DualSense-format force feedback report.
     fn process_dualsense_ff(
         &mut self,
         report: SetStatePackedOutputData,
     ) -> Result<(), Box<dyn Error>> {
-        let left_speed = report.rumble_emulation_left;
-        let right_speed = report.rumble_emulation_right;
-        if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+        // The DualSense report carries per-motor speeds in FF convention
+        if let Err(e) = Self::write_rumble(
+            &mut self.driver,
+            report.rumble_emulation_right,
+            report.rumble_emulation_left,
+        ) {
             return Err(format!("Failed to do rumble: {e:?}").into());
         }
         Ok(())
@@ -93,7 +106,7 @@ impl XpadUhid {
         // The value determines if the effect should be playing or not.
         if value == 0 {
             log::trace!("Stopping rumble");
-            if let Err(e) = self.driver.rumble(0, 0) {
+            if let Err(e) = Self::write_rumble(&mut self.driver, 0, 0) {
                 log::debug!("Failed to stop rumble: {:?}", e);
                 return Ok(());
             }
@@ -129,13 +142,13 @@ impl XpadUhid {
                 weak_magnitude,
             } => {
                 // Scale the rumble values to the DS5 values
-                let left_speed = (strong_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
-                let left_speed = left_speed.round() as u8;
-                let right_speed = (weak_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64;
-                let right_speed = right_speed.round() as u8;
+                let strong =
+                    ((strong_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64).round() as u8;
+                let weak =
+                    ((weak_magnitude as f64 / u16::MAX as f64) * u8::MAX as f64).round() as u8;
 
                 // Do rumble
-                if let Err(e) = self.driver.rumble(left_speed, right_speed) {
+                if let Err(e) = Self::write_rumble(&mut self.driver, weak, strong) {
                     let err = format!("Failed to do rumble: {e:?}");
                     return Err(err.into());
                 }
@@ -152,7 +165,7 @@ impl SourceInputDevice for XpadUhid {
         if let Some(stop_at) = self.haptic_timeout {
             if Instant::now() >= stop_at {
                 self.haptic_timeout = None;
-                let _ = self.driver.rumble(0, 0);
+                let _ = Self::write_rumble(&mut self.driver, 0, 0);
             }
         }
 
@@ -186,23 +199,22 @@ impl SourceOutputDevice for XpadUhid {
             OutputEvent::TriggerHapticPulse(_packed_haptic_report) => Ok(()),
             OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 let (weak, strong) = report.magnitudes();
-                self.driver
-                    .rumble((strong / 256) as u8, (weak / 256) as u8)?;
+                Self::write_rumble(&mut self.driver, (weak / 256) as u8, (strong / 256) as u8)?;
                 self.haptic_timeout = Some(Instant::now() + report.capped_duration());
                 Ok(())
             }
             OutputEvent::TriggerVibration(report) => {
-                let left_speed = (report.left_speed.to_primitive() / 256) as u8;
-                let right_speed = (report.right_speed.to_primitive() / 256) as u8;
-                Ok(self.driver.rumble(left_speed, right_speed)?)
+                let strong = (report.left_speed.to_primitive() / 256) as u8;
+                let weak = (report.right_speed.to_primitive() / 256) as u8;
+                Ok(Self::write_rumble(&mut self.driver, weak, strong)?)
             }
             OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,
             } => {
-                let left_speed = (strong_magnitude / 256) as u8;
-                let right_speed = (weak_magnitude / 256) as u8;
-                Ok(self.driver.rumble(left_speed, right_speed)?)
+                let strong = (strong_magnitude / 256) as u8;
+                let weak = (weak_magnitude / 256) as u8;
+                Ok(Self::write_rumble(&mut self.driver, weak, strong)?)
             }
         }
     }

@@ -616,6 +616,15 @@ pub enum PadSide {
     Both = 2,
 }
 
+/// Side of a trigger haptic pulse. The 0x8F pulse report encodes side
+/// inverted relative to `PadSide` in the 0xEA/0xEB trackpad haptic reports.
+#[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
+pub enum TriggerSide {
+    Right = 0,
+    Left = 1,
+    Both = 2,
+}
+
 #[derive(PrimitiveEnum_u8, Clone, Copy, PartialEq, Debug)]
 pub enum Intensity {
     Default = 0,
@@ -646,7 +655,7 @@ pub struct PackedTriggerRepeatedHapticPulse {
     #[packed_field(bytes = "1")]
     pub report_size: u8,
     #[packed_field(bytes = "2", ty = "enum")]
-    pub side: PadSide,
+    pub side: TriggerSide,
     #[packed_field(bytes = "3..=4", endian = "lsb")]
     pub duration_us: Integer<u16, packed_bits::Bits<16>>,
     #[packed_field(bytes = "5..=6", endian = "lsb")]
@@ -662,7 +671,7 @@ impl PackedTriggerRepeatedHapticPulse {
         Self {
             report_id: ReportType::TriggerRepeatedHapticPulse as u8,
             report_size: 8,
-            side: PadSide::Both,
+            side: TriggerSide::Both,
             duration_us: Integer::from_primitive(0),
             interval_us: Integer::from_primitive(0),
             repeat_count: Integer::from_primitive(0),
@@ -676,9 +685,9 @@ impl PackedTriggerRepeatedHapticPulse {
         let normalized_gain = (self.gain as i16 + 24).clamp(0, 30) as f64 / 30.0;
         let magnitude = (normalized_gain * u16::MAX as f64) as u16;
         match self.side {
-            PadSide::Left => (0, magnitude),
-            PadSide::Right => (magnitude, 0),
-            PadSide::Both => (magnitude, magnitude),
+            TriggerSide::Left => (0, magnitude),
+            TriggerSide::Right => (magnitude, 0),
+            TriggerSide::Both => (magnitude, magnitude),
         }
     }
 
@@ -726,6 +735,15 @@ impl PackedTriggerVibration {
             intensity: 0,
             left_speed: Integer::from_primitive(0),
             right_speed: Integer::from_primitive(0),
+        }
+    }
+
+    /// Create a rumble report with the given left and right magnitudes
+    pub fn with_magnitudes(left: u16, right: u16) -> Self {
+        Self {
+            left_speed: Integer::from_primitive(left),
+            right_speed: Integer::from_primitive(right),
+            ..Self::new()
         }
     }
 }

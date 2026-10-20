@@ -4,7 +4,10 @@ use hidapi::HidDevice;
 use packed_struct::PackedStruct;
 
 use super::{
-    event::{AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, TriggerEvent, TriggerInput},
+    event::{
+        AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, OutputEvent, TriggerEvent,
+        TriggerInput,
+    },
     hid_report::{RumbleOutputDataReport, XInputDataReport},
     GAMEPAD_TIMEOUT, GP_IID, PIDS, VID, XINPUT_PACKET_SIZE,
 };
@@ -59,20 +62,20 @@ impl XInputDriver {
         Ok(())
     }
 
-    pub fn haptic_rumble(
-        &self,
-        l_motor_speed: u8,
-        r_motor_speed: u8,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let report = RumbleOutputDataReport {
-            l_motor_speed,
-            r_motor_speed,
-            ..Default::default()
-        };
-        //log::debug!("Got rumble event: {report:?}");
+    pub fn write_event(&self, event: &OutputEvent) -> Result<(), Box<dyn Error + Send + Sync>> {
+        match event {
+            OutputEvent::Rumble { weak, strong } => {
+                let report = RumbleOutputDataReport {
+                    // The strong motor is the left motor on this device
+                    l_motor_speed: *strong,
+                    r_motor_speed: *weak,
+                    ..Default::default()
+                };
 
-        let buf = report.pack()?;
-        self.write(&buf)
+                let buf = report.pack()?;
+                self.write(&buf)
+            }
+        }
     }
 
     /* GamePad */

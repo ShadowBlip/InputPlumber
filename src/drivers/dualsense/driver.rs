@@ -9,7 +9,9 @@ use crate::drivers::dualsense::{
 };
 
 use super::{
-    event::{AxisEvent, AxisInput, Event, InertialEvent, InertialInput, TouchAxisInput},
+    event::{
+        AxisEvent, AxisInput, Event, InertialEvent, InertialInput, OutputEvent, TouchAxisInput,
+    },
     hid_report::{
         CalibrationReport, PackedInputDataReport, SetStatePackedOutputData, UsbPackedOutputReport,
     },
@@ -240,21 +242,22 @@ impl Driver {
         self.write(state)
     }
 
-    /// Use rumble emulation to rumble the gamepad
-    pub fn rumble(
-        &self,
-        left_speed: u8,
-        right_speed: u8,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let state = SetStatePackedOutputData {
-            use_rumble_not_haptics: true,
-            enable_rumble_emulation: true,
-            rumble_emulation_right: right_speed,
-            rumble_emulation_left: left_speed,
-            ..Default::default()
-        };
+    /// Write an output event to the gamepad
+    pub fn write_event(&self, event: &OutputEvent) -> Result<(), Box<dyn Error + Send + Sync>> {
+        match event {
+            OutputEvent::HapticRumble { left, right } => {
+                let state = SetStatePackedOutputData {
+                    use_rumble_not_haptics: true,
+                    enable_rumble_emulation: true,
+                    rumble_emulation_right: *right,
+                    rumble_emulation_left: *left,
+                    ..Default::default()
+                };
 
-        self.write(state)
+                self.write(state)
+            }
+            OutputEvent::State(state) => self.write(*state),
+        }
     }
 
     /// Unpacks the buffer into a [PackedInputDataReport] structure and updates

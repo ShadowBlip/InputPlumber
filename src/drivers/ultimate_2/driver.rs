@@ -14,7 +14,8 @@ use crate::{
 };
 
 use super::event::{
-    AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, TriggerEvent, TriggerInput,
+    AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, OutputEvent, TriggerEvent,
+    TriggerInput,
 };
 
 // Input report size
@@ -61,22 +62,26 @@ impl Driver {
         })
     }
 
-    /// Rumble the gamepad
-    pub fn rumble(&self, strong: u8, weak: u8) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let state = PackedRumbleOutputReport {
-            report_id: REPORT_ID_RUMBLE,
-            strong_magnitude: strong,
-            weak_magnitude: weak,
-            _padding_3: Default::default(),
-            _padding_4: Default::default(),
-        };
+    /// Write an output event to the gamepad
+    pub fn write_event(&self, event: &OutputEvent) -> Result<(), Box<dyn Error + Send + Sync>> {
+        match event {
+            OutputEvent::Rumble { weak, strong } => {
+                let state = PackedRumbleOutputReport {
+                    report_id: REPORT_ID_RUMBLE,
+                    strong_magnitude: *strong,
+                    weak_magnitude: *weak,
+                    _padding_3: Default::default(),
+                    _padding_4: Default::default(),
+                };
 
-        let buf = state.pack()?;
-        let bytes_written = self.device.write(&buf)?;
-        if bytes_written != size_of::<PackedRumbleOutputReport>() {
-            return Err("Failed to write rumble report".to_string().into());
+                let buf = state.pack()?;
+                let bytes_written = self.device.write(&buf)?;
+                if bytes_written != size_of::<PackedRumbleOutputReport>() {
+                    return Err("Failed to write rumble report".to_string().into());
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     /// Poll the device and read input reports

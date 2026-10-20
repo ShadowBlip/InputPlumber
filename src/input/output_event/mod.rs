@@ -5,7 +5,7 @@ use ::evdev::{FFEffectData, InputEvent};
 use crate::drivers::{
     dualsense::hid_report::SetStatePackedOutputData,
     steam_deck::hid_report::{
-        PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse, PackedTriggerVibration, PadSide,
+        PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedTriggerVibration, PadSide, TriggerSide,
     },
 };
 
@@ -78,9 +78,9 @@ impl OutputEvent {
                 }
             }
             OutputEvent::TriggerRepeatedHapticPulse(report) => match report.side {
-                PadSide::Left => vec![OutputCapability::Haptics(Haptic::TrackpadLeft)],
-                PadSide::Right => vec![OutputCapability::Haptics(Haptic::TrackpadRight)],
-                PadSide::Both => vec![
+                TriggerSide::Left => vec![OutputCapability::Haptics(Haptic::TrackpadLeft)],
+                TriggerSide::Right => vec![OutputCapability::Haptics(Haptic::TrackpadRight)],
+                TriggerSide::Both => vec![
                     OutputCapability::Haptics(Haptic::TrackpadLeft),
                     OutputCapability::Haptics(Haptic::TrackpadRight),
                 ],
