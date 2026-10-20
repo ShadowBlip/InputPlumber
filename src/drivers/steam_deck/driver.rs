@@ -12,7 +12,9 @@ use super::{
         AxisEvent, AxisInput, BinaryInput, ButtonEvent, Event, InertialEvent, InertialInput,
         TouchAxisInput, TriggerEvent, TriggerInput,
     },
-    hid_report::{PackedMappingsReport, PackedRumbleReport, Register, ReportType, TrackpadMode},
+    hid_report::{
+        PackedMappingsReport, PackedTriggerVibration, Register, ReportType, TrackpadMode,
+    },
 };
 
 /// Size of the HID packet
@@ -65,7 +67,7 @@ impl Driver {
         left_speed: u16,
         right_speed: u16,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let mut report = PackedRumbleReport::new();
+        let mut report = PackedTriggerVibration::new();
         report.left_speed = Integer::from_primitive(left_speed);
         report.right_speed = Integer::from_primitive(right_speed);
 
@@ -409,13 +411,11 @@ impl Driver {
                     z: -state.accel_y.to_primitive(),
                 },
             )));
-            events.push(Event::Inertia(InertialEvent::Gyroscope(
-                InertialInput {
-                    x: state.pitch.to_primitive(),
-                    y: state.roll.to_primitive(),
-                    z: -state.yaw.to_primitive(),
-                },
-            )));
+            events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
+                x: state.pitch.to_primitive(),
+                y: state.roll.to_primitive(),
+                z: -state.yaw.to_primitive(),
+            })));
         };
 
         events

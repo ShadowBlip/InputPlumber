@@ -4,7 +4,9 @@ use ::evdev::{FFEffectData, InputEvent};
 
 use crate::drivers::{
     dualsense::hid_report::SetStatePackedOutputData,
-    steam_deck::hid_report::{PackedHapticPulseReport, PackedHapticReport, PackedRumbleReport, PadSide},
+    steam_deck::hid_report::{
+        PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse, PackedTriggerVibration, PadSide,
+    },
 };
 
 use super::output_capability::{Haptic, OutputCapability};
@@ -15,9 +17,9 @@ pub enum OutputEvent {
     Evdev(InputEvent),
     Uinput(UinputOutputEvent),
     DualSense(SetStatePackedOutputData),
-    SteamDeckHaptics(PackedHapticReport),
-    SteamDeckHapticPulse(PackedHapticPulseReport),
-    SteamDeckRumble(PackedRumbleReport),
+    TriggerHapticPulse(PackedTriggerHapticPulse),
+    TriggerRepeatedHapticPulse(PackedTriggerRepeatedHapticPulse),
+    TriggerVibration(PackedTriggerVibration),
     GenericRumble {
         weak_magnitude: u16,
         strong_magnitude: u16,
@@ -65,8 +67,8 @@ impl OutputEvent {
                     vec![OutputCapability::NotImplemented]
                 }
             }
-            OutputEvent::SteamDeckHaptics(packed_haptic_report) => {
-                match packed_haptic_report.side {
+            OutputEvent::TriggerHapticPulse(packed_trigger_haptic_pulse) => {
+                match packed_trigger_haptic_pulse.side {
                     PadSide::Left => vec![OutputCapability::Haptics(Haptic::TrackpadLeft)],
                     PadSide::Right => vec![OutputCapability::Haptics(Haptic::TrackpadRight)],
                     PadSide::Both => vec![
@@ -75,7 +77,7 @@ impl OutputEvent {
                     ],
                 }
             }
-            OutputEvent::SteamDeckHapticPulse(report) => match report.side {
+            OutputEvent::TriggerRepeatedHapticPulse(report) => match report.side {
                 PadSide::Left => vec![OutputCapability::Haptics(Haptic::TrackpadLeft)],
                 PadSide::Right => vec![OutputCapability::Haptics(Haptic::TrackpadRight)],
                 PadSide::Both => vec![
@@ -83,7 +85,7 @@ impl OutputEvent {
                     OutputCapability::Haptics(Haptic::TrackpadRight),
                 ],
             },
-            OutputEvent::SteamDeckRumble(_) => vec![OutputCapability::ForceFeedback],
+            OutputEvent::TriggerVibration(_) => vec![OutputCapability::ForceFeedback],
             OutputEvent::GenericRumble { .. } => vec![OutputCapability::ForceFeedback],
         }
     }
@@ -97,9 +99,9 @@ impl OutputEvent {
             ),
             OutputEvent::Uinput(_) => true,
             OutputEvent::DualSense(report) => report.use_rumble_not_haptics,
-            OutputEvent::SteamDeckHaptics(_) => true,
-            OutputEvent::SteamDeckHapticPulse(_) => true,
-            OutputEvent::SteamDeckRumble(_) => true,
+            OutputEvent::TriggerHapticPulse(_) => true,
+            OutputEvent::TriggerRepeatedHapticPulse(_) => true,
+            OutputEvent::TriggerVibration(_) => true,
             OutputEvent::GenericRumble { .. } => true,
         }
     }

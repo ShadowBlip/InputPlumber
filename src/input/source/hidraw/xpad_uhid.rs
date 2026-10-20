@@ -183,15 +183,15 @@ impl SourceOutputDevice for XpadUhid {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
             OutputEvent::DualSense(report) => Ok(self.process_dualsense_ff(report)?),
             OutputEvent::Uinput(_) => Ok(()),
-            OutputEvent::SteamDeckHaptics(_packed_haptic_report) => Ok(()),
-            OutputEvent::SteamDeckHapticPulse(report) => {
+            OutputEvent::TriggerHapticPulse(_packed_haptic_report) => Ok(()),
+            OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 let (weak, strong) = report.magnitudes();
                 self.driver
                     .rumble((strong / 256) as u8, (weak / 256) as u8)?;
                 self.haptic_timeout = Some(Instant::now() + report.capped_duration());
                 Ok(())
             }
-            OutputEvent::SteamDeckRumble(report) => {
+            OutputEvent::TriggerVibration(report) => {
                 let left_speed = (report.left_speed.to_primitive() / 256) as u8;
                 let right_speed = (report.right_speed.to_primitive() / 256) as u8;
                 Ok(self.driver.rumble(left_speed, right_speed)?)

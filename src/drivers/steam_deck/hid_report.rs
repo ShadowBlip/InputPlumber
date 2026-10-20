@@ -92,7 +92,7 @@ pub enum ReportType {
     GetSettingsDefaults = 0x8C,
     SetControllerMode = 0x8D,
     LoadDefaultSettings = 0x8E,
-    TriggerHapticPulse = 0x8F,
+    TriggerRepeatedHapticPulse = 0x8F,
     TurnOffController = 0x9F,
     GetDeviceInfo = 0xA1,
     CalibrateTrackpads = 0xA7,
@@ -124,8 +124,8 @@ pub enum ReportType {
     ResetIMU = 0xCE,
     UnknownDc = 0xDC,
     UnknownE2 = 0xE2,
-    TriggerHapticCommand = 0xEA,
-    TriggerRumbleCommand = 0xEB,
+    TriggerHapticPulse = 0xEA,
+    TriggerVibration = 0xEB,
 }
 
 impl TryFrom<u8> for ReportType {
@@ -149,7 +149,7 @@ impl TryFrom<u8> for ReportType {
             0x8C => Ok(Self::GetSettingsDefaults),
             0x8D => Ok(Self::SetControllerMode),
             0x8E => Ok(Self::LoadDefaultSettings),
-            0x8F => Ok(Self::TriggerHapticPulse),
+            0x8F => Ok(Self::TriggerRepeatedHapticPulse),
             0xB4 => Ok(Self::DongleGetWirelessState),
             0x9F => Ok(Self::TurnOffController),
             0xA1 => Ok(Self::GetDeviceInfo),
@@ -182,8 +182,8 @@ impl TryFrom<u8> for ReportType {
             0xCE => Ok(Self::ResetIMU),
             0xDC => Ok(Self::UnknownDc),
             0xE2 => Ok(Self::UnknownE2),
-            0xEA => Ok(Self::TriggerHapticCommand),
-            0xEB => Ok(Self::TriggerRumbleCommand),
+            0xEA => Ok(Self::TriggerHapticPulse),
+            0xEB => Ok(Self::TriggerVibration),
             _ => Err("Invalid report type"),
         }
     }
@@ -640,7 +640,7 @@ pub enum CommandType {
  */
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0")]
-pub struct PackedHapticPulseReport {
+pub struct PackedTriggerRepeatedHapticPulse {
     #[packed_field(bytes = "0")]
     pub report_id: u8,
     #[packed_field(bytes = "1")]
@@ -657,10 +657,10 @@ pub struct PackedHapticPulseReport {
     pub gain: i8,
 }
 
-impl PackedHapticPulseReport {
+impl PackedTriggerRepeatedHapticPulse {
     pub fn new() -> Self {
         Self {
-            report_id: ReportType::TriggerHapticPulse as u8,
+            report_id: ReportType::TriggerRepeatedHapticPulse as u8,
             report_size: 8,
             side: PadSide::Both,
             duration_us: Integer::from_primitive(0),
@@ -691,7 +691,7 @@ impl PackedHapticPulseReport {
     }
 }
 
-impl Default for PackedHapticPulseReport {
+impl Default for PackedTriggerRepeatedHapticPulse {
     fn default() -> Self {
         Self::new()
     }
@@ -699,7 +699,7 @@ impl Default for PackedHapticPulseReport {
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "64")]
-pub struct PackedRumbleReport {
+pub struct PackedTriggerVibration {
     #[packed_field(bytes = "0")]
     pub cmd_id: u8,
     #[packed_field(bytes = "1")]
@@ -716,10 +716,10 @@ pub struct PackedRumbleReport {
     pub right_speed: Integer<u16, packed_bits::Bits<16>>,
 }
 
-impl PackedRumbleReport {
+impl PackedTriggerVibration {
     pub fn new() -> Self {
         Self {
-            cmd_id: ReportType::TriggerRumbleCommand as u8,
+            cmd_id: ReportType::TriggerVibration as u8,
             report_size: 9,
             unk_2: 0,
             event_type: 0,
@@ -730,7 +730,7 @@ impl PackedRumbleReport {
     }
 }
 
-impl Default for PackedRumbleReport {
+impl Default for PackedTriggerVibration {
     fn default() -> Self {
         Self::new()
     }
@@ -738,7 +738,7 @@ impl Default for PackedRumbleReport {
 
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
 #[packed_struct(bit_numbering = "msb0", size_bytes = "64")]
-pub struct PackedHapticReport {
+pub struct PackedTriggerHapticPulse {
     #[packed_field(bytes = "0")]
     pub cmd_id: u8,
     #[packed_field(bytes = "1")]
@@ -761,10 +761,10 @@ pub struct PackedHapticReport {
     pub unk_12: u8,
 }
 
-impl PackedHapticReport {
+impl PackedTriggerHapticPulse {
     pub fn new() -> Self {
         Self {
-            cmd_id: ReportType::TriggerHapticCommand as u8,
+            cmd_id: ReportType::TriggerHapticPulse as u8,
             report_size: 13,
             side: PadSide::Left,
             cmd_type: CommandType::Off,
@@ -778,7 +778,7 @@ impl PackedHapticReport {
     }
 }
 
-impl Default for PackedHapticReport {
+impl Default for PackedTriggerHapticPulse {
     fn default() -> Self {
         Self::new()
     }

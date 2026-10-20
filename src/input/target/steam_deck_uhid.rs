@@ -17,9 +17,10 @@ use crate::{
     config::CompositeDeviceConfig,
     drivers::steam_deck::{
         hid_report::{
-            PackedHapticPulseReport, PackedHapticReport, PackedInputDataReport, PackedRumbleReport, ReportType,
-            StringAttribute, PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN,
-            STICK_FORCE_MAX, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
+            PackedInputDataReport, PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse,
+            PackedTriggerVibration, ReportType, StringAttribute, PAD_FORCE_MAX, PAD_X_MAX,
+            PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX, STICK_X_MAX, STICK_X_MIN,
+            STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
         report_descriptor::CONTROLLER_DESCRIPTOR,
         ProductId, DECK_MPS2_TO_ACCEL_RAW, DECK_RAD_S_TO_GYRO_RAW, VID,
@@ -583,45 +584,52 @@ impl SteamDeckUhidDevice {
                 self.requested_string_attribute = attribute;
                 vec![]
             }
-            ReportType::TriggerHapticCommand => {
+            ReportType::TriggerHapticPulse => {
                 let buf = data.as_slice().try_into()?;
-                let packed_haptic_report = match PackedHapticReport::unpack(buf) {
+                let packed_trigger_haptic_pulse = match PackedTriggerHapticPulse::unpack(buf) {
                     Ok(r) => r,
                     Err(e) => {
-                        log::error!("Got error unpacking buffer as PackedHapticReport {e:?}");
+                        log::error!("Got error unpacking buffer as PackedTriggerHapticPulse {e:?}");
                         return Ok(vec![]);
                     }
                 };
-                log::trace!("Got PackedHapticReport: {packed_haptic_report}");
-                let event = OutputEvent::SteamDeckHaptics(packed_haptic_report);
+                log::debug!("Got PackedTriggerHapticPulse: {packed_trigger_haptic_pulse:?}");
+                let event = OutputEvent::TriggerHapticPulse(packed_trigger_haptic_pulse);
                 vec![event]
             }
-            ReportType::TriggerHapticPulse => {
+            ReportType::TriggerRepeatedHapticPulse => {
                 let buf = data
                     .get(..10)
-                    .ok_or("Buffer too short for PackedHapticPulseReport")?
+                    .ok_or("Buffer too short for PackedTriggerRepeatedHapticPulse")?
                     .try_into()?;
-                let report = match PackedHapticPulseReport::unpack(buf) {
+                let packed_trigger_repeated_haptic_pulse =
+                    match PackedTriggerRepeatedHapticPulse::unpack(buf) {
                     Ok(r) => r,
                     Err(e) => {
-                        log::error!("Got error unpacking buffer as PackedHapticPulseReport {e:?}");
+                        log::error!(
+                            "Got error unpacking buffer as PackedTriggerRepeatedHapticPulse {e:?}"
+                        );
                         return Ok(vec![]);
                     }
                 };
-                log::debug!("Got PackedHapticPulseReport: {report:?}");
-                vec![OutputEvent::SteamDeckHapticPulse(report)]
+                log::debug!(
+                    "Got PackedTriggerRepeatedHapticPulse: {packed_trigger_repeated_haptic_pulse:?}"
+                );
+                vec![OutputEvent::TriggerRepeatedHapticPulse(
+                    packed_trigger_repeated_haptic_pulse,
+                )]
             }
-            ReportType::TriggerRumbleCommand => {
+            ReportType::TriggerVibration => {
                 let buf = data.as_slice().try_into()?;
-                let packed_rumble_report = match PackedRumbleReport::unpack(buf) {
+                let packed_trigger_vibration = match PackedTriggerVibration::unpack(buf) {
                     Ok(r) => r,
                     Err(e) => {
-                        log::error!("Got error unpacking buffer as PackedRumbleReport {e:?}");
+                        log::error!("Got error unpacking buffer as PackedTriggerVibration {e:?}");
                         return Ok(vec![]);
                     }
                 };
-                log::trace!("Got PackedRumbleReport: {packed_rumble_report}");
-                let event = OutputEvent::SteamDeckRumble(packed_rumble_report);
+                log::debug!("Got PackedTriggerVibration: {packed_trigger_vibration:?}");
+                let event = OutputEvent::TriggerVibration(packed_trigger_vibration);
                 vec![event]
             }
             // Don't care about other types
