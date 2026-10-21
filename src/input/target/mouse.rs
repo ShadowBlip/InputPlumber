@@ -122,7 +122,11 @@ impl MouseDevice {
         let (x, y) = match value {
             InputValue::Vector2 { x, y } => (x, y),
             InputValue::Vector3 { x, y, z: _ } => (x, y),
-            _ => (None, None),
+            // A translated motion event carrying no vector is a release
+            _ => {
+                self.clear_state();
+                return;
+            }
         };
 
         // Update the mouse velocity

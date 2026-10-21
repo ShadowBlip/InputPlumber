@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use crate::config::capability_map::CapabilityConfig;
+use crate::config::capability_map::{CapabilityConfig, LayerActivationMode};
 
 use super::event::dbus::Action;
 
@@ -23,6 +23,12 @@ pub enum Capability {
     Touchscreen(Touch),
     Gyroscope(Source),
     Accelerometer(Source),
+    /// Activates or deactivates an input layer. Consumed by the composite
+    /// device and never routed to a target device, like Capability::None.
+    Layer {
+        name: String,
+        mode: LayerActivationMode,
+    },
 }
 
 impl Capability {
@@ -89,6 +95,7 @@ impl Capability {
             },
             Capability::Gyroscope(source) => format!("Gyroscope:{source}"),
             Capability::Accelerometer(source) => format!("Accelerometer:{source}"),
+            Capability::Layer { name, mode } => format!("Layer:{name}:{mode}"),
         }
     }
 }
@@ -107,6 +114,7 @@ impl fmt::Display for Capability {
             Capability::Touchscreen(_) => write!(f, "Touchscreen"),
             Capability::Gyroscope(_) => write!(f, "Gyroscope"),
             Capability::Accelerometer(_) => write!(f, "Accelerometer"),
+            Capability::Layer { .. } => write!(f, "Layer"),
         }
     }
 }
@@ -147,6 +155,22 @@ impl FromStr for Capability {
             "Accelerometer" => Ok(Capability::Accelerometer(Source::from_str(
                 parts.join(":").as_str(),
             )?)),
+            "Layer" => {
+                // Layer:<name> or Layer:<name>:<mode>; layer names may not
+                // contain ':'.
+                let rest = parts.join(":");
+                let (name, mode) = match rest.rsplit_once(':') {
+                    Some((name, mode)) => (name, LayerActivationMode::from_str(mode)?),
+                    None => (rest.as_str(), LayerActivationMode::default()),
+                };
+                if name.is_empty() {
+                    return Err(());
+                }
+                Ok(Capability::Layer {
+                    name: name.to_string(),
+                    mode,
+                })
+            }
             _ => Err(()),
         }
     }
@@ -162,6 +186,14 @@ impl TryFrom<String> for Capability {
 
 impl From<CapabilityConfig> for Capability {
     fn from(value: CapabilityConfig) -> Self {
+        // Layer (target-only)
+        if let Some(layer) = value.layer.as_ref() {
+            return Capability::Layer {
+                name: layer.name.clone(),
+                mode: layer.mode.clone().unwrap_or_default(),
+            };
+        }
+
         // Gamepad
         if let Some(gamepad) = value.gamepad.as_ref() {
             // Axis
