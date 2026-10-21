@@ -63,6 +63,7 @@ impl Driver {
             OutputEvent::HapticRumble(report) => self.write(&report.pack()?)?,
             OutputEvent::HapticClick(report) => self.write(&report.pack()?)?,
             OutputEvent::HapticPulse(report) => self.write(&report.pack()?)?,
+            OutputEvent::TriggerVibrationExtended(report) => self.write(&report.pack()?)?,
         }
 
         Ok(())
@@ -401,13 +402,11 @@ impl Driver {
                     z: -state.accel_y.to_primitive(),
                 },
             )));
-            events.push(Event::Inertia(InertialEvent::Gyroscope(
-                InertialInput {
-                    x: state.pitch.to_primitive(),
-                    y: state.roll.to_primitive(),
-                    z: -state.yaw.to_primitive(),
-                },
-            )));
+            events.push(Event::Inertia(InertialEvent::Gyroscope(InertialInput {
+                x: state.pitch.to_primitive(),
+                y: state.roll.to_primitive(),
+                z: -state.yaw.to_primitive(),
+            })));
         };
 
         events

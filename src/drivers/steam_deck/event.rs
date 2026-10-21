@@ -1,4 +1,7 @@
-use super::hid_report::{PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedTriggerVibration};
+use super::hid_report::{
+    PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse, PackedTriggerVibration,
+    PackedTriggerVibrationExtended,
+};
 
 /// Events that can be emitted by the Steam Deck controller
 #[derive(Clone, Debug)]
@@ -18,6 +21,7 @@ pub enum OutputEvent {
     HapticRumble(PackedTriggerVibration),
     HapticClick(PackedTriggerHapticPulse),
     HapticPulse(PackedTriggerRepeatedHapticPulse),
+    TriggerVibrationExtended(PackedTriggerVibrationExtended),
 }
 
 /// Binary input contain either pressed or unpressed

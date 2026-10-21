@@ -213,6 +213,13 @@ impl SourceOutputDevice for AyaneoHaptics {
                 report.left_speed.to_primitive(),
                 report.right_speed.to_primitive(),
             )?),
+            OutputEvent::TriggerVibrationExtended(report) => {
+                let combined = report.combined_rumble();
+                Ok(self.rumble(
+                    combined.left_speed.to_primitive(),
+                    combined.right_speed.to_primitive(),
+                )?)
+            }
             OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,

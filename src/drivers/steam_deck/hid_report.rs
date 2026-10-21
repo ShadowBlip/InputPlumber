@@ -126,6 +126,8 @@ pub enum ReportType {
     UnknownE2 = 0xE2,
     TriggerHapticPulse = 0xEA,
     TriggerVibration = 0xEB,
+    // Placeholder report id for TriggerVibrationExtended, pending confirmation
+    TriggerVibrationExtended = 0xEC,
 }
 
 impl TryFrom<u8> for ReportType {
@@ -767,6 +769,67 @@ impl PackedTriggerVibration {
 }
 
 impl Default for PackedTriggerVibration {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// TriggerVibrationExtended output report
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "12")]
+pub struct PackedTriggerVibrationExtended {
+    #[packed_field(bytes = "0")]
+    pub cmd_id: u8,
+    #[packed_field(bytes = "1")]
+    pub report_size: u8,
+    #[packed_field(bytes = "2..=3", endian = "lsb")]
+    pub left_speed: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "4..=5", endian = "lsb")]
+    pub right_speed: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "6..=7", endian = "lsb")]
+    pub left_trigger_speed: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "8..=9", endian = "lsb")]
+    pub right_trigger_speed: Integer<u16, packed_bits::Bits<16>>,
+    #[packed_field(bytes = "10")]
+    pub left_gain: i8,
+    #[packed_field(bytes = "11")]
+    pub right_gain: i8,
+}
+
+impl PackedTriggerVibrationExtended {
+    pub fn new() -> Self {
+        Self {
+            cmd_id: ReportType::TriggerVibrationExtended as u8,
+            report_size: 10,
+            left_speed: Integer::from_primitive(0),
+            right_speed: Integer::from_primitive(0),
+            left_trigger_speed: Integer::from_primitive(0),
+            right_trigger_speed: Integer::from_primitive(0),
+            left_gain: 0,
+            right_gain: 0,
+        }
+    }
+
+    /// Combine the per-side rumble and trigger speeds into a plain rumble
+    /// report for devices without dedicated trigger motors
+    pub fn combined_rumble(&self) -> PackedTriggerVibration {
+        PackedTriggerVibration {
+            left_speed: Integer::from_primitive(
+                (self.left_speed.to_primitive() + self.left_trigger_speed.to_primitive())
+                    .min(u16::MAX),
+            ),
+            right_speed: Integer::from_primitive(
+                (self.right_speed.to_primitive() + self.right_trigger_speed.to_primitive())
+                    .min(u16::MAX),
+            ),
+            left_gain: self.left_gain,
+            right_gain: self.right_gain,
+            ..Default::default()
+        }
+    }
+}
+
+impl Default for PackedTriggerVibrationExtended {
     fn default() -> Self {
         Self::new()
     }

@@ -1,14 +1,18 @@
 use crate::udev::device::{AttributeGetter, AttributeSetter, UdevDevice};
-use std::{error::Error, time::Duration};
+use hidapi::HidDevice;
+use packed_struct::PackedStruct;
+use std::{error::Error, ffi::CString, time::Duration};
 use udev::Device;
 
-const ALLY_PID: u16 = 0x1abe;
-const ALLYX_PID: u16 = 0x1b4c;
-pub const PIDS: [u16; 2] = [ALLY_PID, ALLYX_PID];
-pub const VID: u16 = 0x0b05;
+use super::{
+    event::OutputEvent, has_haptic_triggers, hid_report::PackedRumbleExtendedOutputReport, PIDS,
+    VID,
+};
 
 pub struct Driver {
     _device: UdevDevice,
+    /// HID device on the gamepad interface for haptics writes
+    pub(crate) hid_device: Option<HidDevice>,
 }
 
 impl Driver {
@@ -35,6 +39,8 @@ impl Driver {
             return Err("Device is not using the asus_rog_ally driver.".into());
         }
 
+        let mut hid_device: Option<HidDevice> = None;
+
         let if_num = device.get_attribute_from_tree("bInterfaceNumber");
         match if_num.as_str() {
             "02" => {
@@ -51,11 +57,48 @@ impl Driver {
                 // Configure QAM mode for Ally X
                 log::trace!("Setting qam mode.");
                 set_attribute(device, "qam_mode", "0");
+
+                if has_haptic_triggers() {
+                    let path = CString::new(udevice.devnode())?;
+                    let api = hidapi::HidApi::new()?;
+                    hid_device = Some(api.open_path(&path)?);
+                }
             }
             _ => return Err(format!("Invalid interface number {if_num} provided.").into()),
         };
 
-        Ok(Self { _device: udevice })
+        Ok(Self {
+            _device: udevice,
+            hid_device,
+        })
+    }
+
+    /// Write an output event to the controller
+    pub fn write_event(&self, event: &OutputEvent) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let Some(hid_device) = &self.hid_device else {
+            return Ok(());
+        };
+
+        match event {
+            &OutputEvent::RumbleExtended {
+                left_trigger,
+                right_trigger,
+                left_motor,
+                right_motor,
+            } => {
+                let mut report = PackedRumbleExtendedOutputReport::off();
+                report.magnitude_left_trigger = left_trigger.min(100);
+                report.magnitude_right_trigger = right_trigger.min(100);
+                report.magnitude_left = left_motor.min(100);
+                report.magnitude_right = right_motor.min(100);
+
+                let buf = report.pack()?;
+                log::debug!("Writing rumble report: {report}");
+                hid_device.write(&buf)?;
+            }
+        }
+
+        Ok(())
     }
 }
 

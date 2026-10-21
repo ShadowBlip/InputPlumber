@@ -247,6 +247,12 @@ impl SourceOutputDevice for MsiClawController {
                 let weak = (report.right_speed.to_primitive() / 256) as u8;
                 Self::write_rumble(&mut self.driver, weak, strong)?;
             }
+            OutputEvent::TriggerVibrationExtended(report) => {
+                let combined = report.combined_rumble();
+                let strong = (combined.left_speed.to_primitive() / 256) as u8;
+                let weak = (combined.right_speed.to_primitive() / 256) as u8;
+                Self::write_rumble(&mut self.driver, weak, strong)?;
+            }
             OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,
