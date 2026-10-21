@@ -18,9 +18,9 @@ use crate::{
     drivers::steam_deck::{
         hid_report::{
             PackedInputDataReport, PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse,
-            PackedTriggerVibration, ReportType, StringAttribute, PAD_FORCE_MAX, PAD_X_MAX,
-            PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX, STICK_X_MAX, STICK_X_MIN,
-            STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
+            PackedTriggerVibration, PackedTriggerVibrationExtended, ReportType, StringAttribute,
+            PAD_FORCE_MAX, PAD_X_MAX, PAD_X_MIN, PAD_Y_MAX, PAD_Y_MIN, STICK_FORCE_MAX,
+            STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGG_MAX,
         },
         report_descriptor::CONTROLLER_DESCRIPTOR,
         ProductId, DECK_MPS2_TO_ACCEL_RAW, DECK_RAD_S_TO_GYRO_RAW, VID,
@@ -604,14 +604,14 @@ impl SteamDeckUhidDevice {
                     .try_into()?;
                 let packed_trigger_repeated_haptic_pulse =
                     match PackedTriggerRepeatedHapticPulse::unpack(buf) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        log::error!(
+                        Ok(r) => r,
+                        Err(e) => {
+                            log::error!(
                             "Got error unpacking buffer as PackedTriggerRepeatedHapticPulse {e:?}"
                         );
-                        return Ok(vec![]);
-                    }
-                };
+                            return Ok(vec![]);
+                        }
+                    };
                 log::debug!(
                     "Got PackedTriggerRepeatedHapticPulse: {packed_trigger_repeated_haptic_pulse:?}"
                 );
@@ -631,6 +631,28 @@ impl SteamDeckUhidDevice {
                 log::debug!("Got PackedTriggerVibration: {packed_trigger_vibration:?}");
                 let event = OutputEvent::TriggerVibration(packed_trigger_vibration);
                 vec![event]
+            }
+            ReportType::TriggerVibrationExtended => {
+                let buf = data
+                    .get(..12)
+                    .ok_or("Buffer too short for PackedTriggerVibrationExtended")?
+                    .try_into()?;
+                let packed_trigger_vibration_extended =
+                    match PackedTriggerVibrationExtended::unpack(buf) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            log::error!(
+                                "Got error unpacking buffer as PackedTriggerVibrationExtended {e:?}"
+                            );
+                            return Ok(vec![]);
+                        }
+                    };
+                log::debug!(
+                    "Got PackedTriggerVibrationExtended: {packed_trigger_vibration_extended:?}"
+                );
+                vec![OutputEvent::TriggerVibrationExtended(
+                    packed_trigger_vibration_extended,
+                )]
             }
             // Don't care about other types
             _ => {

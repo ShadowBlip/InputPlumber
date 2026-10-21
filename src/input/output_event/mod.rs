@@ -5,7 +5,8 @@ use ::evdev::{FFEffectData, InputEvent};
 use crate::drivers::{
     dualsense::hid_report::SetStatePackedOutputData,
     steam_deck::hid_report::{
-        PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedTriggerVibration, PadSide, TriggerSide,
+        PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse, PackedTriggerVibration,
+        PackedTriggerVibrationExtended, PadSide, TriggerSide,
     },
 };
 
@@ -20,6 +21,7 @@ pub enum OutputEvent {
     TriggerHapticPulse(PackedTriggerHapticPulse),
     TriggerRepeatedHapticPulse(PackedTriggerRepeatedHapticPulse),
     TriggerVibration(PackedTriggerVibration),
+    TriggerVibrationExtended(PackedTriggerVibrationExtended),
     GenericRumble {
         weak_magnitude: u16,
         strong_magnitude: u16,
@@ -86,6 +88,11 @@ impl OutputEvent {
                 ],
             },
             OutputEvent::TriggerVibration(_) => vec![OutputCapability::ForceFeedback],
+            OutputEvent::TriggerVibrationExtended(_) => vec![
+                OutputCapability::ForceFeedback,
+                OutputCapability::Haptics(Haptic::TrackpadLeft),
+                OutputCapability::Haptics(Haptic::TrackpadRight),
+            ],
             OutputEvent::GenericRumble { .. } => vec![OutputCapability::ForceFeedback],
         }
     }
@@ -102,6 +109,7 @@ impl OutputEvent {
             OutputEvent::TriggerHapticPulse(_) => true,
             OutputEvent::TriggerRepeatedHapticPulse(_) => true,
             OutputEvent::TriggerVibration(_) => true,
+            OutputEvent::TriggerVibrationExtended(_) => true,
             OutputEvent::GenericRumble { .. } => true,
         }
     }

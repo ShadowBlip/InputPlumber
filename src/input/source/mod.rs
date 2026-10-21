@@ -17,7 +17,7 @@ use tokio::sync::mpsc::{self, error::TryRecvError};
 use crate::{
     config,
     drivers::steam_deck::hid_report::{
-        CommandType, PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, TriggerSide,
+        CommandType, PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse, TriggerSide,
     },
 };
 

@@ -531,7 +531,7 @@ impl HidRawDevice {
             DriverType::RogAlly => {
                 let device = RogAlly::new(device_info.clone())?;
                 let options = SourceDriverOptions {
-                    poll_rate: Duration::from_millis(500),
+                    poll_rate: drivers::rog_ally::GAMEPAD_WRITE_TIMEOUT,
                     buffer_size: 1024,
                 };
                 let source_device = SourceDriver::new_with_options(
@@ -777,7 +777,7 @@ impl HidRawDevice {
         }
 
         // Rog Ally
-        if vid == drivers::rog_ally::driver::VID && drivers::rog_ally::driver::PIDS.contains(&pid) {
+        if vid == drivers::rog_ally::VID && drivers::rog_ally::PIDS.contains(&pid) {
             log::info!("Detected ROG Ally");
             return DriverType::RogAlly;
         }

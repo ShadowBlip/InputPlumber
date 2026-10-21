@@ -16,9 +16,8 @@ use crate::{
             self,
             driver::Driver,
             event,
-            hid_report::{LIZARD_SLEEP_SEC, PackedTriggerVibration},
-            DECK_ACCEL_RAW_TO_MPS2,
-            DECK_GYRO_RAW_TO_RAD_S,
+            hid_report::{PackedTriggerVibration, LIZARD_SLEEP_SEC},
+            DECK_ACCEL_RAW_TO_MPS2, DECK_GYRO_RAW_TO_RAD_S,
         },
     },
     input::{
@@ -110,7 +109,8 @@ impl DeckController {
         left: u16,
         right: u16,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let event = event::OutputEvent::HapticRumble(PackedTriggerVibration::with_magnitudes(left, right));
+        let event =
+            event::OutputEvent::HapticRumble(PackedTriggerVibration::with_magnitudes(left, right));
         driver.write_event(&event)
     }
 
@@ -252,6 +252,10 @@ impl SourceOutputDevice for DeckController {
             OutputEvent::TriggerVibration(report) => {
                 self.driver
                     .write_event(&event::OutputEvent::HapticRumble(report))?;
+            }
+            OutputEvent::TriggerVibrationExtended(report) => {
+                self.driver
+                    .write_event(&event::OutputEvent::TriggerVibrationExtended(report))?;
             }
             OutputEvent::GenericRumble {
                 weak_magnitude,

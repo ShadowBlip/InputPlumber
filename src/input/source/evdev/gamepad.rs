@@ -12,8 +12,8 @@ use packed_struct::PrimitiveEnum;
 
 use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::drivers::steam_deck::hid_report::{
-    CommandType, PackedTriggerRepeatedHapticPulse, PackedTriggerHapticPulse, PackedTriggerVibration,
-    PadSide, TriggerSide,
+    CommandType, PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse,
+    PackedTriggerVibration, PadSide, TriggerSide,
 };
 use crate::input::event::evdev::translator::EventTranslator;
 use crate::input::output_capability::{Haptic, OutputCapability, LED};
@@ -337,7 +337,10 @@ impl GamepadEventDevice {
     }
 
     // Process Steam Deck Haptic events.
-    fn process_haptic_ff(&mut self, report: PackedTriggerHapticPulse) -> Result<(), Box<dyn Error>> {
+    fn process_haptic_ff(
+        &mut self,
+        report: PackedTriggerHapticPulse,
+    ) -> Result<(), Box<dyn Error>> {
         // If no effect was uploaded to handle Steam Deck force feedback, upload one.
         if self.ff_effects_deck.is_none() {
             let effect_data = FFEffectData {
@@ -639,6 +642,11 @@ impl SourceOutputDevice for GamepadEventDevice {
         for event in events.iter() {
             match event {
                 EventType::FORCEFEEDBACK => {
+                    // The source driver writes all actuators via hidraw on
+                    // models with haptic trigger motors
+                    if crate::drivers::rog_ally::has_haptic_triggers() {
+                        return Ok(capabilities);
+                    }
                     capabilities.push(OutputCapability::ForceFeedback);
                     capabilities.push(OutputCapability::ForceFeedbackUpload);
                     capabilities.push(OutputCapability::ForceFeedbackErase);
@@ -717,6 +725,14 @@ impl SourceOutputDevice for GamepadEventDevice {
                 }
                 Ok(())
             }
+            OutputEvent::TriggerVibrationExtended(report) => {
+                log::trace!("Received Trigger Vibration Extended Report");
+                let report = report.combined_rumble();
+                if let Err(e) = self.process_deck_ff(report) {
+                    log::error!("Failed to process Trigger Vibration Extended Report: {e:?}")
+                }
+                Ok(())
+            }
             OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,
@@ -736,6 +752,11 @@ impl SourceOutputDevice for GamepadEventDevice {
     /// a device-specific id of the uploaded effect if it is successful.
     fn upload_effect(&mut self, effect: FFEffectData) -> Result<i16, OutputError> {
         log::trace!("Uploading FF effect data");
+        // The source driver uploads and plays effects on models with haptic
+        // trigger motors
+        if crate::drivers::rog_ally::has_haptic_triggers() {
+            return Ok(-1);
+        }
         if self.device.supported_ff().is_none() {
             log::debug!("Device does not support FF effects");
             return Ok(-1);

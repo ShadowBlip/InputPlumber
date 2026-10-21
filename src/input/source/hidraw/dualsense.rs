@@ -243,6 +243,13 @@ impl SourceOutputDevice for DualSenseController {
                 }
                 Ok(())
             }
+            OutputEvent::TriggerVibrationExtended(report) => {
+                let report = report.combined_rumble();
+                if let Err(e) = self.process_deck_ff(report) {
+                    log::error!("Failed to process Trigger Vibration Extended Report: {e:?}")
+                }
+                Ok(())
+            }
             OutputEvent::GenericRumble {
                 weak_magnitude,
                 strong_magnitude,
