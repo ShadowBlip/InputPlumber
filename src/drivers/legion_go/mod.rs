@@ -49,9 +49,10 @@ pub const GO_TOUCHPAD_D_PIDS: [u16; 4] = [
 pub const GO_TOUCHPAD_X_PIDS: [u16; 2] = [LEGION_GO_1_XINPUT_PID, LEGION_GO_2_XINPUT_PID];
 
 const DRAG_TIMEOUT_DINPUT: Duration = Duration::from_millis(100);
-const DRAG_TIMEOUT_XINPUT: Duration = Duration::from_millis(50);
+const DRAG_TIMEOUT_XINPUT: Duration = Duration::from_millis(150);
 const RELEASE_TIMEOUT_DINPUT: Duration = Duration::from_millis(300);
 const RELEASE_TIMEOUT_XINPUT: Duration = Duration::from_millis(165);
+const RELEASE_CONFIRM: Duration = Duration::from_millis(20);
 const TAP_MAX_DISTANCE_SQ: i64 = 40 * 40;
 
 // Report ID's
@@ -62,8 +63,7 @@ pub const XINPUT_DATA: u8 = 0x04;
 const TOUCHPAD_PACKET_SIZE: usize = 20;
 const XINPUT_PACKET_SIZE: usize = 60;
 
-const GAMEPAD_TIMEOUT: i32 = 8;
-const TOUCHPAD_TIMEOUT: i32 = 4;
+const TIMEOUT: i32 = 8;
 
 // HID Command ID's
 const XINPUT_COMMAND_ID: u8 = 0x74;
@@ -95,10 +95,6 @@ fn default_event_filter() -> Vec<Event> {
     ]
 }
 
-//TODO: Default to Source::Right. The Legion Go 1 left and right handle y axis are inverted from
-//each other and cancel out. To fix this we can use only the right handle. The kernel driver IMU
-//enablement is currently broken. Once fixed upstream and in jupiter/linux_integration switch to
-//using right handle first.
 fn hid_lenovo_go_filter() -> Vec<Event> {
     vec![
         Event::Axis(AxisEvent::LeftAccel(ImuAxisInput::default())),
