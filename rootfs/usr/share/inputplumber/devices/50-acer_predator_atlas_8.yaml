@@ -30,6 +30,6 @@ source_devices:
 capability_map_id: acer_atlas8
 
 target_devices:
-  - xbox-series
+  - xbox-elite
   - mouse
   - keyboard
