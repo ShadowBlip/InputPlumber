@@ -12,7 +12,7 @@ use super::{
         MouseWheelInput, TriggerEvent, TriggerInput,
     },
     hid_report::{GamepadMode, XInputDataReport},
-    GAMEPAD_TIMEOUT, GO2_PIDS, GP_IID, VID, XINPUT_COMMAND_ID, XINPUT_DATA, XINPUT_PACKET_SIZE,
+    GO2_PIDS, GP_IID, TIMEOUT, VID, XINPUT_COMMAND_ID, XINPUT_DATA, XINPUT_PACKET_SIZE,
 };
 
 /// Legion Go hardware generation
@@ -118,9 +118,7 @@ impl Driver {
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
         let mut buf = [0; XINPUT_PACKET_SIZE];
-        let bytes_read = self
-            .hid_device
-            .read_timeout(&mut buf[..], GAMEPAD_TIMEOUT)?;
+        let bytes_read = self.hid_device.read_timeout(&mut buf[..], TIMEOUT)?;
 
         if bytes_read > XINPUT_PACKET_SIZE {
             return Err("Invalid packet size for X-Input Data.".into());
