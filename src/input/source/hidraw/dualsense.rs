@@ -26,7 +26,7 @@ use crate::{
         },
         output_event::OutputEvent,
         source::{
-            EventCapability, HapticPulseSeries, HapticState, InputError, OutputError,
+            magnitude, EventCapability, HapticPulseSeries, HapticState, InputError, OutputError,
             SourceInputDevice, SourceOutputDevice,
         },
     },
@@ -158,8 +158,11 @@ impl DualSenseController {
 
     /// Procces Steam Deck FFB events.
     fn process_deck_ff(&mut self, report: PackedTriggerVibration) -> Result<(), Box<dyn Error>> {
-        let left_speed = report.left_speed.to_primitive() / u8::MAX as u16 + 1;
-        let right_speed = report.right_speed.to_primitive() / u8::MAX as u16 + 1;
+        let left_speed =
+            magnitude(report.left_speed.to_primitive(), report.left_gain, 255.0) as u16 + 1;
+        let right_speed =
+            magnitude(report.right_speed.to_primitive(), report.right_gain, 255.0) as u16 + 1;
+        log::trace!("Writing rumble left={left_speed} right={right_speed}");
         Self::write_rumble(&mut self.driver, left_speed as u8, right_speed as u8)
             .map_err(|e| e.to_string())?;
         Ok(())
