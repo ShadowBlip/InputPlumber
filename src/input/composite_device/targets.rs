@@ -397,6 +397,20 @@ impl CompositeDeviceTargets {
         }
     }
 
+    /// Clear the state of all DBus target devices in order to release the
+    /// buttons, stick directions, and triggers it still holds.
+    pub async fn clear_dbus_state(&self) {
+        for (path, target) in &self.target_dbus_devices {
+            log::debug!("[{}] Clearing dbus device state: {path}", self.path);
+            if let Err(e) = target.clear_state().await {
+                log::error!(
+                    "[{}] Failed to clear dbus device state {path}: {e}",
+                    self.path
+                );
+            }
+        }
+    }
+
     /// Clear the state of all target devices that are gamepads in order to
     /// release any buttons, re-center any joysticks, etc.
     pub async fn clear_gamepad_state(&self) {

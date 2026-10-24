@@ -1258,8 +1258,11 @@ impl CompositeDevice {
         }
         self.intercept_mode = mode;
 
-        // Nothing else is required when turning off input interception.
+        // If input interception is being turned off, clear the DBus
+        // state to prevent the release of held buttons being sent
+        // to other targets.
         if mode == InterceptMode::None || mode == InterceptMode::Pass {
+            self.targets.clear_dbus_state().await;
             return;
         }
 
