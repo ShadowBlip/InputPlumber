@@ -104,7 +104,7 @@ impl SteamDeckDevice {
         persistent_id: &str,
     ) -> Result<Self, Box<dyn Error>> {
         // Ensure the vhci_hcd kernel module is loaded
-        log::debug!("Ensuring vhci_hcd kernel module is loaded");
+        log::trace!("Ensuring vhci_hcd kernel module is loaded");
         if let Err(e) = load_vhci_hcd() {
             return Err(e.to_string().into());
         }
@@ -275,7 +275,7 @@ impl SteamDeckDevice {
                         // Reply based on the currently set report
                         match self.current_report {
                             ReportType::GetAttributesValues => {
-                                log::debug!("Sending attribute data");
+                                log::trace!("Sending attribute data");
                                 // No idea what these bytes mean, but this is
                                 // what is sent from the real device.
                                 let data = [
@@ -352,7 +352,7 @@ impl SteamDeckDevice {
                                     StringAttribute::BoardSerial => &self.board_serial,
                                     _ => &self.serial_number,
                                 };
-                                log::debug!("Sending {attribute:?}: {value}");
+                                log::trace!("Sending {attribute:?}: {value}");
                                 let mut serial_data = value.as_bytes().to_vec();
                                 let mut data = vec![
                                     ReportType::GetStringAttribute as u8,
@@ -364,7 +364,7 @@ impl SteamDeckDevice {
                                 Reply::from_xfer(xfer, data.as_slice())
                             }
                             ReportType::GetChipId => {
-                                log::debug!("Sending Chip ID: {:?}", self.chip_id);
+                                log::trace!("Sending Chip ID: {:?}", self.chip_id);
                                 let mut data = vec![ReportType::GetChipId as u8, 0x11, 0x00];
                                 let mut chip_id = self.chip_id.to_vec();
                                 data.append(&mut chip_id);
@@ -411,13 +411,13 @@ impl SteamDeckDevice {
         //log::trace!("Got OUT transfer for endpoint: {}", xfer.ep);
 
         let Some(setup) = xfer.header() else {
-            log::debug!("No setup request in OUT xfer");
+            log::warn!("No setup request in OUT xfer {xfer:?}");
             return;
         };
 
         // Only handle Class requests
         if setup.request_type() != Type::Class {
-            log::debug!("Unknown request type");
+            log::warn!("Unknown request type {xfer:?}");
             return;
         }
 
@@ -440,12 +440,12 @@ impl SteamDeckDevice {
 
                 // The first byte contains the report type
                 let Some(first_byte) = data.first() else {
-                    log::debug!("Unable to determine report type from empty report");
+                    log::warn!("Unable to determine report type from empty report");
                     return;
                 };
 
                 let Ok(report_type) = ReportType::try_from(*first_byte) else {
-                    log::debug!("Invalid report type: {first_byte}");
+                    log::warn!("Invalid report type: {first_byte}");
                     return;
                 };
 
@@ -454,17 +454,17 @@ impl SteamDeckDevice {
                     // ClearDigitalMappings gets called to take the controller out of lizard
                     // mode so that Steam can control it directly.
                     ReportType::ClearDigitalMappings => {
-                        log::debug!("Disabling lizard mode");
+                        log::trace!("Disabling lizard mode");
                         self.lizard_mode_enabled = false;
                     }
                     ReportType::GetAttributesValues => {
-                        log::debug!("Attribute requested");
+                        log::trace!("Attribute requested");
                         self.current_report = ReportType::GetAttributesValues;
                     }
                     // SetDefaultDigitalMappings sets the device in lizard mode, so it can run
                     // without Steam.
                     ReportType::SetDefaultDigitalMappings => {
-                        log::debug!("Setting lizard mode enabled");
+                        log::trace!("Setting lizard mode enabled");
                         self.lizard_mode_enabled = true;
                     }
                     // Configure the next GET_REPORT call to return the
@@ -474,14 +474,14 @@ impl SteamDeckDevice {
                             .get(2)
                             .map(|byte| StringAttribute::from(*byte))
                             .unwrap_or_default();
-                        log::debug!("String attribute requested: {attribute:?}");
+                        log::trace!("String attribute requested: {attribute:?}");
                         self.requested_string_attribute = attribute;
                         self.current_report = ReportType::GetStringAttribute;
                     }
                     // Configure the next GET_REPORT call to return the serial
                     // number.
                     ReportType::GetChipId => {
-                        log::debug!("Chip ID requested");
+                        log::trace!("Chip ID requested");
                         self.current_report = ReportType::GetChipId;
                     }
                     ReportType::TriggerHapticPulse => {
@@ -503,7 +503,7 @@ impl SteamDeckDevice {
                                     return;
                                 }
                             };
-                        log::debug!(
+                        log::trace!(
                             "Got PackedTriggerHapticPulse: {packed_trigger_haptic_pulse:?}"
                         );
                         let event = OutputEvent::TriggerHapticPulse(packed_trigger_haptic_pulse);
@@ -533,7 +533,7 @@ impl SteamDeckDevice {
                                     return;
                                 }
                             };
-                        log::debug!(
+                        log::trace!(
                             "Got PackedTriggerRepeatedHapticPulse: {packed_trigger_repeated_haptic_pulse:?}"
                         );
                         let event = OutputEvent::TriggerRepeatedHapticPulse(
@@ -559,7 +559,7 @@ impl SteamDeckDevice {
                                 return;
                             }
                         };
-                        log::debug!("Got PackedTriggerVibration: {packed_trigger_vibration:?}");
+                        log::trace!("Got PackedTriggerVibration: {packed_trigger_vibration:?}");
                         let event = OutputEvent::TriggerVibration(packed_trigger_vibration);
                         self.output_event = Some(event);
                     }
@@ -589,7 +589,7 @@ impl SteamDeckDevice {
                                     return;
                                 }
                             };
-                        log::debug!(
+                        log::trace!(
                             "Got PackedTriggerVibrationExtended: {packed_trigger_vibration_extended:?}"
                         );
                         let event = OutputEvent::TriggerVibrationExtended(
@@ -983,7 +983,7 @@ impl TargetInputDevice for SteamDeckDevice {
 
     /// Stop the virtual USB read/write threads
     fn stop(&mut self) -> Result<(), InputError> {
-        log::debug!("Stopping virtual Deck controller");
+        log::trace!("Stopping virtual Deck controller");
         let xfer = {
             let Some(device) = self.device.as_mut() else {
                 return Ok(());
@@ -1005,7 +1005,7 @@ impl TargetInputDevice for SteamDeckDevice {
             }
         }
 
-        log::debug!("Finished stopping");
+        log::trace!("Finished stopping");
         Ok(())
     }
 

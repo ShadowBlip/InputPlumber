@@ -93,7 +93,7 @@ impl Driver {
                 report.magnitude_right = right_motor.min(100);
 
                 let buf = report.pack()?;
-                log::debug!("Writing rumble report: {report}");
+                log::trace!("Writing rumble report: {report}");
                 hid_device.write(&buf)?;
             }
         }
