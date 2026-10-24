@@ -26,7 +26,7 @@ use crate::{
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{
-            EventCapability, HapticPulseSeries, HapticState, InputError, OutputError,
+            magnitude, EventCapability, HapticPulseSeries, HapticState, InputError, OutputError,
             SourceInputDevice, SourceOutputDevice,
         },
     },
@@ -235,14 +235,26 @@ impl SourceOutputDevice for XpadUhid {
                 Ok(())
             }
             OutputEvent::TriggerVibration(report) => {
-                let strong = (report.left_speed.to_primitive() / 256) as u8;
-                let weak = (report.right_speed.to_primitive() / 256) as u8;
+                let strong =
+                    magnitude(report.left_speed.to_primitive(), report.left_gain, 255.0) as u8;
+                let weak =
+                    magnitude(report.right_speed.to_primitive(), report.right_gain, 255.0) as u8;
+                log::trace!("Writing rumble strong={strong} weak={weak}");
                 Ok(Self::write_rumble(&mut self.driver, weak, strong)?)
             }
             OutputEvent::TriggerVibrationExtended(report) => {
                 let combined = report.combined_rumble();
-                let strong = (combined.left_speed.to_primitive() / 256) as u8;
-                let weak = (combined.right_speed.to_primitive() / 256) as u8;
+                let strong = magnitude(
+                    combined.left_speed.to_primitive(),
+                    combined.left_gain,
+                    255.0,
+                ) as u8;
+                let weak = magnitude(
+                    combined.right_speed.to_primitive(),
+                    combined.right_gain,
+                    255.0,
+                ) as u8;
+                log::trace!("Writing rumble strong={strong} weak={weak}");
                 Ok(Self::write_rumble(&mut self.driver, weak, strong)?)
             }
             OutputEvent::GenericRumble {
