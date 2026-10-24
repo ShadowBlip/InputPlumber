@@ -456,7 +456,6 @@ impl CompositeDeviceClient {
 
     /// Write the given event to the appropriate target device, bypassing intercept
     /// logic.
-    #[allow(dead_code)]
     pub async fn write_send_event(&self, event: NativeEvent) -> Result<(), ClientError> {
         self.tx
             .send(CompositeCommand::WriteSendEvent(event))
@@ -466,6 +465,7 @@ impl CompositeDeviceClient {
 
     /// Write the given event to the appropriate target device, bypassing intercept
     /// logic. (blocking)
+    #[allow(dead_code)]
     pub fn blocking_write_send_event(&self, event: NativeEvent) -> Result<(), ClientError> {
         self.tx
             .blocking_send(CompositeCommand::WriteSendEvent(event))?;
