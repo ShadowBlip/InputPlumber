@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use evdev::AbsoluteAxisCode;
 
 use crate::input::capability::{Capability, Gamepad, GamepadButton};
+use crate::input::source::EventCapability;
 
 use super::{context::EventContext, evdev::EvdevEvent, value::InputValue};
 
@@ -130,7 +131,7 @@ impl NativeEvent {
                 _ => Capability::NotImplemented,
             }
         } else {
-            event.as_capability()
+            event.to_capability()
         };
 
         let value = event.get_value();
@@ -147,7 +148,7 @@ impl NativeEvent {
 impl From<EvdevEvent> for NativeEvent {
     /// Convert the [EvdevEvent] into a [NativeEvent]
     fn from(item: EvdevEvent) -> Self {
-        let capability = item.as_capability();
+        let capability = item.to_capability();
         let value = item.get_value();
         NativeEvent {
             capability,

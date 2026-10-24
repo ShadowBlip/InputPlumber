@@ -24,8 +24,8 @@ use crate::{
         event::{evdev::EvdevEvent, native::NativeEvent},
         output_event::OutputEvent,
         source::{
-            haptic_duration, haptic_gain, InputError, OutputError, SourceInputDevice,
-            SourceOutputDevice, HAPTIC_NOMINAL_PERCENT,
+            haptic_duration, haptic_gain, EventCapability, InputError, OutputError,
+            SourceInputDevice, SourceOutputDevice, HAPTIC_NOMINAL_PERCENT,
         },
     },
     udev::device::UdevDevice,
@@ -575,7 +575,7 @@ impl SourceInputDevice for GamepadEventDevice {
                     for key in keys.iter() {
                         let input_event = InputEvent::new(event.0, key.0, 0);
                         let evdev_event = EvdevEvent::from(input_event);
-                        let cap = evdev_event.as_capability();
+                        let cap = evdev_event.to_capability();
                         capabilities.push(cap);
                     }
                 }
@@ -586,7 +586,7 @@ impl SourceInputDevice for GamepadEventDevice {
                     for axis in rel.iter() {
                         let input_event = InputEvent::new(event.0, axis.0, 0);
                         let evdev_event = EvdevEvent::from(input_event);
-                        let cap = evdev_event.as_capability();
+                        let cap = evdev_event.to_capability();
                         capabilities.push(cap);
                     }
                 }
@@ -597,7 +597,7 @@ impl SourceInputDevice for GamepadEventDevice {
                     for axis in abs.iter() {
                         let input_event = InputEvent::new(event.0, axis.0, 0);
                         let evdev_event = EvdevEvent::from(input_event);
-                        let cap = evdev_event.as_capability();
+                        let cap = evdev_event.to_capability();
                         if cap == Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat0)) {
                             capabilities
                                 .push(Capability::Gamepad(Gamepad::Button(GamepadButton::DPadUp)));

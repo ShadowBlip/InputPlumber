@@ -9,6 +9,8 @@ use crate::input::capability::{
     MouseButton, Touch, TouchButton, Touchpad,
 };
 
+use crate::input::source::EventCapability;
+
 use super::{native::NativeEvent, value::InputValue};
 
 #[derive(Debug, Clone)]
@@ -141,10 +143,12 @@ impl EvdevEvent {
     pub fn as_input_event(&self) -> InputEvent {
         self.event
     }
+}
 
+impl EventCapability for EvdevEvent {
     /// Returns the capability that this event fulfills. This is used to translate
     /// evdev events into [NativeEvent]s.
-    pub fn as_capability(&self) -> Capability {
+    fn to_capability(&self) -> Capability {
         let event_type = self.event.event_type();
         let code = self.event.code();
         match event_type {
@@ -500,6 +504,26 @@ impl EvdevEvent {
             _ => Capability::NotImplemented,
         }
     }
+
+    fn to_value(&self) -> Option<InputValue> {
+        Some(self.get_value())
+    }
+
+    /// Returns a prototype event for the capability, if the device has one.
+    ///
+    /// Capabilities with multiple event codes (sticks, hats, mouse/touch
+    /// motion) are Vector2 pairs. This returns only the first match of the
+    /// representative event code pairs. Use `event_codes()` for the full list.
+    /// Vector3 capabilities have no evdev representation and return None.
+    fn from_capability(capability: &Capability) -> Option<Self> {
+        Self::event_codes(capability)
+            .into_iter()
+            .next()
+            .map(|(event_type, code)| Self {
+                event: InputEvent::new(event_type.0, code, 0),
+                abs_info: None,
+            })
+    }
 }
 
 impl Default for EvdevEvent {
@@ -521,6 +545,336 @@ impl From<InputEvent> for EvdevEvent {
 }
 
 impl EvdevEvent {
+    /// All (event type, code) pairs that fulfill this capability, in the
+    /// order evdev events should be written. Capabilities without an evdev
+    /// equivalent return an empty list.
+    fn event_codes(capability: &Capability) -> Vec<(EventType, u16)> {
+        match capability {
+            Capability::None
+            | Capability::NotImplemented
+            | Capability::DBus(_)
+            | Capability::Gyroscope(_)
+            | Capability::Accelerometer(_) => vec![],
+            Capability::Sync => vec![(EventType::SYNCHRONIZATION, 0)],
+            Capability::Gamepad(gamepad) => Self::gamepad_codes(gamepad),
+            Capability::Mouse(mouse) => Self::mouse_codes(mouse),
+            Capability::Keyboard(key) => Self::keyboard_codes(key),
+            Capability::Touchpad(touch) => Self::touchpad_codes(touch),
+            Capability::Touchscreen(touch) => Self::touchscreen_codes(touch),
+        }
+    }
+
+    fn gamepad_codes(gamepad: &Gamepad) -> Vec<(EventType, u16)> {
+        match gamepad {
+            Gamepad::Button(btn) => match btn {
+                GamepadButton::DPadDown => vec![abs_event(AbsoluteAxisCode::ABS_HAT0Y.0)],
+                GamepadButton::DPadLeft => vec![abs_event(AbsoluteAxisCode::ABS_HAT0X.0)],
+                GamepadButton::DPadRight => vec![abs_event(AbsoluteAxisCode::ABS_HAT0X.0)],
+                GamepadButton::DPadUp => vec![abs_event(AbsoluteAxisCode::ABS_HAT0Y.0)],
+                GamepadButton::East => vec![key_event(KeyCode::BTN_EAST.0)],
+                GamepadButton::Guide => vec![key_event(KeyCode::BTN_MODE.0)],
+                GamepadButton::Keyboard => vec![],
+                GamepadButton::LeftBumper => vec![key_event(KeyCode::BTN_TL.0)],
+                GamepadButton::LeftPaddle1 => vec![key_event(KeyCode::BTN_TRIGGER_HAPPY7.0)],
+                GamepadButton::LeftPaddle2 => vec![key_event(KeyCode::BTN_TRIGGER_HAPPY8.0)],
+                GamepadButton::LeftPaddle3 => vec![key_event(KeyCode::BTN_TRIGGER_HAPPY10.0)],
+                GamepadButton::LeftStick => vec![key_event(KeyCode::BTN_THUMBL.0)],
+                GamepadButton::LeftStickTouch => vec![],
+                GamepadButton::LeftTop => vec![],
+                GamepadButton::LeftTrigger => vec![key_event(KeyCode::BTN_TL2.0)],
+                GamepadButton::North => vec![key_event(KeyCode::BTN_NORTH.0)],
+                GamepadButton::QuickAccess => vec![],
+                GamepadButton::QuickAccess2 => vec![],
+                GamepadButton::RightBumper => vec![key_event(KeyCode::BTN_TR.0)],
+                GamepadButton::RightPaddle1 => vec![key_event(KeyCode::BTN_TRIGGER_HAPPY5.0)],
+                GamepadButton::RightPaddle2 => vec![key_event(KeyCode::BTN_TRIGGER_HAPPY6.0)],
+                GamepadButton::RightPaddle3 => vec![key_event(KeyCode::BTN_TRIGGER_HAPPY9.0)],
+                GamepadButton::RightStick => vec![key_event(KeyCode::BTN_THUMBR.0)],
+                GamepadButton::RightStickTouch => vec![],
+                GamepadButton::RightTop => vec![],
+                GamepadButton::RightTrigger => vec![key_event(KeyCode::BTN_TR2.0)],
+                GamepadButton::Screenshot => vec![key_event(KeyCode::KEY_RECORD.0)],
+                GamepadButton::Mute => vec![],
+                GamepadButton::Select => vec![key_event(KeyCode::BTN_SELECT.0)],
+                GamepadButton::South => vec![key_event(KeyCode::BTN_SOUTH.0)],
+                GamepadButton::Start => vec![key_event(KeyCode::BTN_START.0)],
+                GamepadButton::West => vec![key_event(KeyCode::BTN_WEST.0)],
+            },
+            Gamepad::Axis(axis) => match axis {
+                GamepadAxis::LeftStick => vec![
+                    abs_event(AbsoluteAxisCode::ABS_X.0),
+                    abs_event(AbsoluteAxisCode::ABS_Y.0),
+                ],
+                GamepadAxis::RightStick => vec![
+                    abs_event(AbsoluteAxisCode::ABS_RX.0),
+                    abs_event(AbsoluteAxisCode::ABS_RY.0),
+                ],
+                GamepadAxis::Hat0 => vec![
+                    abs_event(AbsoluteAxisCode::ABS_HAT0X.0),
+                    abs_event(AbsoluteAxisCode::ABS_HAT0Y.0),
+                ],
+                GamepadAxis::Hat1 => vec![
+                    abs_event(AbsoluteAxisCode::ABS_HAT1X.0),
+                    abs_event(AbsoluteAxisCode::ABS_HAT1Y.0),
+                ],
+                GamepadAxis::Hat2 => vec![
+                    abs_event(AbsoluteAxisCode::ABS_HAT2X.0),
+                    abs_event(AbsoluteAxisCode::ABS_HAT2Y.0),
+                ],
+                GamepadAxis::Hat3 => vec![
+                    abs_event(AbsoluteAxisCode::ABS_HAT3X.0),
+                    abs_event(AbsoluteAxisCode::ABS_HAT3Y.0),
+                ],
+            },
+            Gamepad::Trigger(trigg) => match trigg {
+                GamepadTrigger::LeftTrigger => vec![abs_event(AbsoluteAxisCode::ABS_Z.0)],
+                GamepadTrigger::LeftTouchpadForce => vec![],
+                GamepadTrigger::LeftStickForce => vec![],
+                GamepadTrigger::RightTrigger => vec![abs_event(AbsoluteAxisCode::ABS_RZ.0)],
+                GamepadTrigger::RightTouchpadForce => vec![],
+                GamepadTrigger::RightStickForce => vec![],
+            },
+            Gamepad::Dial(dial) => match dial {
+                GamepadDial::LeftStickDial => vec![rel_event(RelativeAxisCode::REL_HWHEEL.0)],
+                GamepadDial::RightStickDial => vec![rel_event(RelativeAxisCode::REL_WHEEL.0)],
+            },
+        }
+    }
+
+    fn mouse_codes(mouse: &Mouse) -> Vec<(EventType, u16)> {
+        match mouse {
+            Mouse::Motion => vec![
+                rel_event(RelativeAxisCode::REL_X.0),
+                rel_event(RelativeAxisCode::REL_Y.0),
+            ],
+            Mouse::Button(button) => match button {
+                MouseButton::Left => vec![key_event(KeyCode::BTN_LEFT.0)],
+                MouseButton::Right => vec![key_event(KeyCode::BTN_RIGHT.0)],
+                MouseButton::Middle => vec![key_event(KeyCode::BTN_MIDDLE.0)],
+                MouseButton::WheelUp => vec![],
+                MouseButton::WheelDown => vec![],
+                MouseButton::WheelLeft => vec![],
+                MouseButton::WheelRight => vec![],
+                MouseButton::Extra => vec![key_event(KeyCode::BTN_EXTRA.0)],
+                MouseButton::Side => vec![key_event(KeyCode::BTN_SIDE.0)],
+            },
+            Mouse::Wheel => vec![
+                rel_event(RelativeAxisCode::REL_WHEEL.0),
+                rel_event(RelativeAxisCode::REL_HWHEEL.0),
+            ],
+        }
+    }
+
+    fn keyboard_codes(key: &Keyboard) -> Vec<(EventType, u16)> {
+        match key {
+            Keyboard::Key0 => vec![key_event(KeyCode::KEY_0.0)],
+            Keyboard::Key1 => vec![key_event(KeyCode::KEY_1.0)],
+            Keyboard::Key102nd => vec![key_event(KeyCode::KEY_102ND.0)],
+            Keyboard::Key2 => vec![key_event(KeyCode::KEY_2.0)],
+            Keyboard::Key3 => vec![key_event(KeyCode::KEY_3.0)],
+            Keyboard::Key4 => vec![key_event(KeyCode::KEY_4.0)],
+            Keyboard::Key5 => vec![key_event(KeyCode::KEY_5.0)],
+            Keyboard::Key6 => vec![key_event(KeyCode::KEY_6.0)],
+            Keyboard::Key7 => vec![key_event(KeyCode::KEY_7.0)],
+            Keyboard::Key8 => vec![key_event(KeyCode::KEY_8.0)],
+            Keyboard::Key9 => vec![key_event(KeyCode::KEY_9.0)],
+            Keyboard::KeyA => vec![key_event(KeyCode::KEY_A.0)],
+            Keyboard::KeyAgain => vec![key_event(KeyCode::KEY_AGAIN.0)],
+            Keyboard::KeyApostrophe => vec![key_event(KeyCode::KEY_APOSTROPHE.0)],
+            Keyboard::KeyB => vec![key_event(KeyCode::KEY_B.0)],
+            Keyboard::KeyBack => vec![key_event(KeyCode::KEY_BACK.0)],
+            Keyboard::KeyBackslash => vec![key_event(KeyCode::KEY_BACKSLASH.0)],
+            Keyboard::KeyBackspace => vec![key_event(KeyCode::KEY_BACKSPACE.0)],
+            Keyboard::KeyBlue => vec![key_event(KeyCode::KEY_BLUE.0)],
+            Keyboard::KeyBrightnessDown => vec![key_event(KeyCode::KEY_BRIGHTNESSDOWN.0)],
+            Keyboard::KeyBrightnessUp => vec![key_event(KeyCode::KEY_BRIGHTNESSUP.0)],
+            Keyboard::KeyC => vec![key_event(KeyCode::KEY_C.0)],
+            Keyboard::KeyCalc => vec![key_event(KeyCode::KEY_CALC.0)],
+            Keyboard::KeyCapslock => vec![key_event(KeyCode::KEY_CAPSLOCK.0)],
+            Keyboard::KeyComma => vec![key_event(KeyCode::KEY_COMMA.0)],
+            Keyboard::KeyCompose => vec![key_event(KeyCode::KEY_COMPOSE.0)],
+            Keyboard::KeyCopy => vec![key_event(KeyCode::KEY_COPY.0)],
+            Keyboard::KeyCut => vec![key_event(KeyCode::KEY_CUT.0)],
+            Keyboard::KeyD => vec![key_event(KeyCode::KEY_D.0)],
+            Keyboard::KeyDelete => vec![key_event(KeyCode::KEY_DELETE.0)],
+            Keyboard::KeyDot => vec![key_event(KeyCode::KEY_DOT.0)],
+            Keyboard::KeyDown => vec![key_event(KeyCode::KEY_DOWN.0)],
+            Keyboard::KeyE => vec![key_event(KeyCode::KEY_E.0)],
+            Keyboard::KeyEdit => vec![key_event(KeyCode::KEY_EDIT.0)],
+            Keyboard::KeyEjectCD => vec![key_event(KeyCode::KEY_EJECTCD.0)],
+            Keyboard::KeyEnd => vec![key_event(KeyCode::KEY_END.0)],
+            Keyboard::KeyEnter => vec![key_event(KeyCode::KEY_ENTER.0)],
+            Keyboard::KeyEqual => vec![key_event(KeyCode::KEY_EQUAL.0)],
+            Keyboard::KeyEsc => vec![key_event(KeyCode::KEY_ESC.0)],
+            Keyboard::KeyExit => vec![key_event(KeyCode::KEY_EXIT.0)],
+            Keyboard::KeyF => vec![key_event(KeyCode::KEY_F.0)],
+            Keyboard::KeyF1 => vec![key_event(KeyCode::KEY_F1.0)],
+            Keyboard::KeyF10 => vec![key_event(KeyCode::KEY_F10.0)],
+            Keyboard::KeyF11 => vec![key_event(KeyCode::KEY_F11.0)],
+            Keyboard::KeyF12 => vec![key_event(KeyCode::KEY_F12.0)],
+            Keyboard::KeyF13 => vec![key_event(KeyCode::KEY_F13.0)],
+            Keyboard::KeyF14 => vec![key_event(KeyCode::KEY_F14.0)],
+            Keyboard::KeyF15 => vec![key_event(KeyCode::KEY_F15.0)],
+            Keyboard::KeyF16 => vec![key_event(KeyCode::KEY_F16.0)],
+            Keyboard::KeyF17 => vec![key_event(KeyCode::KEY_F17.0)],
+            Keyboard::KeyF18 => vec![key_event(KeyCode::KEY_F18.0)],
+            Keyboard::KeyF19 => vec![key_event(KeyCode::KEY_F19.0)],
+            Keyboard::KeyF2 => vec![key_event(KeyCode::KEY_F2.0)],
+            Keyboard::KeyF20 => vec![key_event(KeyCode::KEY_F20.0)],
+            Keyboard::KeyF21 => vec![key_event(KeyCode::KEY_F21.0)],
+            Keyboard::KeyF22 => vec![key_event(KeyCode::KEY_F22.0)],
+            Keyboard::KeyF23 => vec![key_event(KeyCode::KEY_F23.0)],
+            Keyboard::KeyF24 => vec![key_event(KeyCode::KEY_F24.0)],
+            Keyboard::KeyF3 => vec![key_event(KeyCode::KEY_F3.0)],
+            Keyboard::KeyF4 => vec![key_event(KeyCode::KEY_F4.0)],
+            Keyboard::KeyF5 => vec![key_event(KeyCode::KEY_F5.0)],
+            Keyboard::KeyF6 => vec![key_event(KeyCode::KEY_F6.0)],
+            Keyboard::KeyF7 => vec![key_event(KeyCode::KEY_F7.0)],
+            Keyboard::KeyF8 => vec![key_event(KeyCode::KEY_F8.0)],
+            Keyboard::KeyF9 => vec![key_event(KeyCode::KEY_F9.0)],
+            Keyboard::KeyFind => vec![key_event(KeyCode::KEY_FIND.0)],
+            Keyboard::KeyForward => vec![key_event(KeyCode::KEY_FORWARD.0)],
+            Keyboard::KeyFront => vec![key_event(KeyCode::KEY_FRONT.0)],
+            Keyboard::KeyG => vec![key_event(KeyCode::KEY_G.0)],
+            Keyboard::KeyGrave => vec![key_event(KeyCode::KEY_GRAVE.0)],
+            Keyboard::KeyGreen => vec![key_event(KeyCode::KEY_GREEN.0)],
+            Keyboard::KeyH => vec![key_event(KeyCode::KEY_H.0)],
+            Keyboard::KeyHanja => vec![key_event(KeyCode::KEY_HANJA.0)],
+            Keyboard::KeyHelp => vec![key_event(KeyCode::KEY_HELP.0)],
+            Keyboard::KeyHenkan => vec![key_event(KeyCode::KEY_HENKAN.0)],
+            Keyboard::KeyHiragana => vec![key_event(KeyCode::KEY_HIRAGANA.0)],
+            Keyboard::KeyHome => vec![key_event(KeyCode::KEY_HOME.0)],
+            Keyboard::KeyI => vec![key_event(KeyCode::KEY_I.0)],
+            Keyboard::KeyInfo => vec![key_event(KeyCode::KEY_INFO.0)],
+            Keyboard::KeyInsert => vec![key_event(KeyCode::KEY_INSERT.0)],
+            Keyboard::KeyJ => vec![key_event(KeyCode::KEY_J.0)],
+            Keyboard::KeyK => vec![key_event(KeyCode::KEY_K.0)],
+            Keyboard::KeyKatakana => vec![key_event(KeyCode::KEY_KATAKANA.0)],
+            Keyboard::KeyKatakanaHiragana => vec![key_event(KeyCode::KEY_KATAKANAHIRAGANA.0)],
+            Keyboard::KeyKp0 => vec![key_event(KeyCode::KEY_KP0.0)],
+            Keyboard::KeyKp1 => vec![key_event(KeyCode::KEY_KP1.0)],
+            Keyboard::KeyKp2 => vec![key_event(KeyCode::KEY_KP2.0)],
+            Keyboard::KeyKp3 => vec![key_event(KeyCode::KEY_KP3.0)],
+            Keyboard::KeyKp4 => vec![key_event(KeyCode::KEY_KP4.0)],
+            Keyboard::KeyKp5 => vec![key_event(KeyCode::KEY_KP5.0)],
+            Keyboard::KeyKp6 => vec![key_event(KeyCode::KEY_KP6.0)],
+            Keyboard::KeyKp7 => vec![key_event(KeyCode::KEY_KP7.0)],
+            Keyboard::KeyKp8 => vec![key_event(KeyCode::KEY_KP8.0)],
+            Keyboard::KeyKp9 => vec![key_event(KeyCode::KEY_KP9.0)],
+            Keyboard::KeyKpAsterisk => vec![key_event(KeyCode::KEY_KPASTERISK.0)],
+            Keyboard::KeyKpComma => vec![key_event(KeyCode::KEY_KPCOMMA.0)],
+            Keyboard::KeyKpDot => vec![key_event(KeyCode::KEY_KPDOT.0)],
+            Keyboard::KeyKpEnter => vec![key_event(KeyCode::KEY_KPENTER.0)],
+            Keyboard::KeyKpEqual => vec![key_event(KeyCode::KEY_KPEQUAL.0)],
+            Keyboard::KeyKpJpComma => vec![key_event(KeyCode::KEY_KPJPCOMMA.0)],
+            Keyboard::KeyKpLeftParen => vec![key_event(KeyCode::KEY_KPLEFTPAREN.0)],
+            Keyboard::KeyKpMinus => vec![key_event(KeyCode::KEY_KPMINUS.0)],
+            Keyboard::KeyKpPlus => vec![key_event(KeyCode::KEY_KPPLUS.0)],
+            Keyboard::KeyKpRightParen => vec![key_event(KeyCode::KEY_KPRIGHTPAREN.0)],
+            Keyboard::KeyKpSlash => vec![key_event(KeyCode::KEY_KPSLASH.0)],
+            Keyboard::KeyL => vec![key_event(KeyCode::KEY_L.0)],
+            Keyboard::KeyLeft => vec![key_event(KeyCode::KEY_LEFT.0)],
+            Keyboard::KeyLeftAlt => vec![key_event(KeyCode::KEY_LEFTALT.0)],
+            Keyboard::KeyLeftBrace => vec![key_event(KeyCode::KEY_LEFTBRACE.0)],
+            Keyboard::KeyLeftCtrl => vec![key_event(KeyCode::KEY_LEFTCTRL.0)],
+            Keyboard::KeyLeftMeta => vec![key_event(KeyCode::KEY_LEFTMETA.0)],
+            Keyboard::KeyLeftShift => vec![key_event(KeyCode::KEY_LEFTSHIFT.0)],
+            Keyboard::KeyM => vec![key_event(KeyCode::KEY_M.0)],
+            Keyboard::KeyMinus => vec![key_event(KeyCode::KEY_MINUS.0)],
+            Keyboard::KeyMuhenkan => vec![key_event(KeyCode::KEY_MUHENKAN.0)],
+            Keyboard::KeyMute => vec![key_event(KeyCode::KEY_MUTE.0)],
+            Keyboard::KeyN => vec![key_event(KeyCode::KEY_N.0)],
+            Keyboard::KeyNextSong => vec![key_event(KeyCode::KEY_NEXTSONG.0)],
+            Keyboard::KeyNumlock => vec![key_event(KeyCode::KEY_NUMLOCK.0)],
+            Keyboard::KeyO => vec![key_event(KeyCode::KEY_O.0)],
+            Keyboard::KeyOk => vec![key_event(KeyCode::KEY_OK.0)],
+            Keyboard::KeyOpen => vec![key_event(KeyCode::KEY_OPEN.0)],
+            Keyboard::KeyP => vec![key_event(KeyCode::KEY_P.0)],
+            Keyboard::KeyPageDown => vec![key_event(KeyCode::KEY_PAGEDOWN.0)],
+            Keyboard::KeyPageUp => vec![key_event(KeyCode::KEY_PAGEUP.0)],
+            Keyboard::KeyPaste => vec![key_event(KeyCode::KEY_PASTE.0)],
+            Keyboard::KeyPause => vec![key_event(KeyCode::KEY_PAUSE.0)],
+            Keyboard::KeyPlayPause => vec![key_event(KeyCode::KEY_PLAYPAUSE.0)],
+            Keyboard::KeyPower => vec![key_event(KeyCode::KEY_POWER.0)],
+            Keyboard::KeyPreviousSong => vec![key_event(KeyCode::KEY_PREVIOUSSONG.0)],
+            Keyboard::KeyProg1 => vec![key_event(KeyCode::KEY_PROG1.0)],
+            Keyboard::KeyProg2 => vec![key_event(KeyCode::KEY_PROG2.0)],
+            Keyboard::KeyProg3 => vec![key_event(KeyCode::KEY_PROG3.0)],
+            Keyboard::KeyProg4 => vec![key_event(KeyCode::KEY_PROG4.0)],
+            Keyboard::KeyProps => vec![key_event(KeyCode::KEY_PROPS.0)],
+            Keyboard::KeyQ => vec![key_event(KeyCode::KEY_Q.0)],
+            Keyboard::KeyR => vec![key_event(KeyCode::KEY_R.0)],
+            Keyboard::KeyRefresh => vec![key_event(KeyCode::KEY_REFRESH.0)],
+            Keyboard::KeyRecord => vec![key_event(KeyCode::KEY_RECORD.0)],
+            Keyboard::KeyRed => vec![key_event(KeyCode::KEY_RED.0)],
+            Keyboard::KeyRight => vec![key_event(KeyCode::KEY_RIGHT.0)],
+            Keyboard::KeyRightAlt => vec![key_event(KeyCode::KEY_RIGHTALT.0)],
+            Keyboard::KeyRightBrace => vec![key_event(KeyCode::KEY_RIGHTBRACE.0)],
+            Keyboard::KeyRightCtrl => vec![key_event(KeyCode::KEY_RIGHTCTRL.0)],
+            Keyboard::KeyRightMeta => vec![key_event(KeyCode::KEY_RIGHTMETA.0)],
+            Keyboard::KeyRightShift => vec![key_event(KeyCode::KEY_RIGHTSHIFT.0)],
+            Keyboard::KeyRo => vec![key_event(KeyCode::KEY_RO.0)],
+            Keyboard::KeyRootMenu => vec![key_event(KeyCode::KEY_ROOT_MENU.0)],
+            Keyboard::KeyS => vec![key_event(KeyCode::KEY_S.0)],
+            Keyboard::KeyScrollDown => vec![key_event(KeyCode::KEY_SCROLLDOWN.0)],
+            Keyboard::KeyScrollLock => vec![key_event(KeyCode::KEY_SCROLLLOCK.0)],
+            Keyboard::KeyScrollUp => vec![key_event(KeyCode::KEY_SCROLLUP.0)],
+            Keyboard::KeySemicolon => vec![key_event(KeyCode::KEY_SEMICOLON.0)],
+            Keyboard::KeySlash => vec![key_event(KeyCode::KEY_SLASH.0)],
+            Keyboard::KeySleep => vec![key_event(KeyCode::KEY_SLEEP.0)],
+            Keyboard::KeySpace => vec![key_event(KeyCode::KEY_SPACE.0)],
+            Keyboard::KeyStop => vec![key_event(KeyCode::KEY_STOP.0)],
+            Keyboard::KeyStopCD => vec![key_event(KeyCode::KEY_STOPCD.0)],
+            Keyboard::KeySysrq => vec![key_event(KeyCode::KEY_SYSRQ.0)],
+            Keyboard::KeyT => vec![key_event(KeyCode::KEY_T.0)],
+            Keyboard::KeyTab => vec![key_event(KeyCode::KEY_TAB.0)],
+            Keyboard::KeyU => vec![key_event(KeyCode::KEY_U.0)],
+            Keyboard::KeyUndo => vec![key_event(KeyCode::KEY_UNDO.0)],
+            Keyboard::KeyUp => vec![key_event(KeyCode::KEY_UP.0)],
+            Keyboard::KeyV => vec![key_event(KeyCode::KEY_V.0)],
+            Keyboard::KeyVolumeDown => vec![key_event(KeyCode::KEY_VOLUMEDOWN.0)],
+            Keyboard::KeyVolumeUp => vec![key_event(KeyCode::KEY_VOLUMEUP.0)],
+            Keyboard::KeyW => vec![key_event(KeyCode::KEY_W.0)],
+            Keyboard::KeyWww => vec![key_event(KeyCode::KEY_WWW.0)],
+            Keyboard::KeyX => vec![key_event(KeyCode::KEY_X.0)],
+            Keyboard::KeyY => vec![key_event(KeyCode::KEY_Y.0)],
+            Keyboard::KeyYellow => vec![key_event(KeyCode::KEY_YELLOW.0)],
+            Keyboard::KeyYen => vec![key_event(KeyCode::KEY_YEN.0)],
+            Keyboard::KeyZ => vec![key_event(KeyCode::KEY_Z.0)],
+            Keyboard::KeyZenkakuhankaku => vec![key_event(KeyCode::KEY_ZENKAKUHANKAKU.0)],
+        }
+    }
+
+    fn touchpad_codes(touch: &Touchpad) -> Vec<(EventType, u16)> {
+        match touch {
+            Touchpad::LeftPad(action)
+            | Touchpad::RightPad(action)
+            | Touchpad::CenterPad(action) => match action {
+                Touch::Motion => vec![
+                    abs_event(AbsoluteAxisCode::ABS_MT_POSITION_X.0),
+                    abs_event(AbsoluteAxisCode::ABS_MT_POSITION_Y.0),
+                ],
+                Touch::Button(button) => match button {
+                    TouchButton::Touch => vec![key_event(KeyCode::BTN_TOUCH.0)],
+                    TouchButton::Press => vec![key_event(KeyCode::BTN_LEFT.0)],
+                },
+            },
+        }
+    }
+
+    fn touchscreen_codes(touch: &Touch) -> Vec<(EventType, u16)> {
+        match touch {
+            Touch::Motion => vec![
+                abs_event(AbsoluteAxisCode::ABS_MT_POSITION_X.0),
+                abs_event(AbsoluteAxisCode::ABS_MT_POSITION_Y.0),
+            ],
+            Touch::Button(button) => match button {
+                TouchButton::Touch => vec![key_event(KeyCode::BTN_TOUCH.0)],
+                TouchButton::Press => vec![key_event(KeyCode::BTN_LEFT.0)],
+            },
+        }
+    }
+
     /// Translate a [NativeEvent] into one or more [EvdevEvent].
     pub fn from_native_event(
         event: NativeEvent,
@@ -528,22 +882,11 @@ impl EvdevEvent {
     ) -> Vec<Self> {
         // Native events can be translated into one or more evdev events
         let mut events = Vec::new();
+        let capability = event.as_capability();
 
-        // Determine the event type to use based on the capability
-        let event_type = event_type_from_capability(event.as_capability());
-
-        // If an event type cannot be determined, return an empty event
-        let Some(event_type) = event_type else {
-            //log::debug!("Unable to determine evdev event type");
-            return events;
-        };
-
-        // Determine the event code(s) based on capability. Axis events can
+        // Process each event code for the capability. Axis events can
         // translate to multiple events.
-        let codes = event_codes_from_capability(event.as_capability());
-
-        // Process each event code
-        for code in codes {
+        for (event_type, code) in Self::event_codes(&capability) {
             // Get the axis information if this is an ABS event.
             let axis_info = if event_type == EventType::ABSOLUTE {
                 axis_map.get(&AbsoluteAxisCode(code)).copied()
@@ -551,10 +894,10 @@ impl EvdevEvent {
                 None
             };
 
-            // Get the axis direction if this this an ABS event and we need to
+            // Get the axis direction if this is an ABS event and we need to
             // translate binary input into axis input. (e.g. DPad buttons)
             let axis_direction = if event_type == EventType::ABSOLUTE {
-                Some(axis_direction_from_capability(event.as_capability()))
+                Some(axis_direction_from_capability(&capability))
             } else {
                 None
             };
@@ -562,47 +905,22 @@ impl EvdevEvent {
             // Get the input value from the event and convert it into an evdev
             // input event.
             let value = event.get_value();
-            let event = input_event_from_value(event_type, code, axis_info, axis_direction, value);
-            if event.is_none() {
+            let Some(event) =
+                input_event_from_value(event_type, code, axis_info, axis_direction, value)
+            else {
                 continue;
-            }
+            };
 
-            events.push(EvdevEvent::from(event.unwrap()));
+            events.push(EvdevEvent::from(event));
         }
 
         events
     }
 }
 
-/// Returns the event type responsible for handling the given input capability.
-fn event_type_from_capability(capability: Capability) -> Option<EventType> {
-    match capability {
-        Capability::Sync => Some(EventType::SYNCHRONIZATION),
-        Capability::Keyboard(_) => Some(EventType::KEY),
-        Capability::Mouse(mouse) => match mouse {
-            Mouse::Motion => Some(EventType::RELATIVE),
-            Mouse::Button(_) => Some(EventType::KEY),
-            Mouse::Wheel => Some(EventType::RELATIVE),
-        },
-        Capability::Gamepad(gamepad) => match gamepad {
-            Gamepad::Button(button) => match button {
-                GamepadButton::DPadUp => Some(EventType::ABSOLUTE),
-                GamepadButton::DPadDown => Some(EventType::ABSOLUTE),
-                GamepadButton::DPadLeft => Some(EventType::ABSOLUTE),
-                GamepadButton::DPadRight => Some(EventType::ABSOLUTE),
-                _ => Some(EventType::KEY),
-            },
-            Gamepad::Axis(_) => Some(EventType::ABSOLUTE),
-            Gamepad::Trigger(_) => Some(EventType::ABSOLUTE),
-            Gamepad::Dial(_) => Some(EventType::RELATIVE),
-        },
-        _ => None,
-    }
-}
-
 /// Returns the axis direction for the given input capability. This is primarily
 /// used to translate direction binary button events into axis events.
-fn axis_direction_from_capability(capability: Capability) -> AxisDirection {
+fn axis_direction_from_capability(capability: &Capability) -> AxisDirection {
     match capability {
         Capability::Gamepad(gamepad) => {
             if let Gamepad::Button(button) = gamepad {
@@ -621,332 +939,19 @@ fn axis_direction_from_capability(capability: Capability) -> AxisDirection {
     }
 }
 
-/// Returns a list of event codes responsible for handling the given input capability.
-/// This is typically used to translate a [NativeEvent] into an [EvdevEvent].
-fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
-    match capability {
-        Capability::None => vec![],
-        Capability::NotImplemented => vec![],
-        Capability::Sync => vec![0],
-        Capability::DBus(_) => vec![],
-        Capability::Gamepad(gamepad) => match gamepad {
-            Gamepad::Button(btn) => match btn {
-                GamepadButton::DPadDown => vec![AbsoluteAxisCode::ABS_HAT0Y.0],
-                GamepadButton::DPadLeft => vec![AbsoluteAxisCode::ABS_HAT0X.0],
-                GamepadButton::DPadRight => vec![AbsoluteAxisCode::ABS_HAT0X.0],
-                GamepadButton::DPadUp => vec![AbsoluteAxisCode::ABS_HAT0Y.0],
-                GamepadButton::East => vec![KeyCode::BTN_EAST.0],
-                GamepadButton::Guide => vec![KeyCode::BTN_MODE.0],
-                GamepadButton::Keyboard => vec![],
-                GamepadButton::LeftBumper => vec![KeyCode::BTN_TL.0],
-                GamepadButton::LeftPaddle1 => vec![KeyCode::BTN_TRIGGER_HAPPY7.0],
-                GamepadButton::LeftPaddle2 => vec![KeyCode::BTN_TRIGGER_HAPPY8.0],
-                GamepadButton::LeftPaddle3 => vec![KeyCode::BTN_TRIGGER_HAPPY10.0],
-                GamepadButton::LeftStick => vec![KeyCode::BTN_THUMBL.0],
-                GamepadButton::LeftStickTouch => vec![],
-                GamepadButton::LeftTop => vec![],
-                GamepadButton::LeftTrigger => vec![KeyCode::BTN_TL2.0],
-                GamepadButton::North => vec![KeyCode::BTN_NORTH.0],
-                GamepadButton::QuickAccess => vec![],
-                GamepadButton::QuickAccess2 => vec![],
-                GamepadButton::RightBumper => vec![KeyCode::BTN_TR.0],
-                GamepadButton::RightPaddle1 => vec![KeyCode::BTN_TRIGGER_HAPPY5.0],
-                GamepadButton::RightPaddle2 => vec![KeyCode::BTN_TRIGGER_HAPPY6.0],
-                GamepadButton::RightPaddle3 => vec![KeyCode::BTN_TRIGGER_HAPPY9.0],
-                GamepadButton::RightStick => vec![KeyCode::BTN_THUMBR.0],
-                GamepadButton::RightStickTouch => vec![],
-                GamepadButton::RightTop => vec![],
-                GamepadButton::RightTrigger => vec![KeyCode::BTN_TR2.0],
-                GamepadButton::Screenshot => vec![KeyCode::KEY_RECORD.0],
-                GamepadButton::Mute => vec![],
-                GamepadButton::Select => vec![KeyCode::BTN_SELECT.0],
-                GamepadButton::South => vec![KeyCode::BTN_SOUTH.0],
-                GamepadButton::Start => vec![KeyCode::BTN_START.0],
-                GamepadButton::West => vec![KeyCode::BTN_WEST.0],
-            },
-            Gamepad::Axis(axis) => match axis {
-                GamepadAxis::LeftStick => {
-                    vec![AbsoluteAxisCode::ABS_X.0, AbsoluteAxisCode::ABS_Y.0]
-                }
-                GamepadAxis::RightStick => {
-                    vec![AbsoluteAxisCode::ABS_RX.0, AbsoluteAxisCode::ABS_RY.0]
-                }
-                GamepadAxis::Hat0 => {
-                    vec![AbsoluteAxisCode::ABS_HAT0X.0, AbsoluteAxisCode::ABS_HAT0Y.0]
-                }
-                GamepadAxis::Hat1 => {
-                    vec![AbsoluteAxisCode::ABS_HAT1X.0, AbsoluteAxisCode::ABS_HAT1Y.0]
-                }
-                GamepadAxis::Hat2 => {
-                    vec![AbsoluteAxisCode::ABS_HAT2X.0, AbsoluteAxisCode::ABS_HAT2Y.0]
-                }
-                GamepadAxis::Hat3 => {
-                    vec![AbsoluteAxisCode::ABS_HAT3X.0, AbsoluteAxisCode::ABS_HAT3Y.0]
-                }
-            },
-            Gamepad::Trigger(trigg) => match trigg {
-                GamepadTrigger::LeftTrigger => {
-                    vec![AbsoluteAxisCode::ABS_Z.0]
-                }
-                GamepadTrigger::LeftTouchpadForce => vec![],
-                GamepadTrigger::LeftStickForce => vec![],
-                GamepadTrigger::RightTrigger => {
-                    vec![AbsoluteAxisCode::ABS_RZ.0]
-                }
-                GamepadTrigger::RightTouchpadForce => vec![],
-                GamepadTrigger::RightStickForce => vec![],
-            },
-            Gamepad::Dial(dial) => match dial {
-                GamepadDial::LeftStickDial => {
-                    vec![RelativeAxisCode::REL_HWHEEL.0]
-                }
-                GamepadDial::RightStickDial => {
-                    vec![RelativeAxisCode::REL_WHEEL.0]
-                }
-            },
-        },
-        Capability::Mouse(mouse) => match mouse {
-            Mouse::Motion => vec![RelativeAxisCode::REL_X.0, RelativeAxisCode::REL_Y.0],
+/// (event type, code) pair constructors shared by the event code helpers
+fn key_event(code: u16) -> (EventType, u16) {
+    (EventType::KEY, code)
+}
 
-            Mouse::Button(button) => match button {
-                MouseButton::Left => vec![KeyCode::BTN_LEFT.0],
-                MouseButton::Right => vec![KeyCode::BTN_RIGHT.0],
-                MouseButton::Middle => vec![KeyCode::BTN_MIDDLE.0],
-                MouseButton::WheelUp => vec![],
-                MouseButton::WheelDown => vec![],
-                MouseButton::WheelLeft => vec![],
-                MouseButton::WheelRight => vec![],
-                MouseButton::Extra => vec![KeyCode::BTN_EXTRA.0],
-                MouseButton::Side => vec![KeyCode::BTN_SIDE.0],
-            },
+/// (event type, code) pair constructor for absolute axis events
+fn abs_event(code: u16) -> (EventType, u16) {
+    (EventType::ABSOLUTE, code)
+}
 
-            Mouse::Wheel => vec![
-                RelativeAxisCode::REL_WHEEL.0,
-                RelativeAxisCode::REL_HWHEEL.0,
-            ],
-        },
-        Capability::Keyboard(key) => match key {
-            Keyboard::Key0 => vec![KeyCode::KEY_0.0],
-            Keyboard::Key1 => vec![KeyCode::KEY_1.0],
-            Keyboard::Key102nd => vec![KeyCode::KEY_102ND.0],
-            Keyboard::Key2 => vec![KeyCode::KEY_2.0],
-            Keyboard::Key3 => vec![KeyCode::KEY_3.0],
-            Keyboard::Key4 => vec![KeyCode::KEY_4.0],
-            Keyboard::Key5 => vec![KeyCode::KEY_5.0],
-            Keyboard::Key6 => vec![KeyCode::KEY_6.0],
-            Keyboard::Key7 => vec![KeyCode::KEY_7.0],
-            Keyboard::Key8 => vec![KeyCode::KEY_8.0],
-            Keyboard::Key9 => vec![KeyCode::KEY_9.0],
-            Keyboard::KeyA => vec![KeyCode::KEY_A.0],
-            Keyboard::KeyAgain => vec![KeyCode::KEY_AGAIN.0],
-            Keyboard::KeyApostrophe => vec![KeyCode::KEY_APOSTROPHE.0],
-            Keyboard::KeyB => vec![KeyCode::KEY_B.0],
-            Keyboard::KeyBack => vec![KeyCode::KEY_BACK.0],
-            Keyboard::KeyBackslash => vec![KeyCode::KEY_BACKSLASH.0],
-            Keyboard::KeyBackspace => vec![KeyCode::KEY_BACKSPACE.0],
-            Keyboard::KeyBlue => vec![KeyCode::KEY_BLUE.0],
-            Keyboard::KeyBrightnessDown => vec![KeyCode::KEY_BRIGHTNESSDOWN.0],
-            Keyboard::KeyBrightnessUp => vec![KeyCode::KEY_BRIGHTNESSUP.0],
-            Keyboard::KeyC => vec![KeyCode::KEY_C.0],
-            Keyboard::KeyCalc => vec![KeyCode::KEY_CALC.0],
-            Keyboard::KeyCapslock => vec![KeyCode::KEY_CAPSLOCK.0],
-            Keyboard::KeyComma => vec![KeyCode::KEY_COMMA.0],
-            Keyboard::KeyCompose => vec![KeyCode::KEY_COMPOSE.0],
-            Keyboard::KeyCopy => vec![KeyCode::KEY_COPY.0],
-            Keyboard::KeyCut => vec![KeyCode::KEY_CUT.0],
-            Keyboard::KeyD => vec![KeyCode::KEY_D.0],
-            Keyboard::KeyDelete => vec![KeyCode::KEY_DELETE.0],
-            Keyboard::KeyDot => vec![KeyCode::KEY_DOT.0],
-            Keyboard::KeyDown => vec![KeyCode::KEY_DOWN.0],
-            Keyboard::KeyE => vec![KeyCode::KEY_E.0],
-            Keyboard::KeyEdit => vec![KeyCode::KEY_EDIT.0],
-            Keyboard::KeyEjectCD => vec![KeyCode::KEY_EJECTCD.0],
-            Keyboard::KeyEnd => vec![KeyCode::KEY_END.0],
-            Keyboard::KeyEnter => vec![KeyCode::KEY_ENTER.0],
-            Keyboard::KeyEqual => vec![KeyCode::KEY_EQUAL.0],
-            Keyboard::KeyEsc => vec![KeyCode::KEY_ESC.0],
-            Keyboard::KeyExit => vec![KeyCode::KEY_EXIT.0],
-            Keyboard::KeyF => vec![KeyCode::KEY_F.0],
-            Keyboard::KeyF1 => vec![KeyCode::KEY_F1.0],
-            Keyboard::KeyF10 => vec![KeyCode::KEY_F10.0],
-            Keyboard::KeyF11 => vec![KeyCode::KEY_F11.0],
-            Keyboard::KeyF12 => vec![KeyCode::KEY_F12.0],
-            Keyboard::KeyF13 => vec![KeyCode::KEY_F13.0],
-            Keyboard::KeyF14 => vec![KeyCode::KEY_F14.0],
-            Keyboard::KeyF15 => vec![KeyCode::KEY_F15.0],
-            Keyboard::KeyF16 => vec![KeyCode::KEY_F16.0],
-            Keyboard::KeyF17 => vec![KeyCode::KEY_F17.0],
-            Keyboard::KeyF18 => vec![KeyCode::KEY_F18.0],
-            Keyboard::KeyF19 => vec![KeyCode::KEY_F19.0],
-            Keyboard::KeyF2 => vec![KeyCode::KEY_F2.0],
-            Keyboard::KeyF20 => vec![KeyCode::KEY_F20.0],
-            Keyboard::KeyF21 => vec![KeyCode::KEY_F21.0],
-            Keyboard::KeyF22 => vec![KeyCode::KEY_F22.0],
-            Keyboard::KeyF23 => vec![KeyCode::KEY_F23.0],
-            Keyboard::KeyF24 => vec![KeyCode::KEY_F24.0],
-            Keyboard::KeyF3 => vec![KeyCode::KEY_F3.0],
-            Keyboard::KeyF4 => vec![KeyCode::KEY_F4.0],
-            Keyboard::KeyF5 => vec![KeyCode::KEY_F5.0],
-            Keyboard::KeyF6 => vec![KeyCode::KEY_F6.0],
-            Keyboard::KeyF7 => vec![KeyCode::KEY_F7.0],
-            Keyboard::KeyF8 => vec![KeyCode::KEY_F8.0],
-            Keyboard::KeyF9 => vec![KeyCode::KEY_F9.0],
-            Keyboard::KeyFind => vec![KeyCode::KEY_FIND.0],
-            Keyboard::KeyForward => vec![KeyCode::KEY_FORWARD.0],
-            Keyboard::KeyFront => vec![KeyCode::KEY_FRONT.0],
-            Keyboard::KeyG => vec![KeyCode::KEY_G.0],
-            Keyboard::KeyGrave => vec![KeyCode::KEY_GRAVE.0],
-            Keyboard::KeyGreen => vec![KeyCode::KEY_GREEN.0],
-            Keyboard::KeyH => vec![KeyCode::KEY_H.0],
-            Keyboard::KeyHanja => vec![KeyCode::KEY_HANJA.0],
-            Keyboard::KeyHelp => vec![KeyCode::KEY_HELP.0],
-            Keyboard::KeyHenkan => vec![KeyCode::KEY_HENKAN.0],
-            Keyboard::KeyHiragana => vec![KeyCode::KEY_HIRAGANA.0],
-            Keyboard::KeyHome => vec![KeyCode::KEY_HOME.0],
-            Keyboard::KeyI => vec![KeyCode::KEY_I.0],
-            Keyboard::KeyInfo => vec![KeyCode::KEY_INFO.0],
-            Keyboard::KeyInsert => vec![KeyCode::KEY_INSERT.0],
-            Keyboard::KeyJ => vec![KeyCode::KEY_J.0],
-            Keyboard::KeyK => vec![KeyCode::KEY_K.0],
-            Keyboard::KeyKatakana => vec![KeyCode::KEY_KATAKANA.0],
-            Keyboard::KeyKatakanaHiragana => vec![KeyCode::KEY_KATAKANAHIRAGANA.0],
-            Keyboard::KeyKp0 => vec![KeyCode::KEY_KP0.0],
-            Keyboard::KeyKp1 => vec![KeyCode::KEY_KP1.0],
-            Keyboard::KeyKp2 => vec![KeyCode::KEY_KP2.0],
-            Keyboard::KeyKp3 => vec![KeyCode::KEY_KP3.0],
-            Keyboard::KeyKp4 => vec![KeyCode::KEY_KP4.0],
-            Keyboard::KeyKp5 => vec![KeyCode::KEY_KP5.0],
-            Keyboard::KeyKp6 => vec![KeyCode::KEY_KP6.0],
-            Keyboard::KeyKp7 => vec![KeyCode::KEY_KP7.0],
-            Keyboard::KeyKp8 => vec![KeyCode::KEY_KP8.0],
-            Keyboard::KeyKp9 => vec![KeyCode::KEY_KP9.0],
-            Keyboard::KeyKpAsterisk => vec![KeyCode::KEY_KPASTERISK.0],
-            Keyboard::KeyKpComma => vec![KeyCode::KEY_KPCOMMA.0],
-            Keyboard::KeyKpDot => vec![KeyCode::KEY_KPDOT.0],
-            Keyboard::KeyKpEnter => vec![KeyCode::KEY_KPENTER.0],
-            Keyboard::KeyKpEqual => vec![KeyCode::KEY_KPEQUAL.0],
-            Keyboard::KeyKpJpComma => vec![KeyCode::KEY_KPJPCOMMA.0],
-            Keyboard::KeyKpLeftParen => vec![KeyCode::KEY_KPLEFTPAREN.0],
-            Keyboard::KeyKpMinus => vec![KeyCode::KEY_KPMINUS.0],
-            Keyboard::KeyKpPlus => vec![KeyCode::KEY_KPPLUS.0],
-            Keyboard::KeyKpRightParen => vec![KeyCode::KEY_KPRIGHTPAREN.0],
-            Keyboard::KeyKpSlash => vec![KeyCode::KEY_KPSLASH.0],
-            Keyboard::KeyL => vec![KeyCode::KEY_L.0],
-            Keyboard::KeyLeft => vec![KeyCode::KEY_LEFT.0],
-            Keyboard::KeyLeftAlt => vec![KeyCode::KEY_LEFTALT.0],
-            Keyboard::KeyLeftBrace => vec![KeyCode::KEY_LEFTBRACE.0],
-            Keyboard::KeyLeftCtrl => vec![KeyCode::KEY_LEFTCTRL.0],
-            Keyboard::KeyLeftMeta => vec![KeyCode::KEY_LEFTMETA.0],
-            Keyboard::KeyLeftShift => vec![KeyCode::KEY_LEFTSHIFT.0],
-            Keyboard::KeyM => vec![KeyCode::KEY_M.0],
-            Keyboard::KeyMinus => vec![KeyCode::KEY_MINUS.0],
-            Keyboard::KeyMuhenkan => vec![KeyCode::KEY_MUHENKAN.0],
-            Keyboard::KeyMute => vec![KeyCode::KEY_MUTE.0],
-            Keyboard::KeyN => vec![KeyCode::KEY_N.0],
-            Keyboard::KeyNextSong => vec![KeyCode::KEY_NEXTSONG.0],
-            Keyboard::KeyNumlock => vec![KeyCode::KEY_NUMLOCK.0],
-            Keyboard::KeyO => vec![KeyCode::KEY_O.0],
-            Keyboard::KeyOk => vec![KeyCode::KEY_OK.0],
-            Keyboard::KeyOpen => vec![KeyCode::KEY_OPEN.0],
-            Keyboard::KeyP => vec![KeyCode::KEY_P.0],
-            Keyboard::KeyPageDown => vec![KeyCode::KEY_PAGEDOWN.0],
-            Keyboard::KeyPageUp => vec![KeyCode::KEY_PAGEUP.0],
-            Keyboard::KeyPaste => vec![KeyCode::KEY_PASTE.0],
-            Keyboard::KeyPause => vec![KeyCode::KEY_PAUSE.0],
-            Keyboard::KeyPlayPause => vec![KeyCode::KEY_PLAYPAUSE.0],
-            Keyboard::KeyPower => vec![KeyCode::KEY_POWER.0],
-            Keyboard::KeyPreviousSong => vec![KeyCode::KEY_PREVIOUSSONG.0],
-            Keyboard::KeyProg1 => vec![KeyCode::KEY_PROG1.0],
-            Keyboard::KeyProg2 => vec![KeyCode::KEY_PROG2.0],
-            Keyboard::KeyProg3 => vec![KeyCode::KEY_PROG3.0],
-            Keyboard::KeyProg4 => vec![KeyCode::KEY_PROG4.0],
-            Keyboard::KeyProps => vec![KeyCode::KEY_PROPS.0],
-            Keyboard::KeyQ => vec![KeyCode::KEY_Q.0],
-            Keyboard::KeyR => vec![KeyCode::KEY_R.0],
-            Keyboard::KeyRefresh => vec![KeyCode::KEY_REFRESH.0],
-            Keyboard::KeyRecord => vec![KeyCode::KEY_RECORD.0],
-            Keyboard::KeyRed => vec![KeyCode::KEY_RED.0],
-            Keyboard::KeyRight => vec![KeyCode::KEY_RIGHT.0],
-            Keyboard::KeyRightAlt => vec![KeyCode::KEY_RIGHTALT.0],
-            Keyboard::KeyRightBrace => vec![KeyCode::KEY_RIGHTBRACE.0],
-            Keyboard::KeyRightCtrl => vec![KeyCode::KEY_RIGHTCTRL.0],
-            Keyboard::KeyRightMeta => vec![KeyCode::KEY_RIGHTMETA.0],
-            Keyboard::KeyRightShift => vec![KeyCode::KEY_RIGHTSHIFT.0],
-            Keyboard::KeyRo => vec![KeyCode::KEY_RO.0],
-            Keyboard::KeyRootMenu => vec![KeyCode::KEY_ROOT_MENU.0],
-            Keyboard::KeyS => vec![KeyCode::KEY_S.0],
-            Keyboard::KeyScrollDown => vec![KeyCode::KEY_SCROLLDOWN.0],
-            Keyboard::KeyScrollLock => vec![KeyCode::KEY_SCROLLLOCK.0],
-            Keyboard::KeyScrollUp => vec![KeyCode::KEY_SCROLLUP.0],
-            Keyboard::KeySemicolon => vec![KeyCode::KEY_SEMICOLON.0],
-            Keyboard::KeySlash => vec![KeyCode::KEY_SLASH.0],
-            Keyboard::KeySleep => vec![KeyCode::KEY_SLEEP.0],
-            Keyboard::KeySpace => vec![KeyCode::KEY_SPACE.0],
-            Keyboard::KeyStop => vec![KeyCode::KEY_STOP.0],
-            Keyboard::KeyStopCD => vec![KeyCode::KEY_STOPCD.0],
-            Keyboard::KeySysrq => vec![KeyCode::KEY_SYSRQ.0],
-            Keyboard::KeyT => vec![KeyCode::KEY_T.0],
-            Keyboard::KeyTab => vec![KeyCode::KEY_TAB.0],
-            Keyboard::KeyU => vec![KeyCode::KEY_U.0],
-            Keyboard::KeyUndo => vec![KeyCode::KEY_UNDO.0],
-            Keyboard::KeyUp => vec![KeyCode::KEY_UP.0],
-            Keyboard::KeyV => vec![KeyCode::KEY_V.0],
-            Keyboard::KeyVolumeDown => vec![KeyCode::KEY_VOLUMEDOWN.0],
-            Keyboard::KeyVolumeUp => vec![KeyCode::KEY_VOLUMEUP.0],
-            Keyboard::KeyW => vec![KeyCode::KEY_W.0],
-            Keyboard::KeyWww => vec![KeyCode::KEY_WWW.0],
-            Keyboard::KeyX => vec![KeyCode::KEY_X.0],
-            Keyboard::KeyY => vec![KeyCode::KEY_Y.0],
-            Keyboard::KeyYellow => vec![KeyCode::KEY_YELLOW.0],
-            Keyboard::KeyYen => vec![KeyCode::KEY_YEN.0],
-            Keyboard::KeyZ => vec![KeyCode::KEY_Z.0],
-            Keyboard::KeyZenkakuhankaku => vec![KeyCode::KEY_ZENKAKUHANKAKU.0],
-        },
-        Capability::Touchpad(touch) => match touch {
-            Touchpad::LeftPad(action) => match action {
-                Touch::Motion => vec![
-                    AbsoluteAxisCode::ABS_MT_POSITION_X.0,
-                    AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
-                ],
-                Touch::Button(button) => match button {
-                    TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
-                    TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
-                },
-            },
-            Touchpad::RightPad(action) => match action {
-                Touch::Motion => vec![
-                    AbsoluteAxisCode::ABS_MT_POSITION_X.0,
-                    AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
-                ],
-                Touch::Button(button) => match button {
-                    TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
-                    TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
-                },
-            },
-            Touchpad::CenterPad(action) => match action {
-                Touch::Motion => vec![
-                    AbsoluteAxisCode::ABS_MT_POSITION_X.0,
-                    AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
-                ],
-                Touch::Button(button) => match button {
-                    TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
-                    TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
-                },
-            },
-        },
-        Capability::Touchscreen(touch) => match touch {
-            Touch::Motion => vec![
-                AbsoluteAxisCode::ABS_MT_POSITION_X.0,
-                AbsoluteAxisCode::ABS_MT_POSITION_Y.0,
-            ],
-            Touch::Button(button) => match button {
-                TouchButton::Touch => vec![KeyCode::BTN_TOUCH.0],
-                TouchButton::Press => vec![KeyCode::BTN_LEFT.0],
-            },
-        },
-        Capability::Gyroscope(_) => vec![],
-        Capability::Accelerometer(_) => vec![],
-    }
+/// (event type, code) pair constructor for relative axis events
+fn rel_event(code: u16) -> (EventType, u16) {
+    (EventType::RELATIVE, code)
 }
 
 /// Returns a translated evdev input event from the given [InputValue].

@@ -14,7 +14,7 @@ use crate::{
             evdev::{translator::EventTranslator, EvdevEvent},
             native::NativeEvent,
         },
-        source::{InputError, SourceInputDevice, SourceOutputDevice},
+        source::{EventCapability, InputError, SourceInputDevice, SourceOutputDevice},
     },
     udev::device::UdevDevice,
 };
@@ -157,7 +157,7 @@ impl SourceInputDevice for KeyboardEventDevice {
                     for key in keys.iter() {
                         let input_event = InputEvent::new(event.0, key.0, 0);
                         let evdev_event = EvdevEvent::from(input_event);
-                        let cap = evdev_event.as_capability();
+                        let cap = evdev_event.to_capability();
                         capabilities.push(cap);
                     }
                 }
