@@ -6,7 +6,7 @@ use std::{
 };
 
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
-use packed_struct::{types::SizedInteger, PrimitiveEnum};
+use packed_struct::types::SizedInteger;
 
 use crate::{
     drivers::{
@@ -16,12 +16,13 @@ use crate::{
     },
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
-        event::{native::NativeEvent, value::normalize_unsigned_value},
+        event::native::NativeEvent,
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{
-            haptic_duration, EventCapability, HapticPulseSeries, HapticState, InputError,
-            OutputError, SourceInputDevice, SourceOutputDevice,
+            haptic_duration, haptic_gain, magnitude, EventCapability, HapticPulseSeries,
+            HapticState, InputError, OutputError, SourceInputDevice, SourceOutputDevice,
+            HAPTIC_NOMINAL_PERCENT,
         },
     },
     udev::device::UdevDevice,
@@ -154,11 +155,7 @@ impl LegionGoSXInputController {
             return Ok(());
         }
 
-        let intensity = report.intensity.to_primitive() + 1;
-        let scaled_gain = ((report.gain as i16 + 24).clamp(0, 30) as u8) * intensity;
-        let normalized_gain = normalize_unsigned_value(scaled_gain as f64, 150.0);
-        let new_gain = normalized_gain * u8::MAX as f64;
-        let new_gain = new_gain as u8;
+        let new_gain = haptic_gain(report.gain, u8::MAX as f64, HAPTIC_NOMINAL_PERCENT) as u8;
 
         let (weak, strong) = match report.side {
             PadSide::Left => (0, new_gain),
@@ -249,14 +246,26 @@ impl SourceOutputDevice for LegionGoSXInputController {
                 self.haptic_state = Some(HapticState::Start(series));
             }
             OutputEvent::TriggerVibration(report) => {
-                let strong = (report.left_speed.to_primitive() / 256) as u8;
-                let weak = (report.right_speed.to_primitive() / 256) as u8;
+                let strong =
+                    magnitude(report.left_speed.to_primitive(), report.left_gain, 255.0) as u8;
+                let weak =
+                    magnitude(report.right_speed.to_primitive(), report.right_gain, 255.0) as u8;
+                log::trace!("Writing rumble strong={strong} weak={weak}");
                 Self::write_rumble(&mut self.driver, weak, strong)?;
             }
             OutputEvent::TriggerVibrationExtended(report) => {
                 let combined = report.combined_rumble();
-                let strong = (combined.left_speed.to_primitive() / 256) as u8;
-                let weak = (combined.right_speed.to_primitive() / 256) as u8;
+                let strong = magnitude(
+                    combined.left_speed.to_primitive(),
+                    combined.left_gain,
+                    255.0,
+                ) as u8;
+                let weak = magnitude(
+                    combined.right_speed.to_primitive(),
+                    combined.right_gain,
+                    255.0,
+                ) as u8;
+                log::trace!("Writing rumble strong={strong} weak={weak}");
                 Self::write_rumble(&mut self.driver, weak, strong)?;
             }
             OutputEvent::GenericRumble {
