@@ -281,7 +281,8 @@ impl CompositeDeviceInterface {
         let event = NativeEvent::new(cap, val);
 
         self.composite_device
-            .blocking_write_send_event(event)
+            .write_send_event(event)
+            .await
             .map_err(|e| fdo::Error::Failed(e.to_string()))?;
 
         Ok(())
