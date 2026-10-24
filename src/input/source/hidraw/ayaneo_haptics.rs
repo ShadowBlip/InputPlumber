@@ -11,7 +11,7 @@ use crate::{
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{
-            HapticPulseSeries, HapticState, InputError, OutputError, SourceInputDevice,
+            magnitude, HapticPulseSeries, HapticState, InputError, OutputError, SourceInputDevice,
             SourceOutputDevice,
         },
     },
@@ -209,16 +209,34 @@ impl SourceOutputDevice for AyaneoHaptics {
                 }
                 Ok(())
             }
-            OutputEvent::TriggerVibration(report) => Ok(self.rumble(
-                report.left_speed.to_primitive(),
-                report.right_speed.to_primitive(),
-            )?),
+            OutputEvent::TriggerVibration(report) => {
+                let left = magnitude(
+                    report.left_speed.to_primitive(),
+                    report.left_gain,
+                    u16::MAX as f64,
+                ) as u16;
+                let right = magnitude(
+                    report.right_speed.to_primitive(),
+                    report.right_gain,
+                    u16::MAX as f64,
+                ) as u16;
+                log::trace!("Writing rumble left={left} right={right}");
+                Ok(self.rumble(left, right)?)
+            }
             OutputEvent::TriggerVibrationExtended(report) => {
                 let combined = report.combined_rumble();
-                Ok(self.rumble(
+                let left = magnitude(
                     combined.left_speed.to_primitive(),
+                    combined.left_gain,
+                    u16::MAX as f64,
+                ) as u16;
+                let right = magnitude(
                     combined.right_speed.to_primitive(),
-                )?)
+                    combined.right_gain,
+                    u16::MAX as f64,
+                ) as u16;
+                log::trace!("Writing rumble left={left} right={right}");
+                Ok(self.rumble(left, right)?)
             }
             OutputEvent::GenericRumble {
                 weak_magnitude,
