@@ -439,7 +439,7 @@ impl SteamDeckUhidDevice {
 
         let data = match self.current_report {
             ReportType::GetAttributesValues => {
-                log::debug!("Sending attribute data");
+                log::trace!("Sending attribute data");
                 // No idea what these bytes mean, but this is
                 // what is sent from the real device.
                 let data = [
@@ -516,7 +516,7 @@ impl SteamDeckUhidDevice {
                     StringAttribute::BoardSerial => &self.board_serial,
                     _ => &self.serial_number,
                 };
-                log::debug!("Sending {attribute:?}: {value}");
+                log::trace!("Sending {attribute:?}: {value}");
                 let mut serial_data = value.as_bytes().to_vec();
                 let mut data = vec![
                     0x0,
@@ -529,7 +529,7 @@ impl SteamDeckUhidDevice {
                 data
             }
             ReportType::GetChipId => {
-                log::debug!("Sending Chip ID: {:?}", self.chip_id);
+                log::trace!("Sending Chip ID: {:?}", self.chip_id);
                 let mut data = vec![0x00, ReportType::GetChipId as u8, 0x11, 0x00];
                 let mut chip_id = self.chip_id.to_vec();
                 data.append(&mut chip_id);
@@ -580,7 +580,7 @@ impl SteamDeckUhidDevice {
                     .get(2)
                     .map(|byte| StringAttribute::from(*byte))
                     .unwrap_or_default();
-                log::debug!("String attribute requested: {attribute:?}");
+                log::trace!("String attribute requested: {attribute:?}");
                 self.requested_string_attribute = attribute;
                 vec![]
             }
@@ -593,7 +593,7 @@ impl SteamDeckUhidDevice {
                         return Ok(vec![]);
                     }
                 };
-                log::debug!("Got PackedTriggerHapticPulse: {packed_trigger_haptic_pulse:?}");
+                log::trace!("Got PackedTriggerHapticPulse: {packed_trigger_haptic_pulse:?}");
                 let event = OutputEvent::TriggerHapticPulse(packed_trigger_haptic_pulse);
                 vec![event]
             }
@@ -612,7 +612,7 @@ impl SteamDeckUhidDevice {
                             return Ok(vec![]);
                         }
                     };
-                log::debug!(
+                log::trace!(
                     "Got PackedTriggerRepeatedHapticPulse: {packed_trigger_repeated_haptic_pulse:?}"
                 );
                 vec![OutputEvent::TriggerRepeatedHapticPulse(
@@ -628,7 +628,7 @@ impl SteamDeckUhidDevice {
                         return Ok(vec![]);
                     }
                 };
-                log::debug!("Got PackedTriggerVibration: {packed_trigger_vibration:?}");
+                log::trace!("Got PackedTriggerVibration: {packed_trigger_vibration:?}");
                 let event = OutputEvent::TriggerVibration(packed_trigger_vibration);
                 vec![event]
             }
@@ -647,7 +647,7 @@ impl SteamDeckUhidDevice {
                             return Ok(vec![]);
                         }
                     };
-                log::debug!(
+                log::trace!(
                     "Got PackedTriggerVibrationExtended: {packed_trigger_vibration_extended:?}"
                 );
                 vec![OutputEvent::TriggerVibrationExtended(
@@ -776,7 +776,7 @@ impl TargetInputDevice for SteamDeckUhidDevice {
                 _ => {}
             };
 
-            log::debug!(
+            log::trace!(
                 "Found Steam Deck target config: {} {} PID: {:?}",
                 device_config.vendor,
                 device_config.name,
@@ -918,7 +918,7 @@ impl TargetOutputDevice for SteamDeckUhidDevice {
                     return Ok(vec![]);
                 }
                 StreamError::UnknownEventType(e) => {
-                    log::debug!("Unknown event type: {:?}", e);
+                    log::warn!("Unknown event type: {:?}", e);
                     // Write the current state
                     self.write_state()?;
                     return Ok(vec![]);
@@ -931,13 +931,13 @@ impl TargetOutputDevice for SteamDeckUhidDevice {
             // This is sent when the HID device is started. Consider this as an answer to
             // UHID_CREATE. This is always the first event that is sent.
             uhid_virt::OutputEvent::Start { dev_flags: _ } => {
-                log::debug!("Start event received");
+                log::trace!("Start event received");
                 vec![]
             }
             // This is sent when the HID device is stopped. Consider this as an answer to
             // UHID_DESTROY.
             uhid_virt::OutputEvent::Stop => {
-                log::debug!("Stop event received");
+                log::trace!("Stop event received");
                 vec![]
             }
             // This is sent when the HID device is opened. That is, the data that the HID
@@ -946,13 +946,13 @@ impl TargetOutputDevice for SteamDeckUhidDevice {
             // there is actually no other process that reads your data so there is no need to
             // send UHID_INPUT events to the kernel.
             uhid_virt::OutputEvent::Open => {
-                log::debug!("Open event received");
+                log::trace!("Open event received");
                 vec![]
             }
             // This is sent when there are no more processes which read the HID data. It is
             // the counterpart of UHID_OPEN and you may as well ignore this event.
             uhid_virt::OutputEvent::Close => {
-                log::debug!("Close event received");
+                log::trace!("Close event received");
                 vec![]
             }
             // This is sent if the HID device driver wants to send raw data to the I/O
