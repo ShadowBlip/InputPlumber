@@ -24,7 +24,7 @@ use crate::{
         event::{evdev::EvdevEvent, native::NativeEvent},
         output_event::OutputEvent,
         source::{
-            haptic_duration, haptic_gain_level, InputError, OutputError, SourceInputDevice,
+            haptic_duration, haptic_gain, InputError, OutputError, SourceInputDevice,
             SourceOutputDevice, HAPTIC_NOMINAL_PERCENT,
         },
     },
@@ -462,7 +462,7 @@ impl GamepadEventDevice {
         let effect = self.ff_effects.get_mut(&effect_id).unwrap();
 
         let magnitude =
-            haptic_gain_level(report.gain, f64::from(u16::MAX), HAPTIC_NOMINAL_PERCENT) as u16;
+            haptic_gain(report.gain, f64::from(u16::MAX), HAPTIC_NOMINAL_PERCENT) as u16;
         let (weak_magnitude, strong_magnitude) = match report.side {
             TriggerSide::Left => (0, magnitude),
             TriggerSide::Right => (magnitude, 0),

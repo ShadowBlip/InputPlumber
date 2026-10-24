@@ -751,9 +751,13 @@ pub const HAPTIC_NOMINAL_PERCENT: f64 = 32.0;
 /// Calculates the motor level for the given gain and nominal percent using a
 /// power scale where 0 dB plays the nominal, returning a value on the 0-max
 /// scale
-pub fn haptic_gain_level(gain: i8, max: f64, nominal_percent: f64) -> f64 {
+pub fn haptic_gain(gain: i8, max: f64, nominal_percent: f64) -> f64 {
     let gain = gain.clamp(-24, 6);
-    max * nominal_percent * 10f64.powf(gain as f64 / 10.0) / 100.0
+    let haptic_gain = max * nominal_percent * 10f64.powf(gain as f64 / 10.0) / 100.0;
+    log::trace!(
+        "haptic_gain: gain={gain} max={max} nominal_percent={nominal_percent} -> {haptic_gain}"
+    );
+    haptic_gain
 }
 
 /// Duration that level-based motors should run for a one-shot trackpad haptic
@@ -763,6 +767,15 @@ pub fn haptic_duration(report: &PackedTriggerHapticPulse) -> Duration {
         CommandType::Tick | CommandType::Off => report.intensity.to_tick(),
     };
     Duration::from_millis(ms as u64)
+}
+
+/// Calculates a motor level on the device's 0-max output scale from a raw
+/// speed on the 0-u16::MAX scale and a power scale dB gain offset
+pub fn magnitude(speed: u16, gain: i8, max: f64) -> f64 {
+    let gain = gain.clamp(-24, 6);
+    let magnitude = max * speed as f64 * 10f64.powf(gain as f64 / 10.0) / u16::MAX as f64;
+    log::trace!("magnitude: speed={speed} gain={gain} max={max} -> {magnitude}");
+    magnitude
 }
 
 /// Active haptic state for level-based motors: a pulse series or a one-shot
@@ -789,8 +802,7 @@ impl HapticPulseSeries {
     /// The first pulse is immediate, so write the on magnitudes after
     /// starting the series
     pub fn new(report: &PackedTriggerRepeatedHapticPulse, max: u8) -> Self {
-        let magnitude =
-            haptic_gain_level(report.gain, f64::from(max), HAPTIC_NOMINAL_PERCENT) as u8;
+        let magnitude = haptic_gain(report.gain, f64::from(max), HAPTIC_NOMINAL_PERCENT) as u8;
         let (weak, strong) = match report.side {
             TriggerSide::Left => (0, magnitude),
             TriggerSide::Right => (magnitude, 0),

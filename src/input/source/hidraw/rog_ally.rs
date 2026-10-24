@@ -14,7 +14,7 @@ use crate::{
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
         source::{
-            haptic_duration, haptic_gain_level, HapticPulseSeries, InputError, OutputError,
+            haptic_duration, haptic_gain, magnitude, HapticPulseSeries, InputError, OutputError,
             SourceInputDevice, SourceOutputDevice, HAPTIC_NOMINAL_PERCENT,
         },
     },
@@ -164,7 +164,7 @@ impl RogAlly {
             return self.write_state();
         }
 
-        let level = haptic_gain_level(report.gain, 100.0, HAPTIC_NOMINAL_PERCENT) as u8;
+        let level = haptic_gain(report.gain, 100.0, HAPTIC_NOMINAL_PERCENT) as u8;
 
         // strong drives the left motor and weak the right
         let (strong, weak) = match report.side {
@@ -285,19 +285,42 @@ impl SourceOutputDevice for RogAlly {
                 Ok(())
             }
             OutputEvent::TriggerVibration(report) => {
-                self.main_strong = to_magnitude(report.left_speed.to_primitive(), report.left_gain);
-                self.main_weak = to_magnitude(report.right_speed.to_primitive(), report.right_gain);
+                // The Ally motor report uses a 0-100 intensity scale
+                self.main_strong =
+                    magnitude(report.left_speed.to_primitive(), report.left_gain, 100.0) as u8;
+                self.main_weak =
+                    magnitude(report.right_speed.to_primitive(), report.right_gain, 100.0) as u8;
                 self.main_stop_at = None;
+                log::trace!(
+                    "Writing motor state strong={} weak={}",
+                    self.main_strong,
+                    self.main_weak
+                );
                 Ok(self.write_state()?)
             }
             OutputEvent::TriggerVibrationExtended(report) => {
-                self.main_strong = to_magnitude(report.left_speed.to_primitive(), report.left_gain);
-                self.main_weak = to_magnitude(report.right_speed.to_primitive(), report.right_gain);
-                self.trigger_lt =
-                    to_magnitude(report.left_trigger_speed.to_primitive(), report.left_gain);
-                self.trigger_rt =
-                    to_magnitude(report.right_trigger_speed.to_primitive(), report.right_gain);
+                self.main_strong =
+                    magnitude(report.left_speed.to_primitive(), report.left_gain, 100.0) as u8;
+                self.main_weak =
+                    magnitude(report.right_speed.to_primitive(), report.right_gain, 100.0) as u8;
+                self.trigger_lt = magnitude(
+                    report.left_trigger_speed.to_primitive(),
+                    report.left_gain,
+                    100.0,
+                ) as u8;
+                self.trigger_rt = magnitude(
+                    report.right_trigger_speed.to_primitive(),
+                    report.right_gain,
+                    100.0,
+                ) as u8;
                 self.main_stop_at = None;
+                log::trace!(
+                    "Writing motor state strong={} weak={} lt={} rt={}",
+                    self.main_strong,
+                    self.main_weak,
+                    self.trigger_lt,
+                    self.trigger_rt
+                );
                 Ok(self.write_state()?)
             }
             OutputEvent::GenericRumble {
@@ -346,12 +369,6 @@ impl Debug for RogAlly {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RogAlly").finish()
     }
-}
-
-/// Calculates rumble magnitude from the given speed and gain and returns as a percentage
-fn to_magnitude(speed: u16, gain: i8) -> u8 {
-    let percent = speed as f64 * 100.0 / u16::MAX as f64;
-    haptic_gain_level(gain, 100.0, percent) as u8
 }
 
 /// Round a microsecond duration up to a whole 10 ms step
