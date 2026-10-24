@@ -13,8 +13,8 @@ use super::{
     },
     hid_report::TouchpadDataReport,
     DRAG_TIMEOUT_DINPUT, DRAG_TIMEOUT_XINPUT, GO_TOUCHPAD_D_PIDS, GO_TOUCHPAD_X_PIDS,
-    PAD_FORCE_NORMAL, RELEASE_TIMEOUT_DINPUT, RELEASE_TIMEOUT_XINPUT, TAP_MAX_DISTANCE_SQ,
-    TOUCHPAD_DATA, TOUCHPAD_PACKET_SIZE, TOUCHPAD_TIMEOUT, TP_IID, VID,
+    PAD_FORCE_NORMAL, RELEASE_CONFIRM, RELEASE_TIMEOUT_DINPUT, RELEASE_TIMEOUT_XINPUT,
+    TAP_MAX_DISTANCE_SQ, TIMEOUT, TOUCHPAD_DATA, TOUCHPAD_PACKET_SIZE, TP_IID, VID,
 };
 
 pub struct Driver {
@@ -34,6 +34,8 @@ pub struct Driver {
     last_touch: Instant,
     /// Whether or not a touch event was started that hasn't been cleared.
     touch_started: bool,
+    /// Whether the active touch continues a previous click.
+    is_continuation: bool,
     /// State for the touchpad device
     touchpad_state: Option<TouchpadDataReport>,
     /// Determine if this is dinput or xinput, used for touch detection.
@@ -77,6 +79,7 @@ impl Driver {
             is_touching: false,
             last_touch: Instant::now(),
             touch_started: false,
+            is_continuation: false,
             touchpad_state: None,
             is_dinput,
             release_delay,
@@ -100,12 +103,15 @@ impl Driver {
 
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let mut buf = [0; TOUCHPAD_PACKET_SIZE];
-        let bytes_read = self.device.read_timeout(&mut buf[..], TOUCHPAD_TIMEOUT)?;
+        let bytes_read = self.device.read_timeout(&mut buf[..], TIMEOUT)?;
 
         if bytes_read == 0 {
-            // In XInput mode data only flows when the touchpad is touched.
-            // Flush state transitions if a touch session was active.
-            if self.touch_started || self.is_clicked {
+            // In XInput mode data only flows when the touchpad is touched. Confirm a lift
+            // only after the pad has been silent long enough to bypass the device's
+            // phantom click.
+            if (self.touch_started || self.is_clicked)
+                && (self.last_touch.elapsed() >= RELEASE_CONFIRM)
+            {
                 return Ok(self.translate_touch(false));
             }
             return Ok(Vec::new());
@@ -113,7 +119,9 @@ impl Driver {
 
         let report_id = buf[0];
         if report_id != TOUCHPAD_DATA {
-            if self.touch_started || self.is_clicked {
+            if (self.touch_started || self.is_clicked)
+                && (self.last_touch.elapsed() >= RELEASE_CONFIRM)
+            {
                 return Ok(self.translate_touch(false));
             }
             return Ok(Vec::new());
@@ -126,7 +134,6 @@ impl Driver {
         let sized_buf: &[u8; TOUCHPAD_PACKET_SIZE] = (&buf[..bytes_read]).try_into()?;
         let input_report = TouchpadDataReport::unpack(sized_buf)?;
 
-        // Print input report for tracing
         log::trace!("--- Input report ---");
         log::trace!("{input_report}");
         log::trace!("---- End Report ----");
@@ -150,16 +157,16 @@ impl Driver {
     /// Translate the state into individual events
     fn translate_touch(&mut self, new_data: bool) -> Vec<Event> {
         let mut events = Vec::new();
-        let Some(mut state) = self.touchpad_state else {
+        let Some(state) = self.touchpad_state else {
             return events;
         };
 
         // Determine if we are touching. Dinput uses tip switch and sends additional reports. Xinput
         // stops sending reports before tip switch is cleared, so treat new data as touching.
         self.is_touching = if self.is_dinput {
-            state.tip_switch_0
+            state.tip_switch_0 && state.contact_count == 1
         } else {
-            new_data
+            new_data && state.tip_switch_0 && state.contact_count == 1
         };
 
         if self.is_touching {
@@ -169,33 +176,63 @@ impl Driver {
                 self.touch_started = true;
                 self.first_touch = Instant::now();
                 self.first_touch_pos = [state.touch_x_0, state.touch_y_0];
+                // A second finger while a click is held ends that click so it stays short.
+                if self.is_clicked {
+                    self.is_continuation = true;
+                    self.release_click(&mut events);
+                }
+            }
+            // Once the continuation moves it is a drag, so press now.
+            if self.is_continuation && !self.is_clicked && self.is_valid_move(state) {
+                self.start_click(&mut events);
             }
             self.last_touch = Instant::now();
             self.emit(&mut events, self.touch_event(state));
-        } else if self.is_clicked {
-            if self.last_touch.elapsed() < self.drag_timeout {
-                self.emit(&mut events, self.touch_event(state));
+            return events;
+        }
+
+        if self.touch_started {
+            self.touch_started = false;
+            // Close this touch at its last position so the target opens a fresh
+            // tracking id for the next touch.
+            self.emit(&mut events, self.touch_event(state));
+
+            // A continuation that moved is a drag to release; one that stayed put is another click.
+            if self.is_continuation {
+                self.is_continuation = false;
+                if self.is_clicked {
+                    self.release_click(&mut events);
+                } else {
+                    self.start_click(&mut events);
+                }
                 return events;
             }
-            self.touch_started = false;
-            self.release_click(&mut events);
-        } else if self.touch_started {
-            let dx = (state.touch_x_0 as i64) - (self.first_touch_pos[0] as i64);
-            let dy = (state.touch_y_0 as i64) - (self.first_touch_pos[1] as i64);
-            let dist_sq = dx * dx + dy * dy;
 
-            if self.first_touch.elapsed() < self.release_delay && dist_sq < TAP_MAX_DISTANCE_SQ {
+            let moved = self.is_valid_move(state);
+            let elapsed = self.last_touch.duration_since(self.first_touch);
+            let held = elapsed >= self.release_delay;
+
+            let is_tap = !moved && !held;
+            log::trace!(
+                "release decision: moved={moved} held={held} elapsed={elapsed:?} (max={:?}) -> {}",
+                self.release_delay,
+                if is_tap { "tap" } else { "swipe" }
+            );
+            if is_tap {
                 self.start_click(&mut events);
                 return events;
             }
 
-            // Explicitly send release event with zeroed coordinates and is_touching = false
-            self.touch_started = false;
-            state.touch_x_0 = 0;
-            state.touch_y_0 = 0;
-            self.touchpad_state = Some(state);
-            self.emit(&mut events, self.touch_event(state));
             log::trace!("END Touch");
+            return events;
+        }
+
+        if self.is_clicked {
+            if self.last_touch.elapsed() < self.drag_timeout {
+                self.emit(&mut events, self.touch_event(state));
+            } else {
+                self.release_click(&mut events);
+            }
         }
 
         events
@@ -232,6 +269,20 @@ impl Driver {
             events,
             Event::Trigger(TriggerEvent::RpadForce(TriggerInput { value: 0 })),
         );
+    }
+
+    /// Whether the touch has moved far enough outside the deadzone for natural
+    /// jitter to count as a move.
+    fn is_valid_move(&self, state: TouchpadDataReport) -> bool {
+        let dx = (state.touch_x_0 as i64) - (self.first_touch_pos[0] as i64);
+        let dy = (state.touch_y_0 as i64) - (self.first_touch_pos[1] as i64);
+        let dist_sq = dx * dx + dy * dy;
+        let valid = dist_sq > TAP_MAX_DISTANCE_SQ;
+        log::trace!(
+            "is_valid_move: dx={dx} dy={dy} dist_sq={dist_sq} (max={})",
+            TAP_MAX_DISTANCE_SQ
+        );
+        valid
     }
 
     /// Generate a touch event from the device state
