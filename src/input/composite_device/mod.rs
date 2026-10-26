@@ -470,6 +470,7 @@ impl CompositeDevice {
                                 continue;
                             }
                         };
+                        self.release_layer_outputs().await;
                         let result = match self.load_device_profile(Some(profile.clone()), None) {
                             Ok(_) => Ok(()),
                             Err(e) => Err(e.to_string()),
@@ -502,6 +503,7 @@ impl CompositeDevice {
                                 continue;
                             }
                         };
+                        self.release_layer_outputs().await;
                         let result = match self
                             .load_device_profile(Some(profile.clone()), Some(path.clone()))
                         {
@@ -984,6 +986,18 @@ impl CompositeDevice {
                 .into_iter()
                 .filter_map(|event| self.filter_event(event))
                 .collect();
+
+            // A mapping that holds a layer down keeps its other outputs back:
+            // they go out as a tap on release, unless the layer was used.
+            let events = if is_pressed {
+                self.layers.defer_tap(&source_cap, events)
+            } else {
+                let (events, tap) = self.layers.finish_tap(&source_cap, events);
+                if !tap.is_empty() {
+                    self.write_chord_events(tap).await?;
+                }
+                events
+            };
 
             // Track what an active layer produced, so removing that layer can
             // release it later while the input is still held.
@@ -2239,6 +2253,17 @@ impl CompositeDevice {
         self.active_inputs.retain(|input| !caps.contains(input));
 
         Ok(())
+    }
+
+    /// Release everything the active layers produced before a profile change
+    /// resets the layer stack. Without it a target keeps an output pressed that
+    /// the new profile never releases, and drops the next press of it as a
+    /// duplicate (Guide+South -> ui_quick only working every other time).
+    async fn release_layer_outputs(&mut self) {
+        let releases = self.layers.clear();
+        if let Err(e) = self.apply_layer_releases(releases).await {
+            log::error!("Failed to release layer outputs: {e:?}");
+        }
     }
 
     /// Emit a DBus signal when source devices change

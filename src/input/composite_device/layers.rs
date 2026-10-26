@@ -22,6 +22,18 @@ struct ActiveLayer {
     mode: LayerActivationMode,
 }
 
+/// The other outputs of a mapping that also holds a layer down, kept back until
+/// the activator is released. They go out as a tap only if none of the layers it
+/// activated produced anything in between, so one button can both open a layer
+/// (held with others) and keep its own meaning (tapped alone).
+#[derive(Debug, Clone)]
+struct DeferredTap {
+    /// The held-back press events, in emission order.
+    presses: Vec<NativeEvent>,
+    /// Set once a layer this activator holds produced an output.
+    chorded: bool,
+}
+
 /// Owns all input layer state for a [super::CompositeDevice]: the layer lookup
 /// tables from the loaded profile, the stack of active layers, and the inputs
 /// those layers produced. Every layer decision lives here; the composite device
@@ -42,6 +54,9 @@ pub struct LayerState {
     /// the source is still held. Base-profile translations are deliberately not
     /// tracked here.
     active_inputs: HashMap<(Capability, String), Vec<Capability>>,
+    /// Activator source capability -> the outputs of its mapping held back
+    /// until it is released (see [DeferredTap]).
+    deferred_taps: HashMap<Capability, DeferredTap>,
 }
 
 impl LayerState {
@@ -52,6 +67,7 @@ impl LayerState {
         self.active_layers.clear();
         self.pressed_activators.clear();
         self.active_inputs.clear();
+        self.deferred_taps.clear();
 
         let Some(profile) = profile else {
             return;
@@ -249,6 +265,82 @@ impl LayerState {
 
         self.active_inputs
             .insert((source.clone(), layer.to_string()), produced);
+
+        // The layer was used, so whatever holds it down is a chord, not a tap.
+        for (activator, activations) in self.pressed_activators.iter() {
+            if !activations.iter().any(|(name, _)| name == layer) {
+                continue;
+            }
+            if let Some(tap) = self.deferred_taps.get_mut(activator) {
+                tap.chorded = true;
+            }
+        }
+    }
+
+    /// Hold back the outputs a hold activation's mapping produces besides the
+    /// activation itself, until [LayerState::finish_tap]. Returns the events to
+    /// process now: the activation alone, or `events` untouched when they hold
+    /// no layer down or carry nothing else.
+    pub fn defer_tap(&mut self, source: &Capability, events: Vec<NativeEvent>) -> Vec<NativeEvent> {
+        let holds_layer = events.iter().any(|event| {
+            matches!(event.as_capability(),
+                Capability::Layer { name, mode: LayerActivationMode::Hold }
+                    if self.config_maps.contains_key(&name))
+        });
+        if !holds_layer {
+            return events;
+        }
+        let (activations, others): (Vec<NativeEvent>, Vec<NativeEvent>) = events
+            .into_iter()
+            .partition(|event| matches!(event.as_capability(), Capability::Layer { .. }));
+        if !others.is_empty() {
+            // A repeated press of a held activator keeps the first deferral.
+            self.deferred_taps
+                .entry(source.clone())
+                .or_insert(DeferredTap {
+                    presses: others,
+                    chorded: false,
+                });
+        }
+        activations
+    }
+
+    /// The release of an input whose outputs [LayerState::defer_tap] held back.
+    /// Returns the events to process now (the release minus the held-back
+    /// outputs, which never went out) and the tap to emit: the held-back
+    /// presses then their releases in reverse order, or nothing when a layer
+    /// was used while the input was held.
+    pub fn finish_tap(
+        &mut self,
+        source: &Capability,
+        events: Vec<NativeEvent>,
+    ) -> (Vec<NativeEvent>, Vec<NativeEvent>) {
+        let Some(tap) = self.deferred_taps.remove(source) else {
+            return (events, Vec::new());
+        };
+        let activations: Vec<NativeEvent> = events
+            .into_iter()
+            .filter(|event| matches!(event.as_capability(), Capability::Layer { .. }))
+            .collect();
+        if tap.chorded {
+            return (activations, Vec::new());
+        }
+
+        let releases: Vec<NativeEvent> = tap
+            .presses
+            .iter()
+            .rev()
+            .map(|press| {
+                NativeEvent::new_translated(
+                    source.clone(),
+                    press.as_capability(),
+                    InputValue::Bool(false),
+                )
+            })
+            .collect();
+        let mut sequence = tap.presses;
+        sequence.extend(releases);
+        (activations, sequence)
     }
 
     /// Remove a layer from anywhere in the stack and return the outputs it must
@@ -269,6 +361,8 @@ impl LayerState {
     /// Pop every active layer from the top of the stack down, returning one
     /// combined set of releases so the caller emits a single signal.
     pub fn clear(&mut self) -> Vec<NativeEvent> {
+        // A tap still held back never went out, so it needs no release.
+        self.deferred_taps.clear();
         let mut releases = Vec::new();
         while let Some(layer) = self.active_layers.last() {
             let name = layer.name.clone();

@@ -324,4 +324,189 @@ layers:
         assert!(!releases[0].pressed());
         assert!(state.active_names().is_empty());
     }
+
+    /// The events an activation mapping produces for a source: holding `layer`
+    /// down, plus the source's own button as a gamepad output.
+    fn activation_with_tap(
+        source: &Capability,
+        layer: &str,
+        mode: LayerActivationMode,
+        pressed: bool,
+    ) -> Vec<NativeEvent> {
+        vec![
+            NativeEvent::new_translated(
+                source.clone(),
+                Capability::Layer {
+                    name: layer.to_string(),
+                    mode,
+                },
+                InputValue::Bool(pressed),
+            ),
+            NativeEvent::new_translated(source.clone(), source.clone(), InputValue::Bool(pressed)),
+        ]
+    }
+
+    fn is_layer(event: &NativeEvent) -> bool {
+        matches!(event.as_capability(), Capability::Layer { .. })
+    }
+
+    #[test]
+    fn tapped_activator_emits_its_held_back_outputs_on_release() {
+        let mut state = state();
+        let guide = button("Guide");
+
+        // The press only holds the layer down, the Guide output waits.
+        let now = state.defer_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, true),
+        );
+        assert_eq!(now.len(), 1);
+        assert!(is_layer(&now[0]));
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+
+        // Released with no layer output in between: Guide goes out as a tap.
+        state.release_activation(&guide);
+        let (now, tap) = state.finish_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, false),
+        );
+        assert_eq!(now.len(), 1);
+        assert!(is_layer(&now[0]));
+        assert_eq!(tap.len(), 2);
+        assert_eq!(tap[0].as_capability(), guide);
+        assert!(tap[0].pressed());
+        assert_eq!(tap[1].as_capability(), guide);
+        assert!(!tap[1].pressed());
+    }
+
+    #[test]
+    fn used_layer_drops_the_held_back_outputs() {
+        let mut state = state();
+        let guide = button("Guide");
+        let south = button("South");
+
+        state.defer_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, true),
+        );
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        state.record_outputs(&south, Some("guide"), true, &[output(&south, "Esc")]);
+
+        state.release_activation(&guide);
+        let (now, tap) = state.finish_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, false),
+        );
+        assert!(now.iter().all(is_layer));
+        assert!(tap.is_empty());
+
+        // The next tap starts clean.
+        state.defer_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, true),
+        );
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        state.release_activation(&guide);
+        let (_, tap) = state.finish_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, false),
+        );
+        assert_eq!(tap.len(), 2);
+    }
+
+    #[test]
+    fn base_outputs_while_held_do_not_count_as_a_chord() {
+        let mut state = state();
+        let guide = button("Guide");
+        let quick_access = button("QuickAccess");
+
+        state.defer_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, true),
+        );
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        // An input the layer does not map translates through the base profile.
+        state.record_outputs(&quick_access, None, true, &[output(&quick_access, "Esc")]);
+
+        state.release_activation(&guide);
+        let (_, tap) = state.finish_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, false),
+        );
+        assert_eq!(tap.len(), 2);
+    }
+
+    #[test]
+    fn repeated_press_keeps_one_deferral() {
+        let mut state = state();
+        let guide = button("Guide");
+
+        for _ in 0..3 {
+            state.defer_tap(
+                &guide,
+                activation_with_tap(&guide, "guide", LayerActivationMode::Hold, true),
+            );
+            state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        }
+        state.release_activation(&guide);
+        let (_, tap) = state.finish_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, false),
+        );
+        assert_eq!(tap.len(), 2);
+    }
+
+    #[test]
+    fn only_hold_activations_of_known_layers_defer() {
+        let mut state = state();
+        let guide = button("Guide");
+        let quick_access = button("QuickAccess");
+
+        // A toggle activation passes its outputs on at once.
+        let now = state.defer_tap(
+            &quick_access,
+            activation_with_tap(
+                &quick_access,
+                "mouse_mode",
+                LayerActivationMode::Toggle,
+                true,
+            ),
+        );
+        assert_eq!(now.len(), 2);
+
+        // So does an activation of a layer the profile does not define.
+        let now = state.defer_tap(
+            &guide,
+            activation_with_tap(&guide, "nope", LayerActivationMode::Hold, true),
+        );
+        assert_eq!(now.len(), 2);
+
+        // And a release with nothing held back is untouched.
+        let (now, tap) = state.finish_tap(
+            &guide,
+            activation_with_tap(&guide, "nope", LayerActivationMode::Hold, false),
+        );
+        assert_eq!(now.len(), 2);
+        assert!(tap.is_empty());
+    }
+
+    #[test]
+    fn clear_drops_a_pending_tap() {
+        let mut state = state();
+        let guide = button("Guide");
+
+        state.defer_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, true),
+        );
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        state.clear();
+
+        let (now, tap) = state.finish_tap(
+            &guide,
+            activation_with_tap(&guide, "guide", LayerActivationMode::Hold, false),
+        );
+        assert_eq!(now.len(), 2);
+        assert!(tap.is_empty());
+    }
 }
