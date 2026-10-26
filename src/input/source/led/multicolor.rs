@@ -75,7 +75,7 @@ impl TryFrom<String> for ColorType {
 }
 
 /// MultiColorChassis source device implementation
-pub struct LedMultiColor {
+pub struct LegacyLedMultiColor {
     brightness_path: PathBuf,
     #[allow(dead_code)]
     current_brightness: u8,
@@ -88,8 +88,8 @@ pub struct LedMultiColor {
     multi_intensity_path: PathBuf,
 }
 
-impl LedMultiColor {
-    /// Create a new LedMultiColor source device with the given udev
+impl LegacyLedMultiColor {
+    /// Create a new LegacyLedMultiColor source device with the given udev
     /// device information
     pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let brightness_path = PathBuf::from(device_info.syspath().as_str()).join("brightness");
@@ -252,13 +252,13 @@ impl LedMultiColor {
     }
 }
 
-impl Debug for LedMultiColor {
+impl Debug for LegacyLedMultiColor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MultiColorChassis").finish()
     }
 }
 
-impl SourceInputDevice for LedMultiColor {
+impl SourceInputDevice for LegacyLedMultiColor {
     fn poll(&mut self) -> Result<Vec<crate::input::event::native::NativeEvent>, InputError> {
         Ok(Vec::new())
     }
@@ -268,7 +268,7 @@ impl SourceInputDevice for LedMultiColor {
     }
 }
 
-impl SourceOutputDevice for LedMultiColor {
+impl SourceOutputDevice for LegacyLedMultiColor {
     fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
         log::trace!("Received output event: {event:?}");
         match event {
@@ -341,4 +341,38 @@ fn read_color_index(path: &Path) -> Result<Vec<ColorType>, LedMcError> {
     }
 
     Ok(multi_index_map)
+}
+
+/// Managed LEDs have a dedicated worker. Legacy LEDs retain game-controlled output.
+#[derive(Debug)]
+pub enum LedMultiColor {
+    Legacy(Box<LegacyLedMultiColor>),
+    Managed(super::managed::LedHandle),
+}
+impl LedMultiColor {
+    pub fn new(info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        Ok(Self::Legacy(Box::new(LegacyLedMultiColor::new(info)?)))
+    }
+}
+impl SourceInputDevice for LedMultiColor {
+    fn poll(&mut self) -> Result<Vec<crate::input::event::native::NativeEvent>, InputError> {
+        Ok(vec![])
+    }
+    fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
+        Ok(vec![])
+    }
+}
+impl SourceOutputDevice for LedMultiColor {
+    fn write_event(&mut self, event: OutputEvent) -> Result<(), OutputError> {
+        match self {
+            Self::Legacy(device) => device.write_event(event),
+            Self::Managed(_) => Ok(()),
+        }
+    }
+    fn stop(&mut self) -> Result<(), OutputError> {
+        if let Self::Managed(handle) = self {
+            handle.stop();
+        }
+        Ok(())
+    }
 }

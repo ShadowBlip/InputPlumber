@@ -1,4 +1,12 @@
 polkit.addRule(function(action, subject) {
+    // Managed lighting is user configuration. Do not fall through to the broader
+    // inputplumber group rule for inactive or remote callers.
+    if (action.id == "org.shadowblip.Input.Source.LEDDevice.SetConfig") {
+        if ((subject.active && subject.local) || subject.user == "root" || subject.isInGroup("wheel")) {
+            return polkit.Result.YES;
+        }
+        return polkit.Result.NO;
+    }
   // Users in the 'inputplumber' group have access to all endpoints
   if (
     (action.id.indexOf("org.shadowblip.Input") == 0 ||

@@ -98,6 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    input_manager.shutdown_leds().await;
     input_manager.shutdown().await;
 
     // Unhide all devices on shutdown
