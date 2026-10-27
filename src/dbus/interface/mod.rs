@@ -4,6 +4,8 @@ use thiserror::Error;
 use zbus::{names::InterfaceName, object_server::Interface, zvariant::ObjectPath, Connection};
 
 pub mod composite_device;
+#[cfg(test)]
+pub mod composite_device_test;
 pub mod force_feedback;
 pub mod manager;
 pub mod performance;
