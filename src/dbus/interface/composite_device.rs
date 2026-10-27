@@ -217,6 +217,8 @@ impl CompositeDeviceInterface {
     }
 
     /// Directly write to the composite device's target devices with the given event
+    ///
+    /// Touch values use "(ubddd)": index, is_touching, pressure, x, y.
     async fn send_event(
         &self,
         event: String,
@@ -275,6 +277,7 @@ impl CompositeDeviceInterface {
                 }
                 _ => InputValue::None,
             },
+            zvariant::Value::Structure(v) => touch_value_from_structure(v)?,
             _ => InputValue::None,
         };
 
@@ -700,3 +703,27 @@ impl CompositeDeviceInterface {
 }
 
 impl Unregisterable for CompositeDeviceInterface {}
+
+/// Parses a "(ubddd)" touch value, laid out like the TouchEvent signal.
+pub(crate) fn touch_value_from_structure(
+    value: zvariant::Structure<'_>,
+) -> fdo::Result<InputValue> {
+    // Converting a structure with too few fields to a tuple panics.
+    let invalid_signature =
+        || fdo::Error::InvalidArgs("Touch value must have the signature (ubddd).".to_string());
+    if *value.signature() != "(ubddd)" {
+        return Err(invalid_signature());
+    }
+    let (index, is_touching, pressure, x, y) =
+        <(u32, bool, f64, f64, f64)>::try_from(value).map_err(|_| invalid_signature())?;
+    let index = u8::try_from(index)
+        .map_err(|_| fdo::Error::InvalidArgs(format!("Touch index {index} is out of range.")))?;
+
+    Ok(InputValue::Touch {
+        index,
+        is_touching,
+        pressure: Some(pressure),
+        x: Some(x),
+        y: Some(y),
+    })
+}

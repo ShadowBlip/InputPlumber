@@ -1,5 +1,8 @@
 pub mod client;
 pub mod command;
+mod release_delay;
+#[cfg(test)]
+mod release_delay_test;
 pub mod targets;
 
 use std::{
@@ -9,9 +12,11 @@ use std::{
         BTreeSet, HashSet,
     },
     error::Error,
+    time::Instant,
 };
 
 use evdev::InputEvent;
+use release_delay::ReleaseDelay;
 use targets::CompositeDeviceTargets;
 use tokio::{sync::mpsc, task::JoinSet, time::Duration};
 use zbus::{object_server::Interface, Connection};
@@ -111,6 +116,8 @@ pub struct CompositeDevice {
     /// a button "up" event will fire immediately after a "down" event upon
     /// physical release of the button.
     translated_recent_events: HashSet<Capability>,
+    /// Delays DBus releases that come too soon after their press
+    send_event_release_delay: ReleaseDelay,
     /// Keep track of translated events we've emitted so we can send
     /// release events
     emitted_mappings: HashSet<String>,
@@ -203,6 +210,7 @@ impl CompositeDevice {
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
             translated_recent_events: HashSet::new(),
+            send_event_release_delay: ReleaseDelay::default(),
             emitted_mappings: HashSet::new(),
             intercept_mode: InterceptMode::None,
             tx: tx.clone(),
@@ -1156,14 +1164,15 @@ impl CompositeDevice {
     async fn write_send_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
         let cap = event.as_capability();
         self.is_new_active_event(&cap, event.pressed());
-        // Check to see if the event is in recently translated.
-        // If it is, spawn a task to delay emit the event.
-        let cap = event.as_capability();
-        if self.translated_recent_events.contains(&cap) && !event.pressed() {
+        // Delay releases that come too soon after their press
+        let delay = self
+            .send_event_release_delay
+            .delay(&cap, event.pressed(), Instant::now());
+        if let Some(delay) = delay {
             log::debug!("Event emitted too quickly. Delaying emission.");
             let tx = self.tx.clone();
             tokio::task::spawn(async move {
-                tokio::time::sleep(MIN_EVENT_TIME).await;
+                tokio::time::sleep(delay).await;
                 if let Err(e) = tx.send(CompositeCommand::WriteEvent(event)).await {
                     log::error!("Failed to send delayed event command: {:?}", e);
                 }
@@ -1171,18 +1180,6 @@ impl CompositeDevice {
 
             return Ok(());
         }
-
-        // Add the event to our list of recently device translated events
-        self.translated_recent_events.insert(event.as_capability());
-
-        // Spawn a task to remove the event from recent translated
-        let tx = self.tx.clone();
-        tokio::task::spawn(async move {
-            tokio::time::sleep(MIN_EVENT_TIME).await;
-            if let Err(e) = tx.send(CompositeCommand::RemoveRecentEvent(cap)).await {
-                log::error!("Failed to send remove recent event command: {:?}", e);
-            }
-        });
 
         //log::trace!("Emitting event: {:?}", event);
         self.write_event(event).await?;
