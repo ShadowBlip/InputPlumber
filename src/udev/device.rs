@@ -791,8 +791,10 @@ impl Device {
         let match_rule = match subsystem.as_str() {
             "hidraw" => {
                 let name = self.name.clone();
+                // match by parent device name too to prevent killing our own output device
+                let device_name = self.get_parent_device_name()?;
                 Some(format!(
-                    r#"ACTION=="add|change", SUBSYSTEMS=="{subsystem}", KERNEL=="{name}""#
+                    r#"ACTION=="add|change", SUBSYSTEM=="{subsystem}", KERNEL=="{name}", KERNELS=="{device_name}""#
                 ))
             }
             "input" => {
@@ -802,7 +804,7 @@ impl Device {
                     let pid = self.get_product_id()?;
 
                     Some(format!(
-                        r#"ACTION=="add|change", SUBSYSTEMS=="{subsystem}", KERNELS=="{device_name}", ATTRS{{id/vendor}}=="{vid}", ATTRS{{id/product}}=="{pid}""#
+                        r#"ACTION=="add|change", SUBSYSTEM=="{subsystem}", KERNELS=="{device_name}", ATTRS{{id/vendor}}=="{vid}", ATTRS{{id/product}}=="{pid}""#
                     ))
                 };
                 rule_fn()

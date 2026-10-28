@@ -9,6 +9,7 @@ use std::{
         BTreeSet, HashSet,
     },
     error::Error,
+    path::Path,
 };
 
 use evdev::InputEvent;
@@ -40,7 +41,7 @@ use crate::{
         },
         target::TargetDeviceTypeId,
     },
-    udev::{hide_device, unhide_device, HideFlag},
+    udev::{hide_device, remove_hide_rules, unhide_device, HideFlag},
 };
 
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
@@ -1612,6 +1613,11 @@ impl CompositeDevice {
     async fn on_source_device_removed(&mut self, device: DeviceInfo) -> Result<(), Box<dyn Error>> {
         let path = device.path();
         let id = device.get_id();
+
+        // The device node is gone, so drop its hide rules
+        if let Some(name) = Path::new(&path).file_name() {
+            remove_hide_rules(&name.to_string_lossy());
+        }
 
         // Remove any ffb effects this device registered
         let mut freed_effect_ids = Vec::new();
