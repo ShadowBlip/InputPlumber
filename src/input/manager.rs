@@ -1759,6 +1759,9 @@ impl Manager {
                             log::warn!("Unable to create initialized UdevDevice for {base_path}/{name} after {MAX_TRIES} attempts.");
                             continue 'outer;
                         }
+                        if !full_path.exists() {
+                            continue 'outer;
+                        }
 
                         // Try to get the device from udev to check its initialization state
                         {
