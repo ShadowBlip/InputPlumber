@@ -126,7 +126,6 @@ GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
 {chmod_early_rule}
 {mv_early_rule}
-GOTO="inputplumber_hide_{name}_late"
 LABEL="inputplumber_end"
 "#
     );
@@ -142,7 +141,6 @@ LABEL="inputplumber_end"
     let rule = format!(
         r#"# Hides devices stemming from {name}
 # Managed by InputPlumber, this file will be autoremoved during configuration changes.
-LABEL="inputplumber_hide_{name}_late"
 {match_rule}, GOTO="inputplumber_valid"
 GOTO="inputplumber_end"
 LABEL="inputplumber_valid"
@@ -162,16 +160,8 @@ LABEL="inputplumber_end"
     Ok(())
 }
 
-/// Unhide the given device
-pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
-    // Get the device to unhide
-    let device = get_device(path.clone()).await?;
-    let name = device.name.as_str();
-    let Some(parent) = device.get_parent() else {
-        return Err("Unable to determine parent for device".into());
-    };
-
-    // Remove all created udev rules
+/// Remove the hide rules created for the device with the given name (e.g. "hidraw5").
+pub fn remove_hide_rules(name: &str) {
     let rule_path = format!(
         "{RULES_PREFIX}/{RULE_HIDE_DEVICE_EARLY_PRIORITY}-inputplumber-hide-{name}-early.rules"
     );
@@ -182,6 +172,19 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
     );
     log::debug!("Removing hide rule: {rule_path}");
     let _ = fs::remove_file(&rule_path);
+}
+
+/// Unhide the given device
+pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
+    // Get the device to unhide
+    let device = get_device(path.clone()).await?;
+    let name = device.name.as_str();
+    let Some(parent) = device.get_parent() else {
+        return Err("Unable to determine parent for device".into());
+    };
+
+    // Remove all created udev rules
+    remove_hide_rules(name);
 
     let hidden_symlink = format!("/dev/inputplumber/by-hidden/{name}");
     if Path::new(&hidden_symlink).exists() {
