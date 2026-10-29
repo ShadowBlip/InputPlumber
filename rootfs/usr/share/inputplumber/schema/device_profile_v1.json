@@ -49,6 +49,13 @@
           "items": {
             "$ref": "#/definitions/Mapping"
           }
+        },
+        "layers": {
+          "type": "array",
+          "description": "Named sets of input mappings that override the base mappings while a layer is active",
+          "items": {
+            "$ref": "#/definitions/Layer"
+          }
         }
       },
       "required": [
@@ -80,6 +87,53 @@
         "name",
         "source_event",
         "target_events"
+      ]
+    },
+    "Layer": {
+      "title": "Layer",
+      "type": "object",
+      "description": "A named set of input mappings that overrides the profile's base mappings while the layer is active. A layer declares no activator of its own; activation is a mapping whose target event is a `layer` capability.",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique, non-empty name of the layer"
+        },
+        "mapping": {
+          "type": "array",
+          "description": "Mappings that win over the base profile while this layer is active",
+          "items": {
+            "$ref": "#/definitions/Mapping"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "mapping"
+      ]
+    },
+    "LayerEvent": {
+      "title": "LayerEvent",
+      "type": "object",
+      "description": "Activates an input layer. Target-only: using a `layer` event as a source_event is rejected when the profile loads.",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the layer to activate"
+        },
+        "mode": {
+          "type": "string",
+          "description": "How the layer is activated. 'hold' is active while the input is held, 'toggle' latches until pressed again.",
+          "enum": [
+            "hold",
+            "toggle"
+          ],
+          "default": "hold"
+        }
+      },
+      "required": [
+        "name"
       ]
     },
     "Event": {
@@ -295,6 +349,9 @@
         },
         "gamepad": {
           "$ref": "#/definitions/GamepadEvent"
+        },
+        "layer": {
+          "$ref": "#/definitions/LayerEvent"
         }
       },
       "required": []
@@ -576,14 +633,14 @@
     "DialEvent": {
       "title": "DialEvent",
       "type": "object",
-      "description": "Dial or Wheel events such as LeftStick, RightStick, etc.",
+      "description": "Dial or Wheel events such as LeftStickDial, RightStickDial, etc.",
       "additionalProperties": false,
       "properties": {
         "name": {
           "type": "string",
           "enum": [
-            "LeftStick",
-            "RightStick"
+            "LeftStickDial",
+            "RightStickDial"
           ]
         },
         "direction": {

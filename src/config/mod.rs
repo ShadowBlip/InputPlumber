@@ -43,6 +43,9 @@ pub struct DeviceProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub mapping: Vec<ProfileMapping>,
+    /// Named sets of mappings that override the base mappings while active
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<ProfileLayer>,
 }
 
 impl DeviceProfile {
@@ -74,6 +77,16 @@ pub struct ProfileMapping {
     pub name: String,
     pub source_event: CapabilityConfig,
     pub target_events: Vec<CapabilityConfig>,
+}
+
+/// A named set of input mappings that overrides the profile's base mappings
+/// while the layer is active. A layer declares no activator of its own;
+/// activation is an ordinary mapping whose target is a `layer` capability.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct ProfileLayer {
+    pub name: String,
+    pub mapping: Vec<ProfileMapping>,
 }
 
 impl ProfileMapping {

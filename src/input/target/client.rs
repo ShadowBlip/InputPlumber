@@ -58,6 +58,10 @@ impl From<Sender<TargetCommand>> for TargetDeviceClient {
     }
 }
 
+// The `Err`-variant of these methods wraps a TargetCommand, which carries a
+// Capability. The layer capability grew the command past clippy's size
+// threshold; boxing the error here would churn every caller for no benefit.
+#[allow(clippy::result_large_err)]
 impl TargetDeviceClient {
     /// Create a new [TargetDeviceClient] from the given channel
     pub fn new(tx: Sender<TargetCommand>) -> Self {

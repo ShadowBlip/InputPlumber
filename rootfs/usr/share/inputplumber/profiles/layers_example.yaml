@@ -1,0 +1,114 @@
+# yaml-language-server: $schema=../schema/device_profile_v1.json
+version: 1
+kind: DeviceProfile
+name: Layers example
+description: Profile that demonstrates input layers with hold and toggle activation
+
+# The layer outputs below need a mouse and a keyboard target, and the base
+# mapping needs a gamepad target. Loading a profile that sets this replaces the
+# composite device's current target devices, so swap "gamepad" for your usual
+# target (e.g. "deck-uhid") if you want to keep it.
+target_devices:
+  - gamepad
+  - keyboard
+  - mouse
+
+mapping:
+  # Activating a layer is just a mapping to a `layer` target event.
+  - name: Hold Guide for mouse mode
+    source_event:
+      gamepad:
+        button: Guide
+    target_events:
+      # mode defaults to hold: the layer is active while Guide is held
+      - layer:
+          name: mouse_mode
+
+  - name: QuickAccess latches the shortcuts layer
+    source_event:
+      gamepad:
+        button: QuickAccess
+    target_events:
+      # toggle: one press latches the layer, the next press releases it
+      - layer:
+          name: shortcuts
+          mode: toggle
+
+  - name: LeftBumper opens the rapid layer
+    source_event:
+      gamepad:
+        button: LeftBumper
+    target_events:
+      - layer:
+          name: rapid
+
+  # Base mappings keep their normal semantics.
+  - name: LeftTop -> LeftPaddle1
+    source_event:
+      gamepad:
+        button: LeftTop
+    target_events:
+      - gamepad:
+          button: LeftPaddle1
+
+layers:
+  # Active while Guide is held: the right stick drives the mouse and the
+  # triggers click, matching the mouse bindings in mouse_keyboard_wasd.yaml.
+  - name: mouse_mode
+    mapping:
+      - name: Guide+RightStick -> mouse
+        source_event:
+          gamepad:
+            axis:
+              name: RightStick
+        target_events:
+          - mouse:
+              motion:
+                speed_pps: 800 # default to 800pps
+
+      - name: Guide+RightTrigger -> left click
+        source_event:
+          gamepad:
+            trigger:
+              name: RightTrigger
+              deadzone: 0.2
+        target_events:
+          - mouse:
+              button: Left
+
+      - name: Guide+LeftTrigger -> right click
+        source_event:
+          gamepad:
+            trigger:
+              name: LeftTrigger
+              deadzone: 0.2
+        target_events:
+          - mouse:
+              button: Right
+
+  - name: shortcuts
+    mapping:
+      - name: QuickAccess+South -> Esc
+        source_event:
+          gamepad:
+            button: South
+        target_events:
+          - keyboard: KeyEsc
+      - name: QuickAccess+North -> Enter
+        source_event:
+          gamepad:
+            button: North
+        target_events:
+          - keyboard: KeyEnter
+
+  # Stacks with the layers above: `shortcuts` and `rapid` both remap South, and
+  # the most recently activated layer wins per source, so pressing LeftBumper
+  # last makes South emit Space.
+  - name: rapid
+    mapping:
+      - name: LB+South -> Space
+        source_event:
+          gamepad:
+            button: South
+        target_events:
+          - keyboard: KeySpace

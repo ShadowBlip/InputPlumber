@@ -185,10 +185,26 @@ impl InputValue {
         target_cap: &Capability,
         target_config: &CapabilityConfig,
     ) -> Result<InputValue, TranslationError> {
+        // A `layer` target consumes the source value as a boolean, so it needs
+        // no source-specific translation.
+        if matches!(target_cap, Capability::Layer { .. }) {
+            return match self {
+                InputValue::Bool(v) => Ok(InputValue::Bool(*v)),
+                _ => Err(TranslationError::ImpossibleTranslation(
+                    "layer targets need a button-like source".to_string(),
+                )),
+            };
+        }
+
         match source_cap {
             // None values cannot be translated
             Capability::None => Err(TranslationError::ImpossibleTranslation(
                 "None events cannot be translated".to_string(),
+            )),
+
+            // Layer events are consumed by the composite device, never translated
+            Capability::Layer { .. } => Err(TranslationError::ImpossibleTranslation(
+                "layer events cannot be translated".to_string(),
             )),
 
             // NotImplemented values cannot be translated
@@ -252,6 +268,8 @@ impl InputValue {
                             Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                             // Gamepad Button -> Accelerometer
                             Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                            // Layer targets are handled by the early return in translate
+                            Capability::Layer { .. } => Err(TranslationError::NotImplemented),
                         }
                     }
                     // Axis -> ...
@@ -328,6 +346,8 @@ impl InputValue {
                             Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                             // Axis -> Accelerometer
                             Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                            // Layer targets are handled by the early return in translate
+                            Capability::Layer { .. } => Err(TranslationError::NotImplemented),
                         }
                     }
                     // Trigger -> ...
@@ -374,6 +394,8 @@ impl InputValue {
                         Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                         // Trigger -> Accelerometer
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                        // Layer targets are handled by the early return in translate
+                        Capability::Layer { .. } => Err(TranslationError::NotImplemented),
                     },
                     // Dial mapping to -> ..
                     Gamepad::Dial(_) => match target_cap {
@@ -404,6 +426,8 @@ impl InputValue {
                         },
                         Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                        // Layer targets are handled by the early return in translate
+                        Capability::Layer { .. } => Err(TranslationError::NotImplemented),
                     },
                 }
             }
@@ -444,6 +468,8 @@ impl InputValue {
                 Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                 // Keyboard Key -> Accelerometer
                 Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                // Layer targets are handled by the early return in translate
+                Capability::Layer { .. } => Err(TranslationError::NotImplemented),
             },
 
             // Touchpad -> ...
@@ -505,6 +531,8 @@ impl InputValue {
                         Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                         // Touchpad Motion -> Accelerometer ...
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                        // Layer targets are handled by the early return in translate
+                        Capability::Layer { .. } => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => self.translate_touch_button(target_cap, target_config),
                 },
@@ -565,6 +593,8 @@ impl InputValue {
                         Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                         // Touchpad Motion -> Accelerometer ...
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                        // Layer targets are handled by the early return in translate
+                        Capability::Layer { .. } => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => self.translate_touch_button(target_cap, target_config),
                 },
@@ -625,6 +655,8 @@ impl InputValue {
                         Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                         // Touchpad Motion -> Accelerometer ...
                         Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                        // Layer targets are handled by the early return in translate
+                        Capability::Layer { .. } => Err(TranslationError::NotImplemented),
                     },
                     Touch::Button(_) => self.translate_touch_button(target_cap, target_config),
                 },
@@ -690,6 +722,8 @@ impl InputValue {
                     Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
                     // Touchscreen Motion -> Accelerometer ...
                     Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+                    // Layer targets are handled by the early return in translate
+                    Capability::Layer { .. } => Err(TranslationError::NotImplemented),
                 },
                 // Touchscreen Button -> ...
                 Touch::Button(_) => self.translate_touch_button(target_cap, target_config),
@@ -1232,6 +1266,8 @@ impl InputValue {
             },
             Capability::Gyroscope(_) => Err(TranslationError::NotImplemented),
             Capability::Accelerometer(_) => Err(TranslationError::NotImplemented),
+            // Layer targets are handled by the early return in translate
+            Capability::Layer { .. } => Err(TranslationError::NotImplemented),
         }
     }
 }

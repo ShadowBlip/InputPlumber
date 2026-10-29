@@ -1,5 +1,7 @@
 pub mod client;
 pub mod command;
+pub mod layers;
+pub mod layers_test;
 pub mod targets;
 
 use std::{
@@ -18,8 +20,9 @@ use zbus::{object_server::Interface, Connection};
 
 use crate::{
     config::{
-        capability_map::CapabilityMapConfig, path::get_profiles_path, CompositeDeviceConfig,
-        DeviceProfile, LoadError, ProfileMapping,
+        capability_map::{CapabilityMapConfig, LayerActivationMode},
+        path::get_profiles_path,
+        CompositeDeviceConfig, DeviceProfile, LoadError, ProfileMapping,
     },
     dbus::interface::{
         composite_device::CompositeDeviceInterface, force_feedback::ForceFeedbackInterface,
@@ -101,6 +104,9 @@ pub struct CompositeDevice {
     /// Map of profile source events to translate to one or more profile mapping
     /// configs that define how the source event should be translated.
     device_profile_config_map: HashMap<Capability, Vec<ProfileMapping>>,
+    /// State of the profile's input layers: what is active, what they produced,
+    /// and what removing a layer obliges this device to undo.
+    layers: layers::LayerState,
     /// List of input capabilities that can be translated by the capability map
     translatable_capabilities: Vec<Capability>,
     /// List of currently "pressed" actions used to translate multiple input
@@ -200,6 +206,7 @@ impl CompositeDevice {
             device_profile: None,
             device_profile_path: None,
             device_profile_config_map: HashMap::new(),
+            layers: layers::LayerState::default(),
             translatable_capabilities: Vec::new(),
             translatable_active_inputs: Vec::new(),
             translated_recent_events: HashSet::new(),
@@ -566,6 +573,10 @@ impl CompositeDevice {
                             self.dbus.path()
                         );
                         self.targets.handle_suspend().await;
+
+                        // Targets are being torn down, so drop the layer stack
+                        // without releasing inputs through them.
+                        self.layers.clear();
                         if let Err(e) = sender.send(()).await {
                             log::error!("Failed to send suspend response: {e:?}");
                         }
@@ -770,6 +781,14 @@ impl CompositeDevice {
             return Ok(());
         }
 
+        // The release of a held layer activation may no longer translate to a
+        // `layer` target, because an active layer can shadow the activation
+        // mapping. Remove the layer from the stack here instead.
+        if !event.pressed() {
+            let releases = self.layers.release_activation(&cap);
+            self.apply_layer_releases(releases).await?;
+        }
+
         // Check if the event needs to be translated based on the
         // capability map. Translated events will be re-enqueued, so this will
         // return early.
@@ -958,12 +977,20 @@ impl CompositeDevice {
         let mut sleep_time = 0;
 
         // Translate the event using the device profile.
+        let source_cap = event.as_capability();
         let mut events = if self.device_profile.is_some() {
-            self.translate_event(&event)
-                .await?
+            let (events, layer) = self.translate_event(&event);
+            let events: Vec<NativeEvent> = events
                 .into_iter()
                 .filter_map(|event| self.filter_event(event))
-                .collect()
+                .collect();
+
+            // Track what an active layer produced, so removing that layer can
+            // release it later while the input is still held.
+            self.layers
+                .record_outputs(&source_cap, layer.as_deref(), is_pressed, &events);
+
+            events
         } else {
             vec![event]
         };
@@ -988,6 +1015,13 @@ impl CompositeDevice {
 
             // Track what is currently active so we can ignore extra events.
             match cap {
+                // Layer activations are applied here and never reach a target
+                // device. This must come before the chord handling below, which
+                // re-enters at write_event and would skip layer handling.
+                Capability::Layer { name, mode } => {
+                    self.apply_layer_activation(&event, &name, &mode).await?;
+                    continue;
+                }
                 Capability::None
                 | Capability::Touchpad(_)
                 | Capability::NotImplemented
@@ -1121,6 +1155,12 @@ impl CompositeDevice {
     /// Writes the given event to the appropriate target device.
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
         let cap = event.as_capability();
+
+        // Layer activations are consumed by the composite device, they never
+        // reach a target device.
+        if matches!(cap, Capability::Layer { .. }) {
+            return Ok(());
+        }
 
         // If this event implements the DBus capability, send the event to DBus devices
         if matches!(cap, Capability::DBus(_)) {
@@ -1492,102 +1532,137 @@ impl CompositeDevice {
         Ok(())
     }
 
-    /// Translates the given event into a Vec of events based on the currently loaded
-    /// [DeviceProfile]
-    async fn translate_event(
-        &self,
-        event: &NativeEvent,
-    ) -> Result<Vec<NativeEvent>, Box<dyn Error>> {
-        // Lookup the profile mapping associated with this event capability. If
-        // none is found, return the original un-translated event.
+    /// Translates the given event into a Vec of events based on the currently
+    /// loaded [DeviceProfile] and any active input layers. Returns the translated
+    /// events and the name of the layer whose mappings produced them, if any.
+    fn translate_event(&self, event: &NativeEvent) -> (Vec<NativeEvent>, Option<String>) {
         let source_cap = event.as_capability();
-        if let Some(mappings) = self.device_profile_config_map.get(&source_cap) {
-            // Find which mappings in the device profile matches this source event
-            let matched_mappings = mappings
-                .iter()
-                .filter(|mapping| mapping.source_matches_properties(event));
 
-            let mut events = Vec::new();
-            // Based on all found mappings, translate the event
-            for mapping in matched_mappings {
-                log::trace!(
-                    "Found translation for event {:?} in profile mapping: {}",
-                    source_cap,
-                    mapping.name
+        // Active layers win, searched top-down (most recently activated first);
+        // otherwise fall back to the base profile. An active layer can shadow an
+        // activation mapping, which the release guard in process_event handles.
+        let matched = self
+            .layers
+            .mapping_for(&source_cap)
+            .map(|(layer, mappings)| (Some(layer), mappings))
+            .or_else(|| {
+                self.device_profile_config_map
+                    .get(&source_cap)
+                    .map(|mappings| (None, mappings.as_slice()))
+            });
+
+        // No mapping found, return the original un-translated event.
+        let Some((layer, mappings)) = matched else {
+            log::trace!("No translation mapping found for event: {:?}", source_cap);
+            return (vec![event.clone()], None);
+        };
+        let layer = layer.map(|name| name.to_string());
+
+        let events = self.translate_with_mappings(event, &source_cap, mappings);
+        if events.is_empty() {
+            if let Some(layer) = layer.as_ref() {
+                log::warn!(
+                    "Layer `{layer}` matched {}, but produced no events",
+                    source_cap.to_capability_string()
                 );
-
-                // Translate the event into the defined target event(s)
-                for target_event in mapping.target_events.iter() {
-                    // TODO: We can cache this conversion for faster translation
-                    let target_cap: Capability = target_event.clone().into();
-                    let result = event.get_value().translate(
-                        &source_cap,
-                        &mapping.source_event,
-                        &target_cap,
-                        target_event,
-                    );
-                    let value = match result {
-                        Ok(v) => v,
-                        Err(err) => {
-                            match err {
-                                TranslationError::NotImplemented => {
-                                    log::warn!(
-                                        "Translation not implemented for profile mapping '{}': {:?} -> {:?}",
-                                        mapping.name,
-                                        source_cap,
-                                        target_cap,
-                                    );
-                                    continue;
-                                }
-                                TranslationError::ImpossibleTranslation(msg) => {
-                                    log::warn!(
-                                        "Impossible translation for profile mapping '{}': {msg}",
-                                        mapping.name
-                                    );
-                                    continue;
-                                }
-                                TranslationError::InvalidSourceConfig(msg) => {
-                                    log::warn!("Invalid source event config in profile mapping '{}': {msg}", mapping.name);
-                                    continue;
-                                }
-                                TranslationError::InvalidTargetConfig(msg) => {
-                                    log::warn!("Invalid target event config in profile mapping '{}': {msg}", mapping.name);
-                                    continue;
-                                }
-                            }
-                        }
-                    };
-                    if matches!(value, InputValue::None) {
-                        continue;
-                    }
-
-                    // Some event mappings like relative->button will see only a `1` or `-1` event,
-                    // so these require emulating a momentary button press.
-                    if source_cap.is_momentary_translation(&target_cap) {
-                        let event = NativeEvent::new_translated(
-                            source_cap.clone(),
-                            target_cap.clone(),
-                            InputValue::Bool(true),
-                        );
-                        events.push(event);
-                        let event = NativeEvent::new_translated(
-                            source_cap.clone(),
-                            target_cap,
-                            InputValue::Bool(false),
-                        );
-                        events.push(event);
-                        continue;
-                    }
-
-                    let event = NativeEvent::new_translated(source_cap.clone(), target_cap, value);
-                    events.push(event);
-                }
             }
-            return Ok(events);
         }
 
-        log::trace!("No translation mapping found for event: {:?}", source_cap);
-        Ok(vec![event.clone()])
+        (events, layer)
+    }
+    /// Translates the given event using the given profile mappings.
+    fn translate_with_mappings(
+        &self,
+        event: &NativeEvent,
+        source_cap: &Capability,
+        mappings: &[ProfileMapping],
+    ) -> Vec<NativeEvent> {
+        // Find which mappings in the device profile matches this source event
+        let matched_mappings = mappings
+            .iter()
+            .filter(|mapping| mapping.source_matches_properties(event));
+
+        let mut events = Vec::new();
+        // Based on all found mappings, translate the event
+        for mapping in matched_mappings {
+            log::trace!(
+                "Found translation for event {:?} in profile mapping: {}",
+                source_cap,
+                mapping.name
+            );
+
+            // Translate the event into the defined target event(s)
+            for target_event in mapping.target_events.iter() {
+                // TODO: We can cache this conversion for faster translation
+                let target_cap: Capability = target_event.clone().into();
+                let result = event.get_value().translate(
+                    source_cap,
+                    &mapping.source_event,
+                    &target_cap,
+                    target_event,
+                );
+                let value = match result {
+                    Ok(v) => v,
+                    Err(err) => match err {
+                        TranslationError::NotImplemented => {
+                            log::warn!(
+                                    "Translation not implemented for profile mapping '{}': {:?} -> {:?}",
+                                    mapping.name,
+                                    source_cap,
+                                    target_cap,
+                                );
+                            continue;
+                        }
+                        TranslationError::ImpossibleTranslation(msg) => {
+                            log::warn!(
+                                "Impossible translation for profile mapping '{}': {msg}",
+                                mapping.name
+                            );
+                            continue;
+                        }
+                        TranslationError::InvalidSourceConfig(msg) => {
+                            log::warn!(
+                                "Invalid source event config in profile mapping '{}': {msg}",
+                                mapping.name
+                            );
+                            continue;
+                        }
+                        TranslationError::InvalidTargetConfig(msg) => {
+                            log::warn!(
+                                "Invalid target event config in profile mapping '{}': {msg}",
+                                mapping.name
+                            );
+                            continue;
+                        }
+                    },
+                };
+                if matches!(value, InputValue::None) {
+                    continue;
+                }
+
+                // Some event mappings like relative->button will see only a `1` or `-1` event,
+                // so these require emulating a momentary button press.
+                if source_cap.is_momentary_translation(&target_cap) {
+                    let event = NativeEvent::new_translated(
+                        source_cap.clone(),
+                        target_cap.clone(),
+                        InputValue::Bool(true),
+                    );
+                    events.push(event);
+                    let event = NativeEvent::new_translated(
+                        source_cap.clone(),
+                        target_cap,
+                        InputValue::Bool(false),
+                    );
+                    events.push(event);
+                    continue;
+                }
+
+                let event = NativeEvent::new_translated(source_cap.clone(), target_cap, value);
+                events.push(event);
+            }
+        }
+        events
     }
 
     /// Executed whenever a source device is added to this [CompositeDevice].
@@ -1692,6 +1767,11 @@ impl CompositeDevice {
 
         // Signal to DBus that source devices have changed
         self.signal_sources_changed().await;
+
+        // The source device holding a layer activation may be gone, so clear
+        // the layer stack and release anything a layer produced while held.
+        let releases = self.layers.clear();
+        self.apply_layer_releases(releases).await?;
 
         // Clear the state of target devices in case the source device was
         // disconnected in the middle of an input.
@@ -1879,13 +1959,11 @@ impl CompositeDevice {
         profile: Option<DeviceProfile>,
         profile_path: Option<String>,
     ) -> Result<(), Box<dyn Error>> {
-        // Remove all outdated capability mappings.
-        log::debug!("Clearing old device profile mappings");
-        self.device_profile_config_map.clear();
-
         // Load the device profile
         self.device_profile = profile;
         self.device_profile_path = profile_path;
+        self.layers.load_profile(self.device_profile.as_ref());
+
         let Some(profile) = self.device_profile.as_ref() else {
             log::debug!("Unloaded device profile");
             return Ok(());
@@ -1896,30 +1974,8 @@ impl CompositeDevice {
             log::info!("Loading device profile {}", profile.name);
         }
 
-        // Loop through every mapping in the profile, extract the source and target events,
-        // and map them into our profile map.
-        for mapping in profile.mapping.iter() {
-            log::trace!("Loading mapping from profile: {}", mapping.name);
-
-            // Convert the source event configuration in the mapping into a
-            // capability that can be easily matched on during event translation
-            let source_event_cap: Capability = mapping.source_event.clone().into();
-
-            // Convert the target events configuration into a vector of capabilities
-            // that can be easily used to create translated events.
-            let mut target_events_caps = Vec::new();
-            for cap_config in mapping.target_events.clone() {
-                let cap: Capability = cap_config.into();
-                target_events_caps.push(cap);
-            }
-
-            // Insert the translation config for this event
-            let config_map = self
-                .device_profile_config_map
-                .entry(source_event_cap)
-                .or_default();
-            config_map.push(mapping.clone());
-        }
+        // Index every mapping in the profile by its source capability.
+        self.device_profile_config_map = index_mappings_by_source(profile.mapping.as_slice());
 
         // Set the target devices to use if it is defined in the profile
         if let Some(target_devices) = profile.target_devices.clone() {
@@ -2143,6 +2199,51 @@ impl CompositeDevice {
         Ok(false)
     }
 
+    /// Applies a layer activation that a profile mapping produced. Only presses
+    /// reach here, releases are handled in [CompositeDevice::process_event].
+    async fn apply_layer_activation(
+        &mut self,
+        event: &NativeEvent,
+        name: &str,
+        mode: &LayerActivationMode,
+    ) -> Result<(), Box<dyn Error>> {
+        // The input that produced this activation: the pre-translation
+        // capability of a translated event, otherwise the event's own capability.
+        let source = event
+            .get_source_capability()
+            .unwrap_or_else(|| event.as_capability());
+
+        // LayerState makes every decision, the caller only applies the result.
+        let releases = self
+            .layers
+            .apply_activation(&source, name, mode, event.pressed());
+        self.apply_layer_releases(releases).await
+    }
+
+    /// Applies the side effects of a layer state change: release everything the
+    /// removed layers produced while held, and forget those capabilities so
+    /// future presses aren't dropped.
+    async fn apply_layer_releases(
+        &mut self,
+        releases: Vec<NativeEvent>,
+    ) -> Result<(), Box<dyn Error>> {
+        if releases.is_empty() {
+            return Ok(());
+        }
+
+        // Capabilities that are no longer active must be removed, otherwise
+        // `is_new_active_event` drops the next press of the same capability.
+        let caps: Vec<Capability> = releases.iter().map(|event| event.as_capability()).collect();
+
+        // Emit releases through the same delayed path used for intercept
+        // releases, so targets see a valid down/up sequence.
+        self.write_chord_events(releases).await?;
+
+        self.active_inputs.retain(|input| !caps.contains(input));
+
+        Ok(())
+    }
+
     /// Emit a DBus signal when source devices change
     async fn signal_sources_changed(&self) {
         let dbus_path = self.dbus.path().to_string();
@@ -2254,4 +2355,28 @@ impl CompositeDevice {
             };
         });
     }
+}
+
+/// Index the given profile mappings by the capability of their source event, the
+/// form matched against events during translation.
+fn index_mappings_by_source(
+    mappings: &[ProfileMapping],
+) -> HashMap<Capability, Vec<ProfileMapping>> {
+    let mut config_map: HashMap<Capability, Vec<ProfileMapping>> = HashMap::new();
+    for mapping in mappings {
+        // A `layer` event is target-only, it can never match a source event.
+        if mapping.source_event.layer.is_some() {
+            log::warn!(
+                "Mapping `{}` uses a `layer` source event, but `layer` is a target-only capability",
+                mapping.name
+            );
+            continue;
+        }
+        let source_cap: Capability = mapping.source_event.clone().into();
+        config_map
+            .entry(source_cap)
+            .or_default()
+            .push(mapping.clone());
+    }
+    config_map
 }
