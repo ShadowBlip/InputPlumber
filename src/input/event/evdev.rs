@@ -1,3 +1,4 @@
+pub mod maps;
 pub mod translator;
 
 use std::collections::HashMap;
@@ -9,9 +10,10 @@ use crate::input::capability::{
     MouseButton, Touch, TouchButton, Touchpad,
 };
 
-use crate::input::source::EventCapability;
+use super::{native::NativeEvent, value::InputValue, EventCapability};
 
-use super::{native::NativeEvent, value::InputValue};
+/// A raw evdev (event type, event code) pair.
+pub(super) type EventSignature = (u16, u16);
 
 #[derive(Debug, Clone)]
 pub struct EvdevEvent {
@@ -137,6 +139,11 @@ impl EvdevEvent {
     /// minimum and maximum values.
     pub fn set_abs_info(&mut self, info: AbsInfo) {
         self.abs_info = Some(info)
+    }
+
+    /// Returns the raw (event type, event code) pair identifying this event.
+    pub fn signature(&self) -> EventSignature {
+        (self.event.event_type().0, self.event.code())
     }
 
     /// Returns the event as a evdev [InputEvent]
@@ -548,7 +555,7 @@ impl EvdevEvent {
     /// All (event type, code) pairs that fulfill this capability, in the
     /// order evdev events should be written. Capabilities without an evdev
     /// equivalent return an empty list.
-    fn event_codes(capability: &Capability) -> Vec<(EventType, u16)> {
+    pub fn event_codes(capability: &Capability) -> Vec<(EventType, u16)> {
         match capability {
             Capability::None
             | Capability::NotImplemented
@@ -1036,7 +1043,7 @@ fn input_event_from_value(
 /// Normalizes the given value from a real value with axis information into a range
 /// between -1.0 - 1.0, indicating how far the axis has been pressed towards its
 /// minimum and maximum values.
-fn normalize_signed_value(raw_value: i32, min: i32, max: i32) -> f64 {
+pub(crate) fn normalize_signed_value(raw_value: i32, min: i32, max: i32) -> f64 {
     let mid = (max + min) / 2;
     let event_value = raw_value - mid;
 
@@ -1058,7 +1065,7 @@ fn normalize_signed_value(raw_value: i32, min: i32, max: i32) -> f64 {
 
 /// Returns a value between 0.0 and 1.0 based on the given value with its
 /// minimum and maximum.
-fn normalize_unsigned_value(raw_value: i32, min: i32, max: i32) -> f64 {
+pub(crate) fn normalize_unsigned_value(raw_value: i32, min: i32, max: i32) -> f64 {
     let range = max - min;
     if range == 0 {
         return 0.0;

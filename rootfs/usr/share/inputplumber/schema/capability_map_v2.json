@@ -287,11 +287,6 @@
           "const": "chord"
         },
         {
-          "description": "Source events will be treated as an inclusive match to emit a single\ninputplumber event. Events emitted after button is released.",
-          "type": "string",
-          "const": "delayed_chord"
-        },
-        {
           "description": "Multiple source events will emit the same inputplumber event. Useful for mapping\naxis where different directions are triggered by separate events or multiple\nevents to the same inputplumber event.",
           "type": "string",
           "const": "multi_source"

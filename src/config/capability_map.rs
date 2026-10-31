@@ -148,9 +148,6 @@ pub enum EvdevMappingType {
     /// Source events will be treated as an inclusive match to emit a single
     /// inputplumber event. Events emitted immediately upon match.
     Chord,
-    /// Source events will be treated as an inclusive match to emit a single
-    /// inputplumber event. Events emitted after button is released.
-    DelayedChord,
     /// Multiple source events will emit the same inputplumber event. Useful for mapping
     /// axis where different directions are triggered by separate events or multiple
     /// events to the same inputplumber event.

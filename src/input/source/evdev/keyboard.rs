@@ -1,17 +1,21 @@
 use std::fmt::Debug;
 use std::os::fd::AsFd;
-use std::{collections::HashMap, error::Error};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+};
 
 use evdev::{Device, EventType, InputEvent};
 use nix::fcntl::{FcntlArg, OFlag};
 
-use crate::config::capability_map::CapabilityMapConfigV2;
+use super::supported_signatures;
+use crate::config::capability_map::CapabilityMapConfig;
 use crate::{
     config::SourceDevice,
     input::{
         capability::Capability,
         event::{
-            evdev::{translator::EventTranslator, EvdevEvent},
+            evdev::{maps, translator::EventTranslator, EvdevEvent},
             native::NativeEvent,
         },
         source::{EventCapability, InputError, SourceInputDevice, SourceOutputDevice},
@@ -23,6 +27,7 @@ use crate::{
 pub struct KeyboardEventDevice {
     device: Device,
     translator: Option<EventTranslator>,
+    event_filter: HashSet<Capability>,
 }
 
 impl KeyboardEventDevice {
@@ -30,7 +35,7 @@ impl KeyboardEventDevice {
     pub fn new(
         device_info: UdevDevice,
         config: &Option<SourceDevice>,
-        capability_map: Option<CapabilityMapConfigV2>,
+        capability_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = device_info.devnode();
         log::debug!("Opening device at: {}", path);
@@ -49,9 +54,16 @@ impl KeyboardEventDevice {
         nix::fcntl::fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
 
         // Create an event translator if a capability map was given
-        let translator = capability_map.map(|map| EventTranslator::new(&map, HashMap::new()));
+        let translator = capability_map.map(|map| {
+            let mappings = maps::from_maps(None, Some(&map), &supported_signatures(&device));
+            EventTranslator::new(&mappings, HashMap::new())
+        });
 
-        Ok(Self { device, translator })
+        Ok(Self {
+            device,
+            translator,
+            event_filter: HashSet::new(),
+        })
     }
 
     /// Translate the given evdev event into a native event
@@ -69,6 +81,14 @@ impl KeyboardEventDevice {
 
         Some(native_event)
     }
+
+    /// Emit a native event unless the on-demand filter excludes it.
+    fn emit(&mut self, events: &mut Vec<NativeEvent>, event: NativeEvent) {
+        if !self.event_filter.is_empty() && !self.event_filter.contains(&event.as_capability()) {
+            return;
+        }
+        events.push(event);
+    }
 }
 
 impl SourceInputDevice for KeyboardEventDevice {
@@ -76,9 +96,11 @@ impl SourceInputDevice for KeyboardEventDevice {
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let mut native_events = vec![];
 
-        // Poll the translator for any scheduled events
+        // Emit any translator held events that are ready
         if let Some(translator) = self.translator.as_mut() {
-            native_events.extend(translator.poll());
+            for event in translator.drain_deferrals() {
+                self.emit(&mut native_events, event);
+            }
         }
 
         // Read events from the device
@@ -101,40 +123,18 @@ impl SourceInputDevice for KeyboardEventDevice {
             events
         };
 
-        // Convert the events into native events if no translator exists
-        if self.translator.is_none() {
-            let translated_events: Vec<NativeEvent> = events
-                .into_iter()
-                .filter_map(|e| self.translate(e))
-                .collect();
-            native_events.extend(translated_events);
-            return Ok(native_events);
-        }
-
-        // Create a list of events that the translator can't translate
-        let mut untranslated_events = vec![];
-
-        // Convert the events into native events with the translator
-        {
-            let Some(translator) = self.translator.as_mut() else {
-                return Ok(native_events);
-            };
-
-            for event in events {
-                if translator.has_translation(&event) {
-                    native_events.extend(translator.translate(&event));
-                } else {
-                    untranslated_events.push(event);
+        for event in events {
+            let translated = self.translator.as_mut().and_then(|t| t.translate(&event));
+            if let Some(translated) = translated {
+                for event in translated {
+                    self.emit(&mut native_events, event);
                 }
+                continue;
+            }
+            if let Some(native_event) = self.translate(event) {
+                self.emit(&mut native_events, native_event);
             }
         }
-
-        // Translate any untranslated events using the legacy method
-        let translated_events: Vec<NativeEvent> = untranslated_events
-            .into_iter()
-            .filter_map(|e| self.translate(e))
-            .collect();
-        native_events.extend(translated_events);
 
         Ok(native_events)
     }
@@ -176,7 +176,21 @@ impl SourceInputDevice for KeyboardEventDevice {
             }
         }
 
+        // Report post-translation capabilities when a translator is active
+        if let Some(translator) = &self.translator {
+            let raw_kept: HashSet<Capability> = capabilities.iter().cloned().collect();
+            capabilities = translator
+                .exposed_capabilities(&raw_kept)
+                .into_iter()
+                .collect();
+        }
+
         Ok(capabilities)
+    }
+
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        self.event_filter = events;
+        Ok(())
     }
 }
 

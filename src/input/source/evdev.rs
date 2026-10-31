@@ -3,7 +3,11 @@ pub mod gamepad;
 pub mod keyboard;
 pub mod touchscreen;
 
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    time::Duration,
+};
 
 use evdev::{Device, EventType};
 use keyboard::KeyboardEventDevice;
@@ -115,14 +119,8 @@ impl EventDevice {
         let is_blocked = conf.as_ref().and_then(|c| c.blocked).unwrap_or(false);
         let driver_type = EventDevice::get_driver_type(&device_info, is_blocked);
 
-        // Only V2 capability maps are supported on evdev sources
-        let capability_map = source_map
-            .as_ref()
-            .and_then(|map| match map {
-                CapabilityMapConfig::V2(config) => Some(config),
-                _ => None,
-            })
-            .cloned();
+        // Capability map resolved by the manager from the cached maps
+        let capability_map = source_map;
 
         match driver_type {
             DriverType::Blocked => {
@@ -196,6 +194,32 @@ impl EventDevice {
 /// Returns the DBus object path for evdev devices
 pub fn get_dbus_path(handler: String) -> String {
     format!("{}/{}", BUS_SOURCES_PREFIX, handler.clone())
+}
+
+/// Returns the set of event signatures the device supports.
+pub(crate) fn supported_signatures(device: &Device) -> HashSet<(u16, u16)> {
+    let mut signatures = HashSet::new();
+    if let Some(keys) = device.supported_keys() {
+        for key in keys.iter() {
+            signatures.insert((EventType::KEY.0, key.0));
+        }
+    }
+    if let Some(axes) = device.supported_relative_axes() {
+        for axis in axes.iter() {
+            signatures.insert((EventType::RELATIVE.0, axis.0));
+        }
+    }
+    if let Some(axes) = device.supported_absolute_axes() {
+        for axis in axes.iter() {
+            signatures.insert((EventType::ABSOLUTE.0, axis.0));
+        }
+    }
+    if let Some(switches) = device.supported_switches() {
+        for switch in switches.iter() {
+            signatures.insert((EventType::SWITCH.0, switch.0));
+        }
+    }
+    signatures
 }
 
 /// Returns the evdev capabilities of the input device at the given path (e.g. /dev/input/event0)
