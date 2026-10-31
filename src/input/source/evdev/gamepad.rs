@@ -13,13 +13,11 @@ use nix::fcntl::{FcntlArg, OFlag};
 use packed_struct::types::SizedInteger;
 use packed_struct::PrimitiveEnum;
 
-use super::supported_signatures;
-use crate::config::capability_map::CapabilityMapConfig;
 use crate::drivers::steam_deck::hid_report::{
     CommandType, PackedTriggerHapticPulse, PackedTriggerRepeatedHapticPulse,
     PackedTriggerVibration, PadSide, TriggerSide,
 };
-use crate::input::event::evdev::{maps, translator::EventTranslator};
+use crate::input::event::evdev::{maps::MappedTranslation, translator::EventTranslator};
 use crate::input::output_capability::{Haptic, OutputCapability, LED};
 use crate::{
     drivers::dualsense::hid_report::SetStatePackedOutputData,
@@ -52,7 +50,7 @@ impl GamepadEventDevice {
     /// Create a new [Gamepad] source device from the given udev info
     pub fn new(
         device_info: UdevDevice,
-        capability_map: Option<CapabilityMapConfig>,
+        mappings: Option<Vec<MappedTranslation>>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = device_info.devnode();
         log::debug!("Opening device at: {}", path);
@@ -73,11 +71,9 @@ impl GamepadEventDevice {
             axes_info.insert(axis, info);
         }
 
-        // Create an event translator if a capability map was given
-        let translator = capability_map.map(|map| {
-            let mappings = maps::from_maps(None, Some(&map), &supported_signatures(&device));
-            EventTranslator::new(&mappings, axes_info.clone())
-        });
+        // Create an event translator if mappings were given
+        let translator =
+            mappings.map(|mappings| EventTranslator::new(&mappings, axes_info.clone()));
 
         Ok(Self {
             device,
@@ -507,6 +503,12 @@ impl GamepadEventDevice {
 }
 
 impl SourceInputDevice for GamepadEventDevice {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.translator
+            .as_ref()
+            .map_or_else(Vec::new, EventTranslator::translation_targets)
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let mut native_events = vec![];

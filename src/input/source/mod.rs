@@ -122,6 +122,11 @@ pub trait SourceInputDevice {
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError>;
 
+    /// Returns the capabilities produced by active capability map translation
+    fn translation_targets(&self) -> Vec<Capability> {
+        Vec::new()
+    }
+
     /// Updates the list of events that will not propagate from the source device
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
         let _ = events;
@@ -265,6 +270,10 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
         }
         let event_filter_enabled =
             !events_exclude.is_empty() || !events_include.is_empty() || events_exclude_all;
+        // Translated capabilities pass the include filter automatically. This
+        // must stay after event_filter_enabled is computed so the extension
+        // cannot enable filtering on its own.
+        events_include.extend(device.translation_targets());
         if event_filter_enabled {
             let devnode = device_info.path();
             if !events_include.is_empty() {
@@ -425,6 +434,10 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                                 &event.as_capability(),
                             )
                         {
+                            log::trace!(
+                                "source {device_id} filtered event {:?}",
+                                event.as_capability()
+                            );
                             continue;
                         }
                         if !event_filter.is_empty()
@@ -434,6 +447,10 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                                 &event.as_capability(),
                             )
                         {
+                            log::trace!(
+                                "source {device_id} filtered event by default filter {:?}",
+                                event.as_capability()
+                            );
                             continue;
                         }
                         if let Some(ref context) = context {
@@ -444,6 +461,10 @@ impl<T: SourceInputDevice + SourceOutputDevice + Send + 'static> SourceDriver<T>
                             send_span.start();
                             event.set_context(context);
                         }
+                        log::trace!(
+                            "source {device_id} sending event {:?}",
+                            event.as_capability()
+                        );
                         let event = Event::Native(event);
                         let result = self
                             .composite_device

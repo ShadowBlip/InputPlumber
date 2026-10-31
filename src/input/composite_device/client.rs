@@ -472,22 +472,6 @@ impl CompositeDeviceClient {
         Ok(())
     }
 
-    /// Translate and write the given event to the appropriate target devices
-    #[allow(dead_code)]
-    pub async fn handle_event(&self, event: NativeEvent) -> Result<(), ClientError> {
-        self.send(CompositeCommand::HandleEvent(event)).await?;
-        Ok(())
-    }
-
-    /// Remove the given event type from list of recently translated events
-    #[allow(dead_code)]
-    pub async fn remove_recent_event(&self, capability: Capability) -> Result<(), ClientError> {
-        self.tx
-            .send(CompositeCommand::RemoveRecentEvent(capability))
-            .await?;
-        Ok(())
-    }
-
     /// Set the events to look for to activate input interception while in
     /// "PASS" mode.
     pub async fn set_intercept_activation(
