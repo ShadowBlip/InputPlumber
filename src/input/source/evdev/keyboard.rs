@@ -8,14 +8,12 @@ use std::{
 use evdev::{Device, EventType, InputEvent};
 use nix::fcntl::{FcntlArg, OFlag};
 
-use super::supported_signatures;
-use crate::config::capability_map::CapabilityMapConfig;
 use crate::{
     config::SourceDevice,
     input::{
         capability::Capability,
         event::{
-            evdev::{maps, translator::EventTranslator, EvdevEvent},
+            evdev::{maps::MappedTranslation, translator::EventTranslator, EvdevEvent},
             native::NativeEvent,
         },
         source::{EventCapability, InputError, SourceInputDevice, SourceOutputDevice},
@@ -35,7 +33,7 @@ impl KeyboardEventDevice {
     pub fn new(
         device_info: UdevDevice,
         config: &Option<SourceDevice>,
-        capability_map: Option<CapabilityMapConfig>,
+        mappings: Option<Vec<MappedTranslation>>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = device_info.devnode();
         log::debug!("Opening device at: {}", path);
@@ -53,11 +51,8 @@ impl KeyboardEventDevice {
         let fd = device.as_fd();
         nix::fcntl::fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
 
-        // Create an event translator if a capability map was given
-        let translator = capability_map.map(|map| {
-            let mappings = maps::from_maps(None, Some(&map), &supported_signatures(&device));
-            EventTranslator::new(&mappings, HashMap::new())
-        });
+        // Create an event translator if mappings were given
+        let translator = mappings.map(|mappings| EventTranslator::new(&mappings, HashMap::new()));
 
         Ok(Self {
             device,
@@ -92,6 +87,12 @@ impl KeyboardEventDevice {
 }
 
 impl SourceInputDevice for KeyboardEventDevice {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.translator
+            .as_ref()
+            .map_or_else(Vec::new, EventTranslator::translation_targets)
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let mut native_events = vec![];

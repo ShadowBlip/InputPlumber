@@ -104,6 +104,14 @@ impl EventTranslator {
         }
     }
 
+    /// Returns the target capabilities of all active mappings
+    pub fn translation_targets(&self) -> Vec<Capability> {
+        self.mappings
+            .iter()
+            .map(|mapping| mapping.target.clone())
+            .collect()
+    }
+
     /// Translate one raw evdev event through the debounce. None when no
     /// mapping consumes the event's signature.
     pub fn translate(&mut self, event: &InputEvent) -> Option<Vec<NativeEvent>> {

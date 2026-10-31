@@ -9,11 +9,9 @@ use evdev::{
 };
 use nix::fcntl::{FcntlArg, OFlag};
 
-use super::supported_signatures;
-use crate::config::capability_map::CapabilityMapConfig;
 use crate::config::TouchscreenConfig;
 use crate::input::capability::Touch;
-use crate::input::event::evdev::{maps, translator::EventTranslator};
+use crate::input::event::evdev::{maps::MappedTranslation, translator::EventTranslator};
 use crate::input::event::value::InputValue;
 use crate::{
     input::{
@@ -117,7 +115,7 @@ impl TouchscreenEventDevice {
     pub fn new(
         device_info: UdevDevice,
         config: Option<TouchscreenConfig>,
-        capability_map: Option<CapabilityMapConfig>,
+        mappings: Option<Vec<MappedTranslation>>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = device_info.devnode();
         log::debug!("Opening device at: {}", path);
@@ -184,11 +182,9 @@ impl TouchscreenEventDevice {
             };
         log::debug!("Configured touchscreen orientation: {orientation:?}");
 
-        // Create an event translator if a capability map was given
-        let translator = capability_map.map(|map| {
-            let mappings = maps::from_maps(None, Some(&map), &supported_signatures(&device));
-            EventTranslator::new(&mappings, axes_info.clone())
-        });
+        // Create an event translator if mappings were given
+        let translator =
+            mappings.map(|mappings| EventTranslator::new(&mappings, axes_info.clone()));
 
         Ok(Self {
             device,
@@ -318,6 +314,12 @@ impl TouchscreenEventDevice {
 }
 
 impl SourceInputDevice for TouchscreenEventDevice {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.translator
+            .as_ref()
+            .map_or_else(Vec::new, EventTranslator::translation_targets)
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let mut native_events = vec![];
