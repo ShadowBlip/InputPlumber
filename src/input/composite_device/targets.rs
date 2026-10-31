@@ -296,6 +296,10 @@ impl CompositeDeviceTargets {
     /// their attachment message.
     pub fn finish_target_creation(&mut self, paths: Vec<String>) {
         self.target_creation_in_progress = false;
+        // avoid queuing devices that are already attached.
+        let paths = paths
+            .into_iter()
+            .filter(|path| !self.target_devices.contains_key(path));
         self.target_devices_queued.extend(paths);
     }
 
