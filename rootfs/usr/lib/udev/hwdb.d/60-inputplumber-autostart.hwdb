@@ -113,6 +113,8 @@ dmi:*svnONE-NETBOOK:pnONEXPLAYERF1Pro:*
 dmi:*svnONE-NETBOOK:pnONEXPLAYERX1A:*
 dmi:*svnONE-NETBOOK:pnONEXPLAYERX1i:*
 dmi:*svnONE-NETBOOK:pnONEXPLAYERX1mini:*
+# OneXPlayer X2 Mini
+dmi:*svnONE-NETBOOK:*pnONEXPLAYERX2Mini:*
 # OneXPlayer X2 Mini Pro
 dmi:*svnONE-NETBOOK:*pnONEXPLAYERX2MiniPRO:*
 # OneXPlayer G1
