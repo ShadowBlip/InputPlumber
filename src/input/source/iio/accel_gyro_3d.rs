@@ -1,7 +1,12 @@
-use std::{collections::HashSet, error::Error, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Debug,
+};
 
 use crate::{
     config,
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::iio_imu::{driver::Driver, info::TriggerStrategy},
     input::{
         capability::Capability,
@@ -18,6 +23,7 @@ use super::common::{
 
 pub struct AccelGyro3dImu {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
 }
 
 impl AccelGyro3dImu {
@@ -26,6 +32,7 @@ impl AccelGyro3dImu {
     pub fn new(
         device_info: UdevDevice,
         config: Option<config::SourceDevice>,
+        capability_map: HashMap<Capability, Capability>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let mount_matrix = mount_matrix_from_config(config.as_ref());
         let sample_rate = sample_rate_from_config(config.as_ref());
@@ -41,20 +48,33 @@ impl AccelGyro3dImu {
             TriggerStrategy::FindExisting,
         )?;
 
-        Ok(Self { driver })
+        Ok(Self {
+            driver,
+            capability_map,
+        })
     }
 }
 
 impl SourceInputDevice for AccelGyro3dImu {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
-        Ok(translate_events(events))
+        Ok(translate_capabilities(
+            translate_events(events),
+            &self.capability_map,
+        ))
     }
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
