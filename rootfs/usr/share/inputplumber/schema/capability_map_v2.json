@@ -294,6 +294,290 @@
       ]
     },
     "EventCode": {
+      "description": "An evdev event code, either a named kernel define or a raw code value\nfor codes with no kernel define.",
+      "anyOf": [
+        {
+          "description": "A named kernel event code, e.g. `BTN_TRIGGER`.",
+          "$ref": "#/$defs/NamedEventCode"
+        },
+        {
+          "description": "A raw code value, e.g. `0x12c`.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      ]
+    },
+    "EventType": {
+      "oneOf": [
+        {
+          "description": "A bookkeeping event. Usually not important to applications.",
+          "type": "string",
+          "const": "SYNC"
+        },
+        {
+          "description": "A key changed state. A key, or button, is usually a momentary switch (in the circuit sense). It has two\nstates: down, or up. There are events for when keys are pressed (become down) and\nreleased (become up). There are also \"key repeats\", where multiple events are sent\nwhile a key is down.",
+          "type": "string",
+          "const": "KEY"
+        },
+        {
+          "description": "Movement on a relative axis. There is no absolute coordinate frame, just the fact that\nthere was a change of a certain amount of units. Used for things like mouse movement or\nscroll wheels.",
+          "type": "string",
+          "const": "REL"
+        },
+        {
+          "description": "Movement on an absolute axis. Used for things such as touch events and joysticks.",
+          "type": "string",
+          "const": "ABS"
+        },
+        {
+          "description": "Miscellaneous events that don't fall into other categories. For example, Key presses may\nsend `MSC_SCAN` events before each KEY event",
+          "type": "string",
+          "const": "MSC"
+        },
+        {
+          "description": "Change in a switch value. Switches are boolean conditions and usually correspond to a\ntoggle switch of some kind in hardware.",
+          "type": "string",
+          "const": "SW"
+        },
+        {
+          "description": "An LED was toggled.",
+          "type": "string",
+          "const": "LED"
+        },
+        {
+          "description": "A sound was made.",
+          "type": "string",
+          "const": "SND"
+        },
+        {
+          "description": "Metadata about key repeat configuration.",
+          "type": "string",
+          "const": "REP"
+        },
+        {
+          "description": "Sent to the device with a previusly obtained effect id as a code in order to toggle the effect.",
+          "type": "string",
+          "const": "FF"
+        },
+        {
+          "description": "Used to trigger power events such as suspend or power off.",
+          "type": "string",
+          "const": "PWR"
+        },
+        {
+          "description": "A force feedback effect's state changed.",
+          "type": "string",
+          "const": "FF_STATUS"
+        },
+        {
+          "description": "An event originating from uinput.",
+          "type": "string",
+          "const": "UINPUT"
+        }
+      ]
+    },
+    "GamepadCapability": {
+      "type": "object",
+      "properties": {
+        "accelerometer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AccelerometerCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "axis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AxisCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "button": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dial": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DialCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gyro": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GyroCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TriggerCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "GyroCapability": {
+      "type": "object",
+      "properties": {
+        "axis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deadzone": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "HidrawConfig": {
+      "description": "A [HidrawConfig] defines how to decode a particular event in an HID input\nreport.",
+      "type": "object",
+      "properties": {
+        "bit_offset": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "byte_start": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "input_type": {
+          "type": "string"
+        },
+        "report_id": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "report_id",
+        "input_type",
+        "byte_start",
+        "bit_offset"
+      ]
+    },
+    "MappingType": {
+      "description": "[MappingType] defines how source events should be translated",
+      "type": "object",
+      "properties": {
+        "evdev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvdevMappingType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MouseCapability": {
+      "type": "object",
+      "properties": {
+        "button": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "motion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MouseMotionCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wheel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MouseWheelCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "MouseMotionCapability": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speed_pps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      }
+    },
+    "MouseWheelCapability": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "NamedEventCode": {
       "type": "string",
       "enum": [
         "SYN_REPORT",
@@ -1020,274 +1304,6 @@
         "SND_BELL",
         "SND_TONE"
       ]
-    },
-    "EventType": {
-      "oneOf": [
-        {
-          "description": "A bookkeeping event. Usually not important to applications.",
-          "type": "string",
-          "const": "SYNC"
-        },
-        {
-          "description": "A key changed state. A key, or button, is usually a momentary switch (in the circuit sense). It has two\nstates: down, or up. There are events for when keys are pressed (become down) and\nreleased (become up). There are also \"key repeats\", where multiple events are sent\nwhile a key is down.",
-          "type": "string",
-          "const": "KEY"
-        },
-        {
-          "description": "Movement on a relative axis. There is no absolute coordinate frame, just the fact that\nthere was a change of a certain amount of units. Used for things like mouse movement or\nscroll wheels.",
-          "type": "string",
-          "const": "REL"
-        },
-        {
-          "description": "Movement on an absolute axis. Used for things such as touch events and joysticks.",
-          "type": "string",
-          "const": "ABS"
-        },
-        {
-          "description": "Miscellaneous events that don't fall into other categories. For example, Key presses may\nsend `MSC_SCAN` events before each KEY event",
-          "type": "string",
-          "const": "MSC"
-        },
-        {
-          "description": "Change in a switch value. Switches are boolean conditions and usually correspond to a\ntoggle switch of some kind in hardware.",
-          "type": "string",
-          "const": "SW"
-        },
-        {
-          "description": "An LED was toggled.",
-          "type": "string",
-          "const": "LED"
-        },
-        {
-          "description": "A sound was made.",
-          "type": "string",
-          "const": "SND"
-        },
-        {
-          "description": "Metadata about key repeat configuration.",
-          "type": "string",
-          "const": "REP"
-        },
-        {
-          "description": "Sent to the device with a previusly obtained effect id as a code in order to toggle the effect.",
-          "type": "string",
-          "const": "FF"
-        },
-        {
-          "description": "Used to trigger power events such as suspend or power off.",
-          "type": "string",
-          "const": "PWR"
-        },
-        {
-          "description": "A force feedback effect's state changed.",
-          "type": "string",
-          "const": "FF_STATUS"
-        },
-        {
-          "description": "An event originating from uinput.",
-          "type": "string",
-          "const": "UINPUT"
-        }
-      ]
-    },
-    "GamepadCapability": {
-      "type": "object",
-      "properties": {
-        "accelerometer": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AccelerometerCapability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "axis": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AxisCapability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "button": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "dial": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DialCapability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "gyro": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/GyroCapability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "trigger": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TriggerCapability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "GyroCapability": {
-      "type": "object",
-      "properties": {
-        "axis": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "deadzone": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
-        "direction": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name"
-      ]
-    },
-    "HidrawConfig": {
-      "description": "A [HidrawConfig] defines how to decode a particular event in an HID input\nreport.",
-      "type": "object",
-      "properties": {
-        "bit_offset": {
-          "type": "integer",
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0
-        },
-        "byte_start": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "input_type": {
-          "type": "string"
-        },
-        "report_id": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "report_id",
-        "input_type",
-        "byte_start",
-        "bit_offset"
-      ]
-    },
-    "MappingType": {
-      "description": "[MappingType] defines how source events should be translated",
-      "type": "object",
-      "properties": {
-        "evdev": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/EvdevMappingType"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "MouseCapability": {
-      "type": "object",
-      "properties": {
-        "button": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "motion": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/MouseMotionCapability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "wheel": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/MouseWheelCapability"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "MouseMotionCapability": {
-      "type": "object",
-      "properties": {
-        "direction": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "speed_pps": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        }
-      }
-    },
-    "MouseWheelCapability": {
-      "type": "object",
-      "properties": {
-        "direction": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
     },
     "SourceCapability": {
       "type": "object",

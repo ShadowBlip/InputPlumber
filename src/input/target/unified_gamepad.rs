@@ -535,6 +535,7 @@ impl From<NativeEvent> for StateUpdate {
 
                         Self { capability, value }
                     }
+                    _ => Self::default(),
                 },
                 Touchpad::RightPad(pad) => match pad {
                     Touch::Motion => {
@@ -575,6 +576,7 @@ impl From<NativeEvent> for StateUpdate {
 
                         Self { capability, value }
                     }
+                    _ => Self::default(),
                 },
                 Touchpad::CenterPad(pad) => match pad {
                     Touch::Motion => {
@@ -615,6 +617,7 @@ impl From<NativeEvent> for StateUpdate {
 
                         Self { capability, value }
                     }
+                    _ => Self::default(),
                 },
             },
             Capability::Touchscreen(touch) => match touch {
@@ -656,6 +659,7 @@ impl From<NativeEvent> for StateUpdate {
 
                     Self { capability, value }
                 }
+                _ => Self::default(),
             },
             Capability::Gyroscope(_) => {
                 let value = match event.get_value() {
@@ -746,6 +750,7 @@ impl From<Capability> for InputCapability {
                     GamepadButton::RightPaddle3 => Self::GamepadButtonRightPaddle3,
                     GamepadButton::RightStick => Self::GamepadButtonRightStick,
                     GamepadButton::RightStickTouch => Self::GamepadButtonRightStickTouch,
+                    _ => Self::default(),
                 },
                 Gamepad::Axis(axis) => match axis {
                     GamepadAxis::LeftStick => Self::GamepadAxisLeftStick,
@@ -754,6 +759,7 @@ impl From<Capability> for InputCapability {
                     GamepadAxis::Hat1 => Self::default(),
                     GamepadAxis::Hat2 => Self::default(),
                     GamepadAxis::Hat3 => Self::default(),
+                    _ => Self::default(),
                 },
                 Gamepad::Trigger(trigger) => match trigger {
                     GamepadTrigger::LeftTrigger => Self::GamepadTriggerLeft,
@@ -945,24 +951,28 @@ impl From<Capability> for InputCapability {
                 Keyboard::KeyYen => Self::KeyboardKeyYen,
                 Keyboard::KeyZ => Self::KeyboardKeyZ,
                 Keyboard::KeyZenkakuhankaku => Self::KeyboardKeyZenkakuhankaku,
+                _ => Self::default(),
             },
             Capability::Touchpad(touchpad) => match touchpad {
                 Touchpad::LeftPad(pad) => match pad {
                     Touch::Motion => Self::TouchpadLeftMotion,
                     Touch::Button(_) => Self::TouchpadLeftButton,
+                    _ => Self::default(),
                 },
                 Touchpad::RightPad(pad) => match pad {
                     Touch::Motion => Self::TouchpadRightMotion,
                     Touch::Button(_) => Self::TouchpadRightButton,
+                    _ => Self::default(),
                 },
                 Touchpad::CenterPad(pad) => match pad {
                     Touch::Motion => Self::TouchpadCenterMotion,
                     Touch::Button(_) => Self::TouchpadCenterButton,
+                    _ => Self::default(),
                 },
             },
             Capability::Touchscreen(touch) => match touch {
                 Touch::Motion => Self::TouchscreenMotion,
-                Touch::Button(_) => Self::default(),
+                _ => Self::default(),
             },
             Capability::Gyroscope(source) => match source {
                 Source::Left => Self::GyroscopeLeft,
@@ -1000,19 +1010,23 @@ impl From<Capability> for InputCapabilityInfo {
                 Touchpad::LeftPad(pad) => match pad {
                     Touch::Motion => Self::new(capability, ValueType::Touch),
                     Touch::Button(_) => Self::new(capability, ValueType::Bool),
+                    _ => Self::default(),
                 },
                 Touchpad::RightPad(pad) => match pad {
                     Touch::Motion => Self::new(capability, ValueType::Touch),
                     Touch::Button(_) => Self::new(capability, ValueType::Bool),
+                    _ => Self::default(),
                 },
                 Touchpad::CenterPad(pad) => match pad {
                     Touch::Motion => Self::new(capability, ValueType::Touch),
                     Touch::Button(_) => Self::new(capability, ValueType::Bool),
+                    _ => Self::default(),
                 },
             },
             Capability::Touchscreen(touch) => match touch {
                 Touch::Motion => Self::new(capability, ValueType::Touch),
                 Touch::Button(_) => Self::new(capability, ValueType::Bool),
+                _ => Self::default(),
             },
             Capability::Gyroscope(_) => Self::new(capability, ValueType::Int16Vector3),
             Capability::Accelerometer(_) => Self::new(capability, ValueType::Int16Vector3),

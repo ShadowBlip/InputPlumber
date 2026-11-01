@@ -959,7 +959,7 @@ impl CompositeDevice {
                     Gamepad::Axis(_) | Gamepad::Trigger(_) => {}
                 },
                 Capability::Mouse(ref t) => match t {
-                    Mouse::Motion => {}
+                    Mouse::Motion | Mouse::Raw(_) => {}
                     Mouse::Button(_) => {
                         if !self.is_new_active_event(&cap, is_pressed) {
                             continue;
