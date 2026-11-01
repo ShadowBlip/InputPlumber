@@ -167,6 +167,8 @@ impl EventCapability for EvdevEvent {
                 KeyCode::BTN_MIDDLE => Capability::Mouse(Mouse::Button(MouseButton::Middle)),
                 KeyCode::BTN_SIDE => Capability::Mouse(Mouse::Button(MouseButton::Side)),
                 KeyCode::BTN_EXTRA => Capability::Mouse(Mouse::Button(MouseButton::Extra)),
+                KeyCode::BTN_FORWARD => Capability::Mouse(Mouse::Button(MouseButton::Forward)),
+                KeyCode::BTN_BACK => Capability::Mouse(Mouse::Button(MouseButton::Back)),
                 // Gamepad Buttons
                 KeyCode::BTN_SOUTH => Capability::Gamepad(Gamepad::Button(GamepadButton::South)),
                 KeyCode::BTN_NORTH => Capability::Gamepad(Gamepad::Button(GamepadButton::North)),
@@ -201,13 +203,26 @@ impl EventCapability for EvdevEvent {
                 KeyCode::BTN_TRIGGER_HAPPY10 => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle3))
                 }
+                KeyCode::BTN_TRIGGER => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::Trigger))
+                }
+                KeyCode::BTN_0 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button0)),
+                KeyCode::BTN_1 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button1)),
+                KeyCode::BTN_2 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button2)),
+                KeyCode::BTN_3 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button3)),
+                KeyCode::BTN_4 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button4)),
+                KeyCode::BTN_5 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button5)),
+                KeyCode::BTN_6 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button6)),
+                KeyCode::BTN_7 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button7)),
+                KeyCode::BTN_8 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button8)),
+                KeyCode::BTN_9 => Capability::Gamepad(Gamepad::Button(GamepadButton::Button9)),
                 KeyCode::BTN_THUMBL => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftStick))
                 }
                 KeyCode::BTN_THUMBR => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick))
                 }
-                KeyCode::BTN_Z => Capability::Gamepad(Gamepad::Button(GamepadButton::QuickAccess)),
+                KeyCode::BTN_Z => Capability::Gamepad(Gamepad::Button(GamepadButton::Raw(0x135))),
                 // Keyboard Buttons
                 KeyCode::KEY_0 => Capability::Keyboard(Keyboard::Key0),
                 KeyCode::KEY_1 => Capability::Keyboard(Keyboard::Key1),
@@ -222,51 +237,28 @@ impl EventCapability for EvdevEvent {
                 KeyCode::KEY_9 => Capability::Keyboard(Keyboard::Key9),
                 KeyCode::KEY_A => Capability::Keyboard(Keyboard::KeyA),
                 KeyCode::KEY_AGAIN => Capability::Keyboard(Keyboard::KeyAgain),
-                KeyCode::KEY_ALTERASE => Capability::NotImplemented,
                 KeyCode::KEY_APOSTROPHE => Capability::Keyboard(Keyboard::KeyApostrophe),
                 KeyCode::KEY_B => Capability::Keyboard(Keyboard::KeyB),
                 KeyCode::KEY_BACK => Capability::Keyboard(Keyboard::KeyBack),
                 KeyCode::KEY_BACKSLASH => Capability::Keyboard(Keyboard::KeyBackslash),
                 KeyCode::KEY_BACKSPACE => Capability::Keyboard(Keyboard::KeyBackspace),
                 KeyCode::KEY_BLUE => Capability::Keyboard(Keyboard::KeyBlue),
-                KeyCode::KEY_BASSBOOST => Capability::NotImplemented,
-                KeyCode::KEY_BATTERY => Capability::NotImplemented,
-                KeyCode::KEY_BLUETOOTH => Capability::NotImplemented,
-                KeyCode::KEY_BOOKMARKS => Capability::NotImplemented,
                 KeyCode::KEY_BRIGHTNESSDOWN => Capability::Keyboard(Keyboard::KeyBrightnessDown),
                 KeyCode::KEY_BRIGHTNESSUP => Capability::Keyboard(Keyboard::KeyBrightnessUp),
-                KeyCode::KEY_BRIGHTNESS_AUTO => Capability::NotImplemented,
-                KeyCode::KEY_BRIGHTNESS_CYCLE => Capability::NotImplemented,
                 KeyCode::KEY_C => Capability::Keyboard(Keyboard::KeyC),
                 KeyCode::KEY_CALC => Capability::Keyboard(Keyboard::KeyCalc),
-                KeyCode::KEY_CAMERA => Capability::NotImplemented,
-                KeyCode::KEY_CANCEL => Capability::NotImplemented,
                 KeyCode::KEY_CAPSLOCK => Capability::Keyboard(Keyboard::KeyCapslock),
-                KeyCode::KEY_CHAT => Capability::NotImplemented,
-                KeyCode::KEY_CLOSE => Capability::NotImplemented,
-                KeyCode::KEY_CLOSECD => Capability::NotImplemented,
-                KeyCode::KEY_COFFEE => Capability::NotImplemented,
                 KeyCode::KEY_COMMA => Capability::Keyboard(Keyboard::KeyComma),
                 KeyCode::KEY_COMPOSE => Capability::Keyboard(Keyboard::KeyCompose),
-                KeyCode::KEY_COMPUTER => Capability::NotImplemented,
-                KeyCode::KEY_CONFIG => Capability::NotImplemented,
-                KeyCode::KEY_CONNECT => Capability::NotImplemented,
                 KeyCode::KEY_COPY => Capability::Keyboard(Keyboard::KeyCopy),
                 KeyCode::KEY_CUT => Capability::Keyboard(Keyboard::KeyCut),
-                KeyCode::KEY_CYCLEWINDOWS => Capability::NotImplemented,
                 KeyCode::KEY_D => Capability::Keyboard(Keyboard::KeyD),
-                KeyCode::KEY_DASHBOARD => Capability::NotImplemented,
                 KeyCode::KEY_DELETE => Capability::Keyboard(Keyboard::KeyDelete),
-                KeyCode::KEY_DELETEFILE => Capability::NotImplemented,
-                KeyCode::KEY_DISPLAY_OFF => Capability::NotImplemented,
-                KeyCode::KEY_DOCUMENTS => Capability::NotImplemented,
                 KeyCode::KEY_DOT => Capability::Keyboard(Keyboard::KeyDot),
                 KeyCode::KEY_DOWN => Capability::Keyboard(Keyboard::KeyDown),
                 KeyCode::KEY_E => Capability::Keyboard(Keyboard::KeyE),
                 KeyCode::KEY_EDIT => Capability::Keyboard(Keyboard::KeyEdit),
                 KeyCode::KEY_EJECTCD => Capability::Keyboard(Keyboard::KeyEjectCD),
-                KeyCode::KEY_EJECTCLOSECD => Capability::NotImplemented,
-                KeyCode::KEY_EMAIL => Capability::NotImplemented,
                 KeyCode::KEY_END => Capability::Keyboard(Keyboard::KeyEnd),
                 KeyCode::KEY_ENTER => Capability::Keyboard(Keyboard::KeyEnter),
                 KeyCode::KEY_EQUAL => Capability::Keyboard(Keyboard::KeyEqual),
@@ -297,38 +289,27 @@ impl EventCapability for EvdevEvent {
                 KeyCode::KEY_F7 => Capability::Keyboard(Keyboard::KeyF7),
                 KeyCode::KEY_F8 => Capability::Keyboard(Keyboard::KeyF8),
                 KeyCode::KEY_F9 => Capability::Keyboard(Keyboard::KeyF9),
-                KeyCode::KEY_FASTFORWARD => Capability::NotImplemented,
-                KeyCode::KEY_FILE => Capability::NotImplemented,
-                KeyCode::KEY_FINANCE => Capability::NotImplemented,
                 KeyCode::KEY_FIND => Capability::Keyboard(Keyboard::KeyFind),
                 KeyCode::KEY_FORWARD => Capability::Keyboard(Keyboard::KeyForward),
-                KeyCode::KEY_FORWARDMAIL => Capability::NotImplemented,
                 KeyCode::KEY_FRONT => Capability::Keyboard(Keyboard::KeyFront),
                 KeyCode::KEY_G => Capability::Keyboard(Keyboard::KeyG),
                 KeyCode::KEY_GRAVE => Capability::Keyboard(Keyboard::KeyGrave),
                 KeyCode::KEY_GREEN => Capability::Keyboard(Keyboard::KeyGreen),
                 KeyCode::KEY_H => Capability::Keyboard(Keyboard::KeyH),
-                KeyCode::KEY_HANGEUL => Capability::NotImplemented,
                 KeyCode::KEY_HANJA => Capability::Keyboard(Keyboard::KeyHanja),
                 KeyCode::KEY_HELP => Capability::Keyboard(Keyboard::KeyHelp),
                 KeyCode::KEY_HENKAN => Capability::Keyboard(Keyboard::KeyHenkan),
                 KeyCode::KEY_HIRAGANA => Capability::Keyboard(Keyboard::KeyHiragana),
                 KeyCode::KEY_HOME => Capability::Keyboard(Keyboard::KeyHome),
-                KeyCode::KEY_HOMEPAGE => Capability::NotImplemented,
-                KeyCode::KEY_HP => Capability::NotImplemented,
                 KeyCode::KEY_I => Capability::Keyboard(Keyboard::KeyI),
                 KeyCode::KEY_INFO => Capability::Keyboard(Keyboard::KeyInfo),
                 KeyCode::KEY_INSERT => Capability::Keyboard(Keyboard::KeyInsert),
-                KeyCode::KEY_ISO => Capability::NotImplemented,
                 KeyCode::KEY_J => Capability::Keyboard(Keyboard::KeyJ),
                 KeyCode::KEY_K => Capability::Keyboard(Keyboard::KeyK),
                 KeyCode::KEY_KATAKANA => Capability::Keyboard(Keyboard::KeyKatakana),
                 KeyCode::KEY_KATAKANAHIRAGANA => {
                     Capability::Keyboard(Keyboard::KeyKatakanaHiragana)
                 }
-                KeyCode::KEY_KBDILLUMDOWN => Capability::NotImplemented,
-                KeyCode::KEY_KBDILLUMTOGGLE => Capability::NotImplemented,
-                KeyCode::KEY_KBDILLUMUP => Capability::NotImplemented,
                 KeyCode::KEY_KP0 => Capability::Keyboard(Keyboard::KeyKp0),
                 KeyCode::KEY_KP1 => Capability::Keyboard(Keyboard::KeyKp1),
                 KeyCode::KEY_KP2 => Capability::Keyboard(Keyboard::KeyKp2),
@@ -348,7 +329,6 @@ impl EventCapability for EvdevEvent {
                 KeyCode::KEY_KPLEFTPAREN => Capability::Keyboard(Keyboard::KeyKpLeftParen),
                 KeyCode::KEY_KPMINUS => Capability::Keyboard(Keyboard::KeyKpMinus),
                 KeyCode::KEY_KPPLUS => Capability::Keyboard(Keyboard::KeyKpPlus),
-                KeyCode::KEY_KPPLUSMINUS => Capability::NotImplemented,
                 KeyCode::KEY_KPRIGHTPAREN => Capability::Keyboard(Keyboard::KeyKpRightParen),
                 KeyCode::KEY_KPSLASH => Capability::Keyboard(Keyboard::KeyKpSlash),
                 KeyCode::KEY_L => Capability::Keyboard(Keyboard::KeyL),
@@ -358,20 +338,11 @@ impl EventCapability for EvdevEvent {
                 KeyCode::KEY_LEFTCTRL => Capability::Keyboard(Keyboard::KeyLeftCtrl),
                 KeyCode::KEY_LEFTMETA => Capability::Keyboard(Keyboard::KeyLeftMeta),
                 KeyCode::KEY_LEFTSHIFT => Capability::Keyboard(Keyboard::KeyLeftShift),
-                KeyCode::KEY_LINEFEED => Capability::NotImplemented,
                 KeyCode::KEY_M => Capability::Keyboard(Keyboard::KeyM),
-                KeyCode::KEY_MACRO => Capability::NotImplemented,
-                KeyCode::KEY_MAIL => Capability::NotImplemented,
-                KeyCode::KEY_MEDIA => Capability::NotImplemented,
-                KeyCode::KEY_MENU => Capability::NotImplemented,
-                KeyCode::KEY_MICMUTE => Capability::NotImplemented,
                 KeyCode::KEY_MINUS => Capability::Keyboard(Keyboard::KeyMinus),
-                KeyCode::KEY_MOVE => Capability::NotImplemented,
-                KeyCode::KEY_MSDOS => Capability::NotImplemented,
                 KeyCode::KEY_MUHENKAN => Capability::Keyboard(Keyboard::KeyMuhenkan),
                 KeyCode::KEY_MUTE => Capability::Keyboard(Keyboard::KeyMute),
                 KeyCode::KEY_N => Capability::Keyboard(Keyboard::KeyN),
-                KeyCode::KEY_NEW => Capability::NotImplemented,
                 KeyCode::KEY_NEXTSONG => Capability::Keyboard(Keyboard::KeyNextSong),
                 KeyCode::KEY_NUMLOCK => Capability::Keyboard(Keyboard::KeyNumlock),
                 KeyCode::KEY_O => Capability::Keyboard(Keyboard::KeyO),
@@ -382,31 +353,21 @@ impl EventCapability for EvdevEvent {
                 KeyCode::KEY_PAGEUP => Capability::Keyboard(Keyboard::KeyPageUp),
                 KeyCode::KEY_PASTE => Capability::Keyboard(Keyboard::KeyPaste),
                 KeyCode::KEY_PAUSE => Capability::Keyboard(Keyboard::KeyPause),
-                KeyCode::KEY_PAUSECD => Capability::NotImplemented,
-                KeyCode::KEY_PHONE => Capability::NotImplemented,
-                KeyCode::KEY_PLAY => Capability::NotImplemented,
-                KeyCode::KEY_PLAYCD => Capability::NotImplemented,
                 KeyCode::KEY_PLAYPAUSE => Capability::Keyboard(Keyboard::KeyPlayPause),
                 KeyCode::KEY_POWER => Capability::Keyboard(Keyboard::KeyPower),
                 KeyCode::KEY_PREVIOUSSONG => Capability::Keyboard(Keyboard::KeyPreviousSong),
-                KeyCode::KEY_PRINT => Capability::NotImplemented,
                 KeyCode::KEY_PROG1 => Capability::Keyboard(Keyboard::KeyProg1),
                 KeyCode::KEY_PROG2 => Capability::Keyboard(Keyboard::KeyProg2),
                 KeyCode::KEY_PROG3 => Capability::Keyboard(Keyboard::KeyProg3),
                 KeyCode::KEY_PROG4 => Capability::Keyboard(Keyboard::KeyProg4),
                 KeyCode::KEY_PROPS => Capability::Keyboard(Keyboard::KeyProps),
                 KeyCode::KEY_Q => Capability::Keyboard(Keyboard::KeyQ),
-                KeyCode::KEY_QUESTION => Capability::NotImplemented,
                 KeyCode::KEY_R => Capability::Keyboard(Keyboard::KeyR),
                 KeyCode::KEY_RECORD => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::Screenshot))
                 }
                 KeyCode::KEY_RED => Capability::Keyboard(Keyboard::KeyRed),
-                KeyCode::KEY_REDO => Capability::NotImplemented,
                 KeyCode::KEY_REFRESH => Capability::Keyboard(Keyboard::KeyRefresh),
-                KeyCode::KEY_REPLY => Capability::NotImplemented,
-                KeyCode::KEY_REWIND => Capability::NotImplemented,
-                KeyCode::KEY_RFKILL => Capability::NotImplemented,
                 KeyCode::KEY_RIGHT => Capability::Keyboard(Keyboard::KeyRight),
                 KeyCode::KEY_RIGHTALT => Capability::Keyboard(Keyboard::KeyRightAlt),
                 KeyCode::KEY_RIGHTBRACE => Capability::Keyboard(Keyboard::KeyRightBrace),
@@ -415,54 +376,45 @@ impl EventCapability for EvdevEvent {
                 KeyCode::KEY_RIGHTSHIFT => Capability::Keyboard(Keyboard::KeyRightShift),
                 KeyCode::KEY_RO => Capability::Keyboard(Keyboard::KeyRo),
                 KeyCode::KEY_ROOT_MENU => Capability::Keyboard(Keyboard::KeyRootMenu),
-                KeyCode::KEY_ROTATE_DISPLAY => Capability::NotImplemented,
                 KeyCode::KEY_S => Capability::Keyboard(Keyboard::KeyS),
-                KeyCode::KEY_SAVE => Capability::NotImplemented,
-                KeyCode::KEY_SCALE => Capability::NotImplemented,
                 KeyCode::KEY_SCROLLDOWN => Capability::Keyboard(Keyboard::KeyScrollDown),
                 KeyCode::KEY_SCROLLLOCK => Capability::Keyboard(Keyboard::KeyScrollLock),
                 KeyCode::KEY_SCROLLUP => Capability::Keyboard(Keyboard::KeyScrollUp),
-                KeyCode::KEY_SEARCH => Capability::NotImplemented,
                 KeyCode::KEY_SEMICOLON => Capability::Keyboard(Keyboard::KeySemicolon),
-                KeyCode::KEY_SEND => Capability::NotImplemented,
-                KeyCode::KEY_SENDFILE => Capability::NotImplemented,
-                KeyCode::KEY_SETUP => Capability::NotImplemented,
-                KeyCode::KEY_SHOP => Capability::NotImplemented,
                 KeyCode::KEY_SLASH => Capability::Keyboard(Keyboard::KeySlash),
                 KeyCode::KEY_SLEEP => Capability::Keyboard(Keyboard::KeySleep),
-                KeyCode::KEY_SOUND => Capability::NotImplemented,
                 KeyCode::KEY_SPACE => Capability::Keyboard(Keyboard::KeySpace),
-                KeyCode::KEY_SPORT => Capability::NotImplemented,
                 KeyCode::KEY_STOP => Capability::Keyboard(Keyboard::KeyStop),
                 KeyCode::KEY_STOPCD => Capability::Keyboard(Keyboard::KeyStopCD),
-                KeyCode::KEY_SUSPEND => Capability::NotImplemented,
-                KeyCode::KEY_SWITCHVIDEOMODE => Capability::NotImplemented,
                 KeyCode::KEY_SYSRQ => Capability::Keyboard(Keyboard::KeySysrq),
                 KeyCode::KEY_T => Capability::Keyboard(Keyboard::KeyT),
                 KeyCode::KEY_TAB => Capability::Keyboard(Keyboard::KeyTab),
                 KeyCode::KEY_U => Capability::Keyboard(Keyboard::KeyU),
                 KeyCode::KEY_UNDO => Capability::Keyboard(Keyboard::KeyUndo),
-                KeyCode::KEY_UNKNOWN => Capability::NotImplemented,
                 KeyCode::KEY_UP => Capability::Keyboard(Keyboard::KeyUp),
-                KeyCode::KEY_UWB => Capability::NotImplemented,
                 KeyCode::KEY_V => Capability::Keyboard(Keyboard::KeyV),
-                KeyCode::KEY_VIDEO_NEXT => Capability::NotImplemented,
-                KeyCode::KEY_VIDEO_PREV => Capability::NotImplemented,
                 KeyCode::KEY_VOLUMEDOWN => Capability::Keyboard(Keyboard::KeyVolumeDown),
                 KeyCode::KEY_VOLUMEUP => Capability::Keyboard(Keyboard::KeyVolumeUp),
                 KeyCode::KEY_W => Capability::Keyboard(Keyboard::KeyW),
-                KeyCode::KEY_WAKEUP => Capability::NotImplemented,
-                KeyCode::KEY_WLAN => Capability::NotImplemented,
-                KeyCode::KEY_WWAN => Capability::NotImplemented,
                 KeyCode::KEY_WWW => Capability::Keyboard(Keyboard::KeyWww),
                 KeyCode::KEY_X => Capability::Keyboard(Keyboard::KeyX),
-                KeyCode::KEY_XFER => Capability::NotImplemented,
                 KeyCode::KEY_Y => Capability::Keyboard(Keyboard::KeyY),
                 KeyCode::KEY_YELLOW => Capability::Keyboard(Keyboard::KeyYellow),
                 KeyCode::KEY_YEN => Capability::Keyboard(Keyboard::KeyYen),
                 KeyCode::KEY_Z => Capability::Keyboard(Keyboard::KeyZ),
                 KeyCode::KEY_ZENKAKUHANKAKU => Capability::Keyboard(Keyboard::KeyZenkakuhankaku),
-                _ => Capability::NotImplemented,
+                _ => {
+                    if code < 0x100 {
+                        Capability::Keyboard(Keyboard::Raw(code))
+                    } else if (0x110..=0x117).contains(&code) || (0x150..=0x151).contains(&code) {
+                        Capability::Mouse(Mouse::Button(MouseButton::Raw(code)))
+                    } else if (0x2c0..=0x2e7).contains(&code) {
+                        let n = (code - 0x2bf) as u8;
+                        Capability::Gamepad(Gamepad::Button(GamepadButton::TriggerHappy(n)))
+                    } else {
+                        Capability::Gamepad(Gamepad::Button(GamepadButton::Raw(code)))
+                    }
+                }
             },
             EventType::ABSOLUTE => match AbsoluteAxisCode(code) {
                 AbsoluteAxisCode::ABS_X => {
@@ -489,7 +441,44 @@ impl EventCapability for EvdevEvent {
                 AbsoluteAxisCode::ABS_HAT0Y => {
                     Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat0))
                 }
-                _ => Capability::NotImplemented,
+                AbsoluteAxisCode::ABS_HAT1X | AbsoluteAxisCode::ABS_HAT1Y => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat1))
+                }
+                AbsoluteAxisCode::ABS_HAT2X | AbsoluteAxisCode::ABS_HAT2Y => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat2))
+                }
+                AbsoluteAxisCode::ABS_HAT3X | AbsoluteAxisCode::ABS_HAT3Y => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Hat3))
+                }
+                AbsoluteAxisCode::ABS_THROTTLE => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Throttle))
+                }
+                AbsoluteAxisCode::ABS_RUDDER => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Rudder))
+                }
+                AbsoluteAxisCode::ABS_WHEEL => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Wheel))
+                }
+                AbsoluteAxisCode::ABS_GAS => Capability::Gamepad(Gamepad::Axis(GamepadAxis::Gas)),
+                AbsoluteAxisCode::ABS_BRAKE => {
+                    Capability::Gamepad(Gamepad::Axis(GamepadAxis::Brake))
+                }
+                AbsoluteAxisCode::ABS_MT_SLOT => Capability::Touchscreen(Touch::Slot),
+                AbsoluteAxisCode::ABS_MT_TOUCH_MAJOR => Capability::Touchscreen(Touch::Major),
+                AbsoluteAxisCode::ABS_MT_TOUCH_MINOR => Capability::Touchscreen(Touch::Minor),
+                AbsoluteAxisCode::ABS_MT_WIDTH_MAJOR => Capability::Touchscreen(Touch::WidthMajor),
+                AbsoluteAxisCode::ABS_MT_WIDTH_MINOR => Capability::Touchscreen(Touch::WidthMinor),
+                AbsoluteAxisCode::ABS_MT_ORIENTATION => Capability::Touchscreen(Touch::Orientation),
+                AbsoluteAxisCode::ABS_MT_POSITION_X => Capability::Touchscreen(Touch::PositionX),
+                AbsoluteAxisCode::ABS_MT_POSITION_Y => Capability::Touchscreen(Touch::PositionY),
+                AbsoluteAxisCode::ABS_MT_TOOL_TYPE => Capability::Touchscreen(Touch::ToolType),
+                AbsoluteAxisCode::ABS_MT_BLOB_ID => Capability::Touchscreen(Touch::BlobId),
+                AbsoluteAxisCode::ABS_MT_TRACKING_ID => Capability::Touchscreen(Touch::TrackingId),
+                AbsoluteAxisCode::ABS_MT_PRESSURE => Capability::Touchscreen(Touch::Pressure),
+                AbsoluteAxisCode::ABS_MT_DISTANCE => Capability::Touchscreen(Touch::Distance),
+                AbsoluteAxisCode::ABS_MT_TOOL_X => Capability::Touchscreen(Touch::ToolX),
+                AbsoluteAxisCode::ABS_MT_TOOL_Y => Capability::Touchscreen(Touch::ToolY),
+                _ => Capability::Gamepad(Gamepad::Axis(GamepadAxis::Raw(code))),
             },
             EventType::RELATIVE => match RelativeAxisCode(code) {
                 RelativeAxisCode::REL_X => Capability::Mouse(Mouse::Motion),
@@ -497,7 +486,7 @@ impl EventCapability for EvdevEvent {
                 RelativeAxisCode::REL_WHEEL | RelativeAxisCode::REL_HWHEEL => {
                     Capability::Mouse(Mouse::Wheel)
                 }
-                _ => Capability::NotImplemented,
+                _ => Capability::Mouse(Mouse::Raw(code)),
             },
             EventType::MISC => Capability::NotImplemented,
             EventType::SWITCH => Capability::NotImplemented,
@@ -606,6 +595,19 @@ impl EvdevEvent {
                 GamepadButton::South => vec![key_event(KeyCode::BTN_SOUTH.0)],
                 GamepadButton::Start => vec![key_event(KeyCode::BTN_START.0)],
                 GamepadButton::West => vec![key_event(KeyCode::BTN_WEST.0)],
+                GamepadButton::Button0 => vec![key_event(KeyCode::BTN_0.0)],
+                GamepadButton::Button1 => vec![key_event(KeyCode::BTN_1.0)],
+                GamepadButton::Button2 => vec![key_event(KeyCode::BTN_2.0)],
+                GamepadButton::Button3 => vec![key_event(KeyCode::BTN_3.0)],
+                GamepadButton::Button4 => vec![key_event(KeyCode::BTN_4.0)],
+                GamepadButton::Button5 => vec![key_event(KeyCode::BTN_5.0)],
+                GamepadButton::Button6 => vec![key_event(KeyCode::BTN_6.0)],
+                GamepadButton::Button7 => vec![key_event(KeyCode::BTN_7.0)],
+                GamepadButton::Button8 => vec![key_event(KeyCode::BTN_8.0)],
+                GamepadButton::Button9 => vec![key_event(KeyCode::BTN_9.0)],
+                GamepadButton::Trigger => vec![key_event(KeyCode::BTN_TRIGGER.0)],
+                GamepadButton::TriggerHappy(n) => vec![key_event(0x2c0 + (n - 1) as u16)],
+                GamepadButton::Raw(code) => vec![key_event(*code)],
             },
             Gamepad::Axis(axis) => match axis {
                 GamepadAxis::LeftStick => vec![
@@ -632,6 +634,12 @@ impl EvdevEvent {
                     abs_event(AbsoluteAxisCode::ABS_HAT3X.0),
                     abs_event(AbsoluteAxisCode::ABS_HAT3Y.0),
                 ],
+                GamepadAxis::Throttle => vec![abs_event(AbsoluteAxisCode::ABS_THROTTLE.0)],
+                GamepadAxis::Rudder => vec![abs_event(AbsoluteAxisCode::ABS_RUDDER.0)],
+                GamepadAxis::Wheel => vec![abs_event(AbsoluteAxisCode::ABS_WHEEL.0)],
+                GamepadAxis::Gas => vec![abs_event(AbsoluteAxisCode::ABS_GAS.0)],
+                GamepadAxis::Brake => vec![abs_event(AbsoluteAxisCode::ABS_BRAKE.0)],
+                GamepadAxis::Raw(code) => vec![abs_event(*code)],
             },
             Gamepad::Trigger(trigg) => match trigg {
                 GamepadTrigger::LeftTrigger => vec![abs_event(AbsoluteAxisCode::ABS_Z.0)],
@@ -650,6 +658,7 @@ impl EvdevEvent {
 
     fn mouse_codes(mouse: &Mouse) -> Vec<(EventType, u16)> {
         match mouse {
+            Mouse::Raw(code) => vec![rel_event(*code)],
             Mouse::Motion => vec![
                 rel_event(RelativeAxisCode::REL_X.0),
                 rel_event(RelativeAxisCode::REL_Y.0),
@@ -664,6 +673,9 @@ impl EvdevEvent {
                 MouseButton::WheelRight => vec![],
                 MouseButton::Extra => vec![key_event(KeyCode::BTN_EXTRA.0)],
                 MouseButton::Side => vec![key_event(KeyCode::BTN_SIDE.0)],
+                MouseButton::Back => vec![key_event(KeyCode::BTN_BACK.0)],
+                MouseButton::Forward => vec![key_event(KeyCode::BTN_FORWARD.0)],
+                MouseButton::Raw(code) => vec![key_event(*code)],
             },
             Mouse::Wheel => vec![
                 rel_event(RelativeAxisCode::REL_WHEEL.0),
@@ -849,6 +861,7 @@ impl EvdevEvent {
             Keyboard::KeyYen => vec![key_event(KeyCode::KEY_YEN.0)],
             Keyboard::KeyZ => vec![key_event(KeyCode::KEY_Z.0)],
             Keyboard::KeyZenkakuhankaku => vec![key_event(KeyCode::KEY_ZENKAKUHANKAKU.0)],
+            Keyboard::Raw(code) => vec![key_event(*code)],
         }
     }
 
@@ -856,29 +869,39 @@ impl EvdevEvent {
         match touch {
             Touchpad::LeftPad(action)
             | Touchpad::RightPad(action)
-            | Touchpad::CenterPad(action) => match action {
-                Touch::Motion => vec![
-                    abs_event(AbsoluteAxisCode::ABS_MT_POSITION_X.0),
-                    abs_event(AbsoluteAxisCode::ABS_MT_POSITION_Y.0),
-                ],
-                Touch::Button(button) => match button {
-                    TouchButton::Touch => vec![key_event(KeyCode::BTN_TOUCH.0)],
-                    TouchButton::Press => vec![key_event(KeyCode::BTN_LEFT.0)],
-                },
-            },
+            | Touchpad::CenterPad(action) => Self::touch_codes(action),
         }
     }
 
     fn touchscreen_codes(touch: &Touch) -> Vec<(EventType, u16)> {
+        Self::touch_codes(touch)
+    }
+
+    fn touch_codes(touch: &Touch) -> Vec<(EventType, u16)> {
         match touch {
-            Touch::Motion => vec![
-                abs_event(AbsoluteAxisCode::ABS_MT_POSITION_X.0),
-                abs_event(AbsoluteAxisCode::ABS_MT_POSITION_Y.0),
-            ],
+            Touch::BlobId => vec![abs_event(AbsoluteAxisCode::ABS_MT_BLOB_ID.0)],
             Touch::Button(button) => match button {
                 TouchButton::Touch => vec![key_event(KeyCode::BTN_TOUCH.0)],
                 TouchButton::Press => vec![key_event(KeyCode::BTN_LEFT.0)],
             },
+            Touch::Distance => vec![abs_event(AbsoluteAxisCode::ABS_MT_DISTANCE.0)],
+            Touch::Major => vec![abs_event(AbsoluteAxisCode::ABS_MT_TOUCH_MAJOR.0)],
+            Touch::Minor => vec![abs_event(AbsoluteAxisCode::ABS_MT_TOUCH_MINOR.0)],
+            Touch::Motion => vec![
+                abs_event(AbsoluteAxisCode::ABS_MT_POSITION_X.0),
+                abs_event(AbsoluteAxisCode::ABS_MT_POSITION_Y.0),
+            ],
+            Touch::Orientation => vec![abs_event(AbsoluteAxisCode::ABS_MT_ORIENTATION.0)],
+            Touch::PositionX => vec![abs_event(AbsoluteAxisCode::ABS_MT_POSITION_X.0)],
+            Touch::PositionY => vec![abs_event(AbsoluteAxisCode::ABS_MT_POSITION_Y.0)],
+            Touch::Pressure => vec![abs_event(AbsoluteAxisCode::ABS_MT_PRESSURE.0)],
+            Touch::Slot => vec![abs_event(AbsoluteAxisCode::ABS_MT_SLOT.0)],
+            Touch::ToolType => vec![abs_event(AbsoluteAxisCode::ABS_MT_TOOL_TYPE.0)],
+            Touch::ToolX => vec![abs_event(AbsoluteAxisCode::ABS_MT_TOOL_X.0)],
+            Touch::ToolY => vec![abs_event(AbsoluteAxisCode::ABS_MT_TOOL_Y.0)],
+            Touch::TrackingId => vec![abs_event(AbsoluteAxisCode::ABS_MT_TRACKING_ID.0)],
+            Touch::WidthMajor => vec![abs_event(AbsoluteAxisCode::ABS_MT_WIDTH_MAJOR.0)],
+            Touch::WidthMinor => vec![abs_event(AbsoluteAxisCode::ABS_MT_WIDTH_MINOR.0)],
         }
     }
 

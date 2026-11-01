@@ -55,6 +55,7 @@ impl Capability {
                 Mouse::Motion => "Mouse:Motion".to_string(),
                 Mouse::Button(button) => format!("Mouse:Button:{button}"),
                 Mouse::Wheel => "Mouse:Wheel".to_string(),
+                Mouse::Raw(code) => format!("Mouse:Raw(0x{code:x})"),
             },
             Capability::Keyboard(key) => format!("Keyboard:{key}"),
             Capability::None => "None".to_string(),
@@ -62,31 +63,11 @@ impl Capability {
             Capability::Sync => "Sync".to_string(),
             Capability::DBus(action) => format!("DBus:{}", action.as_str()),
             Capability::Touchpad(touchpad) => match touchpad {
-                Touchpad::LeftPad(touch) => match touch {
-                    Touch::Motion => "Touchpad:LeftPad:Touch:Motion".to_string(),
-                    Touch::Button(touch_button) => {
-                        format!("Touchpad:LeftPad:Touch:Button:{touch_button}")
-                    }
-                },
-                Touchpad::RightPad(touch) => match touch {
-                    Touch::Motion => "Touchpad:RightPad:Touch:Motion".to_string(),
-                    Touch::Button(touch_button) => {
-                        format!("Touchpad:RightPad:Touch:Button:{touch_button}")
-                    }
-                },
-                Touchpad::CenterPad(touch) => match touch {
-                    Touch::Motion => "Touchpad:CenterPad:Touch:Motion".to_string(),
-                    Touch::Button(touch_button) => {
-                        format!("Touchpad:CenterPad:Touch:Button:{touch_button}")
-                    }
-                },
+                Touchpad::LeftPad(touch) => format!("Touchpad:LeftPad:Touch:{touch}"),
+                Touchpad::RightPad(touch) => format!("Touchpad:RightPad:Touch:{touch}"),
+                Touchpad::CenterPad(touch) => format!("Touchpad:CenterPad:Touch:{touch}"),
             },
-            Capability::Touchscreen(touch) => match touch {
-                Touch::Motion => "Touchscreen:Touch:Motion".to_string(),
-                Touch::Button(touch_button) => {
-                    format!("Touchscreen:Touch:Button:{touch_button}")
-                }
-            },
+            Capability::Touchscreen(touch) => format!("Touchscreen:Touch:{touch}"),
             Capability::Gyroscope(source) => format!("Gyroscope:{source}"),
             Capability::Accelerometer(source) => format!("Accelerometer:{source}"),
         }
@@ -419,6 +400,18 @@ pub enum Mouse {
     Button(MouseButton),
     /// Mouse wheel input is relative
     Wheel,
+    /// Raw relative (REL_*) event code with no named equivalent
+    Raw(u16),
+}
+
+/// Parses the numeric payload of a `Name(code)` capability string. Accepts
+/// decimal or 0x-prefixed hex.
+fn parse_paren_code(s: &str, name: &str) -> Option<u16> {
+    let inner = s.strip_prefix(name)?.strip_suffix(')')?;
+    if let Some(hex) = inner.strip_prefix("0x") {
+        return u16::from_str_radix(hex, 16).ok();
+    }
+    inner.parse::<u16>().ok()
 }
 
 impl fmt::Display for Mouse {
@@ -427,6 +420,7 @@ impl fmt::Display for Mouse {
             Mouse::Motion => write!(f, "Motion"),
             Mouse::Button(_) => write!(f, "Button"),
             Mouse::Wheel => write!(f, "Wheel"),
+            Mouse::Raw(code) => write!(f, "Raw(0x{:x})", code),
         }
     }
 }
@@ -444,6 +438,8 @@ impl FromStr for Mouse {
             "Button" => Ok(Mouse::Button(MouseButton::from_str(
                 parts.join(":").as_str(),
             )?)),
+            "Wheel" => Ok(Mouse::Wheel),
+            s if s.starts_with("Raw(") => parse_paren_code(s, "Raw(").map(Mouse::Raw).ok_or(()),
             _ => Err(()),
         }
     }
@@ -469,6 +465,12 @@ pub enum MouseButton {
     Extra,
     /// Extra mouse button, usually on the side of the mouse
     Side,
+    /// Back button (browser back)
+    Back,
+    /// Forward button (browser forward)
+    Forward,
+    /// Raw button (BTN_*) event code with no named equivalent
+    Raw(u16),
 }
 
 impl fmt::Display for MouseButton {
@@ -483,6 +485,9 @@ impl fmt::Display for MouseButton {
             MouseButton::WheelRight => write!(f, "WheelRight"),
             MouseButton::Extra => write!(f, "Extra1"),
             MouseButton::Side => write!(f, "Extra2"),
+            MouseButton::Back => write!(f, "Back"),
+            MouseButton::Forward => write!(f, "Forward"),
+            MouseButton::Raw(code) => write!(f, "Raw(0x{:x})", code),
         }
     }
 }
@@ -501,6 +506,11 @@ impl FromStr for MouseButton {
             "WheelRight" => Ok(MouseButton::WheelRight),
             "Extra1" => Ok(MouseButton::Extra),
             "Extra2" => Ok(MouseButton::Side),
+            "Back" => Ok(MouseButton::Back),
+            "Forward" => Ok(MouseButton::Forward),
+            s if s.starts_with("Raw(") => {
+                parse_paren_code(s, "Raw(").map(MouseButton::Raw).ok_or(())
+            }
             _ => Err(()),
         }
     }
@@ -553,6 +563,32 @@ pub enum GamepadButton {
     LeftPaddle2,
     /// Left back paddle button, No examples
     LeftPaddle3,
+    /// Generic joystick button, BTN_0
+    Button0,
+    /// Generic joystick button, BTN_1
+    Button1,
+    /// Generic joystick button, BTN_2
+    Button2,
+    /// Generic joystick button, BTN_3
+    Button3,
+    /// Generic joystick button, BTN_4
+    Button4,
+    /// Generic joystick button, BTN_5
+    Button5,
+    /// Generic joystick button, BTN_6
+    Button6,
+    /// Generic joystick button, BTN_7
+    Button7,
+    /// Generic joystick button, BTN_8
+    Button8,
+    /// Generic joystick button, BTN_9
+    Button9,
+    /// Generic joystick trigger button, BTN_TRIGGER
+    Trigger,
+    /// Happy messenger button, BTN_TRIGGER_HAPPY1..40
+    TriggerHappy(u8),
+    /// Raw button (BTN_*) event code with no named equivalent
+    Raw(u16),
     /// Z-axis button on the left stick, Sony L3, Xbox LS
     LeftStick,
     /// Touch sensor for left stick
@@ -610,6 +646,19 @@ impl fmt::Display for GamepadButton {
             GamepadButton::South => write!(f, "South"),
             GamepadButton::Start => write!(f, "Start"),
             GamepadButton::West => write!(f, "West"),
+            GamepadButton::Button0 => write!(f, "Button0"),
+            GamepadButton::Button1 => write!(f, "Button1"),
+            GamepadButton::Button2 => write!(f, "Button2"),
+            GamepadButton::Button3 => write!(f, "Button3"),
+            GamepadButton::Button4 => write!(f, "Button4"),
+            GamepadButton::Button5 => write!(f, "Button5"),
+            GamepadButton::Button6 => write!(f, "Button6"),
+            GamepadButton::Button7 => write!(f, "Button7"),
+            GamepadButton::Button8 => write!(f, "Button8"),
+            GamepadButton::Button9 => write!(f, "Button9"),
+            GamepadButton::Trigger => write!(f, "Trigger"),
+            GamepadButton::TriggerHappy(n) => write!(f, "TriggerHappy({n})"),
+            GamepadButton::Raw(code) => write!(f, "Raw(0x{:x})", code),
         }
     }
 }
@@ -651,6 +700,24 @@ impl FromStr for GamepadButton {
             "South" => Ok(GamepadButton::South),
             "Start" => Ok(GamepadButton::Start),
             "West" => Ok(GamepadButton::West),
+            "Button0" => Ok(GamepadButton::Button0),
+            "Button1" => Ok(GamepadButton::Button1),
+            "Button2" => Ok(GamepadButton::Button2),
+            "Button3" => Ok(GamepadButton::Button3),
+            "Button4" => Ok(GamepadButton::Button4),
+            "Button5" => Ok(GamepadButton::Button5),
+            "Button6" => Ok(GamepadButton::Button6),
+            "Button7" => Ok(GamepadButton::Button7),
+            "Button8" => Ok(GamepadButton::Button8),
+            "Button9" => Ok(GamepadButton::Button9),
+            "Trigger" => Ok(GamepadButton::Trigger),
+            s if s.starts_with("TriggerHappy(") => parse_paren_code(s, "TriggerHappy(")
+                .and_then(|n| u8::try_from(n).ok())
+                .map(GamepadButton::TriggerHappy)
+                .ok_or(()),
+            s if s.starts_with("Raw(") => parse_paren_code(s, "Raw(")
+                .map(GamepadButton::Raw)
+                .ok_or(()),
             _ => Err(()),
         }
     }
@@ -664,6 +731,18 @@ pub enum GamepadAxis {
     Hat1,
     Hat2,
     Hat3,
+    /// Joystick throttle axis
+    Throttle,
+    /// Joystick rudder axis
+    Rudder,
+    /// Steering wheel axis
+    Wheel,
+    /// Racing gas pedal axis
+    Gas,
+    /// Racing brake pedal axis
+    Brake,
+    /// Raw absolute (ABS_*) event code with no named equivalent
+    Raw(u16),
 }
 
 impl fmt::Display for GamepadAxis {
@@ -675,6 +754,12 @@ impl fmt::Display for GamepadAxis {
             GamepadAxis::Hat1 => write!(f, "Hat1"),
             GamepadAxis::Hat2 => write!(f, "Hat2"),
             GamepadAxis::Hat3 => write!(f, "Hat3"),
+            GamepadAxis::Throttle => write!(f, "Throttle"),
+            GamepadAxis::Rudder => write!(f, "Rudder"),
+            GamepadAxis::Wheel => write!(f, "Wheel"),
+            GamepadAxis::Gas => write!(f, "Gas"),
+            GamepadAxis::Brake => write!(f, "Brake"),
+            GamepadAxis::Raw(code) => write!(f, "Raw(0x{:x})", code),
         }
     }
 }
@@ -690,6 +775,14 @@ impl FromStr for GamepadAxis {
             "Hat1" => Ok(GamepadAxis::Hat1),
             "Hat2" => Ok(GamepadAxis::Hat2),
             "Hat3" => Ok(GamepadAxis::Hat3),
+            "Throttle" => Ok(GamepadAxis::Throttle),
+            "Rudder" => Ok(GamepadAxis::Rudder),
+            "Wheel" => Ok(GamepadAxis::Wheel),
+            "Gas" => Ok(GamepadAxis::Gas),
+            "Brake" => Ok(GamepadAxis::Brake),
+            s if s.starts_with("Raw(") => {
+                parse_paren_code(s, "Raw(").map(GamepadAxis::Raw).ok_or(())
+            }
             _ => Err(()),
         }
     }
@@ -938,6 +1031,8 @@ pub enum Keyboard {
     KeyYen,
     KeyZ,
     KeyZenkakuhankaku,
+    /// Raw key (KEY_*) event code with no named equivalent
+    Raw(u16),
 }
 
 impl fmt::Display for Keyboard {
@@ -1118,6 +1213,7 @@ impl fmt::Display for Keyboard {
             Keyboard::KeyYen => write!(f, "KeyYen"),
             Keyboard::KeyZ => write!(f, "KeyZ"),
             Keyboard::KeyZenkakuhankaku => write!(f, "KeyZenkakuhankaku"),
+            Keyboard::Raw(code) => write!(f, "Raw(0x{:x})", code),
         }
     }
 }
@@ -1231,7 +1327,7 @@ impl FromStr for Keyboard {
             "KeyKpPlus" => Ok(Keyboard::KeyKpPlus),
             "KeyKpRightParen" => Ok(Keyboard::KeyKpRightParen),
             "KeyKpSlash" => Ok(Keyboard::KeyKpSlash),
-            "KeyKpdot" => Ok(Keyboard::KeyKpDot),
+            "KeyKpDot" => Ok(Keyboard::KeyKpDot),
             "KeyL" => Ok(Keyboard::KeyL),
             "KeyLeft" => Ok(Keyboard::KeyLeft),
             "KeyLeftAlt" => Ok(Keyboard::KeyLeftAlt),
@@ -1302,6 +1398,7 @@ impl FromStr for Keyboard {
             "KeyYen" => Ok(Keyboard::KeyYen),
             "KeyZ" => Ok(Keyboard::KeyZ),
             "KeyZenkakuhankaku" => Ok(Keyboard::KeyZenkakuhankaku),
+            s if s.starts_with("Raw(") => parse_paren_code(s, "Raw(").map(Keyboard::Raw).ok_or(()),
             _ => Err(()),
         }
     }
@@ -1350,15 +1447,45 @@ impl FromStr for Touchpad {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Touch {
-    Motion,
+    BlobId,
     Button(TouchButton),
+    Distance,
+    Major,
+    Minor,
+    Motion,
+    Orientation,
+    PositionX,
+    PositionY,
+    Pressure,
+    Slot,
+    ToolType,
+    ToolX,
+    ToolY,
+    TrackingId,
+    WidthMajor,
+    WidthMinor,
 }
 
 impl fmt::Display for Touch {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Touch::BlobId => write!(f, "BlobId"),
+            Touch::Button(touch_button) => write!(f, "Button:{touch_button}"),
+            Touch::Distance => write!(f, "Distance"),
+            Touch::Major => write!(f, "Major"),
+            Touch::Minor => write!(f, "Minor"),
             Touch::Motion => write!(f, "Motion"),
-            Touch::Button(_) => write!(f, "Button"),
+            Touch::Orientation => write!(f, "Orientation"),
+            Touch::PositionX => write!(f, "PositionX"),
+            Touch::PositionY => write!(f, "PositionY"),
+            Touch::Pressure => write!(f, "Pressure"),
+            Touch::Slot => write!(f, "Slot"),
+            Touch::ToolType => write!(f, "ToolType"),
+            Touch::ToolX => write!(f, "ToolX"),
+            Touch::ToolY => write!(f, "ToolY"),
+            Touch::TrackingId => write!(f, "TrackingId"),
+            Touch::WidthMajor => write!(f, "WidthMajor"),
+            Touch::WidthMinor => write!(f, "WidthMinor"),
         }
     }
 }
@@ -1371,10 +1498,25 @@ impl FromStr for Touch {
             return Err(());
         };
         match *part {
-            "Motion" => Ok(Touch::Motion),
+            "BlobId" => Ok(Touch::BlobId),
             "Button" => Ok(Touch::Button(TouchButton::from_str(
                 parts.join(":").as_str(),
             )?)),
+            "Distance" => Ok(Touch::Distance),
+            "Major" => Ok(Touch::Major),
+            "Minor" => Ok(Touch::Minor),
+            "Motion" => Ok(Touch::Motion),
+            "Orientation" => Ok(Touch::Orientation),
+            "PositionX" => Ok(Touch::PositionX),
+            "PositionY" => Ok(Touch::PositionY),
+            "Pressure" => Ok(Touch::Pressure),
+            "Slot" => Ok(Touch::Slot),
+            "ToolType" => Ok(Touch::ToolType),
+            "ToolX" => Ok(Touch::ToolX),
+            "ToolY" => Ok(Touch::ToolY),
+            "TrackingId" => Ok(Touch::TrackingId),
+            "WidthMajor" => Ok(Touch::WidthMajor),
+            "WidthMinor" => Ok(Touch::WidthMinor),
             _ => Err(()),
         }
     }
