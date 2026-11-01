@@ -1,6 +1,11 @@
-use std::{collections::HashSet, error::Error, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Debug,
+};
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::gpd_device::{event, macro_keyboard_driver::MacroKeyboardDriver},
     input::{
         capability::{Capability, Gamepad, GamepadButton},
@@ -13,20 +18,31 @@ use crate::{
 /// GPD Win Mini macro keyboard source device implementation
 pub struct GpdMacroKeyboard {
     driver: MacroKeyboardDriver,
+    capability_map: HashMap<Capability, Capability>,
 }
 
 impl GpdMacroKeyboard {
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = MacroKeyboardDriver::new(device_info)?;
-        Ok(Self { driver })
+        Ok(Self {
+            driver,
+            capability_map,
+        })
     }
 }
 
 impl SourceInputDevice for GpdMacroKeyboard {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
@@ -39,7 +55,10 @@ impl SourceInputDevice for GpdMacroKeyboard {
     }
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 }
 

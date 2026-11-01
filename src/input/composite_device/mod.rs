@@ -1473,13 +1473,24 @@ impl CompositeDevice {
                     }
                     "hidraw" => {
                         log::debug!("Adding HIDRAW source device: {:?}", device.name());
-                        let device =
-                            HidRawDevice::new(device, self.client(), source_config.clone())?;
+                        let device = HidRawDevice::new(
+                            device,
+                            self.client(),
+                            source_config.clone(),
+                            self.capability_map.clone(),
+                            source_map,
+                        )?;
                         SourceDevice::HidRaw(device)
                     }
                     "iio" => {
                         log::debug!("Adding IIO source device: {:?}", device.name());
-                        let device = IioDevice::new(device, self.client(), source_config.clone())?;
+                        let device = IioDevice::new(
+                            device,
+                            self.client(),
+                            source_config.clone(),
+                            self.capability_map.clone(),
+                            source_map,
+                        )?;
                         SourceDevice::Iio(device)
                     }
                     "leds" => {
@@ -1489,7 +1500,13 @@ impl CompositeDevice {
                     }
                     "tty" => {
                         log::debug!("Adding TTY source device: {:?}", device.sysname());
-                        let device = TtyDevice::new(device, self.client(), source_config.clone())?;
+                        let device = TtyDevice::new(
+                            device,
+                            self.client(),
+                            source_config.clone(),
+                            self.capability_map.clone(),
+                            source_map,
+                        )?;
                         SourceDevice::Tty(device)
                     }
                     _ => {

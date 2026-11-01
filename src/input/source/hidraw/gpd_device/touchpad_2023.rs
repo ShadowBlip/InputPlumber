@@ -1,6 +1,11 @@
-use std::{collections::HashSet, error::Error, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Debug,
+};
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::gpd_device::{
         event, touchpad_driver_2023::TouchpadDriver2023, TOUCHPAD_2023_PAD_FORCE_MAX,
         TOUCHPAD_2023_X_MAX, TOUCHPAD_2023_Y_MAX,
@@ -19,20 +24,31 @@ use crate::{
 /// GPD Win Mini source device implementation
 pub struct GpdTouchpad2023 {
     driver: TouchpadDriver2023,
+    capability_map: HashMap<Capability, Capability>,
 }
 
 impl GpdTouchpad2023 {
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = TouchpadDriver2023::new(device_info)?;
-        Ok(Self { driver })
+        Ok(Self {
+            driver,
+            capability_map,
+        })
     }
 }
 
 impl SourceInputDevice for GpdTouchpad2023 {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
@@ -45,7 +61,10 @@ impl SourceInputDevice for GpdTouchpad2023 {
     }
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 }
 

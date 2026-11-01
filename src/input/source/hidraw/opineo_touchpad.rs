@@ -1,6 +1,11 @@
-use std::{collections::HashSet, error::Error, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Debug,
+};
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::opineo::{
         driver::Driver, event, LPAD_NAMES, PAD_FORCE_MAX, PAD_X_MAX, PAD_Y_MAX, RPAD_NAMES,
     },
@@ -27,13 +32,17 @@ enum TouchpadSide {
 /// OrangePi Neo Touchpad source device implementation
 pub struct OrangePiNeoTouchpad {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
     side: TouchpadSide,
 }
 
 impl OrangePiNeoTouchpad {
     /// Create a new OrangePi Neo touchscreen source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         // Query the udev module to determine if this is the left or right touchpad.
         let name = device_info.name();
         let touchpad_side = {
@@ -52,22 +61,30 @@ impl OrangePiNeoTouchpad {
 
         Ok(Self {
             driver,
+            capability_map,
             side: touchpad_side,
         })
     }
 }
 
 impl SourceInputDevice for OrangePiNeoTouchpad {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
         let native_events = translate_events(events, self.side);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {

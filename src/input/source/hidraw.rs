@@ -20,6 +20,7 @@ use std::{error::Error, time::Duration};
 
 use crate::{
     config,
+    config::capability_map::{get_capability_translations, CapabilityMapConfig},
     constants::BUS_SOURCES_PREFIX,
     drivers::{self},
     input::{
@@ -330,9 +331,12 @@ impl HidRawDevice {
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
         conf: Option<config::SourceDevice>,
+        capability_map: Option<CapabilityMapConfig>,
+        source_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let is_blocked = conf.as_ref().and_then(|c| c.blocked).unwrap_or(false);
         let driver_type = HidRawDevice::get_driver_type(&device_info, is_blocked);
+        let map = get_capability_translations(capability_map.as_ref(), source_map.as_ref());
 
         match driver_type {
             DriverType::Unknown => Err("No driver for hidraw interface found".into()),
@@ -362,7 +366,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(1),
                     buffer_size: 2048,
                 };
-                let device = DualSenseController::new(device_info.clone())?;
+                let device = DualSenseController::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -377,7 +381,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = DeckController::new(device_info.clone())?;
+                let device = DeckController::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -392,7 +396,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionGoController::new(device_info.clone())?;
+                let device = LegionGoController::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -407,7 +411,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionGo2Controller::new(device_info.clone())?;
+                let device = LegionGo2Controller::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -422,7 +426,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionGoSImuController::new(device_info.clone())?;
+                let device = LegionGoSImuController::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -437,7 +441,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionGoSTouchpadController::new(device_info.clone())?;
+                let device = LegionGoSTouchpadController::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -452,7 +456,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionGoSXInputController::new(device_info.clone())?;
+                let device = LegionGoSXInputController::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -467,7 +471,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = LegionGoTouchpad::new(device_info.clone())?;
+                let device = LegionGoTouchpad::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -482,7 +486,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = MsiClawController::new(device_info.clone())?;
+                let device = MsiClawController::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -497,7 +501,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = OrangePiNeoTouchpad::new(device_info.clone())?;
+                let device = OrangePiNeoTouchpad::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -508,7 +512,7 @@ impl HidRawDevice {
                 Ok(Self::OrangePiNeo(source_device))
             }
             DriverType::Fts3528Touchscreen => {
-                let device = Fts3528Touchscreen::new(device_info.clone())?;
+                let device = Fts3528Touchscreen::new(device_info.clone(), map.clone())?;
                 let source_device =
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::Fts3528Touchscreen(source_device))
@@ -518,7 +522,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
                 };
-                let device = XpadUhid::new(device_info.clone())?;
+                let device = XpadUhid::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -548,7 +552,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = HoripadSteam::new(device_info.clone())?;
+                let device = HoripadSteam::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -559,7 +563,7 @@ impl HidRawDevice {
                 Ok(Self::HoripadSteam(source_device))
             }
             DriverType::Vader4Pro => {
-                let device = Vader4Pro::new(device_info.clone())?;
+                let device = Vader4Pro::new(device_info.clone(), map.clone())?;
                 let options = SourceDriverOptions {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
@@ -593,7 +597,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
                 };
-                let device = GpdTouchpad2023::new(device_info.clone())?;
+                let device = GpdTouchpad2023::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -608,7 +612,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
                 };
-                let device = GpdTouchpad2024::new(device_info.clone())?;
+                let device = GpdTouchpad2024::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -623,7 +627,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
                 };
-                let device = GpdMacroKeyboard::new(device_info.clone())?;
+                let device = GpdMacroKeyboard::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -638,7 +642,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
                 };
-                let device = OxpHid::new(device_info.clone())?;
+                let device = OxpHid::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -654,7 +658,7 @@ impl HidRawDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 1024,
                 };
-                let device = Ultimate2::new(device_info.clone())?;
+                let device = Ultimate2::new(device_info.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
