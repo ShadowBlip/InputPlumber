@@ -40,7 +40,7 @@ use crate::{
         },
         target::TargetDeviceTypeId,
     },
-    udev::{hide_device, unhide_device, HideFlag},
+    udev::{hide_device, remove_hide_rules_of_removed_device, unhide_device, HideFlag},
 };
 
 use self::{client::CompositeDeviceClient, command::CompositeCommand};
@@ -401,6 +401,12 @@ impl CompositeDevice {
                     CompositeCommand::SourceDeviceRemoved(device) => {
                         log::debug!("Detected source device removed: {}", device.path());
                         devices_removed = true;
+                        let devnode = device.path();
+                        if self.source_device_paths.contains(&devnode) {
+                            if let Err(e) = remove_hide_rules_of_removed_device(&devnode).await {
+                                log::debug!("Unable to remove hide rules of {devnode}: {e:?}");
+                            }
+                        }
                         if let Err(e) = self.on_source_device_removed(device).await {
                             log::error!("Failed to remove source device: {:?}", e);
                         }

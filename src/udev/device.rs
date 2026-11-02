@@ -791,9 +791,23 @@ impl Device {
         let match_rule = match subsystem.as_str() {
             "hidraw" => {
                 let name = self.name.clone();
-                Some(format!(
-                    r#"ACTION=="add|change", SUBSYSTEMS=="{subsystem}", KERNEL=="{name}""#
-                ))
+                // The kernel reuses hidraw numbers, so matching on the name alone
+                // leaves a rule that hides whatever device gets this number next.
+                // Also match the parent HID device (e.g. "0003:17EF:61EB.0002"),
+                // whose sequence number is never reused until reboot.
+                match self.get_parent_device_name() {
+                    Some(parent) => Some(format!(
+                        r#"ACTION=="add|change", SUBSYSTEM=="{subsystem}", KERNEL=="{name}", KERNELS=="{parent}""#
+                    )),
+                    None => {
+                        log::warn!(
+                            "Unable to determine parent HID device for {name}; hide rule matches the hidraw number only"
+                        );
+                        Some(format!(
+                            r#"ACTION=="add|change", SUBSYSTEMS=="{subsystem}", KERNEL=="{name}""#
+                        ))
+                    }
+                }
             }
             "input" => {
                 let rule_fn = || {

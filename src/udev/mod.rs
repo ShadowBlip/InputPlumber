@@ -162,6 +162,54 @@ LABEL="inputplumber_end"
     Ok(())
 }
 
+/// Remove the hide rules of a source device that has been removed from the
+/// system. Unlike [unhide_device], this works without the device in sysfs.
+/// The rules are only removed if the device node no longer exists, so a device
+/// that is still present stays hidden.
+pub async fn remove_hide_rules_of_removed_device(devnode: &str) -> Result<(), Box<dyn Error>> {
+    if !(devnode.starts_with("/dev/hidraw") || devnode.starts_with("/dev/input/")) {
+        return Ok(());
+    }
+    if Path::new(devnode).exists() {
+        log::debug!("Device node {devnode} still exists; keeping its hide rules");
+        return Ok(());
+    }
+    let Some(name) = Path::new(devnode).file_name() else {
+        return Ok(());
+    };
+    let name = name.to_string_lossy();
+
+    let mut removed = false;
+    for priority in [RULE_HIDE_DEVICE_EARLY_PRIORITY, RULE_HIDE_DEVICE_LATE_PRIORITY] {
+        let kind = if priority == RULE_HIDE_DEVICE_EARLY_PRIORITY {
+            "early"
+        } else {
+            "late"
+        };
+        let rule_path = format!("{RULES_PREFIX}/{priority}-inputplumber-hide-{name}-{kind}.rules");
+        if fs::remove_file(&rule_path).is_ok() {
+            log::debug!("Removed hide rule of removed device: {rule_path}");
+            removed = true;
+        }
+    }
+
+    let hidden_symlink = format!("/dev/inputplumber/by-hidden/{name}");
+    let _ = fs::remove_file(&hidden_symlink);
+    if let Ok(mut saved) = SAVED_PERMISSIONS.lock() {
+        saved.remove(devnode);
+    }
+
+    if removed {
+        log::debug!("Reloading udev rules: udevadm control --reload-rules");
+        let _ = Command::new("udevadm")
+            .args(["control", "--reload-rules"])
+            .output()
+            .await?;
+    }
+
+    Ok(())
+}
+
 /// Unhide the given device
 pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
     // Get the device to unhide
