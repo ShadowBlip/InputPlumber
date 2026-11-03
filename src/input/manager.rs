@@ -21,7 +21,7 @@ use super::info::DeviceInfo;
 use super::target::{client::TargetDeviceClient, TargetDeviceClass};
 use crate::bluetooth::device1::Device1Proxy;
 use crate::config::{
-    capability_map::load_capability_mappings,
+    capability_map::{load_capability_mappings, CapabilityMapConfig},
     path::{get_devices_paths, get_multidir_sorted_files},
     CompositeDeviceConfig, SourceDevice,
 };
@@ -194,6 +194,10 @@ pub struct Manager {
     /// Devices that udev has not finished initializing, keyed by
     /// (subsystem, sysname) with the recheck attempt count
     uninitialized_udev_devices: HashMap<(String, String), u32>,
+    /// Device configs, cached at startup before enumeration begins
+    device_configs: Vec<(PathBuf, CompositeDeviceConfig)>,
+    /// Capability maps, cached at startup before enumeration begins
+    capability_maps: HashMap<String, CapabilityMapConfig>,
 }
 
 impl Manager {
@@ -237,12 +241,18 @@ impl Manager {
             target_gamepad_order: vec![],
             target_gamepad_order_changing: false,
             uninitialized_udev_devices: HashMap::new(),
+            device_configs: Vec::new(),
+            capability_maps: HashMap::new(),
         }
     }
 
     /// Starts listening for [Command] messages to be sent from clients and
     /// dispatch those events.
     pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Load all configs once before enumeration begins
+        self.device_configs = self.load_device_configs().await;
+        self.capability_maps = load_capability_mappings();
+
         let cmd_tx_all_devices = self.tx.clone();
 
         // Watch for hidraw/evdev inotify events.
@@ -732,13 +742,35 @@ impl Manager {
         device: DeviceInfo,
     ) -> Result<CompositeDevice, Box<dyn Error>> {
         // Lookup the capability map associated with this config if it exists
-        let capability_map = if let Some(map_id) = config.capability_map_id.clone() {
-            log::debug!("Found capability mapping in config: {map_id}");
-            let capability_map = load_capability_mappings();
-            capability_map.get(&map_id).cloned()
-        } else {
-            None
+        let capability_map = match config.capability_map_id.as_ref() {
+            Some(map_id) => {
+                log::debug!("Found capability mapping in config: {map_id}");
+                match self.capability_maps.get(map_id) {
+                    Some(map) => Some(map.clone()),
+                    None => {
+                        log::warn!("Capability map '{map_id}' not found");
+                        None
+                    }
+                }
+            }
+            None => None,
         };
+
+        // Resolve each source's capability map against the cached maps
+        let source_maps = config
+            .source_devices
+            .iter()
+            .map(|source| match source.capability_map_id.as_ref() {
+                Some(map_id) => match self.capability_maps.get(map_id) {
+                    Some(map) => Some(map.clone()),
+                    None => {
+                        log::warn!("Capability map '{map_id}' not found for source");
+                        None
+                    }
+                },
+                None => None,
+            })
+            .collect::<Vec<_>>();
 
         // Create a composite device to manage these devices
         log::info!("Found matching source device for config {path:?}");
@@ -750,6 +782,7 @@ impl Manager {
             device,
             self.next_composite_dbus_path()?,
             capability_map,
+            source_maps,
         )?;
 
         // Check to see if there's already a CompositeDevice for
@@ -1251,8 +1284,10 @@ impl Manager {
 
         // Check all CompositeDevice configs to see if this device creates
         // a match that will automatically create a CompositeDevice.
-        let configs = self.load_device_configs().await;
         log::debug!("Checking unused configs");
+        // Clone rather than borrow: creating a composite below needs
+        // &mut self while we iterate the cached configs
+        let configs = self.device_configs.clone();
         for (path, config) in configs {
             log::trace!("Checking if config {path:?} matches device",);
 
