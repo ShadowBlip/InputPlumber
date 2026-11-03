@@ -10,10 +10,7 @@ use keyboard::KeyboardEventDevice;
 use touchscreen::TouchscreenEventDevice;
 
 use crate::{
-    config::{
-        self,
-        capability_map::{load_capability_mappings, CapabilityMapConfig},
-    },
+    config::{self, capability_map::CapabilityMapConfig},
     constants::BUS_SOURCES_PREFIX,
     input::{
         capability::Capability, composite_device::client::CompositeDeviceClient,
@@ -113,19 +110,19 @@ impl EventDevice {
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
         conf: Option<config::SourceDevice>,
+        source_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let is_blocked = conf.as_ref().and_then(|c| c.blocked).unwrap_or(false);
         let driver_type = EventDevice::get_driver_type(&device_info, is_blocked);
 
-        // Check to see if a capability map was set for this device
-        let mut capability_map = None;
-        let capability_map_id = conf.clone().and_then(|device| device.capability_map_id);
-        if let Some(capability_map_id) = capability_map_id {
-            let mapping_configs = load_capability_mappings();
-            if let Some(CapabilityMapConfig::V2(config)) = mapping_configs.get(&capability_map_id) {
-                capability_map = Some(config.clone());
-            }
-        }
+        // Only V2 capability maps are supported on evdev sources
+        let capability_map = source_map
+            .as_ref()
+            .and_then(|map| match map {
+                CapabilityMapConfig::V2(config) => Some(config),
+                _ => None,
+            })
+            .cloned();
 
         match driver_type {
             DriverType::Blocked => {

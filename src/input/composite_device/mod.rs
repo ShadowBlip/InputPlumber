@@ -94,6 +94,9 @@ pub struct CompositeDevice {
     output_capabilities_by_source: HashMap<String, HashSet<OutputCapability>>,
     /// Capability mapping for the CompositeDevice
     capability_map: Option<CapabilityMapConfig>,
+    /// Resolved capability maps for each source, in the same order as
+    /// `config.source_devices`
+    source_maps: Vec<Option<CapabilityMapConfig>>,
     /// Currently loaded [DeviceProfile] for the [CompositeDevice]. The [DeviceProfile]
     /// is used to translate input events.
     device_profile: Option<DeviceProfile>,
@@ -184,6 +187,7 @@ impl CompositeDevice {
         device_info: DeviceInfo,
         dbus_path: String,
         capability_map: Option<CapabilityMapConfig>,
+        source_maps: Vec<Option<CapabilityMapConfig>>,
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating CompositeDevice with config: {}", config.name);
         let (tx, rx) = mpsc::channel(BUFFER_SIZE);
@@ -198,6 +202,7 @@ impl CompositeDevice {
             output_capabilities: HashSet::new(),
             output_capabilities_by_source: HashMap::new(),
             capability_map,
+            source_maps,
             device_profile: None,
             device_profile_path: None,
             device_profile_config_map: HashMap::new(),
@@ -1739,6 +1744,14 @@ impl CompositeDevice {
             }
         }
 
+        // Resolve the source's capability map, if the config entry has one
+        let source_map = source_config
+            .as_ref()
+            .and_then(|config| self.config.source_devices.iter().position(|s| s == config))
+            .and_then(|index| self.source_maps.get(index))
+            .and_then(Option::as_ref)
+            .cloned();
+
         log::debug!("Adding source device: {:?}", device.name());
         let source_device = match device {
             DeviceInfo::Udev(device) => {
@@ -1778,8 +1791,12 @@ impl CompositeDevice {
                         if is_blocked {
                             is_blocked_evdev = true;
                         }
-                        let device =
-                            EventDevice::new(device, self.client(), source_config.clone())?;
+                        let device = EventDevice::new(
+                            device,
+                            self.client(),
+                            source_config.clone(),
+                            source_map,
+                        )?;
                         SourceDevice::Event(device)
                     }
                     "hidraw" => {
