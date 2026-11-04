@@ -8,7 +8,7 @@ use super::{
         AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, OutputEvent, TriggerEvent,
         TriggerInput,
     },
-    hid_report::{InputDataReport, RumbleOutputDataReport},
+    hid_report::{InputDataReport, ReportId, RumbleOutputDataReport},
     GAMEPAD_TIMEOUT, INPUT_PACKET_SIZE, PID, VID,
 };
 
@@ -45,6 +45,13 @@ impl Driver {
         let bytes_read = self.device.read_timeout(&mut buf[..], GAMEPAD_TIMEOUT)?;
 
         if bytes_read != INPUT_PACKET_SIZE {
+            return Ok(vec![]);
+        }
+
+        // Config interface responses share this endpoint, so drop any report
+        // that is not an input report to avoid phantom events.
+        if buf[0] != ReportId::InputData.to_u8() {
+            log::debug!("Got unhandled report id {:#x}, dropping", buf[0]);
             return Ok(vec![]);
         }
 
