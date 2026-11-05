@@ -1122,6 +1122,15 @@ impl CompositeDevice {
     async fn write_event(&self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
         let cap = event.as_capability();
 
+        // IMU samples are not gamepad/button events and are normally consumed
+        // by physical targets. Mirror them to DBus target devices so overlays
+        // and companion applications can subscribe to motion without taking
+        // ownership of the IIO buffer.
+        if matches!(cap, Capability::Gyroscope(_) | Capability::Accelerometer(_)) {
+            self.targets.write_dbus_event(event.clone()).await;
+            return Ok(());
+        }
+
         // If this event implements the DBus capability, send the event to DBus devices
         if matches!(cap, Capability::DBus(_)) {
             self.targets.write_dbus_event(event).await;

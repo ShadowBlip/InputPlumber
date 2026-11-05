@@ -45,6 +45,21 @@
   | **value** | ** | *d* |  |
   
 
+#### MotionEvent
+
+Emitted for each IMU sample. The sensor name is `gyroscope` or
+`accelerometer`; values use the same units as the source device.
+
+##### Arguments
+
+| Name | Direction | Type | Description |
+| --- | :---: | :---: | --- |
+  | **sensor** | ** | *s* |  |
+  | **x** | ** | *d* |  |
+  | **y** | ** | *d* |  |
+  | **z** | ** | *d* |  |
+  
+
 ## org.freedesktop.DBus.Peer
 
 ### Methods
