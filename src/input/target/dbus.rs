@@ -11,7 +11,7 @@ use crate::{
         DBusInterfaceManager,
     },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Source},
         composite_device::client::CompositeDeviceClient,
         event::{
             dbus::{Action, DBusEvent},
@@ -234,6 +234,33 @@ impl DBusDevice {
     }
 
     /// Writes the given event to DBus
+    fn write_motion_event(&self, sensor: &str, x: f64, y: f64, z: f64) {
+        let Some(dbus) = self.dbus.as_ref() else {
+            return;
+        };
+        let path = dbus.path().to_string();
+        let conn = dbus.connection().clone();
+        let sensor = sensor.to_string();
+        tokio::task::spawn(async move {
+            let iface_ref = match conn
+                .object_server()
+                .interface::<_, TargetDBusInterface>(path.as_str())
+                .await
+            {
+                Ok(reference) => reference,
+                Err(err) => {
+                    log::error!("Failed to get motion interface: {err:?}");
+                    return;
+                }
+            };
+            if let Err(err) =
+                TargetDBusInterface::motion_event(iface_ref.signal_emitter(), sensor, x, y, z).await
+            {
+                log::error!("Failed to send motion event: {err:?}");
+            }
+        });
+    }
+
     fn write_dbus_event(&self, event: DBusEvent) -> Result<(), Box<dyn Error>> {
         // Only send valid events
         let valid = !matches!(event.action, Action::None);
@@ -366,6 +393,17 @@ impl TargetInputDevice for DBusDevice {
         event: crate::input::event::native::NativeEvent,
     ) -> Result<(), InputError> {
         log::trace!("Got event to emit: {:?}", event);
+        // IMU values are Vector3 and cannot be represented by the scalar
+        // InputEvent signal. Preserve the full vector on a dedicated signal.
+        if let InputValue::Vector3 { x, y, z } = event.get_value() {
+            let sensor = match event.as_capability() {
+                Capability::Gyroscope(_) => "gyroscope",
+                Capability::Accelerometer(_) => "accelerometer",
+                _ => return Ok(()),
+            };
+            self.write_motion_event(sensor, x.unwrap_or(0.0), y.unwrap_or(0.0), z.unwrap_or(0.0));
+            return Ok(());
+        }
         if self.is_duplicate_event(&event) {
             return Ok(());
         }
@@ -454,9 +492,30 @@ impl TargetInputDevice for DBusDevice {
             Capability::DBus(Action::Keyboard),
             Capability::DBus(Action::Screenshot),
             Capability::DBus(Action::Touch),
+            Capability::Gyroscope(Source::Center),
+            Capability::Accelerometer(Source::Center),
         ];
 
         Ok(capabilities)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DBusDevice;
+    use crate::input::{capability::Capability, target::TargetInputDevice};
+
+    #[test]
+    fn capabilities_include_imu_motion() {
+        let device = DBusDevice::new();
+        let capabilities = device.get_capabilities().expect("capabilities");
+
+        assert!(capabilities.contains(&Capability::Gyroscope(
+            crate::input::capability::Source::Center
+        )));
+        assert!(capabilities.contains(&Capability::Accelerometer(
+            crate::input::capability::Source::Center
+        )));
     }
 }
 
