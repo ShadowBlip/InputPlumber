@@ -1614,6 +1614,20 @@ impl CompositeDevice {
         let path = device.path();
         let id = device.get_id();
 
+        // A source task may have already removed this device.
+        if !self.source_devices_used.contains(&id) {
+            log::trace!("Source device {id} was already removed");
+            return Ok(());
+        }
+
+        // Blocked sources never observe their device dying.
+        if let Some(source) = self.source_devices.get(&id) {
+            if let Err(e) = source.stop().await {
+                log::debug!("Failed to stop source device {id}: {e:?}");
+            }
+        }
+        self.source_devices.remove(&id);
+
         // The device node is gone, so drop its hide rules
         if let Some(name) = Path::new(&path).file_name() {
             remove_hide_rules(&name.to_string_lossy());
