@@ -48,6 +48,7 @@ pub struct DualSenseController {
     haptic_state: Option<HapticState>,
     pending_output: Option<SetStatePackedOutputData>,
     last_output: Instant,
+    device_state: Option<SetStatePackedOutputData>,
 }
 
 impl DualSenseController {
@@ -61,6 +62,7 @@ impl DualSenseController {
             haptic_state: None,
             pending_output: None,
             last_output: Instant::now(),
+            device_state: None,
         })
     }
 
@@ -93,6 +95,14 @@ impl DualSenseController {
         let Some(state) = self.pending_output else {
             return;
         };
+        let changes_device = self
+            .device_state
+            .as_ref()
+            .is_none_or(|current| current.would_change(&state));
+        if !changes_device {
+            self.pending_output = None;
+            return;
+        }
         if self.last_output.elapsed() < self.output_interval() {
             return;
         }
@@ -102,8 +112,22 @@ impl DualSenseController {
     fn write_output(&mut self, state: SetStatePackedOutputData) {
         self.last_output = Instant::now();
         match self.driver.write(state) {
-            Ok(()) => self.pending_output = None,
+            Ok(()) => {
+                self.pending_output = None;
+                let mut device_state = self.device_state.unwrap_or_default();
+                device_state.merge(&state);
+                self.device_state = Some(device_state);
+            }
             Err(e) => log::debug!("Failed to write DualSense output report, retrying: {e:?}"),
+        }
+    }
+
+    fn restore_output_after_reset(&mut self) {
+        if !self.driver.take_output_reset() {
+            return;
+        }
+        if let Some(state) = self.device_state.take() {
+            self.queue_output(state);
         }
     }
 
@@ -227,6 +251,7 @@ impl SourceInputDevice for DualSenseController {
         self.flush_output();
 
         let events = self.driver.poll()?;
+        self.restore_output_after_reset();
         let native_events = translate_events(events);
 
         Ok(native_events)

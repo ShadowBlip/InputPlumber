@@ -901,6 +901,16 @@ impl SetStatePackedOutputData {
         self._unkn_bit_2 |= newer._unkn_bit_2;
         self.host_timestamp = newer.host_timestamp;
     }
+
+    pub fn would_change(&self, newer: &Self) -> bool {
+        if newer.reset_lights {
+            return true;
+        }
+        let mut next = *self;
+        next.merge(newer);
+        next.host_timestamp = self.host_timestamp;
+        next != *self
+    }
 }
 
 pub const OUTPUT_REPORT_BT_TAG: u8 = 0x10;

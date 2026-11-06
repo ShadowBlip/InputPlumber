@@ -142,6 +142,7 @@ pub struct Driver {
     bluetooth: bool,
     output_seq: u8,
     leds_initialized: bool,
+    output_reset: bool,
     /// Pitch, yaw, roll.
     gyro_calibration: [AxisCalibration; 3],
     /// X, y, z.
@@ -174,6 +175,7 @@ impl Driver {
             touch_state: [false, false],
             last_touch: Instant::now(),
             leds_initialized: false,
+            output_reset: false,
             gyro_calibration,
             accel_calibration,
             filtered_events: vec![],
@@ -234,6 +236,10 @@ impl Driver {
         self.bluetooth
     }
 
+    pub fn take_output_reset(&mut self) -> bool {
+        std::mem::take(&mut self.output_reset)
+    }
+
     /// Release the LEDs from Wireless firmware control
     /// When in wireless mode this must be signaled to control LEDs
     /// This cannot be applied during the BT pair animation.
@@ -290,7 +296,10 @@ impl Driver {
                 .reset_lights()
                 .and_then(|_| self.set_led_color(100, 72, 42))
             {
-                Ok(()) => self.leds_initialized = true,
+                Ok(()) => {
+                    self.leds_initialized = true;
+                    self.output_reset = true;
+                }
                 Err(e) => log::debug!("Failed to initialize DualSense LEDs, retrying: {e:?}"),
             }
         }

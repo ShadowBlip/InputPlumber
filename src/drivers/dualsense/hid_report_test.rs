@@ -208,3 +208,47 @@ fn merge_replaces_trigger_effects_per_side() {
     assert_eq!(merged.right_trigger_ffb, [3; 11]);
     assert_eq!(merged.left_trigger_ffb, [2; 11]);
 }
+
+#[test]
+fn would_change_ignores_repeated_states() {
+    let led = SetStatePackedOutputData {
+        allow_led_color: true,
+        led_red: 10,
+        led_green: 20,
+        led_blue: 30,
+        ..Default::default()
+    };
+    let rumble = SetStatePackedOutputData {
+        use_rumble_not_haptics: true,
+        enable_rumble_emulation: true,
+        rumble_emulation_left: 120,
+        ..Default::default()
+    };
+    let mut device = SetStatePackedOutputData::default();
+    device.merge(&led);
+    device.merge(&rumble);
+
+    assert!(!device.would_change(&led));
+    assert!(!device.would_change(&rumble));
+    assert!(!device.would_change(&SetStatePackedOutputData {
+        host_timestamp: 1234.into(),
+        ..led
+    }));
+    assert!(device.would_change(&SetStatePackedOutputData {
+        led_blue: 31,
+        ..led
+    }));
+    assert!(device.would_change(&SetStatePackedOutputData {
+        rumble_emulation_left: 0,
+        ..rumble
+    }));
+    assert!(device.would_change(&SetStatePackedOutputData {
+        allow_right_trigger_ffb: true,
+        right_trigger_ffb: [0x21, 0xFF, 0x03, 0, 0, 0, 0, 0, 0, 0, 0],
+        ..Default::default()
+    }));
+    assert!(device.would_change(&SetStatePackedOutputData {
+        reset_lights: true,
+        ..Default::default()
+    }));
+}
