@@ -40,9 +40,32 @@ pub trait AttributeGetter {
     fn drivers(&self) -> Vec<String>;
 }
 
+/// Parses a HID_ID uevent property ("0005:0000054C:00000CE6") into bus, vendor and product.
+pub fn parse_hid_id(value: &str) -> Option<(u16, u16, u16)> {
+    let mut fields = value.split(':').map(|field| {
+        u32::from_str_radix(field, 16)
+            .ok()
+            .and_then(|v| u16::try_from(v).ok())
+    });
+    let bus = fields.next()??;
+    let vendor = fields.next()??;
+    let product = fields.next()??;
+    Some((bus, vendor, product))
+}
+
+fn hid_id(device: &::udev::Device) -> Option<(u16, u16, u16)> {
+    if device.subsystem().is_some_and(|s| s == "input") {
+        return None;
+    }
+    parse_hid_id(&device.get_property_from_tree("HID_ID")?)
+}
+
 impl AttributeGetter for ::udev::Device {
     /// Return the bustype attribute from the device
     fn id_bustype(&self) -> u16 {
+        if let Some((bus, _, _)) = hid_id(self) {
+            return bus;
+        }
         let orig = self.get_attribute_from_tree("id/bustype");
         let stripped = orig.strip_prefix("0x").unwrap_or(orig.as_str());
         let attr = u16::from_str_radix(stripped, 16).unwrap_or(0);
@@ -67,6 +90,9 @@ impl AttributeGetter for ::udev::Device {
                 u16::from_str_radix(stripped, 16).unwrap_or(0)
             }
             _ => {
+                if let Some((_, _, product)) = hid_id(self) {
+                    return product;
+                }
                 let orig = self.get_attribute_from_tree("idProduct");
                 let stripped = orig.strip_prefix("0x").unwrap_or(orig.as_str());
                 let attr = u16::from_str_radix(stripped, 16).unwrap_or(0);
@@ -93,6 +119,9 @@ impl AttributeGetter for ::udev::Device {
                 u16::from_str_radix(stripped, 16).unwrap_or(0)
             }
             _ => {
+                if let Some((_, vendor, _)) = hid_id(self) {
+                    return vendor;
+                }
                 let orig = self.get_attribute_from_tree("idVendor");
                 let stripped = orig.strip_prefix("0x").unwrap_or(orig.as_str());
                 let attr = u16::from_str_radix(stripped, 16).unwrap_or(0);
