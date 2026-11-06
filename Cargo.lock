@@ -1047,6 +1047,7 @@ dependencies = [
  "glob-match",
  "hidapi",
  "inotify",
+ "libc",
  "log",
  "mio",
  "nix 0.30.1",
