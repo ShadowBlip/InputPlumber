@@ -16,7 +16,8 @@ use uhid_virt::{Bus, CreateParams, StreamError, UHIDDevice};
 use crate::{
     drivers::dualsense::{
         hid_report::{
-            CalibrationReport, Direction, PackedInputDataReport, USBPackedInputDataReport,
+            output_report_bt_crc32, BluetoothPackedOutputReport, CalibrationReport, Direction,
+            PackedInputDataReport, SetStatePackedOutputData, USBPackedInputDataReport,
             UsbPackedOutputReport, UsbPackedOutputReportShort,
         },
         report_descriptor::{
@@ -706,7 +707,18 @@ impl DualSenseDevice {
                     "Received Bluetooth output report with length: {}",
                     data.len()
                 );
-                //
+                let Some(buf) = data.get(..OUTPUT_REPORT_BT_SIZE) else {
+                    log::warn!("Failed to unpack Bluetooth output report. Expected size {OUTPUT_REPORT_BT_SIZE}, got {}.", data.len());
+                    return Ok(vec![]);
+                };
+                let buf: [u8; OUTPUT_REPORT_BT_SIZE] = buf.try_into()?;
+                let report = BluetoothPackedOutputReport::unpack(&buf)?;
+                let crc = output_report_bt_crc32(&buf[..OUTPUT_REPORT_BT_SIZE - 4]);
+                if crc != report.crc32.to_primitive() {
+                    log::warn!("Dropping Bluetooth output report with invalid CRC");
+                    return Ok(vec![]);
+                }
+                return Ok(vec![OutputEvent::DualSense(report.state)]);
             }
             _ => {
                 log::debug!("Unknown output report: {report_id}");
@@ -983,127 +995,138 @@ impl TargetInputDevice for DualSenseDevice {
     }
 }
 
+const MAX_UHID_EVENTS_PER_POLL: usize = 64;
+
+fn coalesce_output_events(events: Vec<OutputEvent>) -> Vec<OutputEvent> {
+    let mut merged: Option<SetStatePackedOutputData> = None;
+    let mut coalesced = Vec::with_capacity(events.len());
+    for event in events {
+        match event {
+            OutputEvent::DualSense(state) => match merged.as_mut() {
+                Some(pending) => pending.merge(&state),
+                None => merged = Some(state),
+            },
+            other => coalesced.push(other),
+        }
+    }
+    coalesced.extend(merged.map(OutputEvent::DualSense));
+    coalesced
+}
+
 impl TargetOutputDevice for DualSenseDevice {
     /// Handle reading from the device and processing input events from source
     /// devices.
     /// https://www.kernel.org/doc/html/latest/hid/uhid.html#read
     fn poll(&mut self, _: &Option<CompositeDeviceClient>) -> Result<Vec<OutputEvent>, OutputError> {
-        // Read output events
-        let event = match self.device.read() {
-            Ok(event) => event,
-            Err(err) => match err {
-                StreamError::Io(_e) => {
-                    //log::error!("Error reading from UHID device: {e:?}");
-                    // Write the current state
-                    self.write_state()?;
-                    return Ok(vec![]);
-                }
-                StreamError::UnknownEventType(e) => {
+        let mut output_events = Vec::new();
+        for _ in 0..MAX_UHID_EVENTS_PER_POLL {
+            let event = match self.device.read() {
+                Ok(event) => event,
+                Err(StreamError::Io(_)) => break,
+                Err(StreamError::UnknownEventType(e)) => {
                     log::debug!("Unknown event type: {:?}", e);
-                    // Write the current state
-                    self.write_state()?;
-                    return Ok(vec![]);
+                    break;
                 }
-            },
-        };
+            };
 
-        // Match the type of UHID output event
-        let output_events = match event {
-            // This is sent when the HID device is started. Consider this as an answer to
-            // UHID_CREATE. This is always the first event that is sent.
-            uhid_virt::OutputEvent::Start { dev_flags: _ } => {
-                log::debug!("Start event received");
-                Ok(vec![])
-            }
-            // This is sent when the HID device is stopped. Consider this as an answer to
-            // UHID_DESTROY.
-            uhid_virt::OutputEvent::Stop => {
-                log::debug!("Stop event received");
-                Ok(vec![])
-            }
-            // This is sent when the HID device is opened. That is, the data that the HID
-            // device provides is read by some other process. You may ignore this event but
-            // it is useful for power-management. As long as you haven't received this event
-            // there is actually no other process that reads your data so there is no need to
-            // send UHID_INPUT events to the kernel.
-            uhid_virt::OutputEvent::Open => {
-                log::debug!("Open event received");
-                self.is_open = true;
-                Ok(vec![])
-            }
-            // This is sent when there are no more processes which read the HID data. It is
-            // the counterpart of UHID_OPEN and you may as well ignore this event.
-            uhid_virt::OutputEvent::Close => {
-                log::debug!("Close event received");
-                // Drop the cached report so the next consumer to open is synced.
-                self.is_open = false;
-                self.last_written = None;
-                Ok(vec![])
-            }
-            // This is sent if the HID device driver wants to send raw data to the I/O
-            // device. You should read the payload and forward it to the device.
-            uhid_virt::OutputEvent::Output { data } => {
-                log::trace!("Got output data: {:?}", data);
-                let result = self.handle_output(data);
-                match result {
-                    Ok(events) => Ok(events),
-                    Err(e) => {
-                        let err = format!("Failed process output event: {:?}", e);
-                        Err(err.into())
+            // Match the type of UHID output event
+            let events: Result<Vec<OutputEvent>, OutputError> = match event {
+                // This is sent when the HID device is started. Consider this as an answer to
+                // UHID_CREATE. This is always the first event that is sent.
+                uhid_virt::OutputEvent::Start { dev_flags: _ } => {
+                    log::debug!("Start event received");
+                    Ok(vec![])
+                }
+                // This is sent when the HID device is stopped. Consider this as an answer to
+                // UHID_DESTROY.
+                uhid_virt::OutputEvent::Stop => {
+                    log::debug!("Stop event received");
+                    Ok(vec![])
+                }
+                // This is sent when the HID device is opened. That is, the data that the HID
+                // device provides is read by some other process. You may ignore this event but
+                // it is useful for power-management. As long as you haven't received this event
+                // there is actually no other process that reads your data so there is no need to
+                // send UHID_INPUT events to the kernel.
+                uhid_virt::OutputEvent::Open => {
+                    log::debug!("Open event received");
+                    self.is_open = true;
+                    Ok(vec![])
+                }
+                // This is sent when there are no more processes which read the HID data. It is
+                // the counterpart of UHID_OPEN and you may as well ignore this event.
+                uhid_virt::OutputEvent::Close => {
+                    log::debug!("Close event received");
+                    // Drop the cached report so the next consumer to open is synced.
+                    self.is_open = false;
+                    self.last_written = None;
+                    Ok(vec![])
+                }
+                // This is sent if the HID device driver wants to send raw data to the I/O
+                // device. You should read the payload and forward it to the device.
+                uhid_virt::OutputEvent::Output { data } => {
+                    log::trace!("Got output data: {:?}", data);
+                    let result = self.handle_output(data);
+                    match result {
+                        Ok(events) => Ok(events),
+                        Err(e) => {
+                            let err = format!("Failed process output event: {:?}", e);
+                            Err(err.into())
+                        }
                     }
                 }
-            }
-            // This event is sent if the kernel driver wants to perform a GET_REPORT request
-            // on the control channel as described in the HID specs. The report-type and
-            // report-number are available in the payload.
-            // The kernel serializes GET_REPORT requests so there will never be two in
-            // parallel. However, if you fail to respond with a UHID_GET_REPORT_REPLY, the
-            // request might silently time out.
-            // Once you read a GET_REPORT request, you shall forward it to the HID device and
-            // remember the "id" field in the payload. Once your HID device responds to the
-            // GET_REPORT (or if it fails), you must send a UHID_GET_REPORT_REPLY to the
-            // kernel with the exact same "id" as in the request. If the request already
-            // timed out, the kernel will ignore the response silently. The "id" field is
-            // never re-used, so conflicts cannot happen.
-            uhid_virt::OutputEvent::GetReport {
-                id,
-                report_number,
-                report_type,
-            } => {
-                log::trace!(
-                    "Received GetReport event: id: {id}, num: {report_number}, type: {:?}",
-                    report_type
-                );
-                let result = self.handle_get_report(id, report_number, report_type);
-                if let Err(e) = result {
-                    let err = format!("Failed to process GetReport event: {:?}", e);
-                    return Err(err.into());
+                // This event is sent if the kernel driver wants to perform a GET_REPORT request
+                // on the control channel as described in the HID specs. The report-type and
+                // report-number are available in the payload.
+                // The kernel serializes GET_REPORT requests so there will never be two in
+                // parallel. However, if you fail to respond with a UHID_GET_REPORT_REPLY, the
+                // request might silently time out.
+                // Once you read a GET_REPORT request, you shall forward it to the HID device and
+                // remember the "id" field in the payload. Once your HID device responds to the
+                // GET_REPORT (or if it fails), you must send a UHID_GET_REPORT_REPLY to the
+                // kernel with the exact same "id" as in the request. If the request already
+                // timed out, the kernel will ignore the response silently. The "id" field is
+                // never re-used, so conflicts cannot happen.
+                uhid_virt::OutputEvent::GetReport {
+                    id,
+                    report_number,
+                    report_type,
+                } => {
+                    log::trace!(
+                        "Received GetReport event: id: {id}, num: {report_number}, type: {:?}",
+                        report_type
+                    );
+                    let result = self.handle_get_report(id, report_number, report_type);
+                    if let Err(e) = result {
+                        let err = format!("Failed to process GetReport event: {:?}", e);
+                        return Err(err.into());
+                    }
+                    Ok(vec![])
                 }
-                Ok(vec![])
-            }
-            // This is the SET_REPORT equivalent of UHID_GET_REPORT. On receipt, you shall
-            // send a SET_REPORT request to your HID device. Once it replies, you must tell
-            // the kernel about it via UHID_SET_REPORT_REPLY.
-            // The same restrictions as for UHID_GET_REPORT apply.
-            uhid_virt::OutputEvent::SetReport {
-                id,
-                report_number,
-                report_type,
-                data,
-            } => {
-                log::debug!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
-                if let Err(e) = self.device.write_set_report_reply(id, 0) {
-                    log::warn!("Failed to write set report reply: {:?}", e);
-                    return Err(e.to_string().into());
+                // This is the SET_REPORT equivalent of UHID_GET_REPORT. On receipt, you shall
+                // send a SET_REPORT request to your HID device. Once it replies, you must tell
+                // the kernel about it via UHID_SET_REPORT_REPLY.
+                // The same restrictions as for UHID_GET_REPORT apply.
+                uhid_virt::OutputEvent::SetReport {
+                    id,
+                    report_number,
+                    report_type,
+                    data,
+                } => {
+                    log::debug!("Received SetReport event: id: {id}, num: {report_number}, type: {:?}, data: {:?}", report_type, data);
+                    if let Err(e) = self.device.write_set_report_reply(id, 0) {
+                        log::warn!("Failed to write set report reply: {:?}", e);
+                        return Err(e.to_string().into());
+                    }
+                    Ok(vec![])
                 }
-                Ok(vec![])
-            }
-        };
+            };
+            output_events.extend(events?);
+        }
 
-        // Write the current state
         self.write_state()?;
 
-        output_events
+        Ok(coalesce_output_events(output_events))
     }
 
     fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
