@@ -9,7 +9,8 @@ pub mod device;
 use std::{
     collections::HashMap,
     error::Error,
-    fs,
+    ffi::CString,
+    fs, io,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
@@ -39,9 +40,6 @@ pub async fn hide_device(path: &str, flags: &[HideFlag]) -> Result<(), Box<dyn E
     // Get the device to hide
     let device = get_device(path.to_string()).await?;
     let name = device.name.clone();
-    let Some(parent) = device.get_parent() else {
-        return Err("Unable to determine parent for device".into());
-    };
     let subsystem = device.subsystem.clone();
     let Some(match_rule) = device.get_match_rule() else {
         return Err("Unable to create match rule for device".into());
@@ -155,9 +153,60 @@ LABEL="inputplumber_end"
     fs::write(rule_path, rule)?;
 
     // Reload udev
-    reload_children(parent).await?;
+    reload_rules().await?;
+
+    // Replace the node so clients watching it drop their fd.
+    if flags.contains(&HideFlag::ChangePermissions) && !flags.contains(&HideFlag::MoveSourceDevice)
+    {
+        // Strip any prefix before parsing.
+        let node = device
+            .node
+            .trim_start_matches(|c: char| !c.is_ascii_digit());
+        let Some((major, minor)) = node.split_once(':').and_then(|(major, minor)| {
+            let major = major.parse::<u32>().ok()?;
+            let minor = minor.parse::<u32>().ok()?;
+            Some((major, minor))
+        }) else {
+            log::warn!(
+                "Unable to parse device node number '{}', skipping node recreation",
+                device.node
+            );
+            return Ok(());
+        };
+        if let Err(e) = recreate_hidden_node(&dst_path, major, minor) {
+            log::warn!("Failed to recreate hidden node {dst_path}: {e}");
+        }
+    }
 
     Ok(())
+}
+
+/// Unlink the device node and recreate it as a character device with mode 000.
+fn recreate_hidden_node(path: &str, major: u32, minor: u32) -> Result<(), Box<dyn Error>> {
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+
+    let cpath = CString::new(path)?;
+    let dev = libc::makedev(major, minor);
+    let ret = unsafe { libc::mknod(cpath.as_ptr(), libc::S_IFCHR, dev) };
+    if ret == 0 {
+        return Ok(());
+    }
+    let e = io::Error::last_os_error();
+    match e.raw_os_error() {
+        Some(libc::ENODEV) => {
+            log::warn!("Device behind {path} is gone, skipping node recreation");
+            Ok(())
+        }
+        Some(libc::EEXIST) => {
+            log::warn!("Node {path} already exists after removal, skipping recreation");
+            Ok(())
+        }
+        _ => Err(e.into()),
+    }
 }
 
 /// Remove the hide rules created for the device with the given name (e.g. "hidraw5").
@@ -306,13 +355,20 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Trigger udev to evaluate rules on the children of the given parent device path
-async fn reload_children(parent: String) -> Result<(), Box<dyn Error>> {
+/// Reload the udev ruleset so new and removed rules take effect.
+async fn reload_rules() -> Result<(), Box<dyn Error>> {
     log::debug!("Reloading udev rules: udevadm control --reload-rules");
     let _ = Command::new("udevadm")
         .args(["control", "--reload-rules"])
         .output()
         .await?;
+
+    Ok(())
+}
+
+/// Trigger udev to evaluate rules on the children of the given parent device path.
+async fn reload_children(parent: String) -> Result<(), Box<dyn Error>> {
+    reload_rules().await?;
 
     for action in ["remove", "add"] {
         log::debug!("Retriggering udev rules: udevadm trigger --action {action} -b {parent}");
@@ -327,11 +383,7 @@ async fn reload_children(parent: String) -> Result<(), Box<dyn Error>> {
 
 /// Trigger udev to evaluate rules on the children of the given parent device path
 async fn reload_all() -> Result<(), Box<dyn Error>> {
-    log::debug!("Reloading udev rules: udevadm control --reload-rules");
-    let _ = Command::new("udevadm")
-        .args(["control", "--reload-rules"])
-        .output()
-        .await?;
+    reload_rules().await?;
 
     for action in ["remove", "add"] {
         for subsystem in ["input", "hidraw"] {
