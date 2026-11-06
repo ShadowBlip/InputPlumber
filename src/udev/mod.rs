@@ -11,7 +11,7 @@ use std::{
     error::Error,
     ffi::CString,
     fs, io,
-    os::unix::fs::PermissionsExt,
+    os::unix::fs::{chown, MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
 };
@@ -25,8 +25,26 @@ const RULE_HIDE_DEVICE_EARLY_PRIORITY: &str = "50";
 const RULE_HIDE_DEVICE_LATE_PRIORITY: &str = "96";
 const RULES_PREFIX: &str = "/run/udev/rules.d";
 
-static SAVED_PERMISSIONS: LazyLock<Mutex<HashMap<String, u32>>> =
+/// Node attributes saved before a device is hidden so they can be restored on unhide.
+#[derive(Debug, Clone, Copy)]
+struct NodeAttributes {
+    mode: u32,
+    uid: u32,
+    gid: u32,
+}
+
+static SAVED_PERMISSIONS: LazyLock<Mutex<HashMap<String, NodeAttributes>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Restore the saved mode and ownership of a device node if it exists.
+fn restore_node_attributes(path: &Path, attrs: NodeAttributes) {
+    if let Ok(metadata) = fs::metadata(path) {
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(attrs.mode);
+        let _ = fs::set_permissions(path, permissions);
+    }
+    let _ = chown(path, Some(attrs.uid), Some(attrs.gid));
+}
 
 /// HideFlags can be used to change the behavior of how devices are hidden.
 #[derive(Debug, PartialEq, Eq)]
@@ -52,12 +70,16 @@ pub async fn hide_device(path: &str, flags: &[HideFlag]) -> Result<(), Box<dyn E
     };
 
     if let Ok(metadata) = fs::metadata(&dst_path).or_else(|_| fs::metadata(path)) {
-        let mode = metadata.permissions().mode() & 0o7777;
-        if mode != 0 {
+        let attrs = NodeAttributes {
+            mode: metadata.permissions().mode() & 0o7777,
+            uid: metadata.uid(),
+            gid: metadata.gid(),
+        };
+        if attrs.mode != 0 {
             if let Ok(mut saved) = SAVED_PERMISSIONS.lock() {
-                saved.insert(dst_path.clone(), mode);
+                saved.insert(dst_path.clone(), attrs);
                 if path != dst_path {
-                    saved.insert(path.to_string(), mode);
+                    saved.insert(path.to_string(), attrs);
                 }
             }
         }
@@ -254,16 +276,12 @@ pub async fn unhide_device(path: String) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let saved_mode = SAVED_PERMISSIONS
+    let saved_attrs = SAVED_PERMISSIONS
         .lock()
         .ok()
         .and_then(|mut m| m.remove(&dst_path).or_else(|| m.remove(&path)));
-    if let Some(mode) = saved_mode {
-        if let Ok(metadata) = fs::metadata(&dst_path) {
-            let mut permissions = metadata.permissions();
-            permissions.set_mode(mode);
-            let _ = fs::set_permissions(&dst_path, permissions);
-        }
+    if let Some(attrs) = saved_attrs {
+        restore_node_attributes(Path::new(&dst_path), attrs);
     }
 
     // Reload udev
@@ -293,16 +311,12 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
                 let symlink_path = entry.path();
                 if let Ok(target) = fs::canonicalize(&symlink_path) {
                     let target_str = target.to_string_lossy().to_string();
-                    let saved_mode = SAVED_PERMISSIONS
+                    let saved_attrs = SAVED_PERMISSIONS
                         .lock()
                         .ok()
                         .and_then(|mut m| m.remove(&target_str));
-                    if let Some(mode) = saved_mode {
-                        if let Ok(metadata) = fs::metadata(&target) {
-                            let mut permissions = metadata.permissions();
-                            permissions.set_mode(mode);
-                            let _ = fs::set_permissions(&target, permissions);
-                        }
+                    if let Some(attrs) = saved_attrs {
+                        restore_node_attributes(&target, attrs);
                     }
                 }
                 let _ = fs::remove_file(symlink_path);
@@ -327,16 +341,12 @@ pub async fn unhide_all() -> Result<(), Box<dyn Error>> {
                 if let Err(e) = fs::rename(&path, &dst_path) {
                     log::warn!("Failed to move device node from {path:?} to {dst_path}: {e}");
                 }
-                let saved_mode = SAVED_PERMISSIONS
+                let saved_attrs = SAVED_PERMISSIONS
                     .lock()
                     .ok()
                     .and_then(|mut m| m.remove(&dst_path));
-                if let Some(mode) = saved_mode {
-                    if let Ok(metadata) = fs::metadata(&dst_path) {
-                        let mut permissions = metadata.permissions();
-                        permissions.set_mode(mode);
-                        let _ = fs::set_permissions(&dst_path, permissions);
-                    }
+                if let Some(attrs) = saved_attrs {
+                    restore_node_attributes(Path::new(&dst_path), attrs);
                 }
             }
         }
