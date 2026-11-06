@@ -121,7 +121,6 @@ futures = "0.3.31"
 glob-match = "0.2.1"
 hidapi = "2.6.4"
 #evdev = { version = "0.12.1", features = ["tokio"] }
-inotify = "0.11.0"
 libc = "0.2"
 # Omit trace logging for release builds
 log = { version = "0.4.29", features = [

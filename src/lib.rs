@@ -8,4 +8,3 @@ pub mod drivers;
 pub mod input;
 pub mod sync;
 pub mod udev;
-pub mod watcher;
