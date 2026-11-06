@@ -3,21 +3,22 @@ pub mod gamepad;
 pub mod keyboard;
 pub mod touchscreen;
 
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    time::Duration,
+};
 
 use evdev::{Device, EventType};
 use keyboard::KeyboardEventDevice;
 use touchscreen::TouchscreenEventDevice;
 
 use crate::{
-    config::{
-        self,
-        capability_map::{load_capability_mappings, CapabilityMapConfig},
-    },
+    config::{self, capability_map::CapabilityMapConfig},
     constants::BUS_SOURCES_PREFIX,
     input::{
         capability::Capability, composite_device::client::CompositeDeviceClient,
-        info::DeviceInfoRef, output_capability::OutputCapability,
+        event::evdev::maps, info::DeviceInfoRef, output_capability::OutputCapability,
     },
     udev::device::UdevDevice,
 };
@@ -113,19 +114,26 @@ impl EventDevice {
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
         conf: Option<config::SourceDevice>,
+        composite_capability_map: Option<CapabilityMapConfig>,
+        source_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let is_blocked = conf.as_ref().and_then(|c| c.blocked).unwrap_or(false);
         let driver_type = EventDevice::get_driver_type(&device_info, is_blocked);
 
-        // Check to see if a capability map was set for this device
-        let mut capability_map = None;
-        let capability_map_id = conf.clone().and_then(|device| device.capability_map_id);
-        if let Some(capability_map_id) = capability_map_id {
-            let mapping_configs = load_capability_mappings();
-            if let Some(CapabilityMapConfig::V2(config)) = mapping_configs.get(&capability_map_id) {
-                capability_map = Some(config.clone());
+        // Combine the composite-level and source-level maps into one list.
+        // Both maps are resolved by the manager from the cached maps.
+        let mappings = match (composite_capability_map.as_ref(), source_map.as_ref()) {
+            (None, None) => Vec::new(),
+            (composite_map, source_map) => {
+                let device = Device::open(device_info.devnode())?;
+                maps::from_maps(composite_map, source_map, &supported_signatures(&device))
             }
-        }
+        };
+        let mappings = if mappings.is_empty() {
+            None
+        } else {
+            Some(mappings)
+        };
 
         match driver_type {
             DriverType::Blocked => {
@@ -144,7 +152,7 @@ impl EventDevice {
                 Ok(Self::Blocked(source_device))
             }
             DriverType::Gamepad => {
-                let device = GamepadEventDevice::new(device_info.clone(), capability_map)?;
+                let device = GamepadEventDevice::new(device_info.clone(), mappings.clone())?;
                 let source_device =
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::Gamepad(source_device))
@@ -154,14 +162,18 @@ impl EventDevice {
                     .as_ref()
                     .and_then(|c| c.config.clone())
                     .and_then(|c| c.touchscreen);
-                let device =
-                    TouchscreenEventDevice::new(device_info.clone(), touch_config, capability_map)?;
+                let device = TouchscreenEventDevice::new(
+                    device_info.clone(),
+                    touch_config,
+                    mappings.clone(),
+                )?;
                 let source_device =
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::Touchscreen(source_device))
             }
             DriverType::Keyboard => {
-                let device = KeyboardEventDevice::new(device_info.clone(), &conf, capability_map)?;
+                let device =
+                    KeyboardEventDevice::new(device_info.clone(), &conf, mappings.clone())?;
                 let source_device =
                     SourceDriver::new(composite_device, device, device_info.into(), conf);
                 Ok(Self::Keyboard(source_device))
@@ -199,6 +211,32 @@ impl EventDevice {
 /// Returns the DBus object path for evdev devices
 pub fn get_dbus_path(handler: String) -> String {
     format!("{}/{}", BUS_SOURCES_PREFIX, handler.clone())
+}
+
+/// Returns the set of event signatures the device supports.
+pub(crate) fn supported_signatures(device: &Device) -> HashSet<(u16, u16)> {
+    let mut signatures = HashSet::new();
+    if let Some(keys) = device.supported_keys() {
+        for key in keys.iter() {
+            signatures.insert((EventType::KEY.0, key.0));
+        }
+    }
+    if let Some(axes) = device.supported_relative_axes() {
+        for axis in axes.iter() {
+            signatures.insert((EventType::RELATIVE.0, axis.0));
+        }
+    }
+    if let Some(axes) = device.supported_absolute_axes() {
+        for axis in axes.iter() {
+            signatures.insert((EventType::ABSOLUTE.0, axis.0));
+        }
+    }
+    if let Some(switches) = device.supported_switches() {
+        for switch in switches.iter() {
+            signatures.insert((EventType::SWITCH.0, switch.0));
+        }
+    }
+    signatures
 }
 
 /// Returns the evdev capabilities of the input device at the given path (e.g. /dev/input/event0)

@@ -9,6 +9,7 @@ use evdev::{FFEffectData, FFEffectKind, InputEvent};
 use packed_struct::types::SizedInteger;
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
         msi_claw::{driver::Driver, event, AXIS_MAX},
@@ -34,6 +35,7 @@ use crate::{
 /// MSI ClawController source device implementation
 pub struct MsiClawController {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
     haptic_state: Option<HapticState>,
 }
@@ -41,10 +43,14 @@ pub struct MsiClawController {
 impl MsiClawController {
     /// Create a new MSI Claw controller source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info.devnode())?;
         Ok(Self {
             driver,
+            capability_map,
             ff_evdev_effects: HashMap::new(),
             haptic_state: None,
         })
@@ -175,6 +181,10 @@ impl MsiClawController {
 }
 
 impl SourceInputDevice for MsiClawController {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         if let Some(state) = &mut self.haptic_state {
@@ -198,12 +208,15 @@ impl SourceInputDevice for MsiClawController {
 
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {

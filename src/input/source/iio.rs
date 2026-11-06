@@ -8,6 +8,7 @@ use glob_match::glob_match;
 
 use crate::{
     config,
+    config::capability_map::{get_capability_translations, CapabilityMapConfig},
     constants::BUS_SOURCES_PREFIX,
     input::{
         capability::Capability, composite_device::client::CompositeDeviceClient,
@@ -90,8 +91,11 @@ impl IioDevice {
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
         conf: Option<config::SourceDevice>,
+        capability_map: Option<CapabilityMapConfig>,
+        source_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver_type = IioDevice::get_driver_type(&device_info);
+        let map = get_capability_translations(capability_map.as_ref(), source_map.as_ref());
 
         match driver_type {
             DriverType::Unknown => Err("No driver for iio interface found".into()),
@@ -100,7 +104,7 @@ impl IioDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = BmiImu::new(device_info.clone(), conf.clone())?;
+                let device = BmiImu::new(device_info.clone(), conf.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -115,7 +119,7 @@ impl IioDevice {
                     poll_rate: Duration::from_millis(0),
                     buffer_size: 2048,
                 };
-                let device = AccelGyro3dImu::new(device_info.clone(), conf.clone())?;
+                let device = AccelGyro3dImu::new(device_info.clone(), conf.clone(), map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,

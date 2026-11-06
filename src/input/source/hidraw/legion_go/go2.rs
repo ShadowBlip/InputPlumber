@@ -1,7 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::{error::Error, fmt::Debug};
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::legion_go::{
         event,
         go2_driver::{Driver, LegionGoGen},
@@ -19,14 +20,21 @@ use crate::{
 /// Legion Go Controller source device implementation
 pub struct LegionGo2Controller {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
 }
 
 impl LegionGo2Controller {
     /// Create a new Legion controller source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info)?;
-        Ok(Self { driver })
+        Ok(Self {
+            driver,
+            capability_map,
+        })
     }
 
     /// Translate the given Legion Go events into native events
@@ -50,18 +58,25 @@ impl LegionGo2Controller {
 }
 
 impl SourceInputDevice for LegionGo2Controller {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     /// Poll the source device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
         let native_events = self.translate_events(events);
 
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         if self.driver.gen() == LegionGoGen::Gen2 {
-            return Ok(CAPABILITIES.into());
+            return Ok(exposed_capabilities(
+                CAPABILITIES.into(),
+                &self.capability_map,
+            ));
         }
         // The original Legion Go doesn't have these.
         let capabilities = CAPABILITIES
@@ -76,7 +91,7 @@ impl SourceInputDevice for LegionGo2Controller {
             })
             .cloned()
             .collect();
-        Ok(capabilities)
+        Ok(exposed_capabilities(capabilities, &self.capability_map))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {

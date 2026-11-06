@@ -9,6 +9,7 @@ use evdev::{FFEffectData, FFEffectKind};
 use packed_struct::types::SizedInteger;
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
         xpad_uhid::{
@@ -36,6 +37,7 @@ use crate::{
 /// XpadUhid source device implementation
 pub struct XpadUhid {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
     haptic_state: Option<HapticState>,
 }
@@ -43,10 +45,14 @@ pub struct XpadUhid {
 impl XpadUhid {
     /// Create a new source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info)?;
         Ok(Self {
             driver,
+            capability_map,
             ff_evdev_effects: HashMap::new(),
             haptic_state: None,
         })
@@ -169,6 +175,10 @@ impl XpadUhid {
 }
 
 impl SourceInputDevice for XpadUhid {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         if let Some(state) = &mut self.haptic_state {
@@ -192,7 +202,7 @@ impl SourceInputDevice for XpadUhid {
 
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     /// Returns the possible input events this device is capable of emitting
@@ -206,7 +216,10 @@ impl SourceInputDevice for XpadUhid {
     }
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 }
 

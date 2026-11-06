@@ -5,6 +5,7 @@ pub mod oxp_serial;
 use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver};
 use crate::{
     config,
+    config::capability_map::{get_capability_translations, CapabilityMapConfig},
     constants::BUS_SOURCES_PREFIX,
     drivers::oxp_tty::{get_driver_type, OxpDriverType, TTY_TIMEOUT},
     input::{
@@ -90,8 +91,11 @@ impl TtyDevice {
         device_info: UdevDevice,
         composite_device: CompositeDeviceClient,
         conf: Option<config::SourceDevice>,
+        capability_map: Option<CapabilityMapConfig>,
+        source_map: Option<CapabilityMapConfig>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver_type = TtyDevice::get_driver_type(&device_info);
+        let map = get_capability_translations(capability_map.as_ref(), source_map.as_ref());
         match driver_type {
             DriverType::Unknown => Err("No driver for tty interface found".into()),
             DriverType::OneXFlySerial => {
@@ -99,7 +103,8 @@ impl TtyDevice {
                     poll_rate: Duration::from_millis(TTY_TIMEOUT),
                     buffer_size: 4096,
                 };
-                let device = OneXFlySerial::new(device_info.clone(), OxpDriverType::OneXFly)?;
+                let device =
+                    OneXFlySerial::new(device_info.clone(), OxpDriverType::OneXFly, map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
@@ -114,7 +119,8 @@ impl TtyDevice {
                     poll_rate: Duration::from_millis(TTY_TIMEOUT),
                     buffer_size: 4096,
                 };
-                let device = OxpX1Serial::new(device_info.clone(), OxpDriverType::OxpX1)?;
+                let device =
+                    OxpX1Serial::new(device_info.clone(), OxpDriverType::OxpX1, map.clone())?;
                 let source_device = SourceDriver::new_with_options(
                     composite_device,
                     device,
