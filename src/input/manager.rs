@@ -42,15 +42,12 @@ use crate::udev::{
     self,
     device::{AttributeGetter, UdevDevice},
 };
-use crate::watcher::{self, WatchEvent};
 use crate::{
     constants::{BUS_PREFIX, BUS_SOURCES_PREFIX, BUS_TARGETS_PREFIX},
     dbus::interface::manager::ManagerInterface,
 };
 use crate::{dmi::get_dmi_data, input::composite_device::CompositeDevice};
 
-const DEV_PATH: &str = "/dev";
-const INPUT_PATH: &str = "/dev/input";
 const BUFFER_SIZE: usize = 20480;
 const UDEV_INIT_RECHECK_INTERVAL: Duration = Duration::from_secs(1);
 /// Max recheck attempts before an uninitialized device is dropped
@@ -245,33 +242,12 @@ impl Manager {
     pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let cmd_tx_all_devices = self.tx.clone();
 
-        // Watch for hidraw/evdev inotify events.
-        // TODO: when we reload the udev device it triggers the udev watcher. We do this to break
-        // access to the file descriptor for processes that have already authenticated. Figure out
-        // a way to do this only using the udev events.
-        let (watcher_tx, mut watcher_rx) = mpsc::channel(BUFFER_SIZE);
-        if std::path::Path::new(DEV_PATH).exists() {
-            let tx = watcher_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                log::info!("Started hidraw device discovery thread");
-                watcher::watch(DEV_PATH.into(), tx)
-            });
-        }
-        if std::path::Path::new(INPUT_PATH).exists() {
-            let tx = watcher_tx.clone();
-            tokio::task::spawn_blocking(move || {
-                log::info!("Started evdev device discovery thread");
-                watcher::watch(INPUT_PATH.into(), tx)
-            });
-        }
-
         log::debug!("Starting input manager task...");
 
         self.listen_on_dbus();
         let _ = tokio::join!(
             Self::discover_all_devices(&cmd_tx_all_devices),
-            Self::watch_iio_devices(self.tx.clone()),
-            Self::watch_devnodes(self.tx.clone(), &mut watcher_rx),
+            Self::watch_udev_devices(self.tx.clone()),
             self.events_loop()
         );
 
@@ -725,7 +701,7 @@ impl Manager {
     }
 
     /// Create a [CompositeDevice] from the given configuration
-    async fn create_composite_device_from_config(
+    fn create_composite_device_from_config(
         &mut self,
         path: PathBuf,
         config: &CompositeDeviceConfig,
@@ -1287,9 +1263,7 @@ impl Manager {
                     "Found a matching {} device {id} in config {path:?}, creating CompositeDevice",
                     device.kind()
                 );
-                let dev = self
-                    .create_composite_device_from_config(path, &config, device)
-                    .await?;
+                let dev = self.create_composite_device_from_config(path, &config, device)?;
 
                 // Get the target input devices from the config
                 let target_devices_config = config.target_devices.clone();
@@ -1666,12 +1640,16 @@ impl Manager {
         Err(Box::from("No available dbus path left"))
     }
 
-    /// Watch for IIO device events
-    fn watch_iio_devices(
+    /// Watch for udev add/remove events for monitored subsystems.
+    fn watch_udev_devices(
         cmd_tx: mpsc::Sender<ManagerCommand>,
     ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + std::marker::Send + Sync>>> {
         task::spawn_blocking(move || {
-            let mut monitor = MonitorBuilder::new()?.match_subsystem("iio")?.listen()?;
+            let mut monitor = MonitorBuilder::new()?
+                .match_subsystem("hidraw")?
+                .match_subsystem("iio")?
+                .match_subsystem("input")?
+                .listen()?;
 
             let mut poll = Poll::new()?;
             let mut events = Events::with_capacity(1024);
@@ -1688,11 +1666,15 @@ impl Manager {
                     let device = event.device();
                     let dev_name = device.name();
                     let dev_sysname = device.sysname().to_string_lossy();
+                    let subsystem = device
+                        .subsystem()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_default();
 
                     match action.to_string_lossy().trim() {
                         "add" => {
                             log::debug!(
-                                "Got udev add action for iio device {dev_name} ({dev_sysname})"
+                                "Got udev add action for {subsystem} device {dev_name} ({dev_sysname})"
                             );
                             cmd_tx.blocking_send(ManagerCommand::DeviceAdded {
                                 device: device.into(),
@@ -1700,126 +1682,22 @@ impl Manager {
                         }
                         "remove" => {
                             log::debug!(
-                                "Got udev remove action for iio device {dev_name} ({dev_sysname})"
+                                "Got udev remove action for {subsystem} device {dev_name} ({dev_sysname})"
                             );
                             cmd_tx.blocking_send(ManagerCommand::DeviceRemoved {
                                 device: device.into(),
                             })?;
                         }
                         unhandled_action => {
-                            log::trace!("Unhandled udev action for iio device {dev_name} ({dev_sysname}: {unhandled_action}");
+                            log::trace!(
+                                "Unhandled udev action for {subsystem} device {dev_name} ({dev_sysname}): {unhandled_action}"
+                            );
                         }
                     }
                 }
                 std::thread::sleep(Duration::from_millis(10));
             }
         })
-    }
-
-    /// Watch for appearance and disappearence of devices is /dev and associate the corresponding udev device
-    async fn watch_devnodes(
-        cmd_tx: mpsc::Sender<ManagerCommand>,
-        watcher_rx: &mut mpsc::Receiver<WatchEvent>,
-    ) {
-        'outer: while let Some(event) = watcher_rx.recv().await {
-            match event {
-                WatchEvent::Create { name, base_path } => {
-                    let subsystem = {
-                        match base_path.as_str() {
-                            "/dev" => {
-                                if !name.starts_with("hidraw") {
-                                    None
-                                } else {
-                                    Some("hidraw")
-                                }
-                            }
-                            "/dev/input" => Some("input"),
-
-                            _ => None,
-                        }
-                    };
-                    let Some(subsystem) = subsystem else {
-                        log::trace!("No supported subsystem detected for {base_path}/{name}");
-                        continue;
-                    };
-
-                    // Ensure the path is a valid devnode
-                    let full_path = PathBuf::from(format!("{base_path}/{name}"));
-                    if full_path.is_dir() {
-                        log::trace!("Devnode path {base_path}/{name} is a directory. Skipping.");
-                        continue;
-                    }
-
-                    // Wait until the device has initialized with udev
-                    const MAX_TRIES: u8 = 80;
-                    let mut attempt: u8 = 0;
-                    loop {
-                        // Break after max attempts reached
-                        if attempt > MAX_TRIES {
-                            log::warn!("Unable to create initialized UdevDevice for {base_path}/{name} after {MAX_TRIES} attempts.");
-                            continue 'outer;
-                        }
-                        if !full_path.exists() {
-                            continue 'outer;
-                        }
-
-                        // Try to get the device from udev to check its initialization state
-                        {
-                            let Ok(device) = ::udev::Device::from_subsystem_sysname(
-                                subsystem.to_string(),
-                                name.clone(),
-                            ) else {
-                                log::debug!(
-                                    "Unable to create UdevDevice from {base_path}/{name} to check initialization"
-                                );
-                                attempt += 1;
-                                tokio::time::sleep(Duration::from_millis(50)).await;
-                                continue;
-                            };
-
-                            if device.is_initialized() {
-                                break;
-                            }
-                        };
-                        log::trace!("{base_path}/{name} is not yet initialized by udev");
-
-                        tokio::time::sleep(Duration::from_millis(50)).await;
-                        attempt += 1;
-                    }
-
-                    // Create a udev device for the device
-                    let Ok(device) =
-                        ::udev::Device::from_subsystem_sysname(subsystem.to_string(), name.clone())
-                    else {
-                        log::warn!("Unable to create UdevDevice from {base_path}/{name}");
-                        continue;
-                    };
-
-                    // Notify the manager that a device was added
-                    log::debug!("Got inotify add action for {base_path}/{name}");
-                    let result = cmd_tx
-                        .send(ManagerCommand::DeviceAdded {
-                            device: device.into(),
-                        })
-                        .await;
-                    if let Err(e) = result {
-                        log::error!("Unable to send command: {:?}", e);
-                    }
-                }
-                WatchEvent::Delete { name, base_path } => {
-                    let device = UdevDevice::from_devnode(base_path.as_str(), name.as_str());
-                    log::debug!("Got inotify remove action for {base_path}/{name}");
-                    let result = cmd_tx
-                        .send(ManagerCommand::DeviceRemoved {
-                            device: device.into(),
-                        })
-                        .await;
-                    if let Err(e) = result {
-                        log::error!("Unable to send command: {:?}", e);
-                    }
-                }
-            }
-        }
     }
 
     /// Performs initial input device discovery of all supported subsystems
