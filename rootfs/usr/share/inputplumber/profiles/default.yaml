@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/device_profile_v1.json
+# yaml-language-server: $schema=../schema/device_profile_v1.json
 # Schema version number
 version: 1
 
@@ -78,3 +78,22 @@ mapping:
           direction: clockwise
     target_events:
       - keyboard: KeyBrightnessUp
+
+# Optional input layers: named sets of mappings that override the mappings above
+# while they are active. A layer is activated by mapping a source event to a
+# `layer` target event, e.g. adding
+#   target_events:
+#     - layer: { name: guide }
+# to a mapping whose source_event is the gamepad Guide button. `mode` defaults
+# to `hold` (the layer stays active while the input is held) and can be
+# `toggle` (one press latches the layer on, the next press releases it). Layers
+# stack: the most recently activated layer wins for a given source event.
+#layers:
+#  - name: guide
+#    mapping:
+#      - name: Guide+South -> Esc
+#        source_event:
+#          gamepad:
+#            button: South
+#        target_events:
+#          - keyboard: KeyEsc

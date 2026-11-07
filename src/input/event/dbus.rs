@@ -423,6 +423,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
         },
         Capability::Gyroscope(_) => vec![Action::None],
         Capability::Accelerometer(_) => vec![Action::None],
+        Capability::Layer { .. } => vec![Action::None],
     }
 }
 

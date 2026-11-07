@@ -145,3 +145,143 @@ async fn check_autostart_rules() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+use crate::config::DeviceProfile;
+use crate::input::capability::{Capability, Gamepad, GamepadButton};
+
+const PROFILE_DIR: &str = "./rootfs/usr/share/inputplumber/profiles";
+
+/// Every shipped profile must still parse, and profiles other than the layers
+/// example must keep declaring no layers.
+#[test]
+fn shipped_profiles_parse_without_layers() {
+    let entries = std::fs::read_dir(PROFILE_DIR).expect("profiles directory");
+    let mut count = 0;
+    for entry in entries {
+        let path = entry.expect("profile entry").path();
+        if path.extension().map(|ext| ext != "yaml").unwrap_or(true) {
+            continue;
+        }
+        let profile = DeviceProfile::from_yaml_file(path.display().to_string())
+            .unwrap_or_else(|e| panic!("Failed to parse profile {path:?}: {e}"));
+        if path
+            .file_name()
+            .map(|name| name == "layers_example.yaml")
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        assert!(profile.layers.is_empty(), "Profile {path:?} has layers");
+        count += 1;
+    }
+    assert!(count > 0, "No profiles found in {PROFILE_DIR}");
+}
+
+/// The shipped layers example must parse with the layers the docs describe.
+#[test]
+fn shipped_layers_example_parses() {
+    let path = format!("{PROFILE_DIR}/layers_example.yaml");
+    let profile = DeviceProfile::from_yaml_file(path).expect("parse layers example profile");
+
+    let names: Vec<&str> = profile.layers.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, ["mouse_mode", "shortcuts", "rapid"]);
+
+    // The layer outputs need targets that a gamepad-only composite lacks.
+    let targets = profile.target_devices.unwrap_or_default();
+    for kind in ["gamepad", "keyboard", "mouse"] {
+        assert!(
+            targets.iter().any(|t| t == kind),
+            "shipped example must declare a {kind} target device"
+        );
+    }
+
+    // Both the shortcuts and rapid layers remap South.
+    let south: Capability = Capability::Gamepad(Gamepad::Button(GamepadButton::South));
+    let remaps_south = profile
+        .layers
+        .iter()
+        .filter(|layer| {
+            layer
+                .mapping
+                .iter()
+                .any(|m| Into::<Capability>::into(m.source_event.clone()) == south)
+        })
+        .count();
+    assert_eq!(remaps_south, 2);
+}
+
+/// A profile with `layers:` and `layer:` targets parses, and dumping it
+/// round-trips the layers.
+#[test]
+fn profile_with_layers_parses_and_round_trips() {
+    let yaml = r#"
+version: 1
+kind: DeviceProfile
+name: Layers example
+mapping:
+  - name: Guide opens the guide layer
+    source_event: { gamepad: { button: Guide } }
+    target_events:
+      - layer: { name: guide }
+  - name: QuickAccess latches mouse mode
+    source_event: { gamepad: { button: QuickAccess } }
+    target_events:
+      - layer: { name: mouse_mode, mode: toggle }
+layers:
+  - name: guide
+    mapping:
+      - name: Guide+South -> Esc
+        source_event: { gamepad: { button: South } }
+        target_events:
+          - keyboard: KeyEsc
+"#;
+
+    let profile = DeviceProfile::from_yaml(yaml.to_string()).expect("parse profile with layers");
+    assert_eq!(profile.layers.len(), 1);
+    assert_eq!(profile.layers[0].name, "guide");
+    assert_eq!(profile.layers[0].mapping.len(), 1);
+
+    // Activation targets resolve to the layer capability with a resolved mode.
+    let hold: Capability = profile.mapping[0].target_events[0].clone().into();
+    assert_eq!(
+        hold,
+        Capability::Layer {
+            name: "guide".to_string(),
+            mode: crate::config::capability_map::LayerActivationMode::Hold
+        }
+    );
+    let toggle: Capability = profile.mapping[1].target_events[0].clone().into();
+    assert_eq!(toggle.to_capability_string(), "Layer:mouse_mode:toggle");
+
+    // A profile without layers dumps without the key; one with layers round-trips.
+    let dumped = serde_yaml::to_string(&profile).expect("serialize profile");
+    assert!(dumped.contains("layers:"));
+    let reparsed = DeviceProfile::from_yaml(dumped).expect("re-parse dumped profile");
+    assert_eq!(reparsed.layers.len(), 1);
+    assert_eq!(reparsed.layers[0].mapping[0].name, "Guide+South -> Esc");
+
+    let source: Capability = profile.mapping[0].source_event.clone().into();
+    assert_eq!(
+        source,
+        Capability::Gamepad(Gamepad::Button(GamepadButton::Guide))
+    );
+}
+
+/// Profiles without layers must dump without a `layers:` key so existing
+/// saved profiles stay byte-identical.
+#[test]
+fn profile_without_layers_dumps_without_layers_key() {
+    let yaml = r#"
+version: 1
+kind: DeviceProfile
+name: No layers
+mapping:
+  - name: South -> A
+    source_event: { gamepad: { button: South } }
+    target_events:
+      - gamepad: { button: South }
+"#;
+    let profile = DeviceProfile::from_yaml(yaml.to_string()).expect("parse profile");
+    let dumped = serde_yaml::to_string(&profile).expect("serialize profile");
+    assert!(!dumped.contains("layers:"));
+}

@@ -61,6 +61,166 @@ busctl call org.shadowblip.InputPlumber \
   LoadProfilePath "s" /usr/share/inputplumber/profiles/mouse_keyboard_wasd.yaml
 ```
 
+### Input Layers
+
+An input layer is a named set of input mappings that overrides the base mappings
+of a profile while it is active. Layers let one profile carry a whole set of
+alternative bindings (a "guide" chord layer, a mouse-mode layer, a rapid-fire
+layer) and switch between them with ordinary inputs instead of loading a
+different profile.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  Composite Device->>Profile: Input Event
+  Profile->>Composite Device: Activation (layer target)
+  Composite Device->>Composite Device: Push layer on stack
+  Profile->>Composite Device: Translated Event (layer mapping wins)
+  Composite Device->>Target Device: Route to target device
+```
+
+Activating a layer is just a mapping whose target event is a `layer` target:
+`{ layer: { name: <string>, mode?: hold|toggle } }`. The `mode` describes how
+the layer deactivates:
+
+- **`hold`** (default): the layer is active while the activating input is held.
+  Releasing the input pops the layer and releases anything it produced while
+  held, so no key gets stuck.
+- **`toggle`**: one press latches the layer on, the next press of the same input
+  releases it. The layer survives the release of the activating input.
+
+Layers **stack**. The most recently activated layer wins for a given source
+event, so a layer activated later temporarily shadows an earlier one, and
+releasing it uncovers the layer underneath. Layers can be activated in any
+combination and a layer's own mappings may activate other layers. At most eight
+layers stay active at once; activating a ninth drops the oldest one.
+
+Here is a short example (see
+[`layers_example.yaml`](https://github.com/ShadowBlip/InputPlumber/blob/main/rootfs/usr/share/inputplumber/profiles/layers_example.yaml)
+for a complete profile):
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/device_profile_v1.json
+version: 1
+kind: DeviceProfile
+name: Layers example
+
+# The layer outputs need a mouse and keyboard target, and the base mappings
+# need a gamepad target.
+target_devices:
+  - gamepad
+  - keyboard
+  - mouse
+
+mapping:
+  # Hold Guide to enable the mouse mode layer
+  - name: Hold Guide for mouse mode
+    source_event:
+      gamepad:
+        button: Guide
+    target_events:
+      - layer: { name: mouse_mode }
+
+  # Press QuickAccess to latch the shortcuts layer, press it again to release it
+  - name: QuickAccess latches the shortcuts layer
+    source_event:
+      gamepad:
+        button: QuickAccess
+    target_events:
+      - layer: { name: shortcuts, mode: toggle }
+
+  # Hold LeftBumper to enable the rapid layer
+  - name: LeftBumper opens the rapid layer
+    source_event:
+      gamepad:
+        button: LeftBumper
+    target_events:
+      - layer: { name: rapid }
+
+layers:
+  # Active while Guide is held: the right stick drives the mouse and the
+  # triggers click.
+  - name: mouse_mode
+    mapping:
+      - name: Guide+RightStick -> mouse
+        source_event:
+          gamepad:
+            axis:
+              name: RightStick
+        target_events:
+          - mouse:
+              motion:
+                speed_pps: 800
+
+      - name: Guide+RightTrigger -> left click
+        source_event:
+          gamepad:
+            trigger:
+              name: RightTrigger
+              deadzone: 0.2
+        target_events:
+          - mouse:
+              button: Left
+
+      - name: Guide+LeftTrigger -> right click
+        source_event:
+          gamepad:
+            trigger:
+              name: LeftTrigger
+              deadzone: 0.2
+        target_events:
+          - mouse:
+              button: Right
+
+  - name: shortcuts
+    mapping:
+      - name: QuickAccess+South -> Esc
+        source_event:
+          gamepad:
+            button: South
+        target_events:
+          - keyboard: KeyEsc
+
+  # Stacks with the layers above: because the most recently activated layer
+  # wins per source, pressing LeftBumper last makes South emit Space. If
+  # `shortcuts` was activated after LeftBumper, South still emits Esc.
+  - name: rapid
+    mapping:
+      - name: LB+South -> Space
+        source_event:
+          gamepad:
+            button: South
+        target_events:
+          - keyboard: KeySpace
+```
+
+With this profile, holding `Guide` makes the right stick move the mouse and the
+triggers click: right trigger is the left button, left trigger is the right
+button, the same binding `mouse_keyboard_wasd.yaml` uses. Latching
+`QuickAccess` and pressing `South` emits `Esc`; latching `QuickAccess`, then
+holding `LeftBumper` and pressing `South` emits `Space` (the `rapid` layer was
+activated last); releasing `LeftBumper` makes `South` emit `Esc` again. Note
+that both the `shortcuts` and `rapid` layers remap `South`, which is exactly
+what stacking is for.
+
+A profile may set `target_devices`, which **replaces** the composite device's
+target devices when the profile loads. The example sets `gamepad`, `keyboard`
+and `mouse` because its layer outputs need those targets: with no mouse target
+the mouse-mode mappings have nowhere to go, and the keyboard shortcuts are
+dropped for the same reason. Omit the section to keep whatever targets the
+composite already has, and list your usual gamepad target (e.g. `deck-uhid`)
+instead of `gamepad` if you want to keep it.
+
+Two caveats are worth knowing:
+
+- Layer mappings apply **after** the device's capability map, like base profile
+  mappings do. A layer can only remap a capability the composite device
+  publishes after translation, so a layer mapping keyed on a raw source
+  capability that the capability map renames will never match.
+- A profile that uses layers loaded by an older version of InputPlumber has its
+  `layers:` list and `layer` targets ignored silently: the older parser skips
+  unknown fields, so the profile still loads but the layers simply do nothing.
+
 ### Intercept Mode
 
 Intercept Mode is a feature of InputPlumber that can allow external applications
