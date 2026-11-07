@@ -43,12 +43,16 @@ project.
 You can disclose tool use by including something like this in the body of your commit message: 
 
 ```
-Co-developed-by: Claude Opus 4.6
+Assisted-by: LLM
 ```
+
+Do not include the name or product of the LLM used in your commit message; we
+do not want to advertise any given LLM company or product. Instead just include
+the `Assisted-by: LLM` annotation.
 
 You should also elaborate on which parts were generated, what prompts you used, etc.
 
-Before submitting your PR, you must ensure that you have fully reviewed the
+Before submitting your PR, you must ensure that you have fully reviewed and tested the
 changes you submit.
 
 Using AI to respond to human reviewers is strictly prohibited.
