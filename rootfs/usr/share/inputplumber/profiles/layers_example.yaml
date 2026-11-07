@@ -23,6 +23,13 @@ mapping:
       # mode defaults to hold: the layer is active while Guide is held
       - layer:
           name: mouse_mode
+          # When this layer gets deactivated, if no layer mappings were used,
+          # emit these events: a lone Guide tap still presses Guide.
+          on_deactivation:
+            only_when_unused: true
+            emit_events:
+              - gamepad:
+                  button: Guide
 
   - name: QuickAccess latches the shortcuts layer
     source_event:

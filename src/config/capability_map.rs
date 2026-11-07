@@ -212,6 +212,21 @@ pub struct LayerCapability {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<LayerActivationMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_deactivation: Option<LayerDeactivation>,
+}
+
+/// Events a `layer` target event emits when its activator deactivates the
+/// layer: releasing a hold activation, or pressing a toggle activation again.
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct LayerDeactivation {
+    /// Emit only if no mapping of the layer produced an output while it was
+    /// active.
+    #[serde(default)]
+    pub only_when_unused: bool,
+    /// Target events to emit, each as a press followed by a release.
+    pub emit_events: Vec<CapabilityConfig>,
 }
 
 /// How an activation drives the layer stack. The mode that activates a layer is

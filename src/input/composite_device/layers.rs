@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    config::{capability_map::LayerActivationMode, DeviceProfile, ProfileMapping},
+    config::{
+        capability_map::{LayerActivationMode, LayerDeactivation},
+        DeviceProfile, ProfileMapping,
+    },
     input::{
         capability::Capability,
         event::{native::NativeEvent, value::InputValue},
@@ -20,6 +23,8 @@ struct ActiveLayer {
     /// How the layer was activated. Decides release handling and depth-cap
     /// eviction.
     mode: LayerActivationMode,
+    /// Set once one of the layer's mappings produced an output while active.
+    used: bool,
 }
 
 /// Owns all input layer state for a [super::CompositeDevice]: the layer lookup
@@ -42,6 +47,12 @@ pub struct LayerState {
     /// the source is still held. Base-profile translations are deliberately not
     /// tracked here.
     active_inputs: HashMap<(Capability, String), Vec<Capability>>,
+    /// (activator source capability, layer) -> what its `layer` target event
+    /// emits when that activator deactivates the layer.
+    deactivations: HashMap<(Capability, String), LayerDeactivation>,
+    /// Events owed by the deactivations applied since the caller last took
+    /// them (see [LayerState::take_deactivation_events]).
+    deactivation_events: Vec<NativeEvent>,
 }
 
 impl LayerState {
@@ -52,6 +63,8 @@ impl LayerState {
         self.active_layers.clear();
         self.pressed_activators.clear();
         self.active_inputs.clear();
+        self.deactivations.clear();
+        self.deactivation_events.clear();
 
         let Some(profile) = profile else {
             return;
@@ -119,6 +132,106 @@ impl LayerState {
                 }
             }
         }
+
+        let layer_mappings = profile.layers.iter().flat_map(|layer| layer.mapping.iter());
+        for mapping in profile.mapping.iter().chain(layer_mappings) {
+            self.index_deactivations(mapping);
+        }
+    }
+
+    /// Remember the `on_deactivation` of every layer target event in a mapping,
+    /// keyed by the mapping's source and the layer it activates.
+    fn index_deactivations(&mut self, mapping: &ProfileMapping) {
+        let source_cap: Capability = mapping.source_event.clone().into();
+        for target in mapping.target_events.iter() {
+            let Some(layer) = target.layer.as_ref() else {
+                continue;
+            };
+            let Some(deactivation) = layer.on_deactivation.as_ref() else {
+                continue;
+            };
+            // Deactivation emits outputs; it never drives the layer stack.
+            let emit_events = deactivation
+                .emit_events
+                .iter()
+                .filter(|event| {
+                    let cap: Capability = (*event).clone().into();
+                    let valid = !matches!(cap, Capability::Layer { .. } | Capability::NotImplemented);
+                    if !valid {
+                        log::warn!(
+                            "Mapping `{}`: ignoring unsupported on_deactivation event {cap} of layer `{}`",
+                            mapping.name,
+                            layer.name
+                        );
+                    }
+                    valid
+                })
+                .cloned()
+                .collect();
+            let key = (source_cap.clone(), layer.name.clone());
+            if self.deactivations.contains_key(&key) {
+                log::warn!(
+                    "Mapping `{}`: {} already has an on_deactivation for layer `{}`, ignoring this one",
+                    mapping.name,
+                    source_cap.to_capability_string(),
+                    layer.name
+                );
+                continue;
+            }
+            self.deactivations.insert(
+                key,
+                LayerDeactivation {
+                    only_when_unused: deactivation.only_when_unused,
+                    emit_events,
+                },
+            );
+        }
+    }
+
+    /// Take the events owed by the deactivations applied since the last call:
+    /// each `on_deactivation` event as a press, then their releases in reverse
+    /// order. The caller emits them after the deactivation's releases.
+    pub fn take_deactivation_events(&mut self) -> Vec<NativeEvent> {
+        std::mem::take(&mut self.deactivation_events)
+    }
+
+    /// Queue what the activator `source` owes for deactivating `name`.
+    fn queue_deactivation(&mut self, source: &Capability, name: &str, used: bool) {
+        let Some(deactivation) = self.deactivations.get(&(source.clone(), name.to_string())) else {
+            return;
+        };
+        if deactivation.only_when_unused && used {
+            return;
+        }
+        let caps: Vec<Capability> = deactivation
+            .emit_events
+            .iter()
+            .map(|event| event.clone().into())
+            .collect();
+        let presses = caps.iter().map(|cap| {
+            NativeEvent::new_translated(source.clone(), cap.clone(), InputValue::Bool(true))
+        });
+        let releases = caps.iter().rev().map(|cap| {
+            NativeEvent::new_translated(source.clone(), cap.clone(), InputValue::Bool(false))
+        });
+        let events: Vec<NativeEvent> = presses.chain(releases).collect();
+        self.deactivation_events.extend(events);
+    }
+
+    /// Pop a layer because its activator `source` deactivated it, queueing what
+    /// that activation owes on deactivation.
+    fn deactivate_from(&mut self, source: &Capability, name: &str) -> Vec<NativeEvent> {
+        let Some(used) = self
+            .active_layers
+            .iter()
+            .find(|layer| layer.name == name)
+            .map(|layer| layer.used)
+        else {
+            return Vec::new();
+        };
+        let releases = self.pop_layer(name);
+        self.queue_deactivation(source, name, used);
+        releases
     }
 
     /// The active stack, bottom (first activated) to top (last activated).
@@ -176,7 +289,7 @@ impl LayerState {
             LayerActivationMode::Toggle if repeated => Vec::new(),
             LayerActivationMode::Toggle => {
                 if self.active_layers.iter().any(|layer| layer.name == name) {
-                    self.pop_layer(name)
+                    self.deactivate_from(source, name)
                 } else {
                     self.push_layer(name, mode)
                 }
@@ -196,7 +309,7 @@ impl LayerState {
         // Undo the most recent activation first, matching emission order.
         for (name, mode) in activations.into_iter().rev() {
             if mode == LayerActivationMode::Hold {
-                releases.extend(self.pop_layer(&name));
+                releases.extend(self.deactivate_from(source, &name));
             }
         }
         releases
@@ -249,6 +362,10 @@ impl LayerState {
 
         self.active_inputs
             .insert((source.clone(), layer.to_string()), produced);
+
+        if let Some(active) = self.active_layers.iter_mut().find(|l| l.name == layer) {
+            active.used = true;
+        }
     }
 
     /// Remove a layer from anywhere in the stack and return the outputs it must
@@ -269,6 +386,8 @@ impl LayerState {
     /// Pop every active layer from the top of the stack down, returning one
     /// combined set of releases so the caller emits a single signal.
     pub fn clear(&mut self) -> Vec<NativeEvent> {
+        // Clearing is not a deactivation by an activator, so it owes nothing.
+        self.deactivation_events.clear();
         let mut releases = Vec::new();
         while let Some(layer) = self.active_layers.last() {
             let name = layer.name.clone();
@@ -285,10 +404,11 @@ impl LayerState {
             .iter()
             .position(|layer| layer.name == name)
         {
-            self.active_layers.remove(index);
+            let used = self.active_layers.remove(index).used;
             self.active_layers.push(ActiveLayer {
                 name: name.to_string(),
                 mode: mode.clone(),
+                used,
             });
             return Vec::new();
         }
@@ -318,6 +438,7 @@ impl LayerState {
         self.active_layers.push(ActiveLayer {
             name: name.to_string(),
             mode: mode.clone(),
+            used: false,
         });
         releases
     }
