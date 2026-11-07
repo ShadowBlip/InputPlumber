@@ -2218,13 +2218,15 @@ impl CompositeDevice {
     }
 
     /// Applies the side effects of a layer state change: release everything the
-    /// removed layers produced while held, and forget those capabilities so
-    /// future presses aren't dropped.
+    /// removed layers produced while held, emit what their activations owe on
+    /// deactivation, and forget the released capabilities so future presses
+    /// aren't dropped.
     async fn apply_layer_releases(
         &mut self,
         releases: Vec<NativeEvent>,
     ) -> Result<(), Box<dyn Error>> {
-        if releases.is_empty() {
+        let deactivation_events = self.layers.take_deactivation_events();
+        if releases.is_empty() && deactivation_events.is_empty() {
             return Ok(());
         }
 
@@ -2232,9 +2234,12 @@ impl CompositeDevice {
         // `is_new_active_event` drops the next press of the same capability.
         let caps: Vec<Capability> = releases.iter().map(|event| event.as_capability()).collect();
 
-        // Emit releases through the same delayed path used for intercept
-        // releases, so targets see a valid down/up sequence.
-        self.write_chord_events(releases).await?;
+        // Emit releases, then the deactivation events, through the same delayed
+        // path used for intercept releases, so targets see a valid down/up
+        // sequence.
+        let mut events = releases;
+        events.extend(deactivation_events);
+        self.write_chord_events(events).await?;
 
         self.active_inputs.retain(|input| !caps.contains(input));
 

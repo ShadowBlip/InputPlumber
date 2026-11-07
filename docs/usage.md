@@ -89,6 +89,26 @@ the layer deactivates:
 - **`toggle`**: one press latches the layer on, the next press of the same input
   releases it. The layer survives the release of the activating input.
 
+A `layer` target may also emit events when its activation deactivates the
+layer, i.e. when a `hold` input is released or a `toggle` input is pressed
+again:
+
+```yaml
+- layer:
+    name: mouse_mode
+    on_deactivation:
+      only_when_unused: true
+      emit_events:
+        - gamepad: { button: Guide }
+```
+
+Each event in `emit_events` is sent as a press followed by a release, after the
+layer's own releases. With `only_when_unused: true` they are sent only if none of
+the layer's mappings produced an output while it was active, so one button can
+open a layer when held with others and keep its own meaning when tapped alone.
+Clearing the layer stack (a profile change, a removed source device) emits
+nothing.
+
 Layers **stack**. The most recently activated layer wins for a given source
 event, so a layer activated later temporarily shadows an earlier one, and
 releasing it uncovers the layer underneath. Layers can be activated in any

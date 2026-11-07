@@ -130,10 +130,36 @@
             "toggle"
           ],
           "default": "hold"
+        },
+        "on_deactivation": {
+          "$ref": "#/definitions/LayerDeactivation"
         }
       },
       "required": [
         "name"
+      ]
+    },
+    "LayerDeactivation": {
+      "title": "LayerDeactivation",
+      "type": "object",
+      "description": "Events to emit when this activation deactivates the layer: releasing a 'hold' activation, or pressing a 'toggle' activation again. Not emitted when the layer stack is cleared (profile change, device removal).",
+      "additionalProperties": false,
+      "properties": {
+        "only_when_unused": {
+          "type": "boolean",
+          "description": "Emit only if no mapping of the layer produced an output while it was active",
+          "default": false
+        },
+        "emit_events": {
+          "type": "array",
+          "description": "Target events to emit, each as a press followed by a release. `layer` events are ignored.",
+          "items": {
+            "$ref": "#/definitions/Event"
+          }
+        }
+      },
+      "required": [
+        "emit_events"
       ]
     },
     "Event": {

@@ -324,4 +324,214 @@ layers:
         assert!(!releases[0].pressed());
         assert!(state.active_names().is_empty());
     }
+
+    const DEACTIVATION_PROFILE: &str = r#"
+version: 1
+kind: DeviceProfile
+name: Layer deactivation test
+mapping:
+  - name: Guide holds guide, taps QuickAccess when unused
+    source_event: { gamepad: { button: Guide } }
+    target_events:
+      - layer:
+          name: guide
+          on_deactivation:
+            only_when_unused: true
+            emit_events:
+              - gamepad: { button: QuickAccess }
+  - name: QuickAccess latches mouse_mode, taps Esc then Space on unlatch
+    source_event: { gamepad: { button: QuickAccess } }
+    target_events:
+      - layer:
+          name: mouse_mode
+          mode: toggle
+          on_deactivation:
+            emit_events:
+              - keyboard: KeyEsc
+              - keyboard: KeySpace
+layers:
+  - name: guide
+    mapping:
+      - name: South -> Esc
+        source_event: { gamepad: { button: South } }
+        target_events:
+          - keyboard: KeyEsc
+  - name: mouse_mode
+    mapping:
+      - name: South -> Shift
+        source_event: { gamepad: { button: South } }
+        target_events:
+          - keyboard: KeyLeftShift
+"#;
+
+    fn deactivation_state() -> LayerState {
+        let mut state = LayerState::default();
+        state.load_profile(Some(&profile(DEACTIVATION_PROFILE)));
+        state
+    }
+
+    /// (capability, pressed) of each event, for compact sequence asserts.
+    fn sequence(events: &[NativeEvent]) -> Vec<(Capability, bool)> {
+        events
+            .iter()
+            .map(|event| (event.as_capability(), event.pressed()))
+            .collect()
+    }
+
+    #[test]
+    fn unused_hold_layer_emits_its_deactivation_events_as_a_tap() {
+        let mut state = deactivation_state();
+        let guide = button("Guide");
+
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        assert!(state.take_deactivation_events().is_empty());
+
+        let releases = state.release_activation(&guide);
+        assert!(releases.is_empty());
+        let events = state.take_deactivation_events();
+        let quick_access = button("QuickAccess");
+        assert_eq!(
+            sequence(&events),
+            vec![(quick_access.clone(), true), (quick_access, false)]
+        );
+        // Taken once.
+        assert!(state.take_deactivation_events().is_empty());
+    }
+
+    #[test]
+    fn used_hold_layer_with_only_when_unused_emits_nothing() {
+        let mut state = deactivation_state();
+        let guide = button("Guide");
+        let south = button("South");
+
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        state.record_outputs(&south, Some("guide"), true, &[output(&south, "Esc")]);
+        state.release_activation(&guide);
+        assert!(state.take_deactivation_events().is_empty());
+
+        // The next activation starts unused again.
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        state.release_activation(&guide);
+        assert_eq!(state.take_deactivation_events().len(), 2);
+    }
+
+    #[test]
+    fn base_outputs_while_held_do_not_use_the_layer() {
+        let mut state = deactivation_state();
+        let guide = button("Guide");
+        let quick_access = button("QuickAccess");
+
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        // An input the layer does not map translates through the base profile.
+        state.record_outputs(&quick_access, None, true, &[output(&quick_access, "Esc")]);
+        state.release_activation(&guide);
+        assert_eq!(state.take_deactivation_events().len(), 2);
+    }
+
+    #[test]
+    fn toggle_off_emits_deactivation_events_even_when_used() {
+        let mut state = deactivation_state();
+        let quick_access = button("QuickAccess");
+        let south = button("South");
+        let toggle = LayerActivationMode::Toggle;
+
+        // Latch on: nothing owed.
+        state.apply_activation(&quick_access, "mouse_mode", &toggle, true);
+        state.release_activation(&quick_access);
+        assert!(state.take_deactivation_events().is_empty());
+        state.record_outputs(&south, Some("mouse_mode"), true, &[output(&south, "Shift")]);
+
+        // Latch off: only_when_unused is false, so the use does not matter.
+        // Presses in order, then releases in reverse.
+        state.apply_activation(&quick_access, "mouse_mode", &toggle, true);
+        let events = state.take_deactivation_events();
+        assert_eq!(
+            sequence(&events),
+            vec![
+                (key("Esc"), true),
+                (key("Space"), true),
+                (key("Space"), false),
+                (key("Esc"), false),
+            ]
+        );
+        assert!(state.active_names().is_empty());
+    }
+
+    #[test]
+    fn repeated_press_of_a_held_activator_owes_one_tap() {
+        let mut state = deactivation_state();
+        let guide = button("Guide");
+
+        for _ in 0..3 {
+            state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        }
+        state.release_activation(&guide);
+        // The release reaches LayerState twice (see apply_activation).
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, false);
+        assert_eq!(state.take_deactivation_events().len(), 2);
+    }
+
+    #[test]
+    fn clearing_the_stack_owes_nothing() {
+        let mut state = deactivation_state();
+        let guide = button("Guide");
+
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        state.clear();
+        assert!(state.take_deactivation_events().is_empty());
+
+        // Nor does releasing the activator afterwards: the layer is gone.
+        state.release_activation(&guide);
+        assert!(state.take_deactivation_events().is_empty());
+    }
+
+    #[test]
+    fn activations_without_on_deactivation_owe_nothing() {
+        let mut state = state();
+        let guide = button("Guide");
+        let quick_access = button("QuickAccess");
+
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        state.release_activation(&guide);
+        let toggle = LayerActivationMode::Toggle;
+        state.apply_activation(&quick_access, "mouse_mode", &toggle, true);
+        state.release_activation(&quick_access);
+        state.apply_activation(&quick_access, "mouse_mode", &toggle, true);
+        assert!(state.take_deactivation_events().is_empty());
+    }
+
+    #[test]
+    fn layer_events_in_on_deactivation_are_ignored() {
+        let mut state = LayerState::default();
+        state.load_profile(Some(&profile(
+            r#"
+version: 1
+kind: DeviceProfile
+name: Nested deactivation test
+mapping:
+  - name: Guide holds guide
+    source_event: { gamepad: { button: Guide } }
+    target_events:
+      - layer:
+          name: guide
+          on_deactivation:
+            emit_events:
+              - layer: { name: guide }
+              - keyboard: KeyEsc
+layers:
+  - name: guide
+    mapping: []
+"#,
+        )));
+        let guide = button("Guide");
+
+        state.apply_activation(&guide, "guide", &LayerActivationMode::Hold, true);
+        state.release_activation(&guide);
+        let events = state.take_deactivation_events();
+        assert_eq!(
+            sequence(&events),
+            vec![(key("Esc"), true), (key("Esc"), false)]
+        );
+        assert!(state.active_names().is_empty());
+    }
 }
