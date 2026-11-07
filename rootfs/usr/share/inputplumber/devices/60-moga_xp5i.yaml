@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: PowerA MOGA XP5-i Plus
+
+# Only use this profile if *any* of the given matches match. If this list is
+# empty, then the source devices will *always* be checked.
+matches: []
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Maximum number of source devices per CompositeDevice (evdev + hidraw).
+maximum_sources: 2
+
+# One or more source devices to combine into a single virtual device.
+source_devices:
+  # Block the kernel's evdev node. hid-generic maps this descriptor's analog
+  # triggers as deadzoneless digital buttons and produces no d-pad events, so
+  # the hidraw driver below is used for input instead.
+  - group: gamepad
+    blocked: true
+    evdev:
+      name: "MOGA XP5-i Plus"
+      vendor_id: "0103"
+      product_id: "0103"
+      # The kernel exposes one input device with both a legacy joystick (js*)
+      # and an evdev (event*) handler. Without this, the js node matches too,
+      # spawning a second (dead) composite device and a duplicate virtual pad.
+      handler: event*
+
+  # Raw Bluetooth HID input reports.
+  - group: gamepad
+    hidraw:
+      name: "MOGA XP5-i Plus"
+      vendor_id: 0x0103
+      product_id: 0x0103
+
+# The target input device(s) to emulate by default
+target_devices:
+  - xb360
+  - mouse
+  - keyboard
+
+options:
+  # Third-party controller; opt in like the other external gamepad profiles.
+  auto_manage: false
