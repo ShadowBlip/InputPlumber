@@ -470,6 +470,7 @@ impl CompositeDevice {
                                 continue;
                             }
                         };
+                        self.release_layer_outputs().await;
                         let result = match self.load_device_profile(Some(profile.clone()), None) {
                             Ok(_) => Ok(()),
                             Err(e) => Err(e.to_string()),
@@ -502,6 +503,7 @@ impl CompositeDevice {
                                 continue;
                             }
                         };
+                        self.release_layer_outputs().await;
                         let result = match self
                             .load_device_profile(Some(profile.clone()), Some(path.clone()))
                         {
@@ -2239,6 +2241,17 @@ impl CompositeDevice {
         self.active_inputs.retain(|input| !caps.contains(input));
 
         Ok(())
+    }
+
+    /// Release everything the active layers produced before a profile change
+    /// resets the layer stack. Without it a target keeps an output pressed that
+    /// the new profile never releases, and drops the next press of it as a
+    /// duplicate (Guide+South -> ui_quick only working every other time).
+    async fn release_layer_outputs(&mut self) {
+        let releases = self.layers.clear();
+        if let Err(e) = self.apply_layer_releases(releases).await {
+            log::error!("Failed to release layer outputs: {e:?}");
+        }
     }
 
     /// Emit a DBus signal when source devices change
