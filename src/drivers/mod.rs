@@ -6,6 +6,7 @@ pub mod horipad_steam;
 pub mod iio_imu;
 pub mod legion_go;
 pub mod legion_go_s;
+pub mod moga_xp5i;
 pub mod msi_claw;
 pub mod opineo;
 pub mod oxp_hid;
