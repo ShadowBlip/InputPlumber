@@ -1,6 +1,11 @@
-use std::{collections::HashSet, error::Error, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Debug,
+};
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::flydigi_vader_4_pro::{
         driver::{Driver, JOY_AXIS_MAX, JOY_AXIS_MIN, TRIGGER_AXIS_MAX},
         event, VADER_ACCEL_RAW_TO_MPS2, VADER_GYRO_XY_RAW_TO_RAD_S, VADER_GYRO_Z_RAW_TO_RAD_S,
@@ -22,20 +27,31 @@ use crate::{
 /// Vader4Pro source device implementation
 pub struct Vader4Pro {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
 }
 
 impl Vader4Pro {
     /// Create a new source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info)?;
-        Ok(Self { driver })
+        Ok(Self {
+            driver,
+            capability_map,
+        })
     }
 }
 
 impl SourceOutputDevice for Vader4Pro {}
 
 impl SourceInputDevice for Vader4Pro {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = match self.driver.poll() {
@@ -46,12 +62,15 @@ impl SourceInputDevice for Vader4Pro {
             }
         };
         let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {

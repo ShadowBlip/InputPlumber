@@ -10,6 +10,7 @@ use std::{
 use evdev::{FFEffectData, FFEffectKind, InputEvent};
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::{
         dualsense::hid_report::SetStatePackedOutputData,
         steam_deck::{
@@ -41,6 +42,7 @@ use crate::{
 
 pub struct DeckController {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
     device_info: UdevDevice,
     lizard_mode_started: bool,
     lizard_mode_running: Arc<Mutex<bool>>,
@@ -50,11 +52,15 @@ pub struct DeckController {
 impl DeckController {
     /// Create a new Deck Controller source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info.devnode())?;
 
         Ok(Self {
             driver,
+            capability_map,
             device_info,
             lizard_mode_started: false,
             lizard_mode_running: Arc::new(Mutex::new(false)),
@@ -200,6 +206,10 @@ impl DeckController {
 }
 
 impl SourceInputDevice for DeckController {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         // Spawn a blocking task to handle lizard mode
@@ -209,7 +219,7 @@ impl SourceInputDevice for DeckController {
 
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     /// Returns the possible input events this device is capable of emitting
@@ -223,7 +233,10 @@ impl SourceInputDevice for DeckController {
     }
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 }
 

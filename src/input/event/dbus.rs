@@ -218,6 +218,7 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
                 GamepadButton::RightStickTouch => vec![Action::None],
                 GamepadButton::LeftPaddle3 => vec![Action::None],
                 GamepadButton::RightPaddle3 => vec![Action::None],
+                _ => vec![Action::None],
             },
             Gamepad::Axis(axis) => match axis {
                 GamepadAxis::LeftStick => {
@@ -415,11 +416,12 @@ fn actions_from_capability(capability: Capability) -> Vec<Action> {
             Keyboard::KeyGreen => vec![Action::None],
             Keyboard::KeyYellow => vec![Action::None],
             Keyboard::KeyBlue => vec![Action::None],
+            _ => vec![Action::None],
         },
         Capability::Touchpad(_) => vec![Action::None],
         Capability::Touchscreen(touch) => match touch {
             Touch::Motion => vec![Action::Touch],
-            Touch::Button(_) => vec![Action::None],
+            _ => vec![Action::None],
         },
         Capability::Gyroscope(_) => vec![Action::None],
         Capability::Accelerometer(_) => vec![Action::None],

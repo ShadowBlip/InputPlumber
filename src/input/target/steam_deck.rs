@@ -807,6 +807,7 @@ impl SteamDeckDevice {
                         TouchButton::Touch => self.state.l_pad_touch = event.pressed(),
                         TouchButton::Press => self.state.l_pad_press = event.pressed(),
                     },
+                    _ => (),
                 },
                 //TODO:: Remove CenterPad after we implement Target Profiles
                 Touchpad::RightPad(touch_event) | Touchpad::CenterPad(touch_event) => {
@@ -839,6 +840,7 @@ impl SteamDeckDevice {
                             TouchButton::Touch => self.state.r_pad_touch = event.pressed(),
                             TouchButton::Press => self.state.r_pad_press = event.pressed(),
                         },
+                        _ => (),
                     }
                 }
             },

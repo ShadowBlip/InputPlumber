@@ -1,6 +1,11 @@
-use std::{collections::HashSet, error::Error, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Debug,
+};
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::oxp_tty::{driver::Driver, event, OxpDriverType},
     input::{
         capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
@@ -13,6 +18,7 @@ use crate::{
 /// [OneXFlySerial] source device implementation
 pub struct OneXFlySerial {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
 }
 
 impl OneXFlySerial {
@@ -21,21 +27,32 @@ impl OneXFlySerial {
     pub fn new(
         device: UdevDevice,
         driver_type: OxpDriverType,
+        capability_map: HashMap<Capability, Capability>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device.devnode().as_str(), driver_type)?;
-        Ok(Self { driver })
+        Ok(Self {
+            driver,
+            capability_map,
+        })
     }
 }
 
 impl SourceInputDevice for OneXFlySerial {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {

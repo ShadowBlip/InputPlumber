@@ -1,7 +1,11 @@
 pub mod evdev;
 pub mod hidraw;
 
-use std::{collections::HashMap, io::Read, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Read,
+    path::Path,
+};
 
 use evdev::EvdevConfig;
 use hidraw::HidrawConfig;
@@ -12,6 +16,7 @@ use super::{
     path::{get_capability_maps_paths, get_multidir_sorted_files},
     LoadError,
 };
+use crate::input::{capability::Capability, event::native::NativeEvent};
 
 /// Loads all capability mappings in all default locations and returns a hashmap
 /// of the CapabilityMap ID and the [CapabilityMap].
@@ -86,6 +91,64 @@ impl CapabilityMapConfig {
             CapabilityMapConfig::V2(conf) => conf.id.clone(),
         }
     }
+
+    /// Returns the V1 single-source capability-to-capability mappings.
+    pub fn capability_translation(&self) -> HashMap<Capability, Capability> {
+        let CapabilityMapConfig::V1(map) = self else {
+            log::error!(
+                "V2 capability map '{}' cannot be applied to non-evdev sources",
+                self.id()
+            );
+            return HashMap::new();
+        };
+
+        let mut source_counts: HashMap<Capability, usize> = HashMap::new();
+        for mapping in map.mapping.iter() {
+            if mapping.source_events.len() != 1 {
+                log::warn!(
+                    "Capability map '{}' mapping '{}' has multiple source events, which \
+                     cannot be applied to non-evdev sources; dropping",
+                    map.id,
+                    mapping.name
+                );
+                continue;
+            }
+            let source: Capability = mapping.source_events[0].clone().into();
+            if matches!(source, Capability::NotImplemented) {
+                continue;
+            }
+            *source_counts.entry(source).or_default() += 1;
+        }
+        let duplicates: HashSet<Capability> = source_counts
+            .into_iter()
+            .filter(|(_, count)| *count > 1)
+            .map(|(capability, _)| capability)
+            .collect();
+        for capability in &duplicates {
+            log::warn!(
+                "Capability map '{}' has multiple mappings for {capability:?}; dropping all",
+                map.id
+            );
+        }
+
+        map.mapping
+            .iter()
+            .filter(|mapping| mapping.source_events.len() == 1)
+            .filter_map(|mapping| {
+                let source: Capability = mapping.source_events[0].clone().into();
+                let target: Capability = mapping.target_event.clone().into();
+                if matches!(source, Capability::NotImplemented)
+                    || matches!(target, Capability::NotImplemented)
+                {
+                    return None;
+                }
+                if duplicates.contains(&source) {
+                    return None;
+                }
+                Some((source, target))
+            })
+            .collect()
+    }
 }
 
 /// [CapabilityMapConfigHeader] is used to check the version/kind to determine which
@@ -148,9 +211,6 @@ pub enum EvdevMappingType {
     /// Source events will be treated as an inclusive match to emit a single
     /// inputplumber event. Events emitted immediately upon match.
     Chord,
-    /// Source events will be treated as an inclusive match to emit a single
-    /// inputplumber event. Events emitted after button is released.
-    DelayedChord,
     /// Multiple source events will emit the same inputplumber event. Useful for mapping
     /// axis where different directions are triggered by separate events or multiple
     /// events to the same inputplumber event.
@@ -338,4 +398,78 @@ pub struct SourceCapability {
     pub deadzone: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub axis: Option<String>,
+}
+
+/// Builds the capability translation map from the composite-level and
+/// optional source-level maps. Entries present in both are logged and
+/// dropped.
+pub fn get_capability_translations(
+    composite_map: Option<&CapabilityMapConfig>,
+    source_map: Option<&CapabilityMapConfig>,
+) -> HashMap<Capability, Capability> {
+    let mut map = composite_map
+        .map(|map| map.capability_translation())
+        .unwrap_or_default();
+
+    let Some(source_map) = source_map else {
+        return map;
+    };
+    let source_map = source_map.capability_translation();
+
+    let duplicates: HashSet<Capability> = source_map
+        .keys()
+        .filter(|capability| map.contains_key(*capability))
+        .cloned()
+        .collect();
+    for capability in &duplicates {
+        log::warn!("Duplicate capability map entry {capability:?}; dropping both");
+    }
+
+    map.retain(|capability, _| !duplicates.contains(capability));
+    for (capability, target) in source_map {
+        if !duplicates.contains(&capability) {
+            map.insert(capability, target);
+        }
+    }
+
+    map
+}
+
+/// Translates the capabilities of the given events using the given map.
+/// Event values are passed through as-is.
+pub fn translate_capabilities(
+    events: Vec<NativeEvent>,
+    map: &HashMap<Capability, Capability>,
+) -> Vec<NativeEvent> {
+    if map.is_empty() {
+        return events;
+    }
+    events
+        .into_iter()
+        .map(|event| {
+            let source = event.as_capability();
+            match map.get(&source) {
+                Some(target) => {
+                    log::trace!("capability map: {source:?} -> {target:?}");
+                    NativeEvent::new_translated(source, target.clone(), event.get_value())
+                }
+                None => event,
+            }
+        })
+        .collect()
+}
+
+/// Maps the given capabilities through the given map, leaving
+/// untranslated capabilities unchanged.
+pub fn exposed_capabilities(
+    capabilities: Vec<Capability>,
+    map: &HashMap<Capability, Capability>,
+) -> Vec<Capability> {
+    if map.is_empty() {
+        return capabilities;
+    }
+    capabilities
+        .into_iter()
+        .map(|capability| map.get(&capability).cloned().unwrap_or(capability))
+        .collect()
 }

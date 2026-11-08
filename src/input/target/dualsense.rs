@@ -592,6 +592,7 @@ impl DualSenseDevice {
                         TouchButton::Touch => (),
                         TouchButton::Press => state.touchpad = event.pressed(),
                     },
+                    _ => (),
                 }
             }
             Capability::Gyroscope(_) => {

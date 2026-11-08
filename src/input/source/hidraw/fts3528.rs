@@ -1,6 +1,11 @@
-use std::{collections::HashSet, error::Error, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt::Debug,
+};
 
 use crate::{
+    config::capability_map::{exposed_capabilities, translate_capabilities},
     drivers::fts3528::{
         self,
         driver::Driver,
@@ -18,28 +23,42 @@ use crate::{
 /// FTS3528 Touchscreen source device implementation
 pub struct Fts3528Touchscreen {
     driver: Driver,
+    capability_map: HashMap<Capability, Capability>,
 }
 
 impl Fts3528Touchscreen {
     /// Create a new FTS3528 touchscreen source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(
+        device_info: UdevDevice,
+        capability_map: HashMap<Capability, Capability>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let driver = Driver::new(device_info.devnode())?;
-        Ok(Self { driver })
+        Ok(Self {
+            driver,
+            capability_map,
+        })
     }
 }
 
 impl SourceInputDevice for Fts3528Touchscreen {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.capability_map.values().cloned().collect()
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let events = self.driver.poll()?;
         let native_events = translate_events(events);
-        Ok(native_events)
+        Ok(translate_capabilities(native_events, &self.capability_map))
     }
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(exposed_capabilities(
+            CAPABILITIES.into(),
+            &self.capability_map,
+        ))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {

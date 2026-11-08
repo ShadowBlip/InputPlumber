@@ -20,6 +20,7 @@ matches: []
 # from these devices will be watched and translated according to the key map.
 source_devices:
   - group: gamepad
+    capability_map_id: switch_pro
     evdev:
       vendor_id: "057e"
       product_id: "2009"

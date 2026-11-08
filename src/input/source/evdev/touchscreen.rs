@@ -9,10 +9,9 @@ use evdev::{
 };
 use nix::fcntl::{FcntlArg, OFlag};
 
-use crate::config::capability_map::CapabilityMapConfigV2;
 use crate::config::TouchscreenConfig;
 use crate::input::capability::Touch;
-use crate::input::event::evdev::translator::EventTranslator;
+use crate::input::event::evdev::{maps::MappedTranslation, translator::EventTranslator};
 use crate::input::event::value::InputValue;
 use crate::{
     input::{
@@ -103,6 +102,7 @@ impl TouchState {
 pub struct TouchscreenEventDevice {
     device: Device,
     translator: Option<EventTranslator>,
+    event_filter: HashSet<Capability>,
     orientation: Orientation,
     axes_info: HashMap<AbsoluteAxisCode, AbsInfo>,
     touch_state: [TouchState; 10], // NOTE: Max of 10 touch inputs
@@ -115,7 +115,7 @@ impl TouchscreenEventDevice {
     pub fn new(
         device_info: UdevDevice,
         config: Option<TouchscreenConfig>,
-        capability_map: Option<CapabilityMapConfigV2>,
+        mappings: Option<Vec<MappedTranslation>>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = device_info.devnode();
         log::debug!("Opening device at: {}", path);
@@ -182,13 +182,15 @@ impl TouchscreenEventDevice {
             };
         log::debug!("Configured touchscreen orientation: {orientation:?}");
 
-        // Create an event translator if a capability map was given
-        let translator = capability_map.map(|map| EventTranslator::new(&map, axes_info.clone()));
+        // Create an event translator if mappings were given
+        let translator =
+            mappings.map(|mappings| EventTranslator::new(&mappings, axes_info.clone()));
 
         Ok(Self {
             device,
             orientation,
             translator,
+            event_filter: HashSet::new(),
             axes_info,
             touch_state: Default::default(),
             dirty_states: HashSet::with_capacity(10),
@@ -301,16 +303,32 @@ impl TouchscreenEventDevice {
 
         vec![]
     }
+
+    /// Emit a native event unless the on-demand filter excludes it.
+    fn emit(&mut self, events: &mut Vec<NativeEvent>, event: NativeEvent) {
+        if !self.event_filter.is_empty() && !self.event_filter.contains(&event.as_capability()) {
+            return;
+        }
+        events.push(event);
+    }
 }
 
 impl SourceInputDevice for TouchscreenEventDevice {
+    fn translation_targets(&self) -> Vec<Capability> {
+        self.translator
+            .as_ref()
+            .map_or_else(Vec::new, EventTranslator::translation_targets)
+    }
+
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
         let mut native_events = vec![];
 
-        // Poll the translator for any scheduled events
+        // Emit any translator held events that are ready
         if let Some(translator) = self.translator.as_mut() {
-            native_events.extend(translator.poll());
+            for event in translator.drain_deferrals() {
+                self.emit(&mut native_events, event);
+            }
         }
 
         // Read events from the device
@@ -333,51 +351,41 @@ impl SourceInputDevice for TouchscreenEventDevice {
             events
         };
 
-        // Convert the events into native events if no translator exists
-        if self.translator.is_none() {
-            let translated_events: Vec<NativeEvent> = events
-                .into_iter()
-                .map(|e| self.translate(e))
-                .filter(|events| !events.is_empty())
-                .flatten()
-                .collect();
-            native_events.extend(translated_events);
-            return Ok(native_events);
-        }
-
-        // Create a list of events that the translator can't translate
-        let mut untranslated_events = vec![];
-
-        // Convert the events into native events with the translator
-        {
-            let Some(translator) = self.translator.as_mut() else {
-                return Ok(native_events);
-            };
-
-            for event in events {
-                if translator.has_translation(&event) {
-                    native_events.extend(translator.translate(&event));
-                } else {
-                    untranslated_events.push(event);
+        for event in events {
+            let translated = self.translator.as_mut().and_then(|t| t.translate(&event));
+            if let Some(translated) = translated {
+                for event in translated {
+                    self.emit(&mut native_events, event);
                 }
+                continue;
+            }
+            for event in self.translate(event) {
+                self.emit(&mut native_events, event);
             }
         }
-
-        // Convert the events into native events
-        let translated_events: Vec<NativeEvent> = untranslated_events
-            .into_iter()
-            .map(|e| self.translate(e))
-            .filter(|events| !events.is_empty())
-            .flatten()
-            .collect();
-        native_events.extend(translated_events);
 
         Ok(native_events)
     }
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(vec![Capability::Touchscreen(Touch::Motion)])
+        let mut capabilities = vec![Capability::Touchscreen(Touch::Motion)];
+
+        // Report post-translation capabilities when a translator is active
+        if let Some(translator) = &self.translator {
+            let raw_kept: HashSet<Capability> = capabilities.iter().cloned().collect();
+            capabilities = translator
+                .exposed_capabilities(&raw_kept)
+                .into_iter()
+                .collect();
+        }
+
+        Ok(capabilities)
+    }
+
+    fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {
+        self.event_filter = events;
+        Ok(())
     }
 }
 
