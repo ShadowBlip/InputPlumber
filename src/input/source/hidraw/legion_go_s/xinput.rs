@@ -15,7 +15,10 @@ use crate::{
         steam_deck::hid_report::{CommandType, PackedTriggerHapticPulse, PadSide},
     },
     input::{
-        capability::{Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger},
+        capability::{
+            Capability, Gamepad, GamepadAxis, GamepadButton, GamepadTrigger, Touch, TouchButton,
+            Touchpad,
+        },
         event::native::NativeEvent,
         output_capability::{Haptic, OutputCapability},
         output_event::OutputEvent,
@@ -327,4 +330,7 @@ pub const CAPABILITIES: &[Capability] = &[
     Capability::Gamepad(Gamepad::Button(GamepadButton::West)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::LeftTrigger)),
     Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTrigger)),
+    Capability::Gamepad(Gamepad::Trigger(GamepadTrigger::RightTouchpadForce)),
+    Capability::Touchpad(Touchpad::RightPad(Touch::Button(TouchButton::Press))),
+    Capability::Touchpad(Touchpad::RightPad(Touch::Motion)),
 ];
