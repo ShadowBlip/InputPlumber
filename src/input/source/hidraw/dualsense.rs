@@ -1,13 +1,13 @@
 use std::fmt::Debug;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::{collections::HashMap, collections::HashSet, error::Error};
 
 use evdev::{FFEffectData, FFEffectKind};
 use packed_struct::types::SizedInteger;
 
 use crate::drivers::dualsense::{
-    DS5_EDGE_PID, DS5_PID, DS5_TOUCHPAD_HEIGHT, DS5_TOUCHPAD_WIDTH, DS5_VID, STICK_X_MAX,
-    STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGGER_MAX,
+    hid_report::SetStatePackedOutputData, DS5_EDGE_PID, DS5_PID, DS5_TOUCHPAD_HEIGHT,
+    DS5_TOUCHPAD_WIDTH, DS5_VID, STICK_X_MAX, STICK_X_MIN, STICK_Y_MAX, STICK_Y_MIN, TRIGGER_MAX,
 };
 use crate::drivers::steam_deck::hid_report::PackedTriggerVibration;
 use crate::input::capability::Source;
@@ -38,11 +38,17 @@ pub const VID: u16 = DS5_VID;
 /// Product IDs
 pub const PIDS: [u16; 2] = [DS5_EDGE_PID, DS5_PID];
 
+const OUTPUT_INTERVAL_BT: Duration = Duration::from_millis(10);
+const OUTPUT_INTERVAL_USB: Duration = Duration::ZERO;
+
 /// Sony Playstation DualSense Controller source device implementation
 pub struct DualSenseController {
     driver: Driver,
     ff_evdev_effects: HashMap<i16, FFEffectData>,
     haptic_state: Option<HapticState>,
+    pending_output: Option<SetStatePackedOutputData>,
+    last_output: Instant,
+    device_state: Option<SetStatePackedOutputData>,
 }
 
 impl DualSenseController {
@@ -54,7 +60,75 @@ impl DualSenseController {
             driver,
             ff_evdev_effects: HashMap::new(),
             haptic_state: None,
+            pending_output: None,
+            last_output: Instant::now(),
+            device_state: None,
         })
+    }
+
+    fn output_interval(&self) -> Duration {
+        if self.driver.is_bluetooth() {
+            OUTPUT_INTERVAL_BT
+        } else {
+            OUTPUT_INTERVAL_USB
+        }
+    }
+
+    fn queue_output(&mut self, state: SetStatePackedOutputData) {
+        match self.pending_output.as_mut() {
+            Some(pending) => pending.merge(&state),
+            None => self.pending_output = Some(state),
+        }
+    }
+
+    fn queue_rumble(&mut self, left: u8, right: u8) {
+        self.queue_output(SetStatePackedOutputData {
+            use_rumble_not_haptics: true,
+            enable_rumble_emulation: true,
+            rumble_emulation_right: right,
+            rumble_emulation_left: left,
+            ..Default::default()
+        });
+    }
+
+    fn flush_output(&mut self) {
+        let Some(state) = self.pending_output else {
+            return;
+        };
+        let changes_device = self
+            .device_state
+            .as_ref()
+            .is_none_or(|current| current.would_change(&state));
+        if !changes_device {
+            self.pending_output = None;
+            return;
+        }
+        if self.last_output.elapsed() < self.output_interval() {
+            return;
+        }
+        self.write_output(state);
+    }
+
+    fn write_output(&mut self, state: SetStatePackedOutputData) {
+        self.last_output = Instant::now();
+        match self.driver.write(state) {
+            Ok(()) => {
+                self.pending_output = None;
+                let mut device_state = self.device_state.unwrap_or_default();
+                device_state.merge(&state);
+                self.device_state = Some(device_state);
+            }
+            Err(e) => log::debug!("Failed to write DualSense output report, retrying: {e:?}"),
+        }
+    }
+
+    fn restore_output_after_reset(&mut self) {
+        if !self.driver.take_output_reset() {
+            return;
+        }
+        if let Some(state) = self.device_state.take() {
+            self.queue_output(state);
+        }
     }
 
     /// Returns the next available evdev effect id
@@ -70,16 +144,6 @@ impl DualSenseController {
                 return -1;
             }
         }
-    }
-
-    /// Write a rumble event to the driver
-    fn write_rumble(
-        driver: &mut Driver,
-        left: u8,
-        right: u8,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let event = event::OutputEvent::HapticRumble { left, right };
-        driver.write_event(&event)
     }
 
     /// Process the given evdev force feedback event.
@@ -104,10 +168,7 @@ impl DualSenseController {
         if value == 0 {
             self.haptic_state = None;
             log::trace!("Stopping rumble");
-            if let Err(e) = Self::write_rumble(&mut self.driver, 0, 0) {
-                log::debug!("Failed to stop rumble: {:?}", e);
-                return Ok(());
-            }
+            self.queue_rumble(0, 0);
             return Ok(());
         }
 
@@ -143,13 +204,7 @@ impl DualSenseController {
                 let left_speed = strong_magnitude / u8::MAX as u16 + 1;
                 let right_speed = weak_magnitude / u8::MAX as u16 + 1;
 
-                // Do rumble
-                if let Err(e) =
-                    Self::write_rumble(&mut self.driver, left_speed as u8, right_speed as u8)
-                {
-                    let err = format!("Failed to do rumble: {e:?}");
-                    return Err(err.into());
-                }
+                self.queue_rumble(left_speed as u8, right_speed as u8);
             }
         }
 
@@ -163,8 +218,7 @@ impl DualSenseController {
         let right_speed =
             magnitude(report.right_speed.to_primitive(), report.right_gain, 255.0) as u16 + 1;
         log::trace!("Writing rumble left={left_speed} right={right_speed}");
-        Self::write_rumble(&mut self.driver, left_speed as u8, right_speed as u8)
-            .map_err(|e| e.to_string())?;
+        self.queue_rumble(left_speed as u8, right_speed as u8);
         Ok(())
     }
 }
@@ -172,17 +226,18 @@ impl DualSenseController {
 impl SourceInputDevice for DualSenseController {
     /// Poll the given input device for input events
     fn poll(&mut self) -> Result<Vec<NativeEvent>, InputError> {
+        let mut rumble = None;
         if let Some(state) = &mut self.haptic_state {
             match state {
                 HapticState::Stop(stop_at) => {
                     if Instant::now() >= *stop_at {
                         self.haptic_state = None;
-                        let _ = Self::write_rumble(&mut self.driver, 0, 0);
+                        rumble = Some((0, 0));
                     }
                 }
                 HapticState::Start(series) => {
                     if let Some((weak, strong)) = series.advance(Instant::now()) {
-                        let _ = Self::write_rumble(&mut self.driver, strong, weak);
+                        rumble = Some((strong, weak));
                     }
                     if series.is_finished() {
                         self.haptic_state = None;
@@ -190,8 +245,13 @@ impl SourceInputDevice for DualSenseController {
                 }
             }
         }
+        if let Some((left, right)) = rumble {
+            self.queue_rumble(left, right);
+        }
+        self.flush_output();
 
         let events = self.driver.poll()?;
+        self.restore_output_after_reset();
         let native_events = translate_events(events);
 
         Ok(native_events)
@@ -228,15 +288,15 @@ impl SourceOutputDevice for DualSenseController {
             OutputEvent::Evdev(input_event) => Ok(self.process_evdev_ff(input_event)?),
             OutputEvent::DualSense(report) => {
                 log::debug!("Received DualSense output report");
-                let state = event::OutputEvent::State(report);
-                Ok(self.driver.write_event(&state)?)
+                self.queue_output(report);
+                Ok(())
             }
             OutputEvent::Uinput(_) => Ok(()),
             OutputEvent::TriggerHapticPulse(_report) => Ok(()),
             OutputEvent::TriggerRepeatedHapticPulse(report) => {
                 let series = HapticPulseSeries::new(&report, u8::MAX);
                 let (weak, strong) = series.magnitudes();
-                Self::write_rumble(&mut self.driver, strong, weak)?;
+                self.queue_rumble(strong, weak);
                 self.haptic_state = Some(HapticState::Start(series));
                 Ok(())
             }
@@ -260,7 +320,7 @@ impl SourceOutputDevice for DualSenseController {
             } => {
                 let left_speed = (strong_magnitude / 256) as u8;
                 let right_speed = (weak_magnitude / 256) as u8;
-                Self::write_rumble(&mut self.driver, left_speed, right_speed)?;
+                self.queue_rumble(left_speed, right_speed);
                 Ok(())
             }
         }
@@ -290,6 +350,15 @@ impl SourceOutputDevice for DualSenseController {
     fn erase_effect(&mut self, effect_id: i16) -> Result<(), OutputError> {
         log::debug!("Erasing FF effect data");
         self.ff_evdev_effects.remove(&effect_id);
+        Ok(())
+    }
+
+    fn stop(&mut self) -> Result<(), OutputError> {
+        self.haptic_state = None;
+        self.queue_rumble(0, 0);
+        if let Some(state) = self.pending_output {
+            self.write_output(state);
+        }
         Ok(())
     }
 }

@@ -3,10 +3,13 @@ use std::error::Error;
 use packed_struct::prelude::*;
 
 use super::driver::{accel_axis_calibration, gyro_axis_calibration};
-use super::hid_report::{CalibrationReport, InputState};
+use super::hid_report::{
+    output_report_bt_crc32, BluetoothPackedOutputReport, CalibrationReport, InputState,
+    SetStatePackedOutputData, OUTPUT_REPORT_BT_TAG,
+};
 use super::{
     DS5_ACCEL_RAW_TO_MPS2, DS5_CALIB_ACCEL_PLUS, DS5_CALIB_GYRO_PLUS, DS5_CALIB_GYRO_SPEED,
-    DS5_GYRO_RAW_TO_RAD_S,
+    DS5_GYRO_RAW_TO_RAD_S, OUTPUT_REPORT_BT, OUTPUT_REPORT_BT_SIZE,
 };
 
 #[tokio::test]
@@ -94,4 +97,158 @@ fn zero_denominator_falls_back_without_panicking() {
     let accel = accel_axis_calibration(0, 0);
     assert_eq!(accel.bias, 0.0);
     assert!(accel.scale.is_finite() && accel.scale > 0.0);
+}
+
+#[test]
+fn bt_output_crc_is_seeded_with_hidp_header() {
+    assert_eq!(
+        output_report_bt_crc32(&[0x31, 0x20, 0x10, 0xAB, 0xCD]),
+        0x6D65_5711
+    );
+}
+
+#[test]
+fn bt_output_report_layout() -> Result<(), Box<dyn Error>> {
+    let state = SetStatePackedOutputData {
+        allow_led_color: true,
+        led_red: 0x11,
+        led_green: 0x22,
+        led_blue: 0x33,
+        ..Default::default()
+    };
+    let buf = BluetoothPackedOutputReport::new(state, 0x13).pack_with_crc()?;
+
+    assert_eq!(buf.len(), OUTPUT_REPORT_BT_SIZE);
+    assert_eq!(buf[0], OUTPUT_REPORT_BT);
+    assert_eq!(buf[1], 0x30);
+    assert_eq!(buf[2], OUTPUT_REPORT_BT_TAG);
+    assert_eq!(&buf[3..50], &state.pack()?[..]);
+    assert!(buf[50..74].iter().all(|b| *b == 0));
+    let crc = output_report_bt_crc32(&buf[..74]);
+    assert_eq!(&buf[74..], &crc.to_le_bytes());
+
+    Ok(())
+}
+
+#[test]
+fn bt_output_report_round_trip() -> Result<(), Box<dyn Error>> {
+    let state = SetStatePackedOutputData {
+        allow_right_trigger_ffb: true,
+        right_trigger_ffb: [0x21, 0xFF, 0x03, 0, 0, 0, 0, 0, 0, 0, 0],
+        enable_rumble_emulation: true,
+        use_rumble_not_haptics: true,
+        rumble_emulation_left: 90,
+        ..Default::default()
+    };
+    let buf = BluetoothPackedOutputReport::new(state, 7).pack_with_crc()?;
+    let report = BluetoothPackedOutputReport::unpack(&buf)?;
+
+    assert_eq!(report.state, state);
+    assert_eq!(report.seq_tag, 0x70);
+    assert_eq!(
+        report.crc32.to_primitive(),
+        output_report_bt_crc32(&buf[..74])
+    );
+
+    Ok(())
+}
+
+#[test]
+fn merge_keeps_sections_not_set_by_newer_state() {
+    let mut merged = SetStatePackedOutputData {
+        allow_led_color: true,
+        led_red: 255,
+        led_blue: 128,
+        ..Default::default()
+    };
+    merged.merge(&SetStatePackedOutputData {
+        use_rumble_not_haptics: true,
+        enable_rumble_emulation: true,
+        rumble_emulation_left: 200,
+        rumble_emulation_right: 100,
+        ..Default::default()
+    });
+    merged.merge(&SetStatePackedOutputData {
+        use_rumble_not_haptics: true,
+        enable_rumble_emulation: true,
+        ..Default::default()
+    });
+
+    assert!(merged.allow_led_color);
+    assert_eq!(
+        (merged.led_red, merged.led_green, merged.led_blue),
+        (255, 0, 128)
+    );
+    assert!(merged.enable_rumble_emulation && merged.use_rumble_not_haptics);
+    assert_eq!(
+        (merged.rumble_emulation_left, merged.rumble_emulation_right),
+        (0, 0)
+    );
+    assert!(!merged.allow_right_trigger_ffb && !merged.allow_left_trigger_ffb);
+}
+
+#[test]
+fn merge_replaces_trigger_effects_per_side() {
+    let mut merged = SetStatePackedOutputData {
+        allow_right_trigger_ffb: true,
+        right_trigger_ffb: [1; 11],
+        ..Default::default()
+    };
+    merged.merge(&SetStatePackedOutputData {
+        allow_left_trigger_ffb: true,
+        left_trigger_ffb: [2; 11],
+        ..Default::default()
+    });
+    merged.merge(&SetStatePackedOutputData {
+        allow_right_trigger_ffb: true,
+        right_trigger_ffb: [3; 11],
+        ..Default::default()
+    });
+
+    assert_eq!(merged.right_trigger_ffb, [3; 11]);
+    assert_eq!(merged.left_trigger_ffb, [2; 11]);
+}
+
+#[test]
+fn would_change_ignores_repeated_states() {
+    let led = SetStatePackedOutputData {
+        allow_led_color: true,
+        led_red: 10,
+        led_green: 20,
+        led_blue: 30,
+        ..Default::default()
+    };
+    let rumble = SetStatePackedOutputData {
+        use_rumble_not_haptics: true,
+        enable_rumble_emulation: true,
+        rumble_emulation_left: 120,
+        ..Default::default()
+    };
+    let mut device = SetStatePackedOutputData::default();
+    device.merge(&led);
+    device.merge(&rumble);
+
+    assert!(!device.would_change(&led));
+    assert!(!device.would_change(&rumble));
+    assert!(!device.would_change(&SetStatePackedOutputData {
+        host_timestamp: 1234.into(),
+        ..led
+    }));
+    assert!(device.would_change(&SetStatePackedOutputData {
+        led_blue: 31,
+        ..led
+    }));
+    assert!(device.would_change(&SetStatePackedOutputData {
+        rumble_emulation_left: 0,
+        ..rumble
+    }));
+    assert!(device.would_change(&SetStatePackedOutputData {
+        allow_right_trigger_ffb: true,
+        right_trigger_ffb: [0x21, 0xFF, 0x03, 0, 0, 0, 0, 0, 0, 0, 0],
+        ..Default::default()
+    }));
+    assert!(device.would_change(&SetStatePackedOutputData {
+        reset_lights: true,
+        ..Default::default()
+    }));
 }
