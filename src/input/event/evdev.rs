@@ -946,6 +946,7 @@ fn event_codes_from_capability(capability: Capability) -> Vec<u16> {
         },
         Capability::Gyroscope(_) => vec![],
         Capability::Accelerometer(_) => vec![],
+        Capability::Layer { .. } => vec![],
     }
 }
 

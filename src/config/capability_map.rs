@@ -1,7 +1,7 @@
 pub mod evdev;
 pub mod hidraw;
 
-use std::{collections::HashMap, io::Read, path::Path};
+use std::{collections::HashMap, fmt, io::Read, path::Path, str::FromStr};
 
 use evdev::EvdevConfig;
 use hidraw::HidrawConfig;
@@ -199,6 +199,67 @@ pub struct CapabilityConfig {
     pub gyroscope: Option<SourceCapability>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub accelerometer: Option<SourceCapability>,
+    /// Target-only capability that activates an input layer. Using it as a
+    /// source event is rejected when a profile loads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layer: Option<LayerCapability>,
+}
+
+/// A `layer` target event: names the layer to activate and how it is activated.
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct LayerCapability {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<LayerActivationMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_deactivation: Option<LayerDeactivation>,
+}
+
+/// Events a `layer` target event emits when its activator deactivates the
+/// layer: releasing a hold activation, or pressing a toggle activation again.
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct LayerDeactivation {
+    /// Emit only if no mapping of the layer produced an output while it was
+    /// active.
+    #[serde(default)]
+    pub only_when_unused: bool,
+    /// Target events to emit, each as a press followed by a release.
+    pub emit_events: Vec<CapabilityConfig>,
+}
+
+/// How an activation drives the layer stack. The mode that activates a layer is
+/// the mode that deactivates it.
+#[derive(Debug, Deserialize, Serialize, Clone, Default, PartialEq, Eq, Hash, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LayerActivationMode {
+    /// Active only while the activator input is held
+    #[default]
+    Hold,
+    /// Press to activate, press again to deactivate
+    Toggle,
+}
+
+impl fmt::Display for LayerActivationMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LayerActivationMode::Hold => write!(f, "hold"),
+            LayerActivationMode::Toggle => write!(f, "toggle"),
+        }
+    }
+}
+
+impl FromStr for LayerActivationMode {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "hold" => Ok(LayerActivationMode::Hold),
+            "toggle" => Ok(LayerActivationMode::Toggle),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
