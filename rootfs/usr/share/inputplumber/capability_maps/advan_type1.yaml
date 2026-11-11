@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: ADVAN X-PLAY
+
+# Unique identifier of the capability mapping
+id: advan1
+
+# List of mapped events
+mapping:
+  # The embedded controller reports the Home button with scancodes 0xdb + 0x20.
+  # 59-inputplumber.hwdb remaps these to KEY_F16 and a reserved key.
+  - name: Home
+    mapping_type:
+      evdev: chord
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_F16
+          value_type: button
+    target_event:
+      gamepad:
+        button: Guide

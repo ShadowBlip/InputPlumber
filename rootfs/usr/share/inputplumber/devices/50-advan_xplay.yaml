@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: ADVAN X-PLAY
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches:
+  - dmi_data:
+      product_name: "1301"
+      sys_vendor: ADVAN
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  - group: gamepad
+    evdev:
+      name: Generic X-Box pad
+      vendor_id: "2f24"
+      product_id: "0135"
+      handler: event*
+    events:
+      exclude:
+        # The pad has no dedicated Guide button. Holding the Home button makes
+        # the embedded controller report one, which would trigger the Guide
+        # action a second time. Guide is provided by the keyboard source below.
+        - Gamepad:Button:Guide
+  # The embedded controller exposes the Home button with scancodes 0xdb + 0x20.
+  # 59-inputplumber.hwdb remaps these to KEY_F16 and a reserved key.
+  - group: keyboard
+    evdev:
+      name: AT Translated Set 2 keyboard
+      phys_path: isa0060/serio0/input0
+      handler: event*
+    capability_map_id: advan1
+
+# Optional configuration for the composite device
+options:
+  # If true, InputPlumber will automatically try to manage the input device. If
+  # this is false, InputPlumber will not try to manage the device unless an
+  # external service enables management of the device. Defaults to 'false'
+  auto_manage: true
+
+# The target input device(s) to emulate by default
+target_devices:
+  - xbox-elite
+  - mouse
+  - keyboard

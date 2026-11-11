@@ -1,3 +1,10 @@
+# ADVAN X-PLAY
+# The Home button is reported as Win+D (scancodes 0xdb + 0x20) by the
+# embedded controller. Map it to a spare key and drop the extra event.
+evdev:name:AT Translated Set 2 keyboard:dmi:*:svnADVAN:pn1301:*
+  KEYBOARD_KEY_db=f16
+  KEYBOARD_KEY_20=reserved
+
 # AYANEO Devices
 evdev:name:AT Translated Set 2 keyboard:dmi:*:svnAYANEO:*
   KEYBOARD_KEY_66=f15
