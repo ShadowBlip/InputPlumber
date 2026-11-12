@@ -532,10 +532,7 @@ impl Driver {
                     Event::Axis(AxisEvent::LeftGyro(ImuAxisInput {
                         pitch: -state.left_gyro_x,
                         roll: -state.left_gyro_y,
-                        yaw: match self.gen {
-                            LegionGoGen::Gen2 => -state.left_gyro_z,
-                            LegionGoGen::Gen1 => state.left_gyro_z,
-                        },
+                        yaw: state.left_gyro_z,
                     })),
                 )
             }
@@ -548,7 +545,10 @@ impl Driver {
                     Event::Axis(AxisEvent::RightGyro(ImuAxisInput {
                         pitch: -state.right_gyro_x,
                         roll: -state.right_gyro_y,
-                        yaw: -state.right_gyro_z,
+                        yaw: match self.gen {
+                            LegionGoGen::Gen2 => state.right_gyro_z,
+                            LegionGoGen::Gen1 => -state.right_gyro_z,
+                        },
                     })),
                 )
             }
@@ -566,7 +566,7 @@ impl Driver {
                         pitch: -(state.left_gyro_x + state.right_gyro_x) / 2,
                         roll: -(state.left_gyro_y + state.right_gyro_y) / 2,
                         yaw: match self.gen {
-                            LegionGoGen::Gen2 => -(state.left_gyro_z + state.right_gyro_z) / 2,
+                            LegionGoGen::Gen2 => (state.left_gyro_z + state.right_gyro_z) / 2,
                             LegionGoGen::Gen1 => (state.left_gyro_z - state.right_gyro_z) / 2,
                         },
                     })),
