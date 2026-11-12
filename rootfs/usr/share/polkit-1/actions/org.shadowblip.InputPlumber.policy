@@ -824,6 +824,26 @@
     </defaults>
   </action>
 
+  <action id="org.shadowblip.Input.Source.LEDDevice.GetEffects">
+    <description>Get the effects supported by the LED device</description>
+    <message>Authentication is required to get LED device effects</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.shadowblip.Input.Source.LEDDevice.SetState">
+    <description>Set the LED device effect, color, and brightness</description>
+    <message>Authentication is required to set the LED device state</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+
   <action id="org.shadowblip.Input.Source.TTYDevice.Id">
     <description>Get the TTY device ID</description>
     <message>Authentication is required to get TTY device ID</message>
