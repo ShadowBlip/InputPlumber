@@ -13,15 +13,17 @@ id: advan1
 
 # List of mapped events
 mapping:
-  # The embedded controller reports the Home button with scancodes 0xdb + 0x20.
-  # 59-inputplumber.hwdb remaps these to KEY_F16 and a reserved key.
   - name: Home
     mapping_type:
       evdev: chord
     source_events:
       - evdev:
           event_type: KEY
-          event_code: KEY_F16
+          event_code: KEY_LEFTMETA
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_D
           value_type: button
     target_event:
       gamepad:

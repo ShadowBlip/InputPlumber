@@ -34,8 +34,6 @@ source_devices:
         # the embedded controller report one, which would trigger the Guide
         # action a second time. Guide is provided by the keyboard source below.
         - Gamepad:Button:Guide
-  # The embedded controller exposes the Home button with scancodes 0xdb + 0x20.
-  # 59-inputplumber.hwdb remaps these to KEY_F16 and a reserved key.
   - group: keyboard
     evdev:
       name: AT Translated Set 2 keyboard
