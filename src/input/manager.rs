@@ -987,22 +987,6 @@ impl Manager {
             "Starting CompositeDevice at {composite_path} with the following sources: {source_device_ids:?}"
         );
 
-        if !self.composite_device_sources.contains_key(&composite_path) {
-            self.composite_device_sources
-                .insert(composite_path.clone(), Vec::new());
-        }
-        let sources = self
-            .composite_device_sources
-            .get_mut(&composite_path)
-            .unwrap();
-        for id in source_device_ids {
-            self.source_devices_used
-                .insert(id.clone(), composite_path.clone());
-            self.source_devices
-                .insert(id.clone(), source_device.clone());
-            sources.push((source_device.clone(), id));
-        }
-
         // Get a handle to the device
         let client = device.client();
 
@@ -1033,6 +1017,16 @@ impl Manager {
         device.listen_on_dbus().await?;
 
         // Add the device to our maps
+        let mut sources = Vec::with_capacity(source_device_ids.len());
+        for id in source_device_ids {
+            self.source_devices_used
+                .insert(id.clone(), composite_path.clone());
+            self.source_devices
+                .insert(id.clone(), source_device.clone());
+            sources.push((source_device.clone(), id));
+        }
+        self.composite_device_sources
+            .insert(composite_path.clone(), sources);
         self.composite_devices
             .insert(composite_path.clone(), client);
         log::trace!("Managed source devices: {:?}", self.source_devices_used);
@@ -1089,6 +1083,7 @@ impl Manager {
         }
         for id in to_remove {
             self.source_devices_used.remove::<String>(&id);
+            self.source_devices.remove(&id);
         }
 
         // Find any target devices that were in use by the composite device
@@ -1125,6 +1120,8 @@ impl Manager {
         log::debug!("Used config removed: {}", path);
         self.composite_device_targets.remove(&path);
         log::debug!("Used target devices: {:?}", self.composite_device_targets);
+        self.composite_device_sources.remove(&path);
+        log::debug!("Used source devices removed: {}", path);
 
         Ok(())
     }
