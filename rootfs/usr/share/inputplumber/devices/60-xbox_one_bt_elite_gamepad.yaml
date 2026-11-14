@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: Microsoft X-Box One Elite pad
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty,then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# Only allow a CompositeDevice to manage at most the given number of
+# source devices. When this limit is reached, a new CompositeDevice will be
+# created for any new matching devices.
+maximum_sources: 2
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+# Elite Series 2 controllers with the BLE firmware use product ID 0b22 over
+# Bluetooth.
+source_devices:
+  - group: gamepad
+    evdev:
+      name: Xbox Wireless Controller
+      vendor_id: "045e"
+      product_id: "0b22"
+      handler: event*
+    events:
+      # Block input events, but use device for output events
+      exclude:
+        - "*"
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x045e
+      product_id: 0x0b22
+
+# Optional configuration for the composite device
+options:
+  # If true, InputPlumber will automatically try to manage the input device. If
+  # this is false, InputPlumber will not try to manage the device unless an
+  # external service enables management of the device. Defaults to 'false'
+  auto_manage: false
+
+# The target input device(s) to emulate by default
+target_devices:
+  - xbox-elite
+  - mouse
+  - keyboard
