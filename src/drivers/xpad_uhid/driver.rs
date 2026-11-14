@@ -375,7 +375,7 @@ impl Driver {
                     })),
                 );
             }
-            if state.trigger_l != old_state.trigger_r {
+            if state.trigger_r != old_state.trigger_r {
                 self.emit(
                     &mut events,
                     Event::Trigger(TriggerEvent::TriggerR(TriggerInput {
