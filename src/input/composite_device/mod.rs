@@ -951,29 +951,27 @@ impl CompositeDevice {
 
     /// Translate and write the given event to the appropriate target devices
     async fn handle_event(&mut self, event: NativeEvent) -> Result<(), Box<dyn Error>> {
-        // Check if we need to reverse the event list.
-        let is_pressed = event.pressed();
-        // Check if this is is a single event or multiple events.
-        let mut is_chord = false;
+        let source_pressed = event.pressed();
         // Track the delay for chord events.
         let mut sleep_time = 0;
 
         // Translate the event using the device profile.
-        let mut events = if self.device_profile.is_some() {
-            self.translate_event(&event)
-                .await?
+        let (mut events, is_chord) = if self.device_profile.is_some() {
+            let (events, is_chord) = self.translate_event(&event).await?;
+            let events: Vec<NativeEvent> = events
                 .into_iter()
                 .filter_map(|event| self.filter_event(event))
-                .collect()
+                .collect();
+            let is_chord = is_chord && events.len() > 1;
+            (events, is_chord)
         } else {
-            vec![event]
+            (vec![event], false)
         };
 
         // Check if we need to reverse the event list.
-        if events.len() > 1 {
+        if is_chord {
             //log::trace!("Got chord: {events:?}");
-            is_chord = true;
-            if !is_pressed {
+            if !source_pressed {
                 events = events.into_iter().rev().collect();
                 // To support on_release events, we need to sleep past the time it takes to emit
                 // the down events.
@@ -986,6 +984,9 @@ impl CompositeDevice {
 
         for event in events {
             let cap = event.as_capability();
+            // A translated event can be a release even if the source event
+            // is pressed, such as an axis returning to center.
+            let is_pressed = event.pressed();
 
             // Track what is currently active so we can ignore extra events.
             match cap {
@@ -1090,12 +1091,7 @@ impl CompositeDevice {
         };
         let target_cap = event.as_capability();
         // Handle only button presses
-        if !matches!(
-            target_cap,
-            Capability::Gamepad(Gamepad::Button(_))
-                | Capability::Keyboard(_)
-                | Capability::Mouse(Mouse::Button(_))
-        ) {
+        if !target_cap.is_button() {
             return Some(event);
         }
         let pressed = event.pressed();
@@ -1494,33 +1490,40 @@ impl CompositeDevice {
     }
 
     /// Translates the given event into a Vec of events based on the currently loaded
-    /// [DeviceProfile]
+    /// [DeviceProfile]. Also returns true if a single mapping produced multiple
+    /// events that should be emitted as a chord.
     async fn translate_event(
         &self,
         event: &NativeEvent,
-    ) -> Result<Vec<NativeEvent>, Box<dyn Error>> {
+    ) -> Result<(Vec<NativeEvent>, bool), Box<dyn Error>> {
         // Lookup the profile mapping associated with this event capability. If
         // none is found, return the original un-translated event.
         let source_cap = event.as_capability();
+        let is_axis = matches!(source_cap, Capability::Gamepad(Gamepad::Axis(_)));
         if let Some(mappings) = self.device_profile_config_map.get(&source_cap) {
-            // Find which mappings in the device profile matches this source event
-            let matched_mappings = mappings
-                .iter()
-                .filter(|mapping| mapping.source_matches_properties(event));
-
             let mut events = Vec::new();
-            // Based on all found mappings, translate the event
-            for mapping in matched_mappings {
-                log::trace!(
-                    "Found translation for event {:?} in profile mapping: {}",
-                    source_cap,
-                    mapping.name
-                );
+            let mut is_chord = false;
+            for mapping in mappings.iter() {
+                let mapping_start = events.len();
+                let matches = mapping.source_matches_properties(event);
+                if matches {
+                    log::trace!(
+                        "Found translation for event {:?} in profile mapping: {}",
+                        source_cap,
+                        mapping.name
+                    );
+                }
 
                 // Translate the event into the defined target event(s)
                 for target_event in mapping.target_events.iter() {
                     // TODO: We can cache this conversion for faster translation
                     let target_cap: Capability = target_event.clone().into();
+                    // Buttons mapped to an axis direction must be released when
+                    // the axis crosses to the other side of center.
+                    let is_axis_button = is_axis && target_cap.is_button();
+                    if !matches && !is_axis_button {
+                        continue;
+                    }
                     let result = event.get_value().translate(
                         &source_cap,
                         &mapping.source_event,
@@ -1583,12 +1586,24 @@ impl CompositeDevice {
                     let event = NativeEvent::new_translated(source_cap.clone(), target_cap, value);
                     events.push(event);
                 }
+                is_chord |= events.len() - mapping_start > 1;
             }
-            return Ok(events);
+
+            // When several axis directions map to the same button, a release
+            // from one direction must not cancel a press from another.
+            if is_axis {
+                let pressed: Vec<Capability> = events
+                    .iter()
+                    .filter(|event| event.pressed())
+                    .map(|event| event.as_capability())
+                    .collect();
+                events.retain(|event| event.pressed() || !pressed.contains(&event.as_capability()));
+            }
+            return Ok((events, is_chord));
         }
 
         log::trace!("No translation mapping found for event: {:?}", source_cap);
-        Ok(vec![event.clone()])
+        Ok((vec![event.clone()], false))
     }
 
     /// Executed whenever a source device is added to this [CompositeDevice].

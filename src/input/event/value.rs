@@ -950,11 +950,6 @@ impl InputValue {
                 // Get the threshold to consider the axis as 'pressed' or not
                 let threshold = axis.deadzone.unwrap_or(0.3);
                 if let Some(direction) = axis.direction.as_ref() {
-                    // TODO: Axis input is a special case where we need
-                    // to keep track of the state of the axis and only
-                    // emit events whenever the axis passes or falls
-                    // below the defined threshold
-
                     // Get the axis value
                     let (x, y) = match self {
                         InputValue::Vector2 { x, y } => (*x, *y),
@@ -962,59 +957,24 @@ impl InputValue {
                         _ => (None, None),
                     };
 
-                    match direction.as_str() {
+                    // Events that don't include the axis for this direction
+                    // say nothing about whether it is pressed.
+                    let pressed = match direction.as_str() {
                         // Left should be a negative value
-                        "left" => {
-                            if let Some(x) = x {
-                                if x <= -threshold {
-                                    Ok(InputValue::Bool(true))
-                                } else {
-                                    Ok(InputValue::Bool(false))
-                                }
-                            } else {
-                                Ok(InputValue::Bool(false))
-                            }
-                        }
+                        "left" => x.map(|x| x <= -threshold),
                         // Right should be a positive value
-                        "right" => {
-                            if let Some(x) = x {
-                                if x >= threshold {
-                                    Ok(InputValue::Bool(true))
-                                } else {
-                                    Ok(InputValue::Bool(false))
-                                }
-                            } else {
-                                Ok(InputValue::Bool(false))
-                            }
-                        }
+                        "right" => x.map(|x| x >= threshold),
                         // Up should be a negative value
-                        "up" => {
-                            if let Some(y) = y {
-                                if y <= -threshold {
-                                    Ok(InputValue::Bool(true))
-                                } else {
-                                    Ok(InputValue::Bool(false))
-                                }
-                            } else {
-                                Ok(InputValue::Bool(false))
-                            }
-                        }
+                        "up" => y.map(|y| y <= -threshold),
                         // Down should be a positive value
-                        "down" => {
-                            if let Some(y) = y {
-                                if y >= threshold {
-                                    Ok(InputValue::Bool(true))
-                                } else {
-                                    Ok(InputValue::Bool(false))
-                                }
-                            } else {
-                                Ok(InputValue::Bool(false))
-                            }
+                        "down" => y.map(|y| y >= threshold),
+                        _ => {
+                            return Err(TranslationError::InvalidSourceConfig(format!(
+                                "Invalid axis direction: {direction}"
+                            )))
                         }
-                        _ => Err(TranslationError::InvalidSourceConfig(format!(
-                            "Invalid axis direction: {direction}"
-                        ))),
-                    }
+                    };
+                    Ok(pressed.map_or(InputValue::None, InputValue::Bool))
                 } else {
                     Err(TranslationError::InvalidSourceConfig(
                         "No axis direction defined to translate button to axis".to_string(),

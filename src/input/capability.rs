@@ -32,15 +32,19 @@ impl Capability {
     /// emit only a `1` or a `-1` as do other devices like mouse wheels.
     pub fn is_momentary_translation(&self, target: &Capability) -> bool {
         if let Capability::Gamepad(Gamepad::Dial(_)) = self {
-            matches!(
-                target,
-                Capability::Gamepad(Gamepad::Button(_))
-                    | Capability::Mouse(Mouse::Button(_))
-                    | Capability::Keyboard(_)
-            )
+            target.is_button()
         } else {
             false
         }
+    }
+
+    pub fn is_button(&self) -> bool {
+        matches!(
+            self,
+            Capability::Gamepad(Gamepad::Button(_))
+                | Capability::Mouse(Mouse::Button(_))
+                | Capability::Keyboard(_)
+        )
     }
 
     pub fn to_capability_string(&self) -> String {
