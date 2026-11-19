@@ -128,11 +128,37 @@ pub fn denormalize_unsigned_value_u8(normal_value: f64, max: f64) -> u8 {
     (normal_value * max).round() as u8
 }
 
+/// Scale an acceleration vector down so that no axis leaves the range the report can carry.
+pub fn scale_accel_vector(
+    x: Option<f64>,
+    y: Option<f64>,
+    z: Option<f64>,
+    mps2_to_raw: f64,
+) -> (Option<f64>, Option<f64>, Option<f64>) {
+    let peak = [x, y, z]
+        .into_iter()
+        .flatten()
+        .map(|value| value.abs())
+        .fold(0.0_f64, f64::max);
+    let full_scale_mps2 = i16::MAX as f64 / mps2_to_raw;
+
+    if peak <= full_scale_mps2 {
+        return (x, y, z);
+    }
+
+    let scale = full_scale_mps2 / peak;
+    (
+        x.map(|value| value * scale),
+        y.map(|value| value * scale),
+        z.map(|value| value * scale),
+    )
+}
+
 /// Converts an accelerometer value from m/s² to a raw device count.
 pub fn denormalize_accel_value_i16(value_mps2: f64, mps2_to_raw: f64) -> i16 {
     let raw = (value_mps2 * mps2_to_raw).round();
     if raw.is_nan() || raw < i16::MIN as f64 || raw > i16::MAX as f64 {
-        log::warn!("Accelerometer value {value_mps2} m/s² is out of i16 range ({raw}), clamping");
+        log::warn!("Accelerometer value {value_mps2} m/s² was not scaled first ({raw})");
     }
     raw as i16
 }

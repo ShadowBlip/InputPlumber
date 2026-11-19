@@ -40,7 +40,7 @@ use crate::{
             value::{
                 denormalize_accel_value_i16, denormalize_gyro_value_i16,
                 denormalize_signed_value_u8, denormalize_unsigned_value_u16,
-                denormalize_unsigned_value_u8, InputValue,
+                denormalize_unsigned_value_u8, scale_accel_vector, InputValue,
             },
         },
         output_capability::{OutputCapability, LED},
@@ -618,6 +618,7 @@ impl DualSenseDevice {
             }
             Capability::Accelerometer(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
+                    let (x, y, z) = scale_accel_vector(x, y, z, DS5_MPS2_TO_ACCEL_RAW);
                     if let Some(x) = x {
                         state.accel_x = Integer::from_primitive(denormalize_accel_value_i16(
                             x,

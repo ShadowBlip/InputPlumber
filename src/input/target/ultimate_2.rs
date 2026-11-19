@@ -24,7 +24,7 @@ use crate::{
             native::{NativeEvent, ScheduledNativeEvent},
             value::{
                 denormalize_accel_value_i16, denormalize_gyro_value_i16,
-                denormalize_unsigned_value_u8, InputValue,
+                denormalize_unsigned_value_u8, scale_accel_vector, InputValue,
             },
         },
         output_capability::OutputCapability,
@@ -224,6 +224,7 @@ impl Ultimate2WirelessDevice {
             }
             Capability::Accelerometer(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
+                    let (x, y, z) = scale_accel_vector(x, y, z, ULTIMATE_2_MPS2_TO_ACCEL_RAW);
                     // Invert the SDL standard frame rotation so the wire fields
                     // match a real Ultimate 2 for the same pose.
                     if let Some(x) = x {
