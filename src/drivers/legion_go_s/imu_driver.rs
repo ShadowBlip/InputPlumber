@@ -149,11 +149,9 @@ impl IMUDriver {
         if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
             self.emit(
                 &mut events,
-                Event::Inertia(InertialEvent::Accelerometer(InertialInput {
-                    x: -state.x.to_primitive(),
-                    y: state.z.to_primitive(),
-                    z: -state.y.to_primitive(),
-                })),
+                Event::Inertia(InertialEvent::Accelerometer(Self::get_axes_corrected(
+                    state,
+                ))),
             )
         };
 
@@ -175,14 +173,19 @@ impl IMUDriver {
         if state.x != old_state.x || state.y != old_state.y || state.z != old_state.z {
             self.emit(
                 &mut events,
-                Event::Inertia(InertialEvent::Gyroscope(InertialInput {
-                    x: -state.x.to_primitive(),
-                    y: -state.z.to_primitive(),
-                    z: -state.y.to_primitive(),
-                })),
+                Event::Inertia(InertialEvent::Gyroscope(Self::get_axes_corrected(state))),
             )
         };
 
         events
+    }
+
+    /// The report's three axes with their signs corrected.
+    fn get_axes_corrected(state: InertialDataReport) -> InertialInput {
+        InertialInput {
+            x: -state.x.to_primitive(),
+            y: -state.y.to_primitive(),
+            z: -state.z.to_primitive(),
+        }
     }
 }
