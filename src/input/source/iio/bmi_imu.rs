@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::common::{
-    mount_matrix_from_config, sample_rate_from_config, translate_events, CAPABILITIES,
+    capabilities_from_events, mount_matrix_from_config, sample_rate_from_config, translate_events,
 };
 
 pub struct BmiImu {
@@ -53,7 +53,7 @@ impl SourceInputDevice for BmiImu {
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(capabilities_from_events(&self.driver.supported_events()))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {

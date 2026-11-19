@@ -118,6 +118,18 @@ impl Driver {
         })
     }
 
+    /// The event kinds the device's discovered channel groups can produce.
+    pub fn supported_events(&self) -> Vec<Event> {
+        let mut events = Vec::new();
+        if !self.layout.accel.is_empty() {
+            events.push(Event::Accelerometer(AxisData::default()));
+        }
+        if !self.layout.gyro.is_empty() {
+            events.push(Event::Gyroscope(AxisData::default()));
+        }
+        events
+    }
+
     pub fn update_filtered_events(&mut self, events: Vec<Event>) {
         self.filtered_events = events;
     }
