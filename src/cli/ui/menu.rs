@@ -1,9 +1,11 @@
 pub mod debug_target;
 pub mod device_performance_menu;
 pub mod device_test_menu;
+pub mod imu_test_menu;
 
 use device_performance_menu::DevicePerformanceMenu;
 use device_test_menu::DeviceTestMenu;
+use imu_test_menu::ImuTestMenu;
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     prelude::{Buffer, Rect},
@@ -30,6 +32,7 @@ pub trait MenuWidget {
 pub enum Menu {
     DeviceTest(Box<DeviceTestMenu>),
     DevicePerformance(DevicePerformanceMenu),
+    ImuTest(Box<ImuTestMenu>),
 }
 
 impl Widget for &Menu {
@@ -40,6 +43,7 @@ impl Widget for &Menu {
         match self {
             Menu::DeviceTest(menu) => menu.render(area, buf),
             Menu::DevicePerformance(menu) => menu.render(area, buf),
+            Menu::ImuTest(menu) => menu.render(area, buf),
         }
     }
 }
@@ -49,6 +53,7 @@ impl MenuWidget for Menu {
         match self {
             Menu::DeviceTest(menu) => menu.update(),
             Menu::DevicePerformance(menu) => menu.update(),
+            Menu::ImuTest(menu) => menu.update(),
         }
     }
 
@@ -56,6 +61,7 @@ impl MenuWidget for Menu {
         match self {
             Menu::DeviceTest(menu) => menu.handle_key_event(key_event),
             Menu::DevicePerformance(menu) => menu.handle_key_event(key_event),
+            Menu::ImuTest(menu) => menu.handle_key_event(key_event),
         }
     }
 }
@@ -69,5 +75,11 @@ impl From<DeviceTestMenu> for Menu {
 impl From<DevicePerformanceMenu> for Menu {
     fn from(value: DevicePerformanceMenu) -> Self {
         Self::DevicePerformance(value)
+    }
+}
+
+impl From<ImuTestMenu> for Menu {
+    fn from(value: ImuTestMenu) -> Self {
+        Self::ImuTest(Box::new(value))
     }
 }
