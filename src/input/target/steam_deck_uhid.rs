@@ -35,7 +35,8 @@ use crate::{
             native::{NativeEvent, ScheduledNativeEvent},
             value::{
                 denormalize_accel_value_i16, denormalize_gyro_value_i16,
-                denormalize_signed_value_i16, denormalize_unsigned_value_u16, InputValue,
+                denormalize_signed_value_i16, denormalize_unsigned_value_u16, scale_accel_vector,
+                InputValue,
             },
         },
         output_capability::{Haptic, OutputCapability},
@@ -390,6 +391,7 @@ impl SteamDeckUhidDevice {
             }
             Capability::Accelerometer(_) => {
                 if let InputValue::Vector3 { x, y, z } = value {
+                    let (x, y, z) = scale_accel_vector(x, y, z, DECK_MPS2_TO_ACCEL_RAW);
                     if let Some(x) = x {
                         self.state.accel_x = Integer::from_primitive(denormalize_accel_value_i16(
                             x,

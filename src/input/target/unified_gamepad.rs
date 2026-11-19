@@ -27,7 +27,10 @@ use crate::{
         composite_device::client::CompositeDeviceClient,
         event::{
             native::NativeEvent,
-            value::{denormalize_accel_value_i16, denormalize_gyro_value_i16, InputValue},
+            value::{
+                denormalize_accel_value_i16, denormalize_gyro_value_i16, scale_accel_vector,
+                InputValue,
+            },
         },
         output_capability::OutputCapability,
         output_event::OutputEvent,
@@ -680,17 +683,21 @@ impl From<NativeEvent> for StateUpdate {
             }
             Capability::Accelerometer(_) => {
                 let value = match event.get_value() {
-                    InputValue::Vector3 { x, y, z } => Int16Vector3Update {
-                        x: x.map(|x| {
-                            denormalize_accel_value_i16(x, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
-                        }),
-                        y: y.map(|y| {
-                            denormalize_accel_value_i16(y, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
-                        }),
-                        z: z.map(|z| {
-                            denormalize_accel_value_i16(z, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
-                        }),
-                    },
+                    InputValue::Vector3 { x, y, z } => {
+                        let (x, y, z) =
+                            scale_accel_vector(x, y, z, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW);
+                        Int16Vector3Update {
+                            x: x.map(|x| {
+                                denormalize_accel_value_i16(x, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
+                            }),
+                            y: y.map(|y| {
+                                denormalize_accel_value_i16(y, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
+                            }),
+                            z: z.map(|z| {
+                                denormalize_accel_value_i16(z, UNIFIED_GAMEPAD_MPS2_TO_ACCEL_RAW)
+                            }),
+                        }
+                    }
                     _ => {
                         return Self::default();
                     }
