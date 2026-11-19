@@ -12,8 +12,8 @@ use crate::{
 };
 
 use super::common::{
-    corrections_from_config, mount_matrix_from_config, sample_rate_from_config, translate_events,
-    CAPABILITIES,
+    capabilities_from_events, corrections_from_config, mount_matrix_from_config,
+    sample_rate_from_config, translate_events,
 };
 
 pub struct AccelGyro3dImu {
@@ -54,7 +54,7 @@ impl SourceInputDevice for AccelGyro3dImu {
 
     /// Returns the possible input events this device is capable of emitting
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
-        Ok(CAPABILITIES.into())
+        Ok(capabilities_from_events(&self.driver.supported_events()))
     }
 
     fn update_event_filter(&mut self, events: HashSet<Capability>) -> Result<(), InputError> {

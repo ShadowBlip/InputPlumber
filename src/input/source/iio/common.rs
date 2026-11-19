@@ -112,8 +112,7 @@ impl EventCapability for event::Event {
     }
 }
 
-/// List of all capabilities that the iio IMU drivers implement
-pub(super) const CAPABILITIES: &[Capability] = &[
-    Capability::Accelerometer(Source::Center),
-    Capability::Gyroscope(Source::Center),
-];
+/// The capabilities a source implements, from the events its driver reports.
+pub(super) fn capabilities_from_events(events: &[event::Event]) -> Vec<Capability> {
+    events.iter().map(|event| event.to_capability()).collect()
+}
