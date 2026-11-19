@@ -1,3 +1,4 @@
+pub mod debug_target;
 pub mod device_performance_menu;
 pub mod device_test_menu;
 
