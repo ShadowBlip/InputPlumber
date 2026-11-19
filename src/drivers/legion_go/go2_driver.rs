@@ -11,7 +11,7 @@ use super::{
         AxisEvent, BinaryInput, Event, GamepadButtonEvent, ImuAxisInput, JoyAxisInput,
         MouseWheelInput, TriggerEvent, TriggerInput,
     },
-    hid_report::{GamepadMode, XInputDataReport},
+    hid_report::{ConnectedState, GamepadMode, XInputDataReport},
     GO2_PIDS, GP_IID, TIMEOUT, VID, XINPUT_COMMAND_ID, XINPUT_DATA, XINPUT_PACKET_SIZE,
 };
 
@@ -185,6 +185,75 @@ impl Driver {
         let old_state = self.state;
         self.state = Some(input_report);
         old_state
+    }
+
+    /// One handle's raw accelerometer axes, sign-corrected so both handles agree.
+    fn get_accel_raw(&self, state: &XInputDataReport, right: bool) -> (i32, i32, i32) {
+        let (x, y, z) = if right {
+            (
+                state.right_accel_x,
+                state.right_accel_y,
+                state.right_accel_z,
+            )
+        } else {
+            (state.left_accel_x, state.left_accel_y, state.left_accel_z)
+        };
+        let z: i32 = if right { i32::from(z) } else { -i32::from(z) };
+
+        (-i32::from(x), -i32::from(y), z)
+    }
+
+    /// One handle's raw gyroscope axes, sign-corrected so both handles agree.
+    fn get_gyro_raw(&self, state: &XInputDataReport, right: bool) -> (i32, i32, i32) {
+        let (x, y, z) = if right {
+            (state.right_gyro_x, state.right_gyro_y, state.right_gyro_z)
+        } else {
+            (state.left_gyro_x, state.left_gyro_y, state.left_gyro_z)
+        };
+        let z_sign: i32 = match (self.gen, right) {
+            (LegionGoGen::Gen2, _) => -1,
+            (LegionGoGen::Gen1, true) => -1,
+            (LegionGoGen::Gen1, false) => 1,
+        };
+
+        (-i32::from(x), -i32::from(y), z_sign * i32::from(z))
+    }
+
+    /// Map accelerometer axes onto the pitch, roll and yaw of the report.
+    fn get_accel_corrected(axes: (i32, i32, i32)) -> ImuAxisInput {
+        let (x, y, z) = axes;
+        let (pitch, roll, yaw) = (x, -z, y);
+
+        ImuAxisInput {
+            pitch: pitch as i16,
+            roll: roll as i16,
+            yaw: yaw as i16,
+        }
+    }
+
+    /// Map gyroscope axes onto the pitch, roll and yaw of the report.
+    fn get_gyro_corrected(axes: (i32, i32, i32)) -> ImuAxisInput {
+        let (x, y, z) = axes;
+
+        ImuAxisInput {
+            pitch: x as i16,
+            roll: z as i16,
+            yaw: y as i16,
+        }
+    }
+
+    /// Average the handles that report attached, so a detached half cannot halve it.
+    fn average_attached(handles: &[(i32, i32, i32)]) -> Option<(i32, i32, i32)> {
+        if handles.is_empty() {
+            return None;
+        }
+
+        let count = handles.len() as i32;
+        let x = handles.iter().map(|handle| handle.0).sum::<i32>() / count;
+        let y = handles.iter().map(|handle| handle.1).sum::<i32>() / count;
+        let z = handles.iter().map(|handle| handle.2).sum::<i32>() / count;
+
+        Some((x, y, z))
     }
 
     /// Translate the state into individual events
@@ -481,32 +550,25 @@ impl Driver {
                 log::trace!("Left controller connected state: {:?}", state.l_con_state);
                 log::trace!("Right controller connected state: {:?}", state.r_con_state);
             }
+            let left_attached = state.l_con_state == ConnectedState::Attached;
+            let right_attached = state.r_con_state == ConnectedState::Attached;
+
             if state.left_accel_x != old_state.left_accel_x
                 || state.left_accel_y != old_state.left_accel_y
                 || state.left_accel_z != old_state.left_accel_z
             {
-                self.emit(
-                    &mut events,
-                    Event::Axis(AxisEvent::LeftAccel(ImuAxisInput {
-                        pitch: -state.left_accel_x,
-                        roll: -state.left_accel_y,
-                        yaw: -state.left_accel_z,
-                    })),
-                )
+                let value = Self::get_accel_corrected(self.get_accel_raw(&state, false));
+                self.emit(&mut events, Event::Axis(AxisEvent::LeftAccel(value)));
             }
+
             if state.right_accel_x != old_state.right_accel_x
                 || state.right_accel_y != old_state.right_accel_y
                 || state.right_accel_z != old_state.right_accel_z
             {
-                self.emit(
-                    &mut events,
-                    Event::Axis(AxisEvent::RightAccel(ImuAxisInput {
-                        pitch: -state.right_accel_x,
-                        roll: -state.right_accel_y,
-                        yaw: state.right_accel_z,
-                    })),
-                )
+                let value = Self::get_accel_corrected(self.get_accel_raw(&state, true));
+                self.emit(&mut events, Event::Axis(AxisEvent::RightAccel(value)));
             }
+
             if state.left_accel_x != old_state.left_accel_x
                 || state.left_accel_y != old_state.left_accel_y
                 || state.left_accel_z != old_state.left_accel_z
@@ -514,43 +576,34 @@ impl Driver {
                 || state.right_accel_y != old_state.right_accel_y
                 || state.right_accel_z != old_state.right_accel_z
             {
-                self.emit(
-                    &mut events,
-                    Event::Axis(AxisEvent::MultiAccel(ImuAxisInput {
-                        pitch: -(state.left_accel_x + state.right_accel_x) / 2,
-                        roll: -(state.left_accel_y + state.right_accel_y) / 2,
-                        yaw: (-state.left_accel_z + state.right_accel_z) / 2,
-                    })),
-                )
+                let mut handles = Vec::new();
+                if left_attached {
+                    handles.push(self.get_accel_raw(&state, false));
+                }
+                if right_attached {
+                    handles.push(self.get_accel_raw(&state, true));
+                }
+
+                if let Some(axes) = Self::average_attached(&handles) {
+                    let value = Self::get_accel_corrected(axes);
+                    self.emit(&mut events, Event::Axis(AxisEvent::MultiAccel(value)));
+                }
             }
+
             if state.left_gyro_x != old_state.left_gyro_x
                 || state.left_gyro_y != old_state.left_gyro_y
                 || state.left_gyro_z != old_state.left_gyro_z
             {
-                self.emit(
-                    &mut events,
-                    Event::Axis(AxisEvent::LeftGyro(ImuAxisInput {
-                        pitch: -state.left_gyro_x,
-                        roll: -state.left_gyro_y,
-                        yaw: match self.gen {
-                            LegionGoGen::Gen2 => -state.left_gyro_z,
-                            LegionGoGen::Gen1 => state.left_gyro_z,
-                        },
-                    })),
-                )
+                let value = Self::get_gyro_corrected(self.get_gyro_raw(&state, false));
+                self.emit(&mut events, Event::Axis(AxisEvent::LeftGyro(value)));
             }
+
             if state.right_gyro_x != old_state.right_gyro_x
                 || state.right_gyro_y != old_state.right_gyro_y
                 || state.right_gyro_z != old_state.right_gyro_z
             {
-                self.emit(
-                    &mut events,
-                    Event::Axis(AxisEvent::RightGyro(ImuAxisInput {
-                        pitch: -state.right_gyro_x,
-                        roll: -state.right_gyro_y,
-                        yaw: -state.right_gyro_z,
-                    })),
-                )
+                let value = Self::get_gyro_corrected(self.get_gyro_raw(&state, true));
+                self.emit(&mut events, Event::Axis(AxisEvent::RightGyro(value)));
             }
 
             if state.left_gyro_x != old_state.left_gyro_x
@@ -560,17 +613,18 @@ impl Driver {
                 || state.right_gyro_y != old_state.right_gyro_y
                 || state.right_gyro_z != old_state.right_gyro_z
             {
-                self.emit(
-                    &mut events,
-                    Event::Axis(AxisEvent::MultiGyro(ImuAxisInput {
-                        pitch: -(state.left_gyro_x + state.right_gyro_x) / 2,
-                        roll: -(state.left_gyro_y + state.right_gyro_y) / 2,
-                        yaw: match self.gen {
-                            LegionGoGen::Gen2 => -(state.left_gyro_z + state.right_gyro_z) / 2,
-                            LegionGoGen::Gen1 => (state.left_gyro_z - state.right_gyro_z) / 2,
-                        },
-                    })),
-                )
+                let mut handles = Vec::new();
+                if left_attached {
+                    handles.push(self.get_gyro_raw(&state, false));
+                }
+                if right_attached {
+                    handles.push(self.get_gyro_raw(&state, true));
+                }
+
+                if let Some(axes) = Self::average_attached(&handles) {
+                    let value = Self::get_gyro_corrected(axes);
+                    self.emit(&mut events, Event::Axis(AxisEvent::MultiGyro(value)));
+                }
             }
         }
         events

@@ -81,8 +81,7 @@ pub const TRIGG_MAX: f64 = 255.0;
 
 // Accel scale is 4096 LSB/g (±2 g)
 pub const GO2_ACCEL_RAW_TO_MPS2: f64 = 9.80665 / 4096.0;
-// Gyro scale is 32768 LSB full scale over +/-2000 deg/s (16.384 LSB/(deg/s))
-pub const GO2_GYRO_RAW_TO_RAD_S: f64 = (2000.0 / 32768.0) * (PI / 180.0);
+pub const GO2_GYRO_RAW_TO_RAD_S: f64 = (70.0 / 1000.0) * (PI / 180.0);
 
 fn default_event_filter() -> Vec<Event> {
     vec![
