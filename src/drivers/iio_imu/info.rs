@@ -29,33 +29,24 @@ pub struct MountMatrix {
 
 impl MountMatrix {
     /// Create a new [MountMatrix] from the given mount matrix string
-    /// Example:
-    /// "1, 0, 0; 0, 1, 0; 0, 0, 1"
+    /// Examples:
+    /// "1, 0, 0; 0, 1, 0; 0, 0, 1", "1 0 0 0 1 0 0 0 1"
     pub fn new(matrix_str: String) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let parts: Vec<&str> = matrix_str.split(';').map(|part| part.trim()).collect();
-        if parts.len() != 3 {
-            return Err("Not enough parts found in the matrix".into());
+        let values: Result<Vec<f64>, _> = matrix_str
+            .split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+            .filter(|part| !part.is_empty())
+            .map(|part| part.parse::<f64>())
+            .collect();
+        let values = values?;
+        if values.len() != 9 {
+            return Err("Expected nine numbers in the matrix".into());
         }
 
-        let mut matrix = MountMatrix::default();
-        for (i, part) in parts.into_iter().enumerate() {
-            let sub_parts: Vec<&str> = part.split(',').map(|part| part.trim()).collect();
-            if sub_parts.len() != 3 {
-                return Err("Not enough subparts".into());
-            }
-            let x = sub_parts.first().unwrap().parse::<f64>()?;
-            let y = sub_parts.get(1).unwrap().parse::<f64>()?;
-            let z = sub_parts.get(2).unwrap().parse::<f64>()?;
-
-            match i {
-                0 => matrix.x = (x, y, z),
-                1 => matrix.y = (x, y, z),
-                2 => matrix.z = (x, y, z),
-                _ => (),
-            }
-        }
-
-        Ok(matrix)
+        Ok(MountMatrix {
+            x: (values[0], values[1], values[2]),
+            y: (values[3], values[4], values[5]),
+            z: (values[6], values[7], values[8]),
+        })
     }
 }
 
