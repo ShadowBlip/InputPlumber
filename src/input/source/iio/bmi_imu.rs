@@ -12,7 +12,8 @@ use crate::{
 };
 
 use super::common::{
-    capabilities_from_events, mount_matrix_from_config, sample_rate_from_config, translate_events,
+    capabilities_from_events, corrections_from_config, mount_matrix_from_config,
+    sample_rate_from_config, translate_events,
 };
 
 pub struct BmiImu {
@@ -28,6 +29,7 @@ impl BmiImu {
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let mount_matrix = mount_matrix_from_config(config.as_ref());
         let sample_rate = sample_rate_from_config(config.as_ref());
+        let (accel_correction, gyro_correction) = corrections_from_config(config.as_ref());
 
         let id = device_info.sysname();
         let trigger_name = format!("inputplumber-{}", id.replace(':', "_"));
@@ -35,8 +37,8 @@ impl BmiImu {
             id,
             mount_matrix,
             sample_rate,
-            1.0,
-            1.0,
+            accel_correction,
+            gyro_correction,
             TriggerStrategy::Hrtimer(trigger_name),
         )?;
 
