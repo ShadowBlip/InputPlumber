@@ -7,11 +7,18 @@ options:
   auto_manage: true
 
 matches:
+  # older non-upstream kernel naming
   - udev:
       sys_path: /sys/firmware/devicetree/base
       attributes:
         - name: compatible
           value: ayn,thor-lite
+  # upstream kernel naming
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: ayntec,thor-lite
 
 source_devices:
   - group: gamepad
