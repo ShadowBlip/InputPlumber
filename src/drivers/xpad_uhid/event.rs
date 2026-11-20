@@ -78,6 +78,14 @@ pub enum ButtonEvent {
     DPadDown(BinaryInput),
     /// DPad left
     DPadLeft(BinaryInput),
+    /// Elite upper left paddle (P3)
+    L4(BinaryInput),
+    /// Elite lower left paddle (P4)
+    L5(BinaryInput),
+    /// Elite upper right paddle (P1)
+    R4(BinaryInput),
+    /// Elite lower right paddle (P2)
+    R5(BinaryInput),
 }
 
 /// Axis events are events that have (x, y) values
@@ -117,7 +125,11 @@ impl ButtonEvent {
             | Self::DPadUp(input)
             | Self::DPadRight(input)
             | Self::DPadDown(input)
-            | Self::DPadLeft(input) => input.pressed,
+            | Self::DPadLeft(input)
+            | Self::L4(input)
+            | Self::L5(input)
+            | Self::R4(input)
+            | Self::R5(input) => input.pressed,
         }
     }
 }

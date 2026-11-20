@@ -411,6 +411,18 @@ impl EventCapability for event::Event {
                 event::ButtonEvent::ThumbR(_) => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::RightStick))
                 }
+                event::ButtonEvent::L4(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1))
+                }
+                event::ButtonEvent::L5(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2))
+                }
+                event::ButtonEvent::R4(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1))
+                }
+                event::ButtonEvent::R5(_) => {
+                    Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2))
+                }
             },
             event::Event::Axis(axis) => match axis {
                 event::AxisEvent::LStick(_) => {
@@ -450,6 +462,10 @@ impl EventCapability for event::Event {
                     GamepadButton::LeftStick => event::ButtonEvent::ThumbL(Default::default()),
                     GamepadButton::RightBumper => event::ButtonEvent::RB(Default::default()),
                     GamepadButton::RightStick => event::ButtonEvent::ThumbR(Default::default()),
+                    GamepadButton::LeftPaddle1 => event::ButtonEvent::L4(Default::default()),
+                    GamepadButton::LeftPaddle2 => event::ButtonEvent::L5(Default::default()),
+                    GamepadButton::RightPaddle1 => event::ButtonEvent::R4(Default::default()),
+                    GamepadButton::RightPaddle2 => event::ButtonEvent::R5(Default::default()),
                     _ => return None,
                 };
                 Some(event::Event::Button(event))

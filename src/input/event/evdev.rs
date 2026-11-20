@@ -11,6 +11,13 @@ use crate::input::capability::{
 
 use super::{native::NativeEvent, value::InputValue};
 
+// Paddle buttons that are not yet defined in the evdev crate
+// Source: https://github.com/torvalds/linux/blob/master/include/uapi/linux/input-event-codes.h
+const BTN_GRIPL: KeyCode = KeyCode(0x224);
+const BTN_GRIPR: KeyCode = KeyCode(0x225);
+const BTN_GRIPL2: KeyCode = KeyCode(0x226);
+const BTN_GRIPR2: KeyCode = KeyCode(0x227);
+
 #[derive(Debug, Clone)]
 pub struct EvdevEvent {
     event: InputEvent,
@@ -184,6 +191,10 @@ impl EvdevEvent {
                 KeyCode::BTN_TRIGGER_HAPPY8 => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2))
                 }
+                BTN_GRIPL => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle1)),
+                BTN_GRIPR => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle1)),
+                BTN_GRIPL2 => Capability::Gamepad(Gamepad::Button(GamepadButton::LeftPaddle2)),
+                BTN_GRIPR2 => Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle2)),
                 KeyCode::BTN_TRIGGER_HAPPY9 => {
                     Capability::Gamepad(Gamepad::Button(GamepadButton::RightPaddle3))
                 }

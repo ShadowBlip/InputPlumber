@@ -20,8 +20,14 @@ use super::{
 pub const DATA: u8 = 0x01;
 pub const GUIDE: u8 = 0x02;
 
-// Input report size
+// Input report sizes
 const PACKET_SIZE: usize = 17;
+const ELITE_PACKET_SIZE: usize = 20;
+
+// Older Elite Series 2 firmware uses 0x0b05 with a different report layout,
+// which isn't supported.
+// Source: https://github.com/torvalds/linux/blob/master/drivers/hid/hid-ids.h
+const ELITE_SERIES_2_BLE_PID: u16 = 0x0b22;
 
 // HID buffer read timeout
 const HID_TIMEOUT: i32 = 10;
@@ -47,6 +53,7 @@ pub struct Driver {
     /// Last DPad state
     dpad: DPadState,
     filtered_events: Vec<Event>,
+    has_paddles: bool,
 }
 
 impl Driver {
@@ -70,6 +77,7 @@ impl Driver {
             state: None,
             dpad: Default::default(),
             filtered_events: vec![],
+            has_paddles: udevice.id_product() == ELITE_SERIES_2_BLE_PID,
         })
     }
 
@@ -116,24 +124,24 @@ impl Driver {
 
     pub fn poll(&mut self) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         // Read data from the device into a buffer
-        let mut buf = [0; PACKET_SIZE];
+        let mut buf = [0; ELITE_PACKET_SIZE];
         let bytes_read = self.device.read_timeout(&mut buf[..], HID_TIMEOUT)?;
 
         let report_id = buf[0];
-        let slice = &buf[..bytes_read];
         //log::debug!("Got Report ID: {report_id}");
         //log::debug!("Got Report Size: {bytes_read}");
 
         let events = match report_id {
             DATA => {
                 log::trace!("Got input data.");
-                if bytes_read != PACKET_SIZE {
+                if bytes_read < PACKET_SIZE {
                     return Err("Invalid packet size for input data.".into());
                 }
-                // Handle the incoming input report
-                let sized_buf = slice.try_into()?;
-
-                self.handle_input_report(sized_buf)?
+                // Only complete Elite reports have paddle state past the standard report
+                if !self.has_paddles || bytes_read < ELITE_PACKET_SIZE {
+                    buf[PACKET_SIZE..].fill(0);
+                }
+                self.handle_input_report(buf)?
             }
             // XBox One gamepads have a separate report for guide button presses
             // for some reason.
@@ -161,7 +169,7 @@ impl Driver {
     /// the internal state
     fn handle_input_report(
         &mut self,
-        buf: [u8; PACKET_SIZE],
+        buf: [u8; ELITE_PACKET_SIZE],
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let input_report = XBoxSeriesInputDataReport::unpack(&buf)?;
 
@@ -284,6 +292,39 @@ impl Driver {
                     &mut events,
                     Event::Button(ButtonEvent::ThumbR(BinaryInput {
                         pressed: state.button_state.thumb_r,
+                    })),
+                );
+            }
+            let (paddles, old_paddles) = (state.active_paddles(), old_state.active_paddles());
+            if paddles.l4 != old_paddles.l4 {
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::L4(BinaryInput {
+                        pressed: paddles.l4,
+                    })),
+                );
+            }
+            if paddles.l5 != old_paddles.l5 {
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::L5(BinaryInput {
+                        pressed: paddles.l5,
+                    })),
+                );
+            }
+            if paddles.r4 != old_paddles.r4 {
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::R4(BinaryInput {
+                        pressed: paddles.r4,
+                    })),
+                );
+            }
+            if paddles.r5 != old_paddles.r5 {
+                self.emit(
+                    &mut events,
+                    Event::Button(ButtonEvent::R5(BinaryInput {
+                        pressed: paddles.r5,
                     })),
                 );
             }

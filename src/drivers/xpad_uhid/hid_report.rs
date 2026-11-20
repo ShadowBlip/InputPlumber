@@ -277,8 +277,28 @@ pub enum DPadDirection {
     UpLeft = 8,
 }
 
+/// Back paddles of the Elite Series 2
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq, Default)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "1")]
+pub struct PaddleState {
+    /// Lower left (P4)
+    #[packed_field(bits = "4")]
+    pub l5: bool,
+    /// Upper left (P3)
+    #[packed_field(bits = "5")]
+    pub l4: bool,
+    /// Lower right (P2)
+    #[packed_field(bits = "6")]
+    pub r5: bool,
+    /// Upper right (P1)
+    #[packed_field(bits = "7")]
+    pub r4: bool,
+}
+
+/// Bytes 17-19 are only sent by the Elite Series 2.
+// Elite Series 2 layout source: https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_xboxone.c
 #[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
-#[packed_struct(bit_numbering = "msb0", size_bytes = "17")]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "20")]
 pub struct XBoxSeriesInputDataReport {
     // BYTE 0
     #[packed_field(bytes = "0")]
@@ -309,6 +329,24 @@ pub struct XBoxSeriesInputDataReport {
 
     #[packed_field(bytes = "14..=16")]
     pub button_state: ButtonState,
+
+    /// Active on-controller profile, 0 when no profile is selected
+    #[packed_field(bytes = "17")]
+    pub profile: u8,
+
+    #[packed_field(bytes = "19")]
+    pub paddle_state: PaddleState,
+}
+
+impl XBoxSeriesInputDataReport {
+    /// When an on-controller profile is active, paddles are already remapped to
+    /// other buttons by the controller.
+    pub fn active_paddles(&self) -> PaddleState {
+        if self.profile != 0 {
+            return PaddleState::default();
+        }
+        self.paddle_state
+    }
 }
 
 impl Default for XBoxSeriesInputDataReport {
@@ -323,6 +361,8 @@ impl Default for XBoxSeriesInputDataReport {
             trigger_r: Default::default(),
             button_state: Default::default(),
             dpad_state: Default::default(),
+            profile: Default::default(),
+            paddle_state: Default::default(),
         }
     }
 }
