@@ -7,6 +7,7 @@ options:
   auto_manage: true
 
 matches:
+  # older non-upstream kernel naming
   - udev:
       sys_path: /sys/firmware/devicetree/base
       attributes:
@@ -17,6 +18,17 @@ matches:
       attributes:
         - name: compatible
           value: ayn,odin2portal
+  # upstream kernel naming
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: ayntec,odin2
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: compatible
+          value: ayntec,odin2portal
 
 source_devices:
   - group: gamepad
