@@ -1,6 +1,5 @@
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::error::Error;
 
-use futures::StreamExt;
 use packed_struct::PackedStruct;
 use ratatui::{
     crossterm::event::KeyCode,
@@ -10,7 +9,7 @@ use ratatui::{
     widgets::{Block, Widget},
 };
 use tokio::sync::mpsc;
-use zbus::{fdo::ObjectManagerProxy, Connection};
+use zbus::Connection;
 
 use crate::{
     cli::ui::{
@@ -20,12 +19,6 @@ use crate::{
         },
         InterfaceCommand,
     },
-    config::path::get_profiles_path,
-    constants::{BUS_NAME, BUS_PREFIX},
-    dbus::interface::{
-        composite_device::CompositeDeviceInterfaceProxy,
-        target::{debug::TargetDebugInterfaceProxy, TargetInterfaceProxy},
-    },
     drivers::unified_gamepad::{
         capability::InputCapability,
         reports::{
@@ -34,10 +27,12 @@ use crate::{
         },
         value::Value,
     },
-    input::target::TargetDeviceTypeId,
 };
 
-use super::MenuWidget;
+use super::{
+    debug_target::{self, SavedState},
+    MenuWidget,
+};
 
 /// Strips one capability-family prefix from a capability's debug name to
 /// get a display label (e.g. "GamepadButtonKeyboard" -> "Keyboard").
@@ -69,11 +64,7 @@ pub struct DeviceTestMenu {
     rx_reports: mpsc::Receiver<Vec<u8>>,
     rx_capabilities: mpsc::Receiver<Vec<u8>>,
     device_path: String,
-    profile: Option<String>,
-    profile_path: Option<String>,
-    target_device_types: Vec<TargetDeviceTypeId>,
-    intercept_mode: u32,
-    filtered_events: HashMap<String, Vec<String>>,
+    saved: SavedState,
     ui_buttons: Vec<ButtonGauge>,
     ui_triggers: Vec<TriggerGauge>,
     ui_axes: Vec<AxisGauge>,
@@ -83,104 +74,17 @@ pub struct DeviceTestMenu {
 
 impl DeviceTestMenu {
     pub async fn new(conn: &Connection, dbus_path: &str) -> Result<Self, Box<dyn Error>> {
-        // Get a reference to the device to debug
-        let device = CompositeDeviceInterfaceProxy::builder(conn)
-            .path(dbus_path.to_string())?
-            .build()
-            .await?;
-
-        // Save the current target devices used so they can be restored
-        let mut target_device_types = vec![];
-        let target_devices = device.target_devices().await?;
-        for path in target_devices {
-            let target_device = TargetInterfaceProxy::builder(conn)
-                .path(path)?
-                .build()
-                .await?;
-            let device_type = target_device.device_type().await?;
-            let device_type =
-                TargetDeviceTypeId::try_from(device_type.as_str()).map_err(|e| e.to_string())?;
-            target_device_types.push(device_type);
-        }
-
-        // Save the current profile path so it can be restored
-        let profile_path = {
-            let path = device.profile_path().await?;
-            if path.is_empty() {
-                None
-            } else {
-                Some(path)
-            }
-        };
-        let profile = 'profile: {
-            if profile_path.is_some() {
-                break 'profile None;
-            }
-            let data = device.get_profile_yaml().await?;
-            Some(data)
-        };
-
-        // Save the current intercept mode so it can be restored
-        let intercept_mode = device.intercept_mode().await?;
-
-        // Save the current event filters so they can be restored, then clear
-        // them so every source's raw capabilities are visible during testing
-        let filtered_events = device.filtered_events().await?;
-        device.set_filtered_events(HashMap::new()).await?;
-
-        // Add the debug target device if it does not exist
-        if !target_device_types.iter().any(|t| t.as_str() == "debug") {
-            let mut target_devices = vec!["debug".into()];
-            for kind in target_device_types.iter() {
-                target_devices.push(kind.as_str().to_string());
-            }
-            device.set_target_devices(target_devices).await?;
-        }
-
-        // Disable intercept mode
-        if intercept_mode != 0 {
-            device.set_intercept_mode(0).await?;
-        }
-
-        // Set the debug profile
-        {
-            let profile_dir = get_profiles_path();
-            let profile_path = profile_dir.join("debug.yaml");
-            let profile_path = profile_path.to_string_lossy().to_string();
-            device.load_profile_path(profile_path).await?;
-        }
-
-        // Create channels to listen for input reports
-        let (tx_reports, rx_reports) = mpsc::channel(2048);
-        let (tx_capabilities, rx_capabilities) = mpsc::channel(16);
-        let (tx_disconnect, rx_disconnect) = mpsc::channel(1);
-
-        // Spawn a task to listen for input reports
-        let conn_clone = conn.clone();
-        let path_clone = dbus_path.to_string();
-        tokio::task::spawn(async move {
-            let _ = Self::listen_for_signals(
-                &conn_clone,
-                path_clone,
-                tx_disconnect,
-                tx_reports,
-                tx_capabilities,
-            )
-            .await;
-        });
+        // Attach the debug target so every source capability is visible
+        let (saved, stream) = debug_target::attach(conn, dbus_path).await?;
 
         Ok(Self {
             conn: conn.clone(),
             device_path: dbus_path.to_string(),
-            profile,
-            profile_path,
-            rx_disconnect,
-            rx_reports,
-            rx_capabilities,
+            saved,
+            rx_disconnect: stream.rx_disconnect,
+            rx_reports: stream.rx_reports,
+            rx_capabilities: stream.rx_capabilities,
             capability_report: None,
-            target_device_types,
-            intercept_mode,
-            filtered_events,
             ui_buttons: Default::default(),
             ui_triggers: Default::default(),
             ui_axes: Default::default(),
@@ -191,156 +95,7 @@ impl DeviceTestMenu {
 
     // Stop the test, restoring the device state
     fn stop(&self) {
-        // Restore the state of the device
-        let conn = self.conn.clone();
-        let dbus_path = self.device_path.clone();
-        let target_device_types = self.target_device_types.clone();
-        let intercept_mode = self.intercept_mode;
-        let profile = self.profile.clone();
-        let profile_path = self.profile_path.clone();
-        let filtered_events = self.filtered_events.clone();
-        let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
-        tokio::task::spawn(async move {
-            // Create a reference to the composite device
-            let Ok(device) = CompositeDeviceInterfaceProxy::builder(&conn)
-                .path(dbus_path)
-                .unwrap()
-                .build()
-                .await
-            else {
-                log::warn!("Failed to create composite device proxy; cannot restore device state");
-                if let Err(e) = tx.send(Err("failed to create composite device proxy".into())) {
-                    log::warn!("Failed to report device state restore failure: {e}");
-                }
-                return;
-            };
-
-            // Restore the profile
-            let profile_result = if let Some(profile_path) = profile_path {
-                device.load_profile_path(profile_path).await
-            } else if let Some(profile) = profile {
-                device.load_profile_from_yaml(profile).await
-            } else {
-                Ok(())
-            };
-            if let Err(e) = profile_result {
-                log::warn!("Failed to restore profile: {e}");
-            }
-
-            // Restore the target devices of the device
-            let target_devices = target_device_types
-                .into_iter()
-                .map(|kind| kind.as_str().to_string())
-                .collect();
-            if let Err(e) = device.set_target_devices(target_devices).await {
-                log::warn!("Failed to restore target devices: {e}");
-            }
-
-            // Restore the intercept mode
-            if let Err(e) = device.set_intercept_mode(intercept_mode).await {
-                log::warn!("Failed to restore intercept mode: {e}");
-            }
-
-            // Restore the event filters
-            if let Err(e) = device.set_filtered_events(filtered_events).await {
-                log::warn!("Failed to restore event filters: {e}");
-            }
-
-            if let Err(e) = tx.send(Ok(())) {
-                log::warn!("Failed to report device state restore: {e}");
-            }
-        });
-
-        // Wait up to 5s for the device state to be restored before exiting
-        match rx.recv_timeout(Duration::from_secs(5)) {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => log::warn!("Failed to restore device state: {e}"),
-            Err(e) => log::warn!("Failed to restore device state within timeout: {e}"),
-        }
-    }
-}
-
-impl DeviceTestMenu {
-    /// Listen for device signals over dbus
-    async fn listen_for_signals(
-        conn: &Connection,
-        dbus_path: String,
-        tx_disconnect: mpsc::Sender<()>,
-        tx_reports: mpsc::Sender<Vec<u8>>,
-        tx_capabilities: mpsc::Sender<Vec<u8>>,
-    ) -> Result<(), Box<dyn Error>> {
-        // Get a reference to the device to debug
-        let device = CompositeDeviceInterfaceProxy::builder(conn)
-            .path(dbus_path.to_string())?
-            .build()
-            .await?;
-
-        // Wait until the debug target is available
-        let mut debug_target_path = None;
-        for _ in 0..20 {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            let target_devices = device.target_devices().await?;
-            for path in target_devices {
-                if !path.contains("/debug") {
-                    continue;
-                }
-                debug_target_path = Some(path);
-            }
-            if debug_target_path.is_some() {
-                break;
-            }
-        }
-        let Some(target_path) = debug_target_path else {
-            return Err("Failed to find target debug device!".to_string().into());
-        };
-
-        // Get a reference to the debug target device
-        let debug_device = TargetDebugInterfaceProxy::builder(conn)
-            .path(target_path)?
-            .build()
-            .await?;
-
-        // Get the current capability report
-        let capability_report = debug_device.input_capability_report().await?;
-        tx_capabilities.send(capability_report).await?;
-
-        // Listen for input reports
-        let mut receive_report = debug_device.receive_input_report().await?;
-        tokio::task::spawn(async move {
-            while let Some(signal) = receive_report.next().await {
-                let Ok(args) = signal.args() else { break };
-                let _ = tx_reports.send(args.data).await;
-            }
-        });
-
-        // Listen for capability changes
-        let mut receive_caps = debug_device.receive_input_capability_report_changed().await;
-        tokio::task::spawn(async move {
-            while let Some(change) = receive_caps.next().await {
-                let Ok(value) = change.get().await else { break };
-                let _ = tx_capabilities.send(value).await;
-            }
-        });
-
-        // Get a reference to the object manager to listen for controller disconnects
-        let object_manager = ObjectManagerProxy::builder(conn)
-            .destination(BUS_NAME)?
-            .path(BUS_PREFIX)?
-            .build()
-            .await?;
-        let mut ifaces_removed = object_manager.receive_interfaces_removed().await?;
-        tokio::task::spawn(async move {
-            while let Some(change) = ifaces_removed.next().await {
-                let Ok(args) = change.args() else { break };
-                let path = args.object_path.to_string();
-                if path != dbus_path {
-                    continue;
-                }
-                let _ = tx_disconnect.send(()).await;
-            }
-        });
-
-        Ok(())
+        debug_target::restore(&self.conn, &self.device_path, &self.saved);
     }
 
     /// Render all the buttons for the device in the given area
@@ -501,11 +256,7 @@ impl MenuWidget for DeviceTestMenu {
                         let button = ButtonGauge::new(cap.capability, &label);
                         self.ui_buttons.push(button);
                     }
-                    ValueType::UInt8 => {
-                        let trigger = TriggerGauge::new(cap.capability, &label);
-                        self.ui_triggers.push(trigger);
-                    }
-                    ValueType::UInt16 => {
+                    ValueType::UInt8 | ValueType::UInt16 => {
                         let trigger = TriggerGauge::new(cap.capability, &label);
                         self.ui_triggers.push(trigger);
                     }

@@ -16,6 +16,8 @@ use crate::input::target::TargetDeviceTypeId;
 
 use super::ui::menu::device_performance_menu::DevicePerformanceMenu;
 use super::ui::menu::device_test_menu::DeviceTestMenu;
+use super::ui::menu::imu_test_menu::ImuTestMenu;
+use super::ui::menu::Menu;
 use super::ui::TextUserInterface;
 
 #[derive(Subcommand, Debug, Clone)]
@@ -48,6 +50,8 @@ pub enum DeviceCommand {
     },
     /// Test input menu
     Test,
+    /// Validate the device's accelerometer and gyroscope
+    TestImu,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -277,20 +281,7 @@ pub async fn handle_device(
                     return Err(format!("No target device {kind} found in device").into());
                 };
 
-                // Run the TUI for the monitoring interface
-                let mut tui = TextUserInterface::new();
-                let menu = DevicePerformanceMenu::new(&conn, path.as_str()).await?;
-                let task = tokio::task::spawn_blocking(
-                    move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                        if let Err(e) = tui.run(menu.into()) {
-                            return Err(e.to_string().into());
-                        }
-                        Ok(())
-                    },
-                );
-                if let Err(e) = task.await? {
-                    return Err(e.to_string().into());
-                }
+                run_menu(DevicePerformanceMenu::new(&conn, path.as_str()).await?).await?;
             }
         },
         DeviceCommand::Targets { cmd } => match cmd {
@@ -323,21 +314,26 @@ pub async fn handle_device(
                 println!("Set target devices to: {targets:?}");
             }
         },
-        DeviceCommand::Test => {
-            // Run the TUI for the testing interface
-            let mut tui = TextUserInterface::new();
-            let menu = DeviceTestMenu::new(&conn, path.as_str()).await?;
-            let task =
-                tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-                    if let Err(e) = tui.run(menu.into()) {
-                        return Err(e.to_string().into());
-                    }
-                    Ok(())
-                });
-            if let Err(e) = task.await? {
-                return Err(e.to_string().into());
-            }
+        DeviceCommand::Test => run_menu(DeviceTestMenu::new(&conn, path.as_str()).await?).await?,
+
+        DeviceCommand::TestImu => run_menu(ImuTestMenu::new(&conn, path.as_str()).await?).await?,
+    }
+
+    Ok(())
+}
+
+/// Run the given menu in a terminal UI until it exits
+async fn run_menu(menu: impl Into<Menu> + Send + 'static) -> Result<(), Box<dyn Error>> {
+    let mut tui = TextUserInterface::new();
+    let task = tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
+        if let Err(e) = tui.run(menu.into()) {
+            return Err(e.to_string().into());
         }
+        Ok(())
+    });
+
+    if let Err(e) = task.await? {
+        return Err(e.to_string().into());
     }
 
     Ok(())

@@ -369,6 +369,114 @@ Start the built-in test tool (recommended to run in a separate window):
 inputplumber device 0 test
 ```
 
+Validate the device's accelerometer and gyroscope (recommended to run in a separate
+window). The tool walks through a series of poses and rotations, draws each one, and
+reports whether the device measures the expected direction:
+
+```bash
+inputplumber device 0 test-imu
+```
+
+Every inertial sensor the device advertises is measured during the same step, so a
+combined sensor and the sensors it is averaged from can be compared directly. A device
+that advertises no accelerometer and no gyroscope says so and runs no steps. Measurement
+windows are fixed periods of time (2 seconds for a pose, 3 seconds for a rotation), so the
+result does not depend on how fast a device reports.
+
+Sources that filter unchanged events go silent while the device is held still, so the
+counts shown are deltas rather than a report rate. Rotation steps are judged from the
+angle the gyro integrates across the window instead of from a mean angular rate: scaling
+the sensor scales its mean too, so a scale error is invisible in a mean, while an
+integrated angle has to match the rotation that was performed. When no motion arrives
+during a window the step is judged from the mean angular rate instead, which can check the
+axis and the direction but says nothing about scale.
+
+A rotation step passes when the total lands within 22.5 degrees of the 90 degrees asked
+for and the integrated rotation vector stays within 30 degrees of the instructed axis,
+which also catches a turn made the wrong way or about the wrong axis. Gaps longer than
+half a second contribute nothing, because silence from a delta filtered source means the
+device stopped moving. A source that reports few deltas across a three second window
+integrates less of the turn than was performed, so a low report rate can fail this step
+for a sensor whose scale is correct. The total is shown live while measuring and in the
+results list.
+
+Everything happens on one screen that is re-rendered in place. The pose drawing occupies
+the top region at every terminal width and folds itself to whatever rows are left, so a
+terminal 80 columns by 24 rows shows the whole run without scrolling. Below it sits the
+recommended configuration change, then the live reading of the current step and its verdict.
+
+Pressing `n` on the last step moves one past it into the run's summary, which takes the
+space the drawing had and lists every step with its verdict and reason. The summary
+derives the mount matrices on arrival, so the change to make is in the results panel
+without any further key press, and `p` returns to any step to measure it again. Nothing
+is written to any file.
+
+Keys: `s` measures the current step, `r` retries it, `n` and `p` move between steps and into
+and out of the summary, `d` re-derives the matrices for the accelerometer and gyroscope of
+every sensor without leaving the current step, and `q` (or `Esc`) leaves the test.
+
+
+The measured samples arrive from the source driver, so they already carry any mount
+matrix that is configured. A derived transform is therefore a correction on top of the
+value configured today, and the recommendation states which file and key to change and
+where the derived matrix differs from what is configured. An accelerometer gain is taken
+from a pair of opposite resting poses, since one pose alone cannot tell a scale error from
+a pose that was not held true.
+
+An accelerometer group and a gyroscope group often need different transforms, because
+their channels can arrive mirror-related. Whether a mirrored matrix is a defect depends on
+what the matrix serves. Gravity is a single vector, so a mirrored set of accelerometer
+channels still lands on the right canonical axis and nothing measured inside that group can
+reveal the mirror, which means a determinant of `-1` on a source carrying one group only is
+not a mistake. A source carrying both groups takes a single matrix for gravity and angular
+rate at once, so that matrix has to be a proper rotation with a determinant of `+1`. Where
+a device carries its two groups as two iio sources, each derived matrix is offered for its
+own source:
+
+```yaml
+  - group: imu
+    iio:
+      name: accel_3d
+    config:
+      imu:
+        mount_matrix:
+          x: [0, -1, 0]
+          y: [0, 0, 1]
+          z: [-1, 0, 0]
+  - group: imu
+    iio:
+      name: gyro_3d
+    config:
+      imu:
+        mount_matrix:
+          x: [1, 0, 0]
+          y: [0, 0, 1]
+          z: [0, 1, 0]
+```
+
+A device with a single inertial source has one matrix for both groups, so it can only be
+right for one of them. A device whose inertial data arrives in a hidraw report has no
+mount matrix at all, and the tool says so instead of offering a matrix; a wrong frame
+there is corrected in that device's driver.
+
+```yaml
+  - group: gyroscope
+    iio:
+      name: "gyro-accel-3D"
+    config:
+      imu:
+        mount_matrix:
+          x: [0, -1, 0]
+          y: [0, 0, 1]
+          z: [-1, 0, 0]
+```
+
+While the tool runs the device is prepared for raw reading. A `debug` target is added to
+the device's existing target list, intercept mode is turned off, event filters are
+cleared, and the `debug` profile is loaded so that no inertial event is remapped. The
+readings come from that debug target. The original target devices, intercept mode, event
+filters and profile are saved beforehand and restored when the test ends.
+
 View what input devices are being emulated for the first device:
 
 ```bash
