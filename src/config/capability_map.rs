@@ -201,7 +201,7 @@ pub struct CapabilityConfig {
     pub accelerometer: Option<SourceCapability>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct GamepadCapability {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -218,7 +218,7 @@ pub struct GamepadCapability {
     pub dial: Option<DialCapability>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct AxisCapability {
     pub name: String,
@@ -238,7 +238,7 @@ pub struct AxisCapability {
     pub invert: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, JsonSchema, PartialEq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct TriggerCapability {
     pub name: String,
