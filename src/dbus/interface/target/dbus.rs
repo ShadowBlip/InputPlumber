@@ -43,6 +43,17 @@ impl TargetDBusInterface {
         value: f64,
     ) -> zbus::Result<()>;
 
+    /// Emitted when an IMU sample occurs. `sensor` is "gyroscope" or
+    /// "accelerometer"; values are in the sensor's native units.
+    #[zbus(signal)]
+    pub async fn motion_event(
+        ctxt: &SignalEmitter<'_>,
+        sensor: String,
+        x: f64,
+        y: f64,
+        z: f64,
+    ) -> zbus::Result<()>;
+
     /// Emitted when a touch event occurs.
     #[zbus(signal)]
     pub async fn touch_event(
