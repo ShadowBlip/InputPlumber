@@ -362,6 +362,17 @@ pub enum EventCode {
     BtnBase4,
     BtnBase5,
     BtnBase6,
+    /// evdev code 0x12c. No symbolic name exists in the Linux kernel headers
+    /// (linux/input-event-codes.h jumps from BTN_BASE6/0x12b straight to
+    /// BTN_DEAD/0x12f), but the code itself is a valid, distinct evdev key
+    /// code that some hardware (e.g. HID joysticks whose report descriptor
+    /// declares a generic 16+ button Button usage page under a Joystick
+    /// rather than Gamepad top-level collection) legitimately reports.
+    BtnExtraOne,
+    /// evdev code 0x12d. See [EventCode::BtnExtraOne].
+    BtnExtraTwo,
+    /// evdev code 0x12e. See [EventCode::BtnExtraOne].
+    BtnExtraThree,
     BtnDead,
     BtnGamepad,
     BtnSouth,
@@ -1090,6 +1101,9 @@ impl EventCode {
             EventCode::BtnBase4 => 0x129,
             EventCode::BtnBase5 => 0x12a,
             EventCode::BtnBase6 => 0x12b,
+            EventCode::BtnExtraOne => 0x12c,
+            EventCode::BtnExtraTwo => 0x12d,
+            EventCode::BtnExtraThree => 0x12e,
             EventCode::BtnDead => 0x12f,
             EventCode::BtnGamepad => 0x130,
             EventCode::BtnSouth => 0x130,
