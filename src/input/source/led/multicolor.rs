@@ -17,17 +17,20 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum LedMcError {
-    #[error("Error writing value: {0}")]
-    Read(std::io::Error),
+    #[error("Error accessing LED: {0}")]
+    Io(#[from] std::io::Error),
 
-    #[error("Error writing value: {0}")]
-    Write(std::io::Error),
+    #[error("Invalid brightness value: {0}")]
+    Parse(#[from] std::num::ParseIntError),
 
     #[error("Path not found: {0}")]
     Path(PathBuf),
 
     #[error("Unsupported index type: {0}")]
     UnsupportedColor(String),
+
+    #[error("Unsupported effect: {0}")]
+    UnsupportedEffect(String),
 }
 
 #[derive(Eq, Hash, PartialEq, Clone, Copy, Debug)]
@@ -91,10 +94,10 @@ pub struct LedMultiColor {
 impl LedMultiColor {
     /// Create a new LedMultiColor source device with the given udev
     /// device information
-    pub fn new(device_info: UdevDevice) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn new(device_info: UdevDevice) -> Result<Self, LedMcError> {
         let brightness_path = PathBuf::from(device_info.syspath().as_str()).join("brightness");
         if !brightness_path.exists() {
-            return Err(Box::new(LedMcError::Path(brightness_path)));
+            return Err(LedMcError::Path(brightness_path));
         }
 
         let current_brightness: u8 = read_brightness(brightness_path.as_path())?;
@@ -102,7 +105,7 @@ impl LedMultiColor {
         let max_brightness_path =
             PathBuf::from(device_info.syspath().as_str()).join("max_brightness");
         if !max_brightness_path.exists() {
-            return Err(Box::new(LedMcError::Path(brightness_path)));
+            return Err(LedMcError::Path(brightness_path));
         }
 
         let max_brightness: u8 = read_brightness(max_brightness_path.as_path())?;
@@ -110,7 +113,7 @@ impl LedMultiColor {
         let multi_intensity_path =
             PathBuf::from(device_info.syspath().as_str()).join("multi_intensity");
         if !multi_intensity_path.exists() {
-            return Err(Box::new(LedMcError::Path(multi_intensity_path)));
+            return Err(LedMcError::Path(multi_intensity_path));
         }
 
         let multi_index_path = PathBuf::from(device_info.syspath().as_str()).join("multi_index");
@@ -140,9 +143,8 @@ impl LedMultiColor {
 
     /// Writes the given red, green, and blue (only) values to the device. Any other color is set
     /// to 0. Used for RGB only implementations we can't adjust (i.e. DualSense)
-    fn write_color(&self, r: u8, g: u8, b: u8) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let contents = read_to_string(self.multi_intensity_path.as_path())
-            .map_err(|err| Box::new(LedMcError::Read(err)))?;
+    fn write_color(&self, r: u8, g: u8, b: u8) -> Result<(), LedMcError> {
+        let contents = read_to_string(self.multi_intensity_path.as_path())?;
         let contents = (self
             .multi_index_map
             .iter()
@@ -158,21 +160,49 @@ impl LedMultiColor {
             })
             .collect::<Vec<String>>())
         .join(" ");
-        Ok(fs::write(self.multi_intensity_path.as_path(), contents)
-            .map_err(|err| Box::new(LedMcError::Write(err)))?)
+        fs::write(self.multi_intensity_path.as_path(), contents)?;
+        Ok(())
     }
 
     /// Writes the given brightness valeu to the brightness path, but scales it to the max
     /// brightness value. This assumes userspace will be sending a full u8
-    fn write_brightness(&self, brightness: u8) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn write_brightness(&self, brightness: u8) -> Result<(), LedMcError> {
         // Scale brightness to max_brightness, cast avoids overflow
         let brightness: u8 = (brightness as u32 * self.max_brightness as u32 / 255) as u8;
 
-        Ok(fs::write(
+        fs::write(
             self.brightness_path.as_path(),
             brightness.to_string().as_str(),
-        )
-        .map_err(|err| Box::new(LedMcError::Write(err)))?)
+        )?;
+        Ok(())
+    }
+
+    /// Returns the effects the LED supports (e.g. monocolor, breathe, rainbow).
+    /// LEDs without effect support return an empty list.
+    pub fn effects(&self) -> Result<Vec<String>, LedMcError> {
+        let path = PathBuf::from(self.device_info.syspath().as_str()).join("effect_index");
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let effects = read_to_string(path)?;
+        Ok(effects.split_whitespace().map(String::from).collect())
+    }
+
+    /// Sets the LED effect, color, and brightness. Brightness is scaled to the
+    /// maximum brightness of the device.
+    pub fn set_state(
+        &self,
+        effect: &str,
+        (red, green, blue): (u8, u8, u8),
+        brightness: u8,
+    ) -> Result<(), LedMcError> {
+        if !self.effects()?.iter().any(|e| e == effect) {
+            return Err(LedMcError::UnsupportedEffect(effect.to_string()));
+        }
+        let path = PathBuf::from(self.device_info.syspath().as_str()).join("effect");
+        fs::write(path, effect)?;
+        self.write_color(red, green, blue)?;
+        self.write_brightness(brightness)
     }
 
     // Retain below functions for dbus
@@ -188,7 +218,7 @@ impl LedMultiColor {
 
     /// Reads the brightness path and returns a u8 with the current brightness setting
     #[allow(dead_code)]
-    fn read_brightness(&self) -> Result<u8, Box<dyn Error + Send + Sync>> {
+    fn read_brightness(&self) -> Result<u8, LedMcError> {
         read_brightness(self.brightness_path.as_path())
     }
 
@@ -216,8 +246,8 @@ impl LedMultiColor {
 
         let contents = raw_values.join(" ");
 
-        Ok(fs::write(self.multi_intensity_path.as_path(), contents)
-            .map_err(|err| Box::new(LedMcError::Write(err)))?)
+        fs::write(self.multi_intensity_path.as_path(), contents)?;
+        Ok(())
     }
 
     /// Converts a generic dbus provided Vec<u8> to a matching Vec<u32> based on the device's
@@ -249,6 +279,12 @@ impl LedMultiColor {
         }
 
         self.write_colors(values)
+    }
+}
+
+impl From<LedMcError> for OutputError {
+    fn from(value: LedMcError) -> Self {
+        OutputError::DeviceError(value.to_string())
     }
 }
 
@@ -292,7 +328,7 @@ impl SourceOutputDevice for LedMultiColor {
 fn read_color(path: &Path, index: &[ColorType]) -> Result<Vec<HashMap<ColorType, u8>>, LedMcError> {
     let mut current_color: Vec<HashMap<ColorType, u8>> = Vec::new();
 
-    let color_contents = read_to_string(path).map_err(LedMcError::Read)?;
+    let color_contents = read_to_string(path)?;
     let color_vals = color_contents
         .split_whitespace()
         .map(|val| val.to_string().parse().unwrap_or_default())
@@ -321,7 +357,7 @@ fn read_color(path: &Path, index: &[ColorType]) -> Result<Vec<HashMap<ColorType,
 }
 
 /// Reads the brightness path and returns a u8 with the current brightness setting
-fn read_brightness(path: &Path) -> Result<u8, Box<dyn Error + Send + Sync>> {
+fn read_brightness(path: &Path) -> Result<u8, LedMcError> {
     let mut brightstring = read_to_string(path)?;
     brightstring = brightstring.trim().to_string();
     log::debug!("Got brightness value: {brightstring}");
@@ -330,7 +366,7 @@ fn read_brightness(path: &Path) -> Result<u8, Box<dyn Error + Send + Sync>> {
 
 /// Reads the multi_index path and returns a Vec<ColorType> of the configured device.
 fn read_color_index(path: &Path) -> Result<Vec<ColorType>, LedMcError> {
-    let mi_contents = read_to_string(path).map_err(LedMcError::Read)?;
+    let mi_contents = read_to_string(path)?;
     let multi_index_strings = mi_contents
         .split_whitespace()
         .map(String::from)
