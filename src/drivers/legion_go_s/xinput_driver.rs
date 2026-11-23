@@ -5,12 +5,17 @@ use packed_struct::PackedStruct;
 
 use super::{
     event::{
-        AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, OutputEvent, TriggerEvent,
-        TriggerInput,
+        AxisEvent, BinaryInput, ButtonEvent, Event, JoyAxisInput, OutputEvent, TouchAxisInput,
+        TriggerEvent, TriggerInput,
     },
     hid_report::{RumbleOutputDataReport, XInputDataReport},
-    GAMEPAD_TIMEOUT, GP_IID, PIDS, VID, XINPUT_PACKET_SIZE,
+    GAMEPAD_TIMEOUT, GP_IID, PAD_FORCE_NORMAL, PAD_MOTION_MAX, PIDS, VID, XINPUT_PACKET_SIZE,
 };
+
+/// Environment variable that disables the gamepad-report touchpad path ("0").
+const GAMEPAD_TOUCHPAD_ENV: &str = "INPUTPLUMBER_LEGION_GO_S_GAMEPAD_TOUCHPAD";
+/// Environment variable with a multiplier for the touchpad deltas (default 1.0).
+const GAMEPAD_TOUCHPAD_GAIN_ENV: &str = "INPUTPLUMBER_LEGION_GO_S_GAMEPAD_TOUCHPAD_GAIN";
 
 pub struct XInputDriver {
     /// HIDRAW device instance
@@ -19,6 +24,16 @@ pub struct XInputDriver {
     xinput_state: Option<XInputDataReport>,
 
     filtered_events: Vec<Event>,
+
+    /// Whether touchpad data from the gamepad report is translated.
+    /// On some SIPO touchpad firmware the touchpad interface (IF2) only
+    /// repeats a frozen absolute frame, while the gamepad report carries live
+    /// touch, tap and relative motion data in bytes 8-11.
+    pad_enabled: bool,
+    /// Multiplier applied to the relative touchpad deltas.
+    pad_gain: f64,
+    /// Synthesized absolute touchpad position in the 0..=PAD_MOTION_MAX range.
+    pad_pos: (f64, f64),
 }
 
 impl XInputDriver {
@@ -35,10 +50,23 @@ impl XInputDriver {
         {
             return Err(format!("Device '{fmtpath}' is not a Legion Go S Controller").into());
         }
+        let pad_enabled = std::env::var(GAMEPAD_TOUCHPAD_ENV)
+            .map(|v| v != "0")
+            .unwrap_or(true);
+        let pad_gain = std::env::var(GAMEPAD_TOUCHPAD_GAIN_ENV)
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|g| g.is_finite() && *g > 0.0)
+            .unwrap_or(1.0);
+        log::debug!("Gamepad report touchpad enabled: {pad_enabled}, gain: {pad_gain}");
+
         Ok(Self {
             device,
             xinput_state: None,
             filtered_events: vec![],
+            pad_enabled,
+            pad_gain,
+            pad_pos: (PAD_MOTION_MAX / 2.0, PAD_MOTION_MAX / 2.0),
         })
     }
 
@@ -318,6 +346,66 @@ impl XInputDriver {
             );
         }
 
+        if self.pad_enabled {
+            self.translate_touchpad(&state, &old_state, &mut events);
+        }
+
         events
+    }
+
+    /// Translate the touchpad fields of the gamepad report (touching flag,
+    /// tap/click flag and signed relative deltas) into absolute touchpad
+    /// events. Each touch starts at the pad center and the deltas move the
+    /// position, clamped to the pad range.
+    fn translate_touchpad(
+        &mut self,
+        state: &XInputDataReport,
+        old_state: &XInputDataReport,
+        events: &mut Vec<Event>,
+    ) {
+        let touching = state.rpad_touching;
+        let was_touching = old_state.rpad_touching;
+        let mut moved = false;
+
+        if touching {
+            if !was_touching {
+                self.pad_pos = (PAD_MOTION_MAX / 2.0, PAD_MOTION_MAX / 2.0);
+            }
+            let dx = state.touch_x as f64 * self.pad_gain;
+            let dy = state.touch_y as f64 * self.pad_gain;
+            if dx != 0.0 || dy != 0.0 {
+                self.pad_pos.0 = (self.pad_pos.0 + dx).clamp(0.0, PAD_MOTION_MAX);
+                self.pad_pos.1 = (self.pad_pos.1 + dy).clamp(0.0, PAD_MOTION_MAX);
+                moved = true;
+            }
+        }
+
+        if touching != was_touching || moved {
+            self.emit(
+                events,
+                Event::Axis(AxisEvent::Touchpad(TouchAxisInput {
+                    index: 0,
+                    is_touching: touching,
+                    x: self.pad_pos.0.round() as u16,
+                    y: self.pad_pos.1.round() as u16,
+                })),
+            );
+        }
+
+        if state.rpad_tap != old_state.rpad_tap {
+            self.emit(
+                events,
+                Event::Button(ButtonEvent::RPadPress(BinaryInput {
+                    pressed: state.rpad_tap,
+                })),
+            );
+            // The deck target needs a force value to produce a click.
+            self.emit(
+                events,
+                Event::Trigger(TriggerEvent::RpadForce(TriggerInput {
+                    value: PAD_FORCE_NORMAL * state.rpad_tap as u8,
+                })),
+            );
+        }
     }
 }
