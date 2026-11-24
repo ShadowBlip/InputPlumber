@@ -14,6 +14,18 @@ source_devices:
       attributes:
         - name: name
           value: "DP-*"
+  - group: keyboard
+    udev:
+      subsystem: input
+      attributes:
+        - name: name
+          value: "HDMI-*"
+  # Pulse-Eight USB-CEC Adapter (2548:1002)
+  - group: keyboard
+    udev:
+      subsystem: input
+      sys_name: "event*"
+      driver: "pulse8-cec"
 
 target_devices:
   - gamepad
