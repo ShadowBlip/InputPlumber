@@ -7,6 +7,7 @@ pub mod gpd_device;
 pub mod horipad_steam;
 pub mod legion_go;
 pub mod legion_go_s;
+pub mod moga_xp5i;
 pub mod msi_claw;
 pub mod opineo_touchpad;
 pub mod oxp_hid;
@@ -47,6 +48,7 @@ use self::{
         imu::LegionGoSImuController, touchpad::LegionGoSTouchpadController,
         xinput::LegionGoSXInputController,
     },
+    moga_xp5i::MogaXp5i,
     msi_claw::MsiClawController,
     opineo_touchpad::OrangePiNeoTouchpad,
     oxp_hid::OxpHid,
@@ -74,6 +76,7 @@ enum DriverType {
     LegionGoSTouchpad,
     LegionGoSXInput,
     LegionGoTouchpad,
+    MogaXp5i,
     MsiClaw,
     OrangePiNeoTouchpad,
     OxpHid,
@@ -103,6 +106,7 @@ pub enum HidRawDevice {
     LegionGoSTouchpad(SourceDriver<LegionGoSTouchpadController>),
     LegionGoSXInput(SourceDriver<LegionGoSXInputController>),
     LegionGoTouchpad(SourceDriver<LegionGoTouchpad>),
+    MogaXp5i(SourceDriver<MogaXp5i>),
     MsiClawController(SourceDriver<MsiClawController>),
     OrangePiNeo(SourceDriver<OrangePiNeoTouchpad>),
     OxpHid(SourceDriver<OxpHid>),
@@ -131,6 +135,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.info_ref(),
             HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.info_ref(),
+            HidRawDevice::MogaXp5i(source_driver) => source_driver.info_ref(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.info_ref(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.info_ref(),
             HidRawDevice::OxpHid(source_driver) => source_driver.info_ref(),
@@ -159,6 +164,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_id(),
             HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.get_id(),
+            HidRawDevice::MogaXp5i(source_driver) => source_driver.get_id(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.get_id(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_id(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_id(),
@@ -187,6 +193,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.client(),
             HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.client(),
+            HidRawDevice::MogaXp5i(source_driver) => source_driver.client(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.client(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.client(),
             HidRawDevice::OxpHid(source_driver) => source_driver.client(),
@@ -215,6 +222,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.run().await,
             HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.run().await,
+            HidRawDevice::MogaXp5i(source_driver) => source_driver.run().await,
             HidRawDevice::MsiClawController(source_driver) => source_driver.run().await,
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.run().await,
             HidRawDevice::OxpHid(source_driver) => source_driver.run().await,
@@ -243,6 +251,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.get_capabilities(),
+            HidRawDevice::MogaXp5i(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_capabilities(),
@@ -279,6 +288,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoTouchpad(source_driver) => {
                 source_driver.get_output_capabilities()
             }
+            HidRawDevice::MogaXp5i(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::MsiClawController(source_driver) => {
                 source_driver.get_output_capabilities()
             }
@@ -309,6 +319,7 @@ impl SourceDeviceCompatible for HidRawDevice {
             HidRawDevice::LegionGoSTouchpad(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoSXInput(source_driver) => source_driver.get_device_path(),
             HidRawDevice::LegionGoTouchpad(source_driver) => source_driver.get_device_path(),
+            HidRawDevice::MogaXp5i(source_driver) => source_driver.get_device_path(),
             HidRawDevice::MsiClawController(source_driver) => source_driver.get_device_path(),
             HidRawDevice::OrangePiNeo(source_driver) => source_driver.get_device_path(),
             HidRawDevice::OxpHid(source_driver) => source_driver.get_device_path(),
@@ -558,6 +569,21 @@ impl HidRawDevice {
                 );
                 Ok(Self::HoripadSteam(source_device))
             }
+            DriverType::MogaXp5i => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(0),
+                    buffer_size: 1024,
+                };
+                let device = MogaXp5i::new(device_info.clone())?;
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
+                Ok(Self::MogaXp5i(source_device))
+            }
             DriverType::Vader4Pro => {
                 let device = Vader4Pro::new(device_info.clone())?;
                 let options = SourceDriverOptions {
@@ -796,6 +822,16 @@ impl HidRawDevice {
         if vid == drivers::horipad_steam::VID && drivers::horipad_steam::PIDS.contains(&pid) {
             log::info!("Detected Horipad Steam Controller");
             return DriverType::HoripadSteam;
+        }
+
+        // PowerA MOGA XP5-i Plus. MFi accessories expose the generic
+        // 0x0103 VID/PID over Bluetooth, so match the HID name as well.
+        if vid == drivers::moga_xp5i::VID
+            && pid == drivers::moga_xp5i::PID
+            && device.name().starts_with(drivers::moga_xp5i::DEVICE_NAME)
+        {
+            log::info!("Detected MOGA XP5-i Plus");
+            return DriverType::MogaXp5i;
         }
 
         // Flydigi Vader 4 Pro
