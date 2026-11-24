@@ -1,7 +1,7 @@
 use packed_struct::prelude::*;
 use std::{error::Error, ffi::CString, time::Instant};
 
-use hidapi::HidDevice;
+use hidapi::{BusType, HidDevice};
 
 use crate::drivers::dualsense::{
     event::{BinaryInput, ButtonEvent, TriggerEvent, TriggerInput},
@@ -9,11 +9,10 @@ use crate::drivers::dualsense::{
 };
 
 use super::{
-    event::{
-        AxisEvent, AxisInput, Event, InertialEvent, InertialInput, OutputEvent, TouchAxisInput,
-    },
+    event::{AxisEvent, AxisInput, Event, InertialEvent, InertialInput, TouchAxisInput},
     hid_report::{
-        CalibrationReport, PackedInputDataReport, SetStatePackedOutputData, UsbPackedOutputReport,
+        BluetoothPackedOutputReport, CalibrationReport, PackedInputDataReport,
+        SetStatePackedOutputData, UsbPackedOutputReport,
     },
     DS5_ACCEL_RAW_TO_MPS2, DS5_GYRO_RAW_TO_RAD_S, DS5_VID, DS_FEATURE_REPORT_CALIBRATION_SIZE,
     FEATURE_REPORT_CALIBRATION, INPUT_REPORT_BT_SIZE, PIDS,
@@ -140,7 +139,10 @@ pub struct Driver {
     /// Timestamp of the last touch event.
     last_touch: Instant,
     device: HidDevice,
+    bluetooth: bool,
+    output_seq: u8,
     leds_initialized: bool,
+    output_reset: bool,
     /// Pitch, yaw, roll.
     gyro_calibration: [AxisCalibration; 3],
     /// X, y, z.
@@ -162,14 +164,18 @@ impl Driver {
             );
         }
 
+        let bluetooth = matches!(info.bus_type(), BusType::Bluetooth);
         let (gyro_calibration, accel_calibration) = read_calibration(&device);
 
         Ok(Self {
             device,
+            bluetooth,
+            output_seq: 0,
             state: None,
             touch_state: [false, false],
             last_touch: Instant::now(),
             leds_initialized: false,
+            output_reset: false,
             gyro_calibration,
             accel_calibration,
             filtered_events: vec![],
@@ -206,17 +212,32 @@ impl Driver {
     /// Writes the given output state to the gamepad. This can be used to change
     /// the color of LEDs, activate rumble, etc.
     pub fn write(
-        &self,
+        &mut self,
         state: SetStatePackedOutputData,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let report = UsbPackedOutputReport {
-            state,
-            ..Default::default()
-        };
-        let buf = report.pack()?;
-        let _bytes_written = self.device.write(&buf)?;
+        if self.bluetooth {
+            let report = BluetoothPackedOutputReport::new(state, self.output_seq);
+            self.output_seq = (self.output_seq + 1) & 0x0F;
+            let buf = report.pack_with_crc()?;
+            self.device.write(&buf)?;
+        } else {
+            let report = UsbPackedOutputReport {
+                state,
+                ..Default::default()
+            };
+            let buf = report.pack()?;
+            self.device.write(&buf)?;
+        }
 
         Ok(())
+    }
+
+    pub fn is_bluetooth(&self) -> bool {
+        self.bluetooth
+    }
+
+    pub fn take_output_reset(&mut self) -> bool {
+        std::mem::take(&mut self.output_reset)
     }
 
     /// Release the LEDs from Wireless firmware control
@@ -224,7 +245,7 @@ impl Driver {
     /// This cannot be applied during the BT pair animation.
     /// SDL2 waits until the SensorTimestamp value is >= 10200000
     /// before pulsing this bit once.
-    pub fn reset_lights(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn reset_lights(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let state = SetStatePackedOutputData {
             reset_lights: true,
             ..Default::default()
@@ -233,7 +254,12 @@ impl Driver {
     }
 
     /// Set the color of the gamepad to the given value
-    pub fn set_led_color(&self, r: u8, g: u8, b: u8) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn set_led_color(
+        &mut self,
+        r: u8,
+        g: u8,
+        b: u8,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         log::debug!("Setting LED color to: {r}, {g}, {b}");
         let state = SetStatePackedOutputData {
             allow_led_color: true,
@@ -246,24 +272,6 @@ impl Driver {
         self.write(state)
     }
 
-    /// Write an output event to the gamepad
-    pub fn write_event(&self, event: &OutputEvent) -> Result<(), Box<dyn Error + Send + Sync>> {
-        match event {
-            OutputEvent::HapticRumble { left, right } => {
-                let state = SetStatePackedOutputData {
-                    use_rumble_not_haptics: true,
-                    enable_rumble_emulation: true,
-                    rumble_emulation_right: *right,
-                    rumble_emulation_left: *left,
-                    ..Default::default()
-                };
-
-                self.write(state)
-            }
-            OutputEvent::State(state) => self.write(*state),
-        }
-    }
-
     /// Unpacks the buffer into a [PackedInputDataReport] structure and updates
     /// the internal gamepad state
     fn handle_input_report(
@@ -273,15 +281,27 @@ impl Driver {
     ) -> Result<Vec<Event>, Box<dyn Error + Send + Sync>> {
         let input_report = PackedInputDataReport::unpack(buf, bytes_read)?;
 
+        if !self.bluetooth && matches!(input_report, PackedInputDataReport::Bluetooth(_)) {
+            log::info!("Detected Bluetooth DualSense from its input reports");
+            self.bluetooth = true;
+        }
+
         // Check if LEDs need to be initialized
         if !self.leds_initialized
             && input_report.state().sensor_timestamp.to_primitive() >= 10200000
         {
             log::debug!("Initializing LEDs");
-            self.reset_lights()?;
-            self.leds_initialized = true;
-            // TODO: Remove this after adding LED support
-            self.set_led_color(100, 72, 42)?;
+            // TODO: Remove set_led_color after adding LED support
+            match self
+                .reset_lights()
+                .and_then(|_| self.set_led_color(100, 72, 42))
+            {
+                Ok(()) => {
+                    self.leds_initialized = true;
+                    self.output_reset = true;
+                }
+                Err(e) => log::debug!("Failed to initialize DualSense LEDs, retrying: {e:?}"),
+            }
         }
 
         // Print input report for debugging

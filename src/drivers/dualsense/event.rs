@@ -1,7 +1,5 @@
 use std::mem;
 
-use super::hid_report::SetStatePackedOutputData;
-
 /// Events that can be emitted by the DualSense controller
 #[derive(Clone, Debug)]
 pub enum Event {
@@ -22,16 +20,6 @@ impl Event {
             _ => false,
         }
     }
-}
-
-/// Output events supported by the DualSense controller
-#[derive(Clone, Debug)]
-pub enum OutputEvent {
-    /// Rumble the left and right haptic actuators, driving the adaptive
-    /// triggers on the DS5.
-    HapticRumble { left: u8, right: u8 },
-    /// Write a full DualSense state report
-    State(SetStatePackedOutputData),
 }
 
 /// Binary input contain either pressed or unpressed

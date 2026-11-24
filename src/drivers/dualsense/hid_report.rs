@@ -8,6 +8,7 @@ use packed_struct::prelude::*;
 use super::{
     DS5_CALIB_ACCEL_PLUS, DS5_CALIB_GYRO_PLUS, DS5_CALIB_GYRO_SPEED, FEATURE_REPORT_CALIBRATION,
     INPUT_REPORT_BT, INPUT_REPORT_BT_SIZE, INPUT_REPORT_USB, INPUT_REPORT_USB_SIZE,
+    OUTPUT_REPORT_BT, OUTPUT_REPORT_BT_SIZE,
 };
 
 /// DualSense input report for USB and Bluetooth
@@ -796,6 +797,186 @@ impl Default for UsbPackedOutputReportShort {
             report_id: 0x02,
             state: Default::default(),
         }
+    }
+}
+
+impl SetStatePackedOutputData {
+    pub fn merge(&mut self, newer: &Self) {
+        if newer.enable_rumble_emulation
+            || newer.use_rumble_not_haptics
+            || newer.enable_improved_rumble_emulation
+        {
+            self.enable_rumble_emulation |= newer.enable_rumble_emulation;
+            self.use_rumble_not_haptics |= newer.use_rumble_not_haptics;
+            self.enable_improved_rumble_emulation |= newer.enable_improved_rumble_emulation;
+            self.rumble_emulation_right = newer.rumble_emulation_right;
+            self.rumble_emulation_left = newer.rumble_emulation_left;
+        }
+        if newer.allow_right_trigger_ffb {
+            self.allow_right_trigger_ffb = true;
+            self.right_trigger_ffb = newer.right_trigger_ffb;
+        }
+        if newer.allow_left_trigger_ffb {
+            self.allow_left_trigger_ffb = true;
+            self.left_trigger_ffb = newer.left_trigger_ffb;
+        }
+        if newer.allow_headphone_volume {
+            self.allow_headphone_volume = true;
+            self.volume_headphones = newer.volume_headphones;
+        }
+        if newer.allow_speaker_volume {
+            self.allow_speaker_volume = true;
+            self.volume_speakers = newer.volume_speakers;
+        }
+        if newer.allow_mic_volume {
+            self.allow_mic_volume = true;
+            self.volume_mic = newer.volume_mic;
+        }
+        if newer.allow_audio_control {
+            self.allow_audio_control = true;
+            self.input_path_select = newer.input_path_select;
+            self.output_path_select = newer.output_path_select;
+            self.noise_cancel_enable = newer.noise_cancel_enable;
+            self.echo_cancel_enable = newer.echo_cancel_enable;
+            self.mic_select = newer.mic_select;
+        }
+        if newer.allow_audio_control2 {
+            self.allow_audio_control2 = true;
+            self._unkn_audio_control_2 = newer._unkn_audio_control_2;
+            self.beamforming_enable = newer.beamforming_enable;
+            self.speaker_comp_pre_gain = newer.speaker_comp_pre_gain;
+        }
+        if newer.allow_motor_power_level {
+            self.allow_motor_power_level = true;
+            self.rumble_motor_power_reduction = newer.rumble_motor_power_reduction;
+            self.trigger_motor_power_reduction = newer.trigger_motor_power_reduction;
+        }
+        if newer.allow_haptic_low_pass_filter {
+            self.allow_haptic_low_pass_filter = true;
+            self.haptic_low_pass_filter = newer.haptic_low_pass_filter;
+        }
+        if newer.allow_player_indicators {
+            self.allow_player_indicators = true;
+            self._player_light_unkn = newer._player_light_unkn;
+            self.player_light_fade = newer.player_light_fade;
+            self.player_light_1 = newer.player_light_1;
+            self.player_light_2 = newer.player_light_2;
+            self.player_light_3 = newer.player_light_3;
+            self.player_light_4 = newer.player_light_4;
+            self.player_light_5 = newer.player_light_5;
+        }
+        if newer.allow_led_color {
+            self.allow_led_color = true;
+            self.led_red = newer.led_red;
+            self.led_green = newer.led_green;
+            self.led_blue = newer.led_blue;
+        }
+        if newer.allow_audio_mute {
+            self.allow_audio_mute = true;
+            self.haptic_mute = newer.haptic_mute;
+            self.headphone_mute = newer.headphone_mute;
+            self.speaker_mute = newer.speaker_mute;
+            self.mic_mute = newer.mic_mute;
+            self.audio_power_save = newer.audio_power_save;
+            self.haptic_power_save = newer.haptic_power_save;
+            self.motion_power_save = newer.motion_power_save;
+            self.touch_power_save = newer.touch_power_save;
+        }
+        if newer.allow_mute_light {
+            self.allow_mute_light = true;
+            self.mute_light_mode = newer.mute_light_mode;
+        }
+        if newer.allow_color_light_fade_animation {
+            self.allow_color_light_fade_animation = true;
+            self.light_fade_animation = newer.light_fade_animation;
+        }
+        if newer.allow_light_brightness_change {
+            self.allow_light_brightness_change = true;
+            self.light_brightness = newer.light_brightness;
+        }
+        self.reset_lights |= newer.reset_lights;
+        self._unkn_bitc = (self._unkn_bitc.to_primitive() | newer._unkn_bitc.to_primitive()).into();
+        self._unkn_bit_1 =
+            (self._unkn_bit_1.to_primitive() | newer._unkn_bit_1.to_primitive()).into();
+        self._unkn_bit_2 |= newer._unkn_bit_2;
+        self.host_timestamp = newer.host_timestamp;
+    }
+
+    pub fn would_change(&self, newer: &Self) -> bool {
+        if newer.reset_lights {
+            return true;
+        }
+        let mut next = *self;
+        next.merge(newer);
+        next.host_timestamp = self.host_timestamp;
+        next != *self
+    }
+}
+
+pub const OUTPUT_REPORT_BT_TAG: u8 = 0x10;
+pub const OUTPUT_REPORT_BT_CRC32_SEED: u8 = 0xA2;
+
+fn crc32_update(mut crc: u32, data: &[u8]) -> u32 {
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xEDB8_8320 & (crc & 1).wrapping_neg());
+        }
+    }
+    crc
+}
+
+/// Seeded with the HIDP DATA|OUTPUT header, see dualsense_send_output_report() in hid-playstation.c
+pub fn output_report_bt_crc32(report: &[u8]) -> u32 {
+    let crc = crc32_update(u32::MAX, &[OUTPUT_REPORT_BT_CRC32_SEED]);
+    !crc32_update(crc, report)
+}
+
+#[derive(PackedStruct, Debug, Copy, Clone, PartialEq)]
+#[packed_struct(bit_numbering = "msb0", size_bytes = "78")]
+pub struct BluetoothPackedOutputReport {
+    #[packed_field(bytes = "0")]
+    pub report_id: u8,
+    #[packed_field(bytes = "1")]
+    pub seq_tag: u8,
+    #[packed_field(bytes = "2")]
+    pub tag: u8,
+    #[packed_field(bytes = "3..=49")]
+    pub state: SetStatePackedOutputData,
+    #[packed_field(bytes = "50..=73")]
+    pub reserved: [u8; 24],
+    #[packed_field(bytes = "74..=77", endian = "lsb")]
+    pub crc32: Integer<u32, packed_bits::Bits<32>>,
+}
+
+impl Default for BluetoothPackedOutputReport {
+    fn default() -> Self {
+        Self {
+            report_id: OUTPUT_REPORT_BT,
+            seq_tag: 0,
+            tag: OUTPUT_REPORT_BT_TAG,
+            state: Default::default(),
+            reserved: [0; 24],
+            crc32: 0.into(),
+        }
+    }
+}
+
+impl BluetoothPackedOutputReport {
+    pub fn new(state: SetStatePackedOutputData, seq: u8) -> Self {
+        Self {
+            seq_tag: (seq & 0x0F) << 4,
+            state,
+            ..Default::default()
+        }
+    }
+
+    pub fn pack_with_crc(&self) -> Result<[u8; OUTPUT_REPORT_BT_SIZE], PackingError> {
+        let mut buf = self.pack()?;
+        let body = OUTPUT_REPORT_BT_SIZE - 4;
+        let crc = output_report_bt_crc32(&buf[..body]);
+        buf[body..].copy_from_slice(&crc.to_le_bytes());
+        Ok(buf)
     }
 }
 
