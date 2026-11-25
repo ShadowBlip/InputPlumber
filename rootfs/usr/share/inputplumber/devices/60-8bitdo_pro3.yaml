@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# Schema version number
+version: 1
+
+# The type of configuration schema
+kind: CompositeDevice
+
+# Name of the composite device mapping
+name: 8BitDo Pro 3
+
+# Only use this profile if *any* of the given matches matches. If this list is
+# empty, then the source devices will *always* be checked.
+# /sys/class/dmi/id/product_name
+matches: []
+
+# Only allow a single source device per composite device of this type.
+single_source: false
+
+# Maximum number of source devices per CompositeDevice.
+maximum_sources: 2
+
+# One or more source devices to combine into a single virtual device. The events
+# from these devices will be watched and translated according to the key map.
+source_devices:
+  # Dinput/SteamInput Mode
+  - group: gamepad
+    blocked: true
+    evdev:
+      name: "8BitDo Pro 3"
+      vendor_id: "2dc8"
+      product_id: "6009"
+    capability_map_id: dinput_generic
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x2dc8
+      product_id: 0x6009
+      interface_num: 0
+  # XInput/Receiver Mode
+  - group: gamepad
+    blocked: true
+    evdev:
+      name: "8BitDo Ultimate 2 Wireless Controller"
+      vendor_id: "2dc8"
+      product_id: "310b"
+  - group: gamepad
+    hidraw:
+      vendor_id: 0x2dc8
+      product_id: 0x310b
+      interface_num: 0
+
+# The target input device(s) to emulate by default
+target_devices:
+  - gamepad
+  - mouse
+  - keyboard
