@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/capability_map_v2.json
+# Schema version number
+version: 2
+
+# The type of configuration schema
+kind: CapabilityMap
+
+# Name for the device event map
+name: ADVAN X-PLAY
+
+# Unique identifier of the capability mapping
+id: advan1
+
+# List of mapped events
+mapping:
+  - name: Home
+    mapping_type:
+      evdev: chord
+    source_events:
+      - evdev:
+          event_type: KEY
+          event_code: KEY_LEFTMETA
+          value_type: button
+      - evdev:
+          event_type: KEY
+          event_code: KEY_D
+          value_type: button
+    target_event:
+      gamepad:
+        button: Guide
